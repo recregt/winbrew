@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/recregt/winbrew/actions/workflows/ci.yml/badge.svg)](https://github.com/recregt/winbrew/actions)
 [![Release](https://github.com/recregt/winbrew/actions/workflows/release.yml/badge.svg)](https://github.com/recregt/winbrew/actions)
-[![Version](https://img.shields.io/github/v/release/recregt/winbrew?color=blue&logo=github&label=Version)](https://github.com/recregt/winbrew/releases/latest)
+[![Version](https://img.shields.io/github/v/release/recregt/winbrew?include_prereleases&color=blue&logo=github&label=Version)](https://github.com/recregt/winbrew/releases/latest)
 
 A modern package manager for Windows that installs, tracks, and cleanly removes software.
 
