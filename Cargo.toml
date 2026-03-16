@@ -3,6 +3,10 @@ name = "winbrew"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "wb"
+path = "src/main.rs"
+
 [dependencies]
 winreg = "0.56"
 clap = { version = "4", features = ["derive"] }
