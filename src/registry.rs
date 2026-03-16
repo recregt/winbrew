@@ -33,7 +33,7 @@ pub fn collect_installed_apps(filter: Option<&str>) -> Result<Vec<AppInfo>> {
                 continue;
             };
 
-            if pattern.as_ref().map_or(false, |re| !re.is_match(&name)) {
+            if pattern.as_ref().is_some_and(|re| !re.is_match(&name)) {
                 continue;
             }
 

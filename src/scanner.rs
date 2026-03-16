@@ -103,12 +103,12 @@ fn candidate_dirs() -> Vec<PathBuf> {
         }
     }
 
-    if let Ok(local) = env::var("LOCALAPPDATA") {
-        if let Some(parent) = PathBuf::from(local).parent() {
-            let locallow = parent.join("LocalLow");
-            if seen.insert(locallow.clone()) {
-                dirs.push(locallow);
-            }
+    if let Ok(local) = env::var("LOCALAPPDATA")
+        && let Some(parent) = PathBuf::from(local).parent()
+    {
+        let locallow = parent.join("LocalLow");
+        if seen.insert(locallow.clone()) {
+            dirs.push(locallow);
         }
     }
 
