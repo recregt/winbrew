@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Package
+        run: |
+          mkdir release_pkg
+          copy target\release\wb.exe release_pkg\
+          copy README.md release_pkg\
+          Compress-Archive -Path release_pkg\* -DestinationPath winbrew-${{ github.ref_name }}-windows-x86_64.zip
+
+      - name: Generate changelog
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v5
+        with:
+          configurationJson: |
+            {
+              "categories": [
+                { "title": "🚀 Features", "rules": [{"pattern": "^feat(\\([a-z0-9._/-]+\\))?!?:", "on_property": "title"}] },
+                { "title": "🐛 Bug Fixes", "rules": [{"pattern": "^fix(\\([a-z0-9._/-]+\\))?!?:", "on_property": "title"}] },
+                { "title": "📖 Documentation", "rules": [{"pattern": "^docs(\\([a-z0-9._/-]+\\))?!?:", "on_property": "title"}] },
+                { "title": "🔧 Refactor", "rules": [{"pattern": "^refactor(\\([a-z0-9._/-]+\\))?!?:", "on_property": "title"}] },
+                { "title": "⚡ Performance", "rules": [{"pattern": "^perf(\\([a-z0-9._/-]+\\))?!?:", "on_property": "title"}] },
+                { "title": "🧹 Chore", "rules": [{"pattern": "^chore(\\([a-z0-9._/-]+\\))?!?:", "on_property": "title"}] },
+                { "title": "🎨 Style", "rules": [{"pattern": "^style(\\([a-z0-9._/-]+\\))?!?:", "on_property": "title"}] },
+                { "title": "🧪 Tests", "rules": [{"pattern": "^test(\\([a-z0-9._/-]+\\))?!?:", "on_property": "title"}] },
+                { "title": "🏗️ Build", "rules": [{"pattern": "^build(\\([a-z0-9._/-]+\\))?!?:", "on_property": "title"}] },
+                { "title": "⚙️ CI", "rules": [{"pattern": "^ci(\\([a-z0-9._/-]+\\))?!?:", "on_property": "title"}] },
+                { "title": "⏪ Reverts", "rules": [{"pattern": "^revert(\\([a-z0-9._/-]+\\))?!?:", "on_property": "title"}] }
+              ],
+              "ignore_labels": ["skip-changelog"],
+              "sort": "ASC"
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: winbrew-${{ github.ref_name }}-windows-x86_64.zip
+          body: ${{ steps.changelog.outputs.changelog }}
