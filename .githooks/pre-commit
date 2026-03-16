@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+
+echo "Running rustfmt check..."
+cargo fmt --all -- --check
