@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'README.md'
+      - '.githooks/**'
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - '.gitattributes'
   pull_request:
   workflow_dispatch:
 
@@ -55,7 +61,7 @@ jobs:
 
       - name: Install PuTTY via MSI
         run: |
-          Invoke-WebRequest -Uri "https://the.earth.li/~sgtatham/putty/latest/w64/putty-64bit-0.83-installer.msi" -OutFile "putty.msi"
+          Invoke-WebRequest -Uri "https://the.earth.li/~sgtatham/putty/latest/w64/putty-64bit-installer.msi" -OutFile "putty.msi"
           Start-Process msiexec.exe -Wait -ArgumentList '/i putty.msi /quiet /qn /norestart'
 
       # ── wb --version ──────────────────────────────────────────────────────
