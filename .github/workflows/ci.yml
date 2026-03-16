@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Rustfmt + Clippy
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Rustfmt
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  integration:
+    name: Integration tests (Windows)
+    runs-on: windows-latest
+    needs: checks
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build
+
+      - name: Install PuTTY via MSI
+        run: |
+          Invoke-WebRequest -Uri "https://the.earth.li/~sgtatham/putty/latest/w64/putty-64bit-0.83-installer.msi" -OutFile "putty.msi"
+          Start-Process msiexec.exe -Wait -ArgumentList '/i putty.msi /quiet /qn /norestart'
+
+      # ── wb --version ──────────────────────────────────────────────────────
+      - name: wb --version
+        run: .\target\debug\wb.exe --version
+
+      # ── wb --help ─────────────────────────────────────────────────────────
+      - name: wb --help
+        run: .\target\debug\wb.exe --help
+
+      # ── list (no filter) ──────────────────────────────────────────────────
+      - name: wb list
+        run: .\target\debug\wb.exe list
+
+      # ── list with filter ──────────────────────────────────────────────────
+      - name: wb list "putty"
+        run: |
+          $out = .\target\debug\wb.exe list "putty" | Out-String
+          Write-Host $out
+          if ($out -notmatch "PuTTY") {
+            Write-Error "Expected 'PuTTY' in list output"; exit 1
+          }
+
+      # ── scan (read-only) ──────────────────────────────────────────────────
+      - name: wb scan "putty"
+        run: |
+          $out = .\target\debug\wb.exe scan "putty" | Out-String
+          Write-Host $out
+          $nothingCount = ([regex]::Matches($out, '\(nothing found\)')).Count
+          if ($nothingCount -eq 2) {
+            Write-Error "Expected scan to find at least one PuTTY entry"; exit 1
+          }
+
+      # ── conflicting flags: --yes + --dry-run must exit non-zero ───────────
+      - name: wb clean --yes --dry-run must fail
+        run: |
+          & .\target\debug\wb.exe clean "putty" --yes --dry-run 2>&1 | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Error "Expected non-zero exit for conflicting --yes --dry-run flags"; exit 1
+          }
+          exit 0
+
+      # ── clean --yes (real deletion) ───────────────────────────────────────
+      - name: wb clean "putty" --yes
+        run: |
+          $out = .\target\debug\wb.exe clean "putty" --yes | Out-String
+          Write-Host $out
+          if ($out -notmatch "Deleted \d+ item\(s\)") {
+            Write-Error "Expected 'Deleted N item(s)' in clean output"; exit 1
+          }
+
+      # ── post-clean: scan must return nothing ──────────────────────────────
+      - name: Verify PuTTY fully removed (scan returns empty)
+        run: |
+          $out = .\target\debug\wb.exe scan "putty" | Out-String
+          Write-Host $out
+          $nothingCount = ([regex]::Matches($out, '\(nothing found\)')).Count
+          if ($nothingCount -lt 2) {
+            Write-Error "Expected scan to find nothing after clean; got:`n$out"; exit 1
+          }
+
+      # ── post-clean: list must no longer contain 7-Zip ─────────────────────
+      - name: Verify PuTTY absent from list after clean
+        run: |
+          $out = .\target\debug\wb.exe list "putty" | Out-String
+          Write-Host $out
+          if ($out -match "PuTTY") {
+            Write-Error "PuTTY should not appear in list after clean"; exit 1
+          }
+
+  dependabot-metadata:
+    name: Dependabot metadata
+    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "Dependency type: ${{ steps.metadata.outputs.dependency-type }}"
+          echo "Update type: ${{ steps.metadata.outputs.update-type }}"
