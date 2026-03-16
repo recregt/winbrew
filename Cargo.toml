@@ -1,0 +1,21 @@
+[package]
+name = "winbrew"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+winreg = "0.56"
+clap = { version = "4", features = ["derive"] }
+dialoguer = "0.12"
+indicatif = "0.18"
+console = "0.16"
+anyhow = "1"
+
+[build-dependencies]
+winres = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+codegen-units = 1
