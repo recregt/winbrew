@@ -1,10 +1,11 @@
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-    
+
     #[cfg(target_os = "windows")]
     {
         let mut res = winres::WindowsResource::new();
-        res.set_manifest(r#"
+        res.set_manifest(
+            r#"
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
 <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
@@ -14,7 +15,8 @@ fn main() {
     </security>
 </trustInfo>
 </assembly>
-"#);
+"#,
+        );
         res.compile().unwrap();
     }
 }

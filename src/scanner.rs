@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::{collections::HashSet, env, path::PathBuf};
 
-use crate::uninstall::{uninstall_roots, Hive, UninstallRoot};
+use crate::uninstall::{Hive, UninstallRoot, uninstall_roots};
 
 pub struct ScanResult {
     pub registry_matches: Vec<RegistryMatch>,
@@ -72,13 +72,16 @@ fn scan_reg_key(root: &UninstallRoot, query: &str) -> Vec<RegistryMatch> {
             let app_key = root.key.open_subkey(&key_name).ok()?;
             let display_name: String = app_key.get_value("DisplayName").ok()?;
 
-            display_name.to_lowercase().contains(query).then_some(RegistryMatch {
-                hive: root.hive,
-                uninstall_key_path: root.key_path,
-                root_label: root.label,
-                key_name,
-                display_name,
-            })
+            display_name
+                .to_lowercase()
+                .contains(query)
+                .then_some(RegistryMatch {
+                    hive: root.hive,
+                    uninstall_key_path: root.key_path,
+                    root_label: root.label,
+                    key_name,
+                    display_name,
+                })
         })
         .collect()
 }
@@ -101,7 +104,13 @@ fn candidate_dirs() -> Vec<PathBuf> {
     let mut seen = HashSet::new();
     let mut dirs = Vec::new();
 
-    for var in ["PROGRAMFILES", "PROGRAMW6432", "PROGRAMFILES(X86)", "APPDATA", "LOCALAPPDATA"] {
+    for var in [
+        "PROGRAMFILES",
+        "PROGRAMW6432",
+        "PROGRAMFILES(X86)",
+        "APPDATA",
+        "LOCALAPPDATA",
+    ] {
         if let Ok(val) = env::var(var) {
             let path = PathBuf::from(val);
             if seen.insert(path.clone()) {

@@ -50,11 +50,7 @@ impl Command {
         match self {
             Self::List { filter } => registry::show_installed_apps(filter.as_deref()),
             Self::Scan { name } => scanner::scan(&name),
-            Self::Clean {
-                name,
-                dry_run,
-                yes,
-            } => cleaner::clean(&name, dry_run, yes),
+            Self::Clean { name, dry_run, yes } => cleaner::clean(&name, dry_run, yes),
         }
     }
 }

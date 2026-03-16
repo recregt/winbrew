@@ -1,5 +1,5 @@
 use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
-use winreg::{RegKey, HKCU, HKLM};
+use winreg::{HKCU, HKLM, RegKey};
 
 const UNINSTALL: &str = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
 const WOW_UNINSTALL: &str = "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall";

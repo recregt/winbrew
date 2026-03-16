@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use dialoguer::Confirm;
 
 use crate::scanner::{self, RegistryMatch, ScanResult};
@@ -33,7 +33,10 @@ pub fn clean(name: &str, dry_run: bool, yes: bool) -> Result<()> {
     for registry_match in &result.registry_matches {
         match delete_registry_match(registry_match) {
             Ok(()) => {
-                println!("deleted registry: [{}\\{}]", registry_match.root_label, registry_match.key_name);
+                println!(
+                    "deleted registry: [{}\\{}]",
+                    registry_match.root_label, registry_match.key_name
+                );
                 deleted_count += 1;
             }
             Err(error) => failures.push(format!(
@@ -49,10 +52,9 @@ pub fn clean(name: &str, dry_run: bool, yes: bool) -> Result<()> {
                 println!("deleted directory: {}", directory.display());
                 deleted_count += 1;
             }
-            Err(error) => failures.push(format!(
-                "failed directory {}: {error}",
-                directory.display()
-            )),
+            Err(error) => {
+                failures.push(format!("failed directory {}: {error}", directory.display()))
+            }
         }
     }
 
@@ -76,7 +78,10 @@ fn is_empty(result: &ScanResult) -> bool {
 
 fn delete_registry_match(registry_match: &RegistryMatch) -> Result<()> {
     let root = registry_match.hive.open();
-    let key_path = format!("{}\\{}", registry_match.uninstall_key_path, registry_match.key_name);
+    let key_path = format!(
+        "{}\\{}",
+        registry_match.uninstall_key_path, registry_match.key_name
+    );
 
     root.delete_subkey_all(&key_path)?;
     Ok(())

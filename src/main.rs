@@ -1,5 +1,5 @@
-mod cli;
 mod cleaner;
+mod cli;
 mod registry;
 mod scanner;
 mod uninstall;
