@@ -1,29 +1,62 @@
 use anyhow::Result;
+use regex::RegexBuilder;
 
 use crate::uninstall::uninstall_roots;
 
-pub fn show_installed_apps(filter: Option<&str>) -> Result<()> {
-    let filter_lower = filter.map(|f| f.to_lowercase());
+/// Holds complete app info for display and filtering.
+#[derive(Debug, Eq, PartialEq)]
+pub struct AppInfo {
+    pub name: String,
+    pub version: String,
+    pub publisher: String,
+}
+
+pub fn collect_installed_apps(filter: Option<&str>) -> Result<Vec<AppInfo>> {
+    let pattern = filter
+        .map(|f| {
+            RegexBuilder::new(&regex::escape(f))
+                .case_insensitive(true)
+                .build()
+        })
+        .transpose()?;
+
+    let mut apps = Vec::new();
 
     for root in uninstall_roots() {
-        print_apps(&root.key, filter_lower.as_deref());
+        for key_result in root.key.enum_keys() {
+            let Ok(key_name) = key_result else { continue };
+            let Ok(app_key) = root.key.open_subkey(&key_name) else {
+                continue;
+            };
+
+            let Ok(name) = app_key.get_value::<String, _>("DisplayName") else {
+                continue;
+            };
+
+            if pattern.as_ref().map_or(false, |re| !re.is_match(&name)) {
+                continue;
+            }
+
+            let version = app_key
+                .get_value::<String, _>("DisplayVersion")
+                .unwrap_or_default();
+            let publisher = app_key
+                .get_value::<String, _>("Publisher")
+                .unwrap_or_default();
+
+            apps.push(AppInfo {
+                name,
+                version,
+                publisher,
+            });
+        }
     }
 
-    Ok(())
-}
+    // 1. First sort by name, then by version (descending).
+    apps.sort_unstable_by(|a, b| a.name.cmp(&b.name).then_with(|| b.version.cmp(&a.version)));
 
-fn print_apps(key: &winreg::RegKey, filter_lower: Option<&str>) {
-    key.enum_keys()
-        .flatten()
-        .filter_map(|name| key.open_subkey(&name).ok())
-        .filter_map(|app_key| app_key.get_value::<String, _>("DisplayName").ok())
-        .filter(|name| matches_filter(name, filter_lower))
-        .for_each(|name| println!("{name}"));
-}
+    // 2. Deduplicate by name, keeping the highest version due to the sort order.
+    apps.dedup_by(|a, b| a.name == b.name);
 
-fn matches_filter(name: &str, filter_lower: Option<&str>) -> bool {
-    match filter_lower {
-        Some(filter) => name.to_lowercase().contains(filter),
-        None => true,
-    }
+    Ok(apps)
 }

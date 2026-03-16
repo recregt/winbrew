@@ -1,7 +1,9 @@
 use anyhow::Result;
+use rayon::prelude::*;
+use regex::RegexBuilder;
 use std::{collections::HashSet, env, path::PathBuf};
 
-use crate::uninstall::{Hive, UninstallRoot, uninstall_roots};
+use crate::uninstall::{Hive, uninstall_roots};
 
 pub struct ScanResult {
     pub registry_matches: Vec<RegistryMatch>,
@@ -10,93 +12,75 @@ pub struct ScanResult {
 
 pub struct RegistryMatch {
     pub hive: Hive,
-    pub uninstall_key_path: &'static str,
+    pub full_key_path: String,
     pub root_label: &'static str,
     pub key_name: String,
     pub display_name: String,
 }
 
-pub fn scan(name: &str) -> Result<()> {
-    let result = collect(name);
-    display_scan_result(&result);
+pub fn collect(name: &str) -> Result<ScanResult> {
+    let pattern = regex::escape(name);
+    let re = RegexBuilder::new(&pattern).case_insensitive(true).build()?;
 
-    Ok(())
+    let (registry_matches, mut directory_matches) = rayon::join(
+        || fetch_registry_matches(&re),
+        || fetch_directory_matches(&re),
+    );
+
+    directory_matches.sort();
+
+    Ok(ScanResult {
+        registry_matches,
+        directory_matches,
+    })
 }
 
-pub fn collect(name: &str) -> ScanResult {
-    let query = name.to_lowercase();
+fn fetch_registry_matches(re: &regex::Regex) -> Vec<RegistryMatch> {
+    let mut matches = Vec::new();
 
-    ScanResult {
-        registry_matches: registry_matches(&query),
-        directory_matches: matching_directories(&query),
-    }
-}
+    for root in uninstall_roots() {
+        for key_result in root.key.enum_keys() {
+            let Ok(key_name) = key_result else { continue };
+            let Ok(app_key) = root.key.open_subkey(&key_name) else {
+                continue;
+            };
+            let Ok(display_name) = app_key.get_value::<String, _>("DisplayName") else {
+                continue;
+            };
 
-pub fn display_scan_result(result: &ScanResult) {
-    println!("[Registry]");
-
-    if result.registry_matches.is_empty() {
-        println!("  (nothing found)");
-    } else {
-        for registry_match in &result.registry_matches {
-            println!(
-                "  [{}\\{}]  {}",
-                registry_match.root_label, registry_match.key_name, registry_match.display_name
-            );
-        }
-    }
-
-    println!("\n[Directories]");
-
-    if result.directory_matches.is_empty() {
-        println!("  (nothing found)");
-    } else {
-        for directory in &result.directory_matches {
-            println!("  {}", directory.display());
-        }
-    }
-}
-
-fn registry_matches(query: &str) -> Vec<RegistryMatch> {
-    uninstall_roots()
-        .into_iter()
-        .flat_map(|root| scan_reg_key(&root, query))
-        .collect()
-}
-
-fn scan_reg_key(root: &UninstallRoot, query: &str) -> Vec<RegistryMatch> {
-    root.key
-        .enum_keys()
-        .flatten()
-        .filter_map(|key_name| {
-            let app_key = root.key.open_subkey(&key_name).ok()?;
-            let display_name: String = app_key.get_value("DisplayName").ok()?;
-
-            display_name
-                .to_lowercase()
-                .contains(query)
-                .then_some(RegistryMatch {
+            if re.is_match(&display_name) {
+                let full_key_path = format!("{}\\{}", root.key_path, key_name);
+                matches.push(RegistryMatch {
                     hive: root.hive,
-                    uninstall_key_path: root.key_path,
+                    full_key_path,
                     root_label: root.label,
                     key_name,
                     display_name,
-                })
-        })
-        .collect()
+                });
+            }
+        }
+    }
+
+    matches
 }
 
-fn matching_directories(query: &str) -> Vec<PathBuf> {
+fn fetch_directory_matches(re: &regex::Regex) -> Vec<PathBuf> {
     candidate_dirs()
-        .into_iter()
-        .filter_map(|dir| std::fs::read_dir(dir).ok())
-        .flatten()
-        .flatten()
-        .filter(|entry| {
-            let name = entry.file_name();
-            name.to_string_lossy().to_lowercase().contains(query) && entry.path().is_dir()
+        .into_par_iter()
+        .flat_map_iter(|dir| {
+            std::fs::read_dir(dir)
+                .into_iter()
+                .flatten()
+                .filter_map(Result::ok)
+                .filter(|entry| {
+                    let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
+                    if !is_dir {
+                        return false;
+                    }
+                    re.is_match(&entry.file_name().to_string_lossy())
+                })
+                .map(|entry| entry.path())
         })
-        .map(|entry| entry.path())
         .collect()
 }
 
@@ -120,9 +104,8 @@ fn candidate_dirs() -> Vec<PathBuf> {
     }
 
     if let Ok(local) = env::var("LOCALAPPDATA") {
-        let local_path = PathBuf::from(local);
-        if let Some(appdata_root) = local_path.parent() {
-            let locallow = appdata_root.join("LocalLow");
+        if let Some(parent) = PathBuf::from(local).parent() {
+            let locallow = parent.join("LocalLow");
             if seen.insert(locallow.clone()) {
                 dirs.push(locallow);
             }
