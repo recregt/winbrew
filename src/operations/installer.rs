@@ -36,10 +36,11 @@ fn install_recursive(
     let source_kind = format!("{:?}", manifest.source.kind).to_lowercase();
     let strip_container = manifest.install.strip_container;
 
-    if let Some(pkg) = database::get_package(conn, name)? {
-        if pkg.status == PackageStatus::Ok && pkg.version == package_version {
-            return Ok(());
-        }
+    if let Some(pkg) = database::get_package(conn, name)?
+        && pkg.status == PackageStatus::Ok
+        && pkg.version == package_version
+    {
+        return Ok(());
     }
 
     for dep in &dependencies {

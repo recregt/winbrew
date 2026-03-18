@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use anyhow::Result;
 use comfy_table::{Cell, Color, Table, presets::UTF8_FULL_CONDENSED};
 use dialoguer::{Confirm, theme::ColorfulTheme};
