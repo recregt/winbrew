@@ -17,6 +17,12 @@ pub enum Command {
     /// List packages installed by winbrew
     List,
 
+    /// Show effective runtime settings and paths
+    Info,
+
+    /// Check local winbrew installation health
+    Doctor,
+
     /// Install a package from the configured package repository
     Install {
         #[arg(value_name = "PACKAGE")]
@@ -34,6 +40,33 @@ pub enum Command {
         #[arg(long, short = 'y', help_heading = "Safety")]
         yes: bool,
     },
+
+    /// Get or set winbrew configuration values
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq, Subcommand)]
+pub enum ConfigCommand {
+    /// List all configuration values
+    List,
+
+    /// Read a configuration value
+    Get {
+        #[arg(value_name = "KEY")]
+        key: String,
+    },
+
+    /// Store a configuration value
+    Set {
+        #[arg(value_name = "KEY")]
+        key: String,
+
+        #[arg(value_name = "VALUE")]
+        value: String,
+    },
 }
 
 #[cfg(test)]
@@ -46,6 +79,20 @@ mod tests {
         let cli = Cli::parse_from(["winbrew", "list"]);
 
         assert_eq!(cli.command, Command::List);
+    }
+
+    #[test]
+    fn parse_info() {
+        let cli = Cli::parse_from(["winbrew", "info"]);
+
+        assert_eq!(cli.command, Command::Info);
+    }
+
+    #[test]
+    fn parse_doctor() {
+        let cli = Cli::parse_from(["winbrew", "doctor"]);
+
+        assert_eq!(cli.command, Command::Doctor);
     }
 
     #[test]
@@ -70,6 +117,18 @@ mod tests {
             Command::Remove {
                 name: "ripgrep".to_string(),
                 yes: true,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_config_list() {
+        let cli = Cli::parse_from(["winbrew", "config", "list"]);
+
+        assert_eq!(
+            cli.command,
+            Command::Config {
+                command: super::ConfigCommand::List,
             }
         );
     }

@@ -1,11 +1,13 @@
-#![allow(dead_code)]
-
 use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::Path;
 
 pub fn create(name: &str, target: &Path, args: Option<&str>) -> Result<()> {
-    let shim_path = crate::core::paths::shim_path(name);
+    create_at(crate::core::paths::base_dir(), name, target, args)
+}
+
+pub fn create_at(root: &Path, name: &str, target: &Path, args: Option<&str>) -> Result<()> {
+    let shim_path = crate::core::paths::shim_path_at(root, name);
 
     if let Some(parent) = shim_path.parent() {
         fs::create_dir_all(parent).context("failed to create bin directory")?;
@@ -25,7 +27,11 @@ pub fn create(name: &str, target: &Path, args: Option<&str>) -> Result<()> {
 }
 
 pub fn remove(name: &str) -> Result<()> {
-    let shim_path = crate::core::paths::shim_path(name);
+    remove_at(crate::core::paths::base_dir(), name)
+}
+
+pub fn remove_at(root: &Path, name: &str) -> Result<()> {
+    let shim_path = crate::core::paths::shim_path_at(root, name);
 
     match fs::remove_file(&shim_path) {
         Ok(_) => Ok(()),
@@ -35,11 +41,19 @@ pub fn remove(name: &str) -> Result<()> {
 }
 
 pub fn exists(name: &str) -> bool {
-    crate::core::paths::shim_path(name).exists()
+    exists_at(crate::core::paths::base_dir(), name)
+}
+
+pub fn exists_at(root: &Path, name: &str) -> bool {
+    crate::core::paths::shim_path_at(root, name).exists()
 }
 
 pub fn read(name: &str) -> Result<(String, Option<String>)> {
-    let shim_path = crate::core::paths::shim_path(name);
+    read_at(crate::core::paths::base_dir(), name)
+}
+
+pub fn read_at(root: &Path, name: &str) -> Result<(String, Option<String>)> {
+    let shim_path = crate::core::paths::shim_path_at(root, name);
 
     let content = fs::read_to_string(&shim_path).context("failed to read shim file")?;
 

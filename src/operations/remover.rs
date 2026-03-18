@@ -1,4 +1,6 @@
 use anyhow::{Context, Result};
+use std::path::Path;
+use std::path::PathBuf;
 
 use crate::core::{paths, shim};
 use crate::database;
@@ -28,12 +30,13 @@ pub fn remove(name: &str) -> Result<()> {
     let conn = database::lock_conn()?;
 
     let pkg = database::get_package(&conn, name)?.context(format!("{} is not installed", name))?;
+    let install_root = paths::install_root_from_package_dir(Path::new(&pkg.install_dir));
 
     for s in &pkg.shims {
-        shim::remove(&s.name)?;
+        shim::remove_at(&install_root, &s.name)?;
     }
 
-    let install_dir = paths::package_dir(name);
+    let install_dir = PathBuf::from(&pkg.install_dir);
     if install_dir.exists() {
         std::fs::remove_dir_all(&install_dir).context("failed to remove package directory")?;
     }

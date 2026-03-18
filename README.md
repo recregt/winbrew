@@ -6,7 +6,8 @@
 
 A modern package manager for Windows that installs, tracks, and cleanly removes software.
 
-> ⚠️ Early development. Core install/list/remove flows are available and still evolving.
+> [!IMPORTANT]
+> Early development. Core install/list/remove+ flows are available and still evolving.
 
 ## Requirements
 

@@ -1,7 +1,6 @@
-#![allow(dead_code)]
-
 use std::env;
 use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -24,12 +23,32 @@ pub fn packages_dir() -> PathBuf {
     base_dir().join("packages")
 }
 
+pub fn packages_dir_at(root: &Path) -> PathBuf {
+    root.join("packages")
+}
+
+pub fn install_root(value: Option<&str>) -> PathBuf {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| base_dir().clone())
+}
+
 pub fn package_dir(name: &str) -> PathBuf {
     base_dir().join("packages").join(name)
 }
 
+pub fn package_dir_at(root: &Path, name: &str) -> PathBuf {
+    packages_dir_at(root).join(name)
+}
+
 pub fn bin_dir() -> PathBuf {
     base_dir().join("bin")
+}
+
+pub fn bin_dir_at(root: &Path) -> PathBuf {
+    root.join("bin")
 }
 
 pub fn data_dir() -> PathBuf {
@@ -44,23 +63,46 @@ pub fn cache_dir() -> PathBuf {
     base_dir().join("cache")
 }
 
+pub fn cache_dir_at(root: &Path) -> PathBuf {
+    root.join("cache")
+}
+
 pub fn cache_file(name: &str, version: &str, ext: &str) -> PathBuf {
-    base_dir()
-        .join("cache")
-        .join(format!("{}-{}.{}", name, version, ext))
+    cache_dir().join(format!("{}-{}.{}", name, version, ext))
+}
+
+pub fn cache_file_at(root: &Path, name: &str, version: &str, ext: &str) -> PathBuf {
+    cache_dir_at(root).join(format!("{}-{}.{}", name, version, ext))
 }
 
 pub fn shim_path(name: &str) -> PathBuf {
-    base_dir().join("bin").join(format!("{}.shim", name))
+    bin_dir().join(format!("{}.shim", name))
+}
+
+pub fn shim_path_at(root: &Path, name: &str) -> PathBuf {
+    bin_dir_at(root).join(format!("{}.shim", name))
 }
 
 pub fn ensure_dirs() -> std::io::Result<()> {
-    let base = base_dir(); // Read from global cache
-
-    // Create all directories using the cached base path
-    for dir in ["packages", "bin", "data", "cache"] {
-        fs::create_dir_all(base.join(dir))?;
+    for dir in [packages_dir(), bin_dir(), data_dir(), cache_dir()] {
+        fs::create_dir_all(dir)?;
     }
 
     Ok(())
+}
+
+pub fn ensure_install_dirs(root: &Path) -> std::io::Result<()> {
+    for dir in [packages_dir_at(root), bin_dir_at(root)] {
+        fs::create_dir_all(dir)?;
+    }
+
+    Ok(())
+}
+
+pub fn install_root_from_package_dir(install_dir: &Path) -> PathBuf {
+    install_dir
+        .parent()
+        .and_then(|path| path.parent())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| base_dir().clone())
 }

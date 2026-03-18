@@ -1,13 +1,15 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::HashSet;
 use std::path::Path;
+use std::path::PathBuf;
 
-use crate::core::{downloader, extractor, paths, shim};
+use crate::core::{
+    extractor,
+    network::{download_and_verify, fetch_manifest},
+    paths, shim,
+};
 use crate::database;
-use crate::manifest::Manifest;
 use crate::models::{Package, PackageStatus, Shim};
-
-const PKGS_REPO: &str = "https://raw.githubusercontent.com/recregt/winbrew-pkgs/main";
 
 pub fn install(name: &str, version: &str, on_progress: impl Fn(u64, u64)) -> Result<()> {
     let conn = database::lock_conn()?;
@@ -28,7 +30,8 @@ fn install_recursive(
         return Ok(());
     }
 
-    let manifest = fetch_manifest(name, version)?;
+    let install_root = install_root(conn)?;
+    let manifest = fetch_manifest(conn, name, version)?;
     let package_version = manifest.package.version.clone();
     let dependencies = manifest.package.dependencies.clone();
     let source_url = manifest.source.url.clone();
@@ -55,10 +58,11 @@ fn install_recursive(
     }
 
     paths::ensure_dirs()?;
+    paths::ensure_install_dirs(&install_root)?;
 
     let ext = detect_ext(&source_url);
     let cache_file = paths::cache_file(name, &package_version, &ext);
-    let install_dir = paths::package_dir(name);
+    let install_dir = paths::package_dir_at(&install_root, name);
 
     let normalized_bins = manifest.normalized_bins();
     let shims: Vec<Shim> = normalized_bins
@@ -85,20 +89,20 @@ fn install_recursive(
     )?;
 
     let result = (|| -> Result<()> {
-        downloader::download_and_verify(&source_url, &cache_file, &checksum, on_progress)?;
+        download_and_verify(conn, &source_url, &cache_file, &checksum, on_progress)?;
 
         extractor::extract(&cache_file, &install_dir, strip_container)?;
 
         for s in &shims {
             let target = install_dir.join(&s.path);
-            shim::create(&s.name, &target, s.args.as_deref())?;
+            shim::create_at(&install_root, &s.name, &target, s.args.as_deref())?;
         }
 
         Ok(())
     })();
 
     if let Err(err) = result {
-        cleanup_failed_install(conn, name, &install_dir, &shims);
+        cleanup_failed_install(conn, name, &install_root, &install_dir, &shims);
         return Err(err);
     }
 
@@ -107,17 +111,10 @@ fn install_recursive(
     Ok(())
 }
 
-fn fetch_manifest(name: &str, version: &str) -> Result<Manifest> {
-    let url = format!("{}/{}/{}.toml", PKGS_REPO, name, version);
-
-    let content = reqwest::blocking::get(&url)
-        .context("failed to fetch manifest")?
-        .error_for_status()
-        .context("manifest not found")?
-        .text()
-        .context("failed to read manifest")?;
-
-    Manifest::from_str(&content)
+fn install_root(conn: &rusqlite::Connection) -> Result<PathBuf> {
+    Ok(paths::install_root(
+        database::config_string(conn, "install_dir")?.as_deref(),
+    ))
 }
 
 fn detect_ext(url: &str) -> String {
@@ -137,11 +134,12 @@ fn parse_dependency(dep: &str) -> (&str, Option<&str>) {
 fn cleanup_failed_install(
     conn: &rusqlite::Connection,
     name: &str,
+    install_root: &Path,
     install_dir: &Path,
     shims: &[Shim],
 ) {
     for shim_entry in shims {
-        let _ = shim::remove(&shim_entry.name);
+        let _ = shim::remove_at(install_root, &shim_entry.name);
     }
 
     if install_dir.exists() {

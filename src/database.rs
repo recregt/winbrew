@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use anyhow::{Context, Result, anyhow};
 use chrono::Utc;
 use rusqlite::{Connection, Error as SqlError, OptionalExtension, params, types::Type};
@@ -154,11 +152,49 @@ pub fn config_set(conn: &Connection, key: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn config_list(conn: &Connection) -> Result<Vec<(String, String)>> {
+    let mut stmt = conn.prepare("SELECT key, value FROM config ORDER BY key ASC")?;
+    let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+
+    let mut pairs = Vec::new();
+    for row in rows {
+        pairs.push(row?);
+    }
+
+    Ok(pairs)
+}
+
 pub fn config_get(conn: &Connection, key: &str) -> Result<Option<String>> {
     let mut stmt = conn.prepare("SELECT value FROM config WHERE key = ?1")?;
     stmt.query_row(params![key], |row| row.get(0))
         .optional()
         .context("failed to get config")
+}
+
+pub fn config_string(conn: &Connection, key: &str) -> Result<Option<String>> {
+    Ok(config_get(conn, key)?
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty()))
+}
+
+pub fn config_u64(conn: &Connection, key: &str) -> Result<Option<u64>> {
+    match config_string(conn, key)? {
+        Some(value) => Ok(Some(
+            value
+                .parse::<u64>()
+                .with_context(|| format!("invalid {key} value"))?,
+        )),
+        None => Ok(None),
+    }
+}
+
+pub fn config_bool(conn: &Connection, key: &str) -> Result<Option<bool>> {
+    match config_string(conn, key)?.as_deref() {
+        Some("true") | Some("1") | Some("yes") | Some("on") => Ok(Some(true)),
+        Some("false") | Some("0") | Some("no") | Some("off") => Ok(Some(false)),
+        Some(value) => Err(anyhow!("invalid {key} value: {value}")),
+        None => Ok(None),
+    }
 }
 
 fn row_to_package(row: &rusqlite::Row) -> std::result::Result<Package, SqlError> {
