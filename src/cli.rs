@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(
     name = "winbrew",
-    version,
+    version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("WINBREW_GIT_HASH"), ")"),
     about = "A modern package manager for Windows that installs, tracks, and cleanly removes software.",
     arg_required_else_help = true
 )]

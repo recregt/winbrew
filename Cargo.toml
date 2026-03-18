@@ -19,7 +19,7 @@ strum_macros = "0.28.0"
 regex = "1.12.3"
 rayon = "1.11.0"
 comfy-table = "7.2.2"
-rusqlite = { version = "0.39", features = ["bundled"] }
+rusqlite = { version = "0.39", features = ["bundled", "unlock_notify"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
@@ -29,6 +29,9 @@ reqwest = { version = "0.13", features = ["blocking"] }
 memmap2 = "0.9"
 zip = "8.2.0"
 
+[target.'cfg(windows)'.dependencies]
+mimalloc = "0.1"
+
 [target.'cfg(target_env = "msvc")'.dependencies]
 sha2 = "0.10"
 
@@ -36,13 +39,15 @@ sha2 = "0.10"
 sha2 = { version = "0.10", features = ["asm"] }
 
 [build-dependencies]
-winres = "0.1"
+chrono = { version = "0.4", features = ["clock"] }
+winresource = "0.1"
 
 [lints.rust]
 dead_code = "warn"
 
 [profile.release]
-opt-level = 3
-lto = true
-strip = true
+opt-level = "z"
+lto = "fat"
 codegen-units = 1
+panic = "abort"
+strip = true

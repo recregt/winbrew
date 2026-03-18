@@ -1,17 +1,15 @@
-mod cli;
-mod commands;
-mod core;
-mod database;
-mod manifest;
-mod models;
-mod operations;
-mod ui;
-mod windows;
+#[cfg(windows)]
+use mimalloc::MiMalloc;
 
 use anyhow::Result;
 use clap::Parser;
+use winbrew::{Cli, run};
+
+#[cfg(windows)]
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() -> Result<()> {
-    let cli = cli::Cli::parse();
-    commands::run(cli.command)
+    let cli = Cli::parse();
+    run(cli.command)
 }
