@@ -9,60 +9,60 @@ use crate::{
 pub fn run() -> Result<()> {
     let ui = Ui::new();
     ui.page_title("Doctor");
+    ui.info("Checking database...");
 
     let conn = database::lock_conn()?;
     let install_root_value = database::config_string(&conn, "install_dir")?;
     let install_root = paths::install_root(install_root_value.as_deref());
 
-    let mut rows = Vec::new();
-    rows.push(("Database reachable".to_string(), "yes".to_string()));
-    rows.push((
-        "Database".to_string(),
-        paths::db_path().to_string_lossy().to_string(),
-    ));
-    rows.push((
-        "Database exists".to_string(),
+    ui.notice("Database reachable: yes");
+    ui.notice(format!("Database: {}", paths::db_path().to_string_lossy()));
+    ui.notice(format!(
+        "Database exists: {}",
         if paths::db_path().exists() {
             "yes"
         } else {
             "no"
         }
-        .to_string(),
     ));
-    rows.push((
-        "Install root source".to_string(),
+    ui.notice(format!(
+        "Install root source: {}",
         if install_root_value.is_some() {
-            "config:install_dir".to_string()
+            "config:install_dir"
         } else {
-            "default".to_string()
-        },
+            "default"
+        }
     ));
-    rows.push((
-        "Install root".to_string(),
-        install_root.to_string_lossy().to_string(),
+    ui.notice(format!("Install root: {}", install_root.to_string_lossy()));
+    ui.notice(format!(
+        "Install root exists: {}",
+        if install_root.exists() { "yes" } else { "no" }
     ));
-    rows.push((
-        "Install root exists".to_string(),
-        if install_root.exists() { "yes" } else { "no" }.to_string(),
+    ui.notice(format!(
+        "Bin dir: {}",
+        paths::bin_dir_at(&install_root).to_string_lossy()
     ));
-    rows.push((
-        "Bin dir".to_string(),
-        paths::bin_dir_at(&install_root)
-            .to_string_lossy()
-            .to_string(),
-    ));
-    rows.push((
-        "Packages dir".to_string(),
-        paths::packages_dir_at(&install_root)
-            .to_string_lossy()
-            .to_string(),
+    ui.notice(format!(
+        "Packages dir: {}",
+        paths::packages_dir_at(&install_root).to_string_lossy()
     ));
 
+    ui.info("Loading installed packages...");
     let packages = database::list_packages(&conn)?;
-    rows.push(("Installed packages".to_string(), packages.len().to_string()));
+    ui.info(format!("Loaded {} package(s).", packages.len()));
+    ui.notice(format!("Installed packages: {}", packages.len()));
 
     let mut broken = Vec::new();
-    for pkg in &packages {
+    ui.info("Scanning installed shims...");
+    for (index, pkg) in packages.iter().enumerate() {
+        if index % 25 == 0 {
+            ui.info(format!(
+                "Scanning package {}/{}...",
+                index + 1,
+                packages.len()
+            ));
+        }
+
         for shim_entry in &pkg.shims {
             if !shim::exists_at(&install_root, &shim_entry.name) {
                 broken.push(format!("{} -> {}", pkg.name, shim_entry.name));
@@ -83,9 +83,7 @@ pub fn run() -> Result<()> {
         }
     }
 
-    rows.push(("Broken shims".to_string(), broken.len().to_string()));
-
-    ui.display_key_values(&rows);
+    ui.notice(format!("Broken shims: {}", broken.len()));
 
     if broken.is_empty() {
         ui.success("No broken shims found.");
