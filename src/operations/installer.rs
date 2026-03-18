@@ -6,7 +6,7 @@ use crate::core::{downloader, extractor, paths, shim};
 use crate::database::{self, Package, PackageStatus};
 use crate::manifest::Manifest;
 
-const PKGS_REPO: &str = "https://raw.githubusercontent.com/yourusername/winbrew-pkgs/main";
+const PKGS_REPO: &str = "https://raw.githubusercontent.com/recregt/winbrew-pkgs/main";
 
 pub fn install(name: &str, version: &str, on_progress: impl Fn(u64, u64)) -> Result<()> {
     let conn = database::connect()?;
