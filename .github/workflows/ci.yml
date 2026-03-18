@@ -59,77 +59,35 @@ jobs:
       - name: Build
         run: cargo build
 
-      - name: Install PuTTY via MSI
-        run: |
-          Invoke-WebRequest -Uri "https://the.earth.li/~sgtatham/putty/latest/w64/putty-64bit-installer.msi" -OutFile "putty.msi"
-          Start-Process msiexec.exe -Wait -ArgumentList '/i putty.msi /quiet /qn /norestart'
-
-      # ── wb --version ──────────────────────────────────────────────────────
       - name: wb --version
         run: .\target\debug\wb.exe --version
 
-      # ── wb --help ─────────────────────────────────────────────────────────
       - name: wb --help
         run: .\target\debug\wb.exe --help
 
-      # ── list (no filter) ──────────────────────────────────────────────────
-      - name: wb list
+      - name: wb list (empty)
         run: .\target\debug\wb.exe list
 
-      # ── list with filter ──────────────────────────────────────────────────
-      - name: wb list "putty"
+      - name: wb install node
+        run: .\target\debug\wb.exe install node
+
+      - name: wb list (node should appear)
         run: |
-          $out = .\target\debug\wb.exe list "putty" | Out-String
+          $out = .\target\debug\wb.exe list | Out-String
           Write-Host $out
-          if ($out -notmatch "PuTTY") {
-            Write-Error "Expected 'PuTTY' in list output"; exit 1
+          if ($out -notmatch "node") {
+            Write-Error "Expected 'node' in list output"; exit 1
           }
 
-      # ── scan (read-only) ──────────────────────────────────────────────────
-      - name: wb scan "putty"
-        run: |
-          $out = .\target\debug\wb.exe scan "putty" | Out-String
-          Write-Host $out
-          $nothingCount = ([regex]::Matches($out, '\(nothing found\)')).Count
-          if ($nothingCount -eq 2) {
-            Write-Error "Expected scan to find at least one PuTTY entry"; exit 1
-          }
+      - name: wb remove node
+        run: .\target\debug\wb.exe remove node --yes
 
-      # ── conflicting flags: --yes + --dry-run must exit non-zero ───────────
-      - name: wb clean --yes --dry-run must fail
+      - name: wb list (node should be gone)
         run: |
-          & .\target\debug\wb.exe clean "putty" --yes --dry-run 2>&1 | Out-Null
-          if ($LASTEXITCODE -eq 0) {
-            Write-Error "Expected non-zero exit for conflicting --yes --dry-run flags"; exit 1
-          }
-          exit 0
-
-      # ── clean --yes (real deletion) ───────────────────────────────────────
-      - name: wb clean "putty" --yes
-        run: |
-          $out = .\target\debug\wb.exe clean "putty" --yes | Out-String
+          $out = .\target\debug\wb.exe list | Out-String
           Write-Host $out
-          if ($out -notmatch "Deleted \d+ item\(s\)") {
-            Write-Error "Expected 'Deleted N item(s)' in clean output"; exit 1
-          }
-
-      # ── post-clean: scan must return nothing ──────────────────────────────
-      - name: Verify PuTTY fully removed (scan returns empty)
-        run: |
-          $out = .\target\debug\wb.exe scan "putty" | Out-String
-          Write-Host $out
-          $nothingCount = ([regex]::Matches($out, '\(nothing found\)')).Count
-          if ($nothingCount -lt 2) {
-            Write-Error "Expected scan to find nothing after clean; got:`n$out"; exit 1
-          }
-
-      # ── post-clean: list must no longer contain 7-Zip ─────────────────────
-      - name: Verify PuTTY absent from list after clean
-        run: |
-          $out = .\target\debug\wb.exe list "putty" | Out-String
-          Write-Host $out
-          if ($out -match "PuTTY") {
-            Write-Error "PuTTY should not appear in list after clean"; exit 1
+          if ($out -match "node") {
+            Write-Error "node should not appear after remove"; exit 1
           }
 
   dependabot-metadata:
