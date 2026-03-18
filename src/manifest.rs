@@ -87,13 +87,13 @@ pub struct Manifest {
 }
 
 impl Manifest {
-    pub fn from_str(content: &str) -> Result<Self> {
+    pub fn parse(content: &str) -> Result<Self> {
         toml::from_str(content).context("failed to parse manifest")
     }
 
     pub fn from_file(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path).context("failed to read manifest file")?;
-        Self::from_str(&content)
+        Self::parse(&content)
     }
 
     pub fn normalized_bins(self) -> Vec<NormalizedBin> {

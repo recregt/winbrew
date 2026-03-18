@@ -19,7 +19,7 @@ pub fn fetch_manifest(conn: &Connection, name: &str, version: &str) -> Result<Ma
         .text()
         .context("failed to read manifest")?;
 
-    Manifest::from_str(&content)
+    Manifest::parse(&content)
 }
 
 fn manifest_url(conn: &Connection, name: &str, version: &str) -> Result<String> {

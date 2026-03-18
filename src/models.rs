@@ -26,7 +26,7 @@ impl PackageStatus {
         }
     }
 
-    pub fn from_str(status: &str) -> Self {
+    pub fn parse(status: &str) -> Self {
         match status {
             "ok" => Self::Ok,
             "updating" => Self::Updating,

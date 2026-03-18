@@ -143,6 +143,12 @@ impl Ui {
     }
 }
 
+impl Default for Ui {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn header_cell(label: &str, color_enabled: bool, fg: Color) -> Cell {
     let cell = Cell::new(label);
     if color_enabled { cell.fg(fg) } else { cell }

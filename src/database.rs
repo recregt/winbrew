@@ -215,7 +215,7 @@ fn row_to_package(row: &rusqlite::Row) -> std::result::Result<Package, SqlError>
         install_dir: row.get("install_dir")?,
         shims,
         dependencies,
-        status: PackageStatus::from_str(&status_raw),
+        status: PackageStatus::parse(&status_raw),
         installed_at: row.get("installed_at")?,
     })
 }
