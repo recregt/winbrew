@@ -10,13 +10,15 @@ fn main() {
 <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
         <requestedPrivileges>
-            <requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>
+            <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
         </requestedPrivileges>
     </security>
 </trustInfo>
 </assembly>
 "#,
         );
-        res.compile().unwrap();
+        if let Err(err) = res.compile() {
+            panic!("failed to compile Windows resources: {err}");
+        }
     }
 }

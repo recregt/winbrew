@@ -9,8 +9,7 @@ use crate::manifest::Manifest;
 const PKGS_REPO: &str = "https://raw.githubusercontent.com/recregt/winbrew-pkgs/main";
 
 pub fn install(name: &str, version: &str, on_progress: impl Fn(u64, u64)) -> Result<()> {
-    let conn = database::connect()?;
-    database::migrate(&conn)?;
+    let conn = database::lock_conn()?;
 
     let mut visited = HashSet::new();
     install_recursive(name, version, &conn, &mut visited, &on_progress)

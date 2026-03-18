@@ -3,8 +3,29 @@ use anyhow::{Context, Result};
 use crate::core::{paths, shim};
 use crate::database;
 
+pub fn find_dependents(name: &str) -> Result<Vec<String>> {
+    let conn = database::lock_conn()?;
+
+    let mut dependents = database::list_packages(&conn)?
+        .into_iter()
+        .filter(|pkg| {
+            pkg.name != name
+                && pkg
+                    .dependencies
+                    .iter()
+                    .any(|dep| dependency_name(dep).eq_ignore_ascii_case(name))
+        })
+        .map(|pkg| pkg.name)
+        .collect::<Vec<_>>();
+
+    dependents.sort_unstable();
+    dependents.dedup();
+
+    Ok(dependents)
+}
+
 pub fn remove(name: &str) -> Result<()> {
-    let conn = database::connect()?;
+    let conn = database::lock_conn()?;
 
     let pkg = database::get_package(&conn, name)?.context(format!("{} is not installed", name))?;
 
@@ -20,4 +41,8 @@ pub fn remove(name: &str) -> Result<()> {
     database::delete_package(&conn, name)?;
 
     Ok(())
+}
+
+fn dependency_name(dep: &str) -> &str {
+    dep.rsplit_once('@').map(|(name, _)| name).unwrap_or(dep)
 }

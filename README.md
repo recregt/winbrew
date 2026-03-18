@@ -6,12 +6,12 @@
 
 A modern package manager for Windows that installs, tracks, and cleanly removes software.
 
-> ⚠️ Early development. Install and track features are not yet implemented.
+> ⚠️ Early development. Core install/list/remove flows are available and still evolving.
 
 ## Requirements
 
 - Windows 10 or later
-- Run as **Administrator** (required for registry access)
+- Internet access (for package manifests and artifacts)
 
 ## Installation
 
@@ -26,41 +26,45 @@ Download the latest `winbrew-vX.X.X-windows-x86_64.zip` from [Releases](https://
 
 ## Usage
 
-### List installed applications
+### List installed packages
 ```bash
 wb list
-wb list steam        # filter by name
 ```
 
-### Scan for leftovers
-
-Scans registry and common directories without making any changes.
+### Install package
 ```bash
-wb scan steam
+wb install node
+wb install ripgrep latest
 ```
 
-### Clean leftovers
+### Remove package
 ```bash
-wb clean steam             # interactive confirmation
-wb clean steam --yes       # skip confirmation
-wb clean steam --dry-run   # preview without deleting
+wb remove node         # interactive confirmation
+wb remove node --yes   # skip confirmation
 ```
 
 ## How it works
 
-`wb scan` and `wb clean` search the following locations:
+`wb install` does the following:
 
-**Registry**
-- `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`
-- `HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall`
-- `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`
+- Fetches package manifest from the configured package repository
+- Downloads and verifies artifact checksum
+- Extracts package under `%WINBREW_ROOT%\packages\<name>`
+- Creates shims under `%WINBREW_ROOT%\bin`
+- Persists metadata into `%WINBREW_ROOT%\data\winbrew.db`
 
-**Directories**
-- `%PROGRAMFILES%`
-- `%PROGRAMFILES(X86)%`
-- `%APPDATA%`
-- `%LOCALAPPDATA%`
-- `%LOCALAPPDATA%\..\LocalLow`
+`wb remove` removes shims and package directory, then deletes package metadata.
+
+Default root is `C:\winbrew`, override with `WINBREW_ROOT`.
+
+### Package repository
+
+Current manifest source:
+- `https://raw.githubusercontent.com/recregt/winbrew-pkgs/main/<name>/<version>.toml`
+
+### Legacy cleanup mode
+
+Currently, registry scan/cleanup command group (`scan`/`clean`) is removed.
 
 ## License
 

@@ -6,8 +6,26 @@ pub fn run(name: &str, yes: bool) -> Result<()> {
     let ui = Ui::new();
     ui.page_title("Remove");
 
+    let dependents = remover::find_dependents(name)?;
+    if !dependents.is_empty() {
+        ui.notice(format!(
+            "Warning: {name} is required by installed package(s): {}",
+            dependents.join(", ")
+        ));
+
+        if yes {
+            ui.notice("Proceeding because --yes was provided.");
+        }
+    }
+
     if !yes {
-        let confirmed = ui.confirm("Do you want to remove this package and its shims?", false)?;
+        let prompt = if dependents.is_empty() {
+            "Do you want to remove this package and its shims?"
+        } else {
+            "This removal can break dependent packages. Remove anyway?"
+        };
+
+        let confirmed = ui.confirm(prompt, false)?;
 
         if !confirmed {
             ui.notice("Aborted.");
