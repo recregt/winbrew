@@ -29,11 +29,13 @@ impl BinEntry {
                     .unwrap_or_default()
                     .to_string_lossy()
                     .to_string();
-                NormalizedBin { name, path, args: None }
+                NormalizedBin {
+                    name,
+                    path,
+                    args: None,
+                }
             }
-            BinEntry::Detailed { name, path, args } => {
-                NormalizedBin { name, path, args }
-            }
+            BinEntry::Detailed { name, path, args } => NormalizedBin { name, path, args },
         }
     }
 }
@@ -90,12 +92,15 @@ impl Manifest {
     }
 
     pub fn from_file(path: &Path) -> Result<Self> {
-        let content = std::fs::read_to_string(path)
-            .context("failed to read manifest file")?;
+        let content = std::fs::read_to_string(path).context("failed to read manifest file")?;
         Self::from_str(&content)
     }
 
     pub fn normalized_bins(self) -> Vec<NormalizedBin> {
-        self.install.bin.into_iter().map(|b| b.normalize()).collect()
+        self.install
+            .bin
+            .into_iter()
+            .map(|b| b.normalize())
+            .collect()
     }
 }

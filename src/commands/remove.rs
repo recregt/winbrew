@@ -1,9 +1,6 @@
 use anyhow::Result;
 
-use crate::{
-    operations::remover,
-    ui::Ui,
-};
+use crate::{operations::remover, ui::Ui};
 
 pub fn run(name: &str, yes: bool) -> Result<()> {
     let ui = Ui::new();

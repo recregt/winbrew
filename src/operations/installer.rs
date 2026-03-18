@@ -44,7 +44,13 @@ fn install_recursive(
 
     for dep in &dependencies {
         let (dep_name, dep_version) = parse_dependency(dep);
-        install_recursive(dep_name, dep_version.unwrap_or("latest"), conn, visited, on_progress)?;
+        install_recursive(
+            dep_name,
+            dep_version.unwrap_or("latest"),
+            conn,
+            visited,
+            on_progress,
+        )?;
     }
 
     paths::ensure_dirs()?;
@@ -63,16 +69,19 @@ fn install_recursive(
         })
         .collect();
 
-    database::insert_package(conn, &Package {
-        name: name.to_string(),
-        version: package_version.clone(),
-        kind: source_kind,
-        install_dir: install_dir.to_string_lossy().to_string(),
-        shims: shims.clone(),
-        dependencies,
-        status: PackageStatus::Installing,
-        installed_at: database::now(),
-    })?;
+    database::insert_package(
+        conn,
+        &Package {
+            name: name.to_string(),
+            version: package_version.clone(),
+            kind: source_kind,
+            install_dir: install_dir.to_string_lossy().to_string(),
+            shims: shims.clone(),
+            dependencies,
+            status: PackageStatus::Installing,
+            installed_at: database::now(),
+        },
+    )?;
 
     let result = (|| -> Result<()> {
         downloader::download_and_verify(&source_url, &cache_file, &checksum, on_progress)?;

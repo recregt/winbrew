@@ -6,8 +6,7 @@ pub fn create(name: &str, target: &Path, args: Option<&str>) -> Result<()> {
     let shim_path = crate::core::paths::shim_path(name);
 
     if let Some(parent) = shim_path.parent() {
-        fs::create_dir_all(parent)
-            .context("failed to create bin directory")?;
+        fs::create_dir_all(parent).context("failed to create bin directory")?;
     }
 
     let mut content = format!("path = {}\n", target.to_string_lossy());
@@ -18,8 +17,7 @@ pub fn create(name: &str, target: &Path, args: Option<&str>) -> Result<()> {
         content.push('\n');
     }
 
-    fs::write(&shim_path, content)
-        .context("failed to write shim file")?;
+    fs::write(&shim_path, content).context("failed to write shim file")?;
 
     Ok(())
 }
@@ -41,8 +39,7 @@ pub fn exists(name: &str) -> bool {
 pub fn read(name: &str) -> Result<(String, Option<String>)> {
     let shim_path = crate::core::paths::shim_path(name);
 
-    let content = fs::read_to_string(&shim_path)
-        .context("failed to read shim file")?;
+    let content = fs::read_to_string(&shim_path).context("failed to read shim file")?;
 
     let mut path = None;
     let mut args = None;

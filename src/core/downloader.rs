@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use reqwest::StatusCode;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
@@ -53,7 +53,7 @@ where
         file.set_len(total_size)
             .context("failed to pre-allocate destination file")?;
     }
-    
+
     let mut writer = BufWriter::with_capacity(BUFFER_SIZE, file);
     let mut buffer = [0u8; BUFFER_SIZE];
     let mut downloaded = existing_size;
@@ -74,7 +74,7 @@ where
         writer
             .write_all(&buffer[..read])
             .context("failed to write file")?;
-            
+
         downloaded += read as u64;
         on_progress(downloaded, total_size);
     }
@@ -93,20 +93,16 @@ where
         fs::remove_file(dest).context("failed to replace existing destination file")?;
     }
 
-    fs::rename(&temp_dest, dest)
-        .context("failed to finalize downloaded file")?;
+    fs::rename(&temp_dest, dest).context("failed to finalize downloaded file")?;
     temp_guard.keep = true;
 
     Ok(())
 }
 
 pub fn verify_checksum(path: &Path, expected: &str) -> Result<()> {
-    let expected = expected
-        .strip_prefix("sha256:")
-        .unwrap_or(expected);
+    let expected = expected.strip_prefix("sha256:").unwrap_or(expected);
 
-    let file = File::open(path)
-        .context("failed to open file for checksum")?;
+    let file = File::open(path).context("failed to open file for checksum")?;
 
     let actual = match unsafe { memmap2::MmapOptions::new().map(&file) } {
         Ok(mmap) => hex::encode(Sha256::digest(&mmap)),

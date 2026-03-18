@@ -1,11 +1,11 @@
-mod core;
 mod cli;
 mod commands;
+mod core;
+mod database;
+mod manifest;
 mod operations;
 mod ui;
 mod windows;
-mod database;
-mod manifest;
 
 use anyhow::Result;
 use clap::Parser;

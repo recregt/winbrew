@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -37,7 +37,10 @@ fn extract_zip(src: &Path, dest: &Path, strip_container: bool) -> Result<()> {
         };
 
         let relative = match &container {
-            Some(prefix) => raw_path.strip_prefix(prefix).unwrap_or(&raw_path).to_path_buf(),
+            Some(prefix) => raw_path
+                .strip_prefix(prefix)
+                .unwrap_or(&raw_path)
+                .to_path_buf(),
             None => raw_path,
         };
 
@@ -72,7 +75,7 @@ fn detect_container(archive: &mut zip::ZipArchive<fs::File>) -> Option<PathBuf> 
 
     for i in 0..archive.len() {
         let entry = archive.by_index(i).ok()?;
-        
+
         if entry.is_dir() {
             continue;
         }

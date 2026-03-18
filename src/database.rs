@@ -44,12 +44,10 @@ pub fn connect() -> Result<Connection> {
     let path = paths::db_path();
 
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .context("failed to create winbrew data directory")?;
+        std::fs::create_dir_all(parent).context("failed to create winbrew data directory")?;
     }
 
-    let conn = Connection::open(&path)
-        .context("failed to open database")?;
+    let conn = Connection::open(&path).context("failed to open database")?;
 
     conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
         .context("failed to set pragmas")?;
@@ -58,7 +56,8 @@ pub fn connect() -> Result<Connection> {
 }
 
 pub fn migrate(conn: &Connection) -> Result<()> {
-    conn.execute_batch("
+    conn.execute_batch(
+        "
         CREATE TABLE IF NOT EXISTS packages (
             name         TEXT PRIMARY KEY,
             version      TEXT NOT NULL,
@@ -74,16 +73,17 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
-    ").context("migration failed")?;
+    ",
+    )
+    .context("migration failed")?;
 
     Ok(())
 }
 
 pub fn insert_package(conn: &Connection, pkg: &Package) -> Result<()> {
-    let shims = serde_json::to_string(&pkg.shims)
-        .context("failed to serialize shims")?;
-    let deps = serde_json::to_string(&pkg.dependencies)
-        .context("failed to serialize dependencies")?;
+    let shims = serde_json::to_string(&pkg.shims).context("failed to serialize shims")?;
+    let deps =
+        serde_json::to_string(&pkg.dependencies).context("failed to serialize dependencies")?;
 
     conn.execute(
         "INSERT OR REPLACE INTO packages
@@ -99,7 +99,8 @@ pub fn insert_package(conn: &Connection, pkg: &Package) -> Result<()> {
             pkg.status.to_string(),
             pkg.installed_at,
         ],
-    ).context("failed to insert package")?;
+    )
+    .context("failed to insert package")?;
 
     Ok(())
 }
@@ -108,7 +109,8 @@ pub fn update_status(conn: &Connection, name: &str, status: PackageStatus) -> Re
     conn.execute(
         "UPDATE packages SET status = ?1 WHERE name = ?2",
         params![status.to_string(), name],
-    ).context("failed to update status")?;
+    )
+    .context("failed to update status")?;
 
     Ok(())
 }
@@ -116,7 +118,7 @@ pub fn update_status(conn: &Connection, name: &str, status: PackageStatus) -> Re
 pub fn get_package(conn: &Connection, name: &str) -> Result<Option<Package>> {
     let mut stmt = conn.prepare(
         "SELECT name, version, kind, install_dir, shims, dependencies, status, installed_at
-         FROM packages WHERE name = ?1"
+         FROM packages WHERE name = ?1",
     )?;
 
     let mut rows = stmt.query(params![name])?;
@@ -132,12 +134,10 @@ pub fn list_packages(conn: &Connection) -> Result<Vec<Package>> {
     let mut stmt = conn.prepare(
         "SELECT name, version, kind, install_dir, shims, dependencies, status, installed_at
          FROM packages WHERE status = 'ok'
-         ORDER BY name ASC"
+         ORDER BY name ASC",
     )?;
 
-    let rows = stmt.query_map([], |row| {
-        Ok(row_to_package(row))
-    })?;
+    let rows = stmt.query_map([], |row| Ok(row_to_package(row)))?;
 
     let mut packages = Vec::new();
     for row in rows {
@@ -148,10 +148,9 @@ pub fn list_packages(conn: &Connection) -> Result<Vec<Package>> {
 }
 
 pub fn delete_package(conn: &Connection, name: &str) -> Result<bool> {
-    let affected = conn.execute(
-        "DELETE FROM packages WHERE name = ?1",
-        params![name],
-    ).context("failed to delete package")?;
+    let affected = conn
+        .execute("DELETE FROM packages WHERE name = ?1", params![name])
+        .context("failed to delete package")?;
 
     Ok(affected > 0)
 }
@@ -160,7 +159,8 @@ pub fn config_set(conn: &Connection, key: &str, value: &str) -> Result<()> {
     conn.execute(
         "INSERT OR REPLACE INTO config (key, value) VALUES (?1, ?2)",
         params![key, value],
-    ).context("failed to set config")?;
+    )
+    .context("failed to set config")?;
 
     Ok(())
 }
@@ -177,17 +177,14 @@ pub fn config_get(conn: &Connection, key: &str) -> Result<Option<String>> {
 }
 
 fn row_to_package(row: &rusqlite::Row) -> Result<Package> {
-    let shims: Vec<Shim> = serde_json::from_str(
-        &row.get::<_, String>(4)?
-    ).context("failed to parse shims")?;
+    let shims: Vec<Shim> =
+        serde_json::from_str(&row.get::<_, String>(4)?).context("failed to parse shims")?;
 
-    let dependencies: Vec<String> = serde_json::from_str(
-        &row.get::<_, String>(5)?
-    ).context("failed to parse dependencies")?;
+    let dependencies: Vec<String> =
+        serde_json::from_str(&row.get::<_, String>(5)?).context("failed to parse dependencies")?;
 
-    let status: PackageStatus = serde_json::from_str(
-        &format!("\"{}\"", row.get::<_, String>(6)?)
-    ).unwrap_or(PackageStatus::Failed);
+    let status: PackageStatus = serde_json::from_str(&format!("\"{}\"", row.get::<_, String>(6)?))
+        .unwrap_or(PackageStatus::Failed);
 
     Ok(Package {
         name: row.get(0)?,

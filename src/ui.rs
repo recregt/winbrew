@@ -41,7 +41,7 @@ impl Ui {
         let pb = ProgressBar::new(0);
         pb.set_style(
             ProgressStyle::with_template(
-                "{spinner:.green} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})"
+                "{spinner:.green} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})",
             )
             .unwrap()
             .progress_chars("█▉▊▋▌▍▎▏  "),
