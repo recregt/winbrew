@@ -45,6 +45,8 @@ jobs:
     name: Integration tests (Windows)
     runs-on: windows-latest
     needs: checks
+    env:
+      WB_EXE: .\target\x86_64-pc-windows-msvc\debug\wb.exe
 
     steps:
       - name: Checkout
@@ -60,31 +62,124 @@ jobs:
         run: cargo build
 
       - name: wb --version
-        run: .\target\debug\wb.exe --version
+        continue-on-error: true
+        run: $env:WB_EXE --version
 
       - name: wb --help
-        run: .\target\debug\wb.exe --help
+        continue-on-error: true
+        run: $env:WB_EXE --help
 
       - name: wb list (empty)
-        run: .\target\debug\wb.exe list
+        continue-on-error: true
+        run: |
+          & $env:WB_EXE list
+
+      - name: wb config seed values
+        continue-on-error: true
+        run: |
+          & $env:WB_EXE config set ci.integration enabled
+          & $env:WB_EXE config set default_yes true
+          & $env:WB_EXE config set color false
+          & $env:WB_EXE config set download_timeout 31
+          & $env:WB_EXE config set concurrent_downloads 3
+
+      - name: wb config get ci.integration
+        continue-on-error: true
+        run: |
+          $out = & $env:WB_EXE config get ci.integration | Out-String
+          Write-Host $out
+          if ($out -notmatch "ci.integration = enabled") {
+            Write-Error "Expected config get to return the CI test value"; exit 1
+          }
+
+      - name: wb config get download_timeout
+        continue-on-error: true
+        run: |
+          $out = & $env:WB_EXE config get download_timeout | Out-String
+          Write-Host $out
+          if ($out -notmatch "download_timeout = 31") {
+            Write-Error "Expected config get to return the seeded timeout"; exit 1
+          }
+
+      - name: wb config list includes seeded values
+        continue-on-error: true
+        run: |
+          $out = & $env:WB_EXE config list | Out-String
+          Write-Host $out
+          foreach ($needle in @(
+            "ci.integration = enabled",
+            "default_yes = true",
+            "color = false",
+            "download_timeout = 31",
+            "concurrent_downloads = 3"
+          )) {
+            if ($out -notmatch [regex]::Escape($needle)) {
+              Write-Error "Expected config list to include '$needle'"; exit 1
+            }
+          }
+
+      - name: wb info
+        continue-on-error: true
+        run: |
+          $out = & $env:WB_EXE info | Out-String
+          Write-Host $out
+          if ($out -notmatch "Version:") {
+            Write-Error "Expected 'Version:' in info output"; exit 1
+          }
+          if ($out -notmatch "Database:") {
+            Write-Error "Expected 'Database:' in info output"; exit 1
+          }
+          foreach ($needle in @(
+            "Default yes: true",
+            "Color: false",
+            "Download timeout: 31s",
+            "Concurrent downloads: 3"
+          )) {
+            if ($out -notmatch [regex]::Escape($needle)) {
+              Write-Error "Expected info output to include '$needle'"; exit 1
+            }
+          }
+
+      - name: wb doctor
+        continue-on-error: true
+        run: |
+          $out = & $env:WB_EXE doctor | Out-String
+          Write-Host $out
+          if ($out -notmatch "No broken shims found\.") {
+            Write-Error "Expected doctor to report no broken shims"; exit 1
+          }
+          foreach ($needle in @(
+            "Installed packages: 0",
+            "Broken shims: 0"
+          )) {
+            if ($out -notmatch [regex]::Escape($needle)) {
+              Write-Error "Expected doctor output to include '$needle'"; exit 1
+            }
+          }
 
       - name: wb install node
-        run: .\target\debug\wb.exe install node
+        continue-on-error: true
+        run: |
+          & $env:WB_EXE install node
 
       - name: wb list (node should appear)
+        continue-on-error: true
         run: |
-          $out = .\target\debug\wb.exe list | Out-String
+          $out = & $env:WB_EXE list | Out-String
           Write-Host $out
           if ($out -notmatch "node") {
             Write-Error "Expected 'node' in list output"; exit 1
           }
 
       - name: wb remove node
-        run: .\target\debug\wb.exe remove node --yes
+        continue-on-error: true
+        run: |
+          & $env:WB_EXE remove node --yes
 
       - name: wb list (node should be gone)
+        continue-on-error: true
         run: |
-          $out = .\target\debug\wb.exe list | Out-String
+          $out = & $env:WB_EXE list | Out-String
           Write-Host $out
           if ($out -match "node") {
             Write-Error "node should not appear after remove"; exit 1

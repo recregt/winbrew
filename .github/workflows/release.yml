@@ -12,6 +12,8 @@ jobs:
   build-and-release:
     name: Build and Release
     runs-on: windows-latest
+    env:
+      WB_EXE: .\target\x86_64-pc-windows-msvc\release\wb.exe
 
     steps:
       - name: Checkout
@@ -31,7 +33,7 @@ jobs:
       - name: Package
         run: |
           mkdir release_pkg
-          copy target\release\wb.exe release_pkg\
+          copy $env:WB_EXE release_pkg\
           copy README.md release_pkg\
           Compress-Archive -Path release_pkg\* -DestinationPath winbrew-${{ github.ref_name }}-windows-x86_64.zip
 
