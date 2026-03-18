@@ -22,6 +22,9 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
       - name: Build
         run: cargo build --release
 
@@ -31,6 +34,11 @@ jobs:
           copy target\release\wb.exe release_pkg\
           copy README.md release_pkg\
           Compress-Archive -Path release_pkg\* -DestinationPath winbrew-${{ github.ref_name }}-windows-x86_64.zip
+
+      - name: Checksum
+        run: |
+          $hash = Get-FileHash winbrew-${{ github.ref_name }}-windows-x86_64.zip -Algorithm SHA256
+          $hash.Hash | Out-File -FilePath winbrew-${{ github.ref_name }}-windows-x86_64.zip.sha256
 
       - name: Generate changelog
         id: changelog
@@ -60,5 +68,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: winbrew-${{ github.ref_name }}-windows-x86_64.zip
+          files: | 
+            winbrew-${{ github.ref_name }}-windows-x86_64.zip
+            winbrew-${{ github.ref_name }}-windows-x86_64.zip.sha256
           body: ${{ steps.changelog.outputs.changelog }}
