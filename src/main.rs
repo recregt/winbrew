@@ -3,6 +3,7 @@ mod commands;
 mod core;
 mod database;
 mod manifest;
+mod models;
 mod operations;
 mod ui;
 mod windows;

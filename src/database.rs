@@ -2,67 +2,13 @@
 
 use anyhow::{Context, Result, anyhow};
 use chrono::Utc;
-use rusqlite::{Connection, params};
-use serde::{Deserialize, Serialize};
+use rusqlite::{Connection, Error as SqlError, OptionalExtension, params, types::Type};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use crate::core::paths;
+use crate::models::{Package, PackageStatus, Shim};
 
 static DB_CONN: OnceLock<Mutex<Connection>> = OnceLock::new();
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Shim {
-    pub name: String,
-    pub path: String,
-    pub args: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum PackageStatus {
-    Installing,
-    Ok,
-    Updating,
-    Failed,
-}
-
-impl PackageStatus {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Installing => "installing",
-            Self::Ok => "ok",
-            Self::Updating => "updating",
-            Self::Failed => "failed",
-        }
-    }
-
-    fn from_str(status: &str) -> Self {
-        match status {
-            "ok" => Self::Ok,
-            "updating" => Self::Updating,
-            "failed" => Self::Failed,
-            _ => Self::Installing,
-        }
-    }
-}
-
-impl std::fmt::Display for PackageStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-#[derive(Debug)]
-pub struct Package {
-    pub name: String,
-    pub version: String,
-    pub kind: String,
-    pub install_dir: String,
-    pub shims: Vec<Shim>,
-    pub dependencies: Vec<String>,
-    pub status: PackageStatus,
-    pub installed_at: String,
-}
 
 pub fn connect() -> Result<Connection> {
     let path = paths::db_path();
@@ -168,13 +114,9 @@ pub fn get_package(conn: &Connection, name: &str) -> Result<Option<Package>> {
          FROM packages WHERE name = ?1",
     )?;
 
-    let mut rows = stmt.query(params![name])?;
-
-    if let Some(row) = rows.next()? {
-        Ok(Some(row_to_package(row)?))
-    } else {
-        Ok(None)
-    }
+    stmt.query_row(params![name], row_to_package)
+        .optional()
+        .context("failed to query package")
 }
 
 pub fn list_packages(conn: &Connection) -> Result<Vec<Package>> {
@@ -214,24 +156,21 @@ pub fn config_set(conn: &Connection, key: &str, value: &str) -> Result<()> {
 
 pub fn config_get(conn: &Connection, key: &str) -> Result<Option<String>> {
     let mut stmt = conn.prepare("SELECT value FROM config WHERE key = ?1")?;
-    let mut rows = stmt.query(params![key])?;
-
-    if let Some(row) = rows.next()? {
-        Ok(Some(row.get(0)?))
-    } else {
-        Ok(None)
-    }
+    stmt.query_row(params![key], |row| row.get(0))
+        .optional()
+        .context("failed to get config")
 }
 
-fn row_to_package(row: &rusqlite::Row) -> Result<Package> {
+fn row_to_package(row: &rusqlite::Row) -> std::result::Result<Package, SqlError> {
     let shims_raw: String = row.get("shims")?;
     let dependencies_raw: String = row.get("dependencies")?;
     let status_raw: String = row.get("status")?;
 
-    let shims: Vec<Shim> = serde_json::from_str(&shims_raw).context("failed to parse shims")?;
+    let shims: Vec<Shim> = serde_json::from_str(&shims_raw)
+        .map_err(|err| SqlError::FromSqlConversionFailure(4, Type::Text, Box::new(err)))?;
 
-    let dependencies: Vec<String> =
-        serde_json::from_str(&dependencies_raw).context("failed to parse dependencies")?;
+    let dependencies: Vec<String> = serde_json::from_str(&dependencies_raw)
+        .map_err(|err| SqlError::FromSqlConversionFailure(5, Type::Text, Box::new(err)))?;
 
     Ok(Package {
         name: row.get("name")?,

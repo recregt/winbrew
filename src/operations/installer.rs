@@ -3,8 +3,9 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use crate::core::{downloader, extractor, paths, shim};
-use crate::database::{self, Package, PackageStatus};
+use crate::database;
 use crate::manifest::Manifest;
+use crate::models::{Package, PackageStatus, Shim};
 
 const PKGS_REPO: &str = "https://raw.githubusercontent.com/recregt/winbrew-pkgs/main";
 
@@ -60,9 +61,9 @@ fn install_recursive(
     let install_dir = paths::package_dir(name);
 
     let normalized_bins = manifest.normalized_bins();
-    let shims: Vec<database::Shim> = normalized_bins
+    let shims: Vec<Shim> = normalized_bins
         .iter()
-        .map(|b| database::Shim {
+        .map(|b| Shim {
             name: b.name.clone(),
             path: b.path.clone(),
             args: b.args.clone(),
@@ -137,7 +138,7 @@ fn cleanup_failed_install(
     conn: &rusqlite::Connection,
     name: &str,
     install_dir: &Path,
-    shims: &[database::Shim],
+    shims: &[Shim],
 ) {
     for shim_entry in shims {
         let _ = shim::remove(&shim_entry.name);

@@ -6,6 +6,8 @@ use dialoguer::{Confirm, theme::ColorfulTheme};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::time::Duration;
 
+use crate::models::Package;
+
 const SPINNER_TEMPLATE: &str = "{spinner:.green} {msg}";
 
 pub struct Ui;
@@ -66,7 +68,7 @@ impl Ui {
         result
     }
 
-    pub fn display_packages(&self, packages: &[crate::database::Package]) {
+    pub fn display_packages(&self, packages: &[Package]) {
         if packages.is_empty() {
             self.notice("No packages installed via winbrew.");
             return;
