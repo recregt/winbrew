@@ -76,7 +76,7 @@ pub fn connect() -> Result<Connection> {
     conn.execute_batch(
         "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;",
     )
-        .context("failed to set pragmas")?;
+    .context("failed to set pragmas")?;
 
     Ok(conn)
 }
@@ -91,7 +91,9 @@ pub fn get_conn() -> Result<&'static Mutex<Connection>> {
 
     let _ = DB_CONN.set(Mutex::new(conn));
 
-    DB_CONN.get().context("failed to initialize database connection")
+    DB_CONN
+        .get()
+        .context("failed to initialize database connection")
 }
 
 pub fn lock_conn() -> Result<MutexGuard<'static, Connection>> {
@@ -226,8 +228,7 @@ fn row_to_package(row: &rusqlite::Row) -> Result<Package> {
     let dependencies_raw: String = row.get("dependencies")?;
     let status_raw: String = row.get("status")?;
 
-    let shims: Vec<Shim> =
-        serde_json::from_str(&shims_raw).context("failed to parse shims")?;
+    let shims: Vec<Shim> = serde_json::from_str(&shims_raw).context("failed to parse shims")?;
 
     let dependencies: Vec<String> =
         serde_json::from_str(&dependencies_raw).context("failed to parse dependencies")?;
