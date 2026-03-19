@@ -1,20 +1,21 @@
 use anyhow::{Context, Result, anyhow, bail};
+use std::io::Write;
 
 use crate::cli::ConfigCommand;
 use crate::{database, ui::Ui};
 
 pub fn run(command: ConfigCommand) -> Result<()> {
-    let ui = Ui::new();
+    let mut ui = Ui::new();
     ui.page_title("Config");
 
     match command {
-        ConfigCommand::List => list(&ui),
-        ConfigCommand::Get { key } => get(&ui, &key),
-        ConfigCommand::Set { key, value } => set(&ui, &key, &value),
+        ConfigCommand::List => list(&mut ui),
+        ConfigCommand::Get { key } => get(&mut ui, &key),
+        ConfigCommand::Set { key, value } => set(&mut ui, &key, &value),
     }
 }
 
-fn list(ui: &Ui) -> Result<()> {
+fn list<W: Write>(ui: &mut Ui<W>) -> Result<()> {
     let conn = database::lock_conn()?;
     let entries = database::config_list(&conn)?;
 
@@ -30,7 +31,7 @@ fn list(ui: &Ui) -> Result<()> {
     Ok(())
 }
 
-fn get(ui: &Ui, key: &str) -> Result<()> {
+fn get<W: Write>(ui: &mut Ui<W>, key: &str) -> Result<()> {
     let conn = database::lock_conn()?;
 
     let value =
@@ -40,7 +41,7 @@ fn get(ui: &Ui, key: &str) -> Result<()> {
     Ok(())
 }
 
-fn set(ui: &Ui, key: &str, value: &str) -> Result<()> {
+fn set<W: Write>(ui: &mut Ui<W>, key: &str, value: &str) -> Result<()> {
     let clean_key = key.trim();
     if clean_key.is_empty() {
         bail!("config key cannot be empty");

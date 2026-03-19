@@ -7,7 +7,7 @@ use crate::{
 };
 
 pub fn run() -> Result<()> {
-    let ui = Ui::new();
+    let mut ui = Ui::new();
     ui.page_title("Doctor");
     ui.info("Checking database...");
 

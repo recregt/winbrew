@@ -1,0 +1,102 @@
+use anyhow::{Context, Result};
+use rusqlite::{Connection, Error as SqlError, OptionalExtension, params, types::Type};
+
+use crate::models::{Package, PackageStatus, Shim};
+
+pub fn insert_package(conn: &Connection, pkg: &Package) -> Result<()> {
+    let shims = serde_json::to_string(&pkg.shims).context("failed to serialize shims")?;
+    let deps =
+        serde_json::to_string(&pkg.dependencies).context("failed to serialize dependencies")?;
+
+    conn.execute(
+        "INSERT OR REPLACE INTO packages
+         (name, version, kind, install_dir, shims, dependencies, status, installed_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            pkg.name,
+            pkg.version,
+            pkg.kind,
+            pkg.install_dir,
+            shims,
+            deps,
+            pkg.status.as_str(),
+            pkg.installed_at,
+        ],
+    )
+    .context("failed to insert package")?;
+
+    Ok(())
+}
+
+pub fn update_status(conn: &Connection, name: &str, status: PackageStatus) -> Result<()> {
+    conn.execute(
+        "UPDATE packages SET status = ?1 WHERE name = ?2",
+        params![status.as_str(), name],
+    )
+    .context("failed to update status")?;
+
+    Ok(())
+}
+
+pub fn get_package(conn: &Connection, name: &str) -> Result<Option<Package>> {
+    let mut stmt = conn.prepare(
+        "SELECT name, version, kind, install_dir, shims, dependencies, status, installed_at
+         FROM packages WHERE name = ?1",
+    )?;
+
+    stmt.query_row(params![name], row_to_package)
+        .optional()
+        .context("failed to query package")
+}
+
+pub fn list_packages(conn: &Connection) -> Result<Vec<Package>> {
+    let mut stmt = conn.prepare(
+        "SELECT name, version, kind, install_dir, shims, dependencies, status, installed_at
+         FROM packages WHERE status = 'ok'
+         ORDER BY name ASC",
+    )?;
+
+    let rows = stmt.query_map([], |row| Ok(row_to_package(row)))?;
+
+    let mut packages = Vec::new();
+    for row in rows {
+        packages.push(row?.context("failed to read row")?);
+    }
+
+    Ok(packages)
+}
+
+pub fn delete_package(conn: &Connection, name: &str) -> Result<bool> {
+    let affected = conn
+        .execute("DELETE FROM packages WHERE name = ?1", params![name])
+        .context("failed to delete package")?;
+
+    Ok(affected > 0)
+}
+
+fn row_to_package(row: &rusqlite::Row) -> std::result::Result<Package, SqlError> {
+    const COL_SHIMS: usize = 4;
+    const COL_DEPENDENCIES: usize = 5;
+
+    let shims_raw: String = row.get("shims")?;
+    let dependencies_raw: String = row.get("dependencies")?;
+    let status_raw: String = row.get("status")?;
+
+    let shims: Vec<Shim> = serde_json::from_str(&shims_raw)
+        .map_err(|err| SqlError::FromSqlConversionFailure(COL_SHIMS, Type::Text, Box::new(err)))?;
+
+    let dependencies: Vec<String> = serde_json::from_str(&dependencies_raw).map_err(|err| {
+        SqlError::FromSqlConversionFailure(COL_DEPENDENCIES, Type::Text, Box::new(err))
+    })?;
+
+    Ok(Package {
+        name: row.get("name")?,
+        version: row.get("version")?,
+        kind: row.get("kind")?,
+        install_dir: row.get("install_dir")?,
+        shims,
+        dependencies,
+        status: PackageStatus::parse(&status_raw),
+        installed_at: row.get("installed_at")?,
+    })
+}

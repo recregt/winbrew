@@ -1,9 +1,9 @@
 use anyhow::Result;
 
-use crate::{operations::installer, ui::Ui};
+use crate::{ops::installer, ui::Ui};
 
 pub fn run(name: &str, version: &str) -> Result<()> {
-    let ui = Ui::new();
+    let mut ui = Ui::new();
     ui.page_title("Install");
 
     let pb = ui.progress_bar();

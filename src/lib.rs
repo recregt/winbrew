@@ -4,7 +4,7 @@ pub mod core;
 pub mod database;
 pub mod manifest;
 pub mod models;
-pub mod operations;
+pub mod ops;
 pub mod ui;
 pub mod windows;
 

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use crate::core::{
     extractor,
     network::{download_and_verify, fetch_manifest},
-    paths, shim,
+    paths, shim, time,
 };
 use crate::database;
 use crate::models::{Package, PackageStatus, Shim};
@@ -84,7 +84,7 @@ fn install_recursive(
             shims: shims.clone(),
             dependencies,
             status: PackageStatus::Installing,
-            installed_at: database::now(),
+            installed_at: time::now(),
         },
     )?;
 

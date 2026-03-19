@@ -1,9 +1,9 @@
 use anyhow::Result;
 
-use crate::{operations::remover, ui::Ui};
+use crate::{ops::remover, ui::Ui};
 
 pub fn run(name: &str, yes: bool) -> Result<()> {
-    let ui = Ui::new();
+    let mut ui = Ui::new();
     ui.page_title("Remove");
 
     let dependents = remover::find_dependents(name)?;
