@@ -4,7 +4,7 @@ use mimalloc::MiMalloc;
 use anyhow::Result;
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
-use winbrew::{database, Cli, run};
+use winbrew::{Cli, database, run};
 
 #[cfg(windows)]
 #[global_allocator]
