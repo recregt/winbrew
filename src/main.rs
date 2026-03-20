@@ -4,7 +4,7 @@ use mimalloc::MiMalloc;
 use anyhow::Result;
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
-use winbrew::{Cli, run};
+use winbrew::{database, Cli, run};
 
 #[cfg(windows)]
 #[global_allocator]
@@ -18,6 +18,8 @@ fn main() -> Result<()> {
         .with_target(false)
         .without_time()
         .init();
+
+    database::init()?;
 
     let cli = Cli::parse();
     run(cli.command)
