@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{ops::list, ui::Ui};
+use crate::{services::list, ui::Ui};
 
 pub fn run() -> Result<()> {
     let mut ui = Ui::new();

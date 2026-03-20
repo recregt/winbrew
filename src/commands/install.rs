@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{ops::installer, ui::Ui};
+use crate::{services::installer, ui::Ui};
 
 pub fn run(name: &str, version: &str) -> Result<()> {
     let mut ui = Ui::new();

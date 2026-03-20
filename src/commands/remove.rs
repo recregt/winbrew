@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{ops::remover, ui::Ui};
+use crate::{services::remover, ui::Ui};
 
 pub fn run(name: &str, yes: bool) -> Result<()> {
     let mut ui = Ui::new();
