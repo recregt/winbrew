@@ -120,16 +120,18 @@ fn install_recursive(
     })();
 
     if let Err(err) = result {
-        cleanup_failed_install(
+        let cleanup = InstallCleanup {
             conn,
             name,
-            &install_root,
-            &staging_dir,
-            &backup_dir,
-            &install_dir,
-            &shims,
+            install_root: &install_root,
+            staging_dir: &staging_dir,
+            backup_dir: &backup_dir,
+            install_dir: &install_dir,
+            shims: &shims,
             is_update,
-        );
+        };
+
+        cleanup_failed_install(cleanup);
         return Err(err);
     }
 
@@ -169,36 +171,38 @@ fn parse_dependency(dep: &str) -> (&str, Option<&str>) {
         .unwrap_or((dep, None))
 }
 
-fn cleanup_failed_install(
-    conn: &rusqlite::Connection,
-    name: &str,
-    install_root: &Path,
-    staging_dir: &Path,
-    backup_dir: &Path,
-    install_dir: &Path,
-    shims: &[Shim],
+struct InstallCleanup<'a> {
+    conn: &'a rusqlite::Connection,
+    name: &'a str,
+    install_root: &'a Path,
+    staging_dir: &'a Path,
+    backup_dir: &'a Path,
+    install_dir: &'a Path,
+    shims: &'a [Shim],
     is_update: bool,
-) {
-    if staging_dir.exists() {
-        let _ = fs::remove_dir_all(staging_dir);
+}
+
+fn cleanup_failed_install(ctx: InstallCleanup<'_>) {
+    if ctx.staging_dir.exists() {
+        let _ = fs::remove_dir_all(ctx.staging_dir);
     }
 
-    if backup_dir.exists() {
-        let _ = fs::remove_dir_all(backup_dir);
+    if ctx.backup_dir.exists() {
+        let _ = fs::remove_dir_all(ctx.backup_dir);
     }
 
-    if !is_update {
-        for shim_entry in shims {
-            let _ = shim::remove_at(install_root, &shim_entry.name);
+    if !ctx.is_update {
+        for shim_entry in ctx.shims {
+            let _ = shim::remove_at(ctx.install_root, &shim_entry.name);
         }
 
-        if install_dir.exists() {
-            let _ = fs::remove_dir_all(install_dir);
+        if ctx.install_dir.exists() {
+            let _ = fs::remove_dir_all(ctx.install_dir);
         }
     }
 
-    if let Err(err) = database::update_status(conn, name, PackageStatus::Failed) {
-        warn!("failed to mark {name} as failed: {err}");
+    if let Err(err) = database::update_status(ctx.conn, ctx.name, PackageStatus::Failed) {
+        warn!("failed to mark {} as failed: {err}", ctx.name);
     }
 }
 
