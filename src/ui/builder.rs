@@ -2,6 +2,7 @@ use super::Ui;
 use crate::database;
 use crate::ui::theme;
 use std::io::{self, BufWriter, Write};
+use tracing::warn;
 
 #[derive(Default)]
 pub(crate) struct ConfigOverrides {
@@ -56,7 +57,7 @@ impl<W: Write> UiBuilder<W> {
             "color" => self.config_overrides.color = Some(value),
             "default_yes" => self.config_overrides.default_yes = Some(value),
             _ => {
-                eprintln!("unknown config key: {key}");
+                warn!("unknown config key: {key}");
             }
         }
         self

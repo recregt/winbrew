@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+use tracing::{debug, trace};
 
 pub fn extract(src: &Path, dest: &Path, strip_container: bool) -> Result<()> {
     let ext = src
@@ -8,6 +9,8 @@ pub fn extract(src: &Path, dest: &Path, strip_container: bool) -> Result<()> {
         .and_then(|e| e.to_str())
         .map(|s| s.to_lowercase())
         .unwrap_or_default();
+
+    debug!(archive = %src.display(), target = %dest.display(), format = ext.as_str(), strip_container, "starting extraction");
 
     match ext.as_str() {
         "zip" => extract_zip(src, dest, strip_container),
@@ -20,11 +23,17 @@ fn extract_zip(src: &Path, dest: &Path, strip_container: bool) -> Result<()> {
     let file = fs::File::open(src).context("failed to open zip file")?;
     let mut archive = zip::ZipArchive::new(file).context("failed to read zip archive")?;
 
+    trace!(archive = %src.display(), entries = archive.len(), strip_container, "opened zip archive");
+
     let container = if strip_container {
         detect_container(&mut archive)
     } else {
         None
     };
+
+    if let Some(container) = &container {
+        debug!(container = %container.display(), target = %dest.display(), "detected zip container prefix");
+    }
 
     fs::create_dir_all(dest).context("failed to create destination directory")?;
 
@@ -33,7 +42,10 @@ fn extract_zip(src: &Path, dest: &Path, strip_container: bool) -> Result<()> {
 
         let raw_path = match entry.enclosed_name() {
             Some(path) => path.to_owned(),
-            None => continue, // Skip invalid paths instead of failing entirely
+            None => {
+                trace!(entry = i, "skipping zip entry with invalid enclosed path");
+                continue;
+            }
         };
 
         let relative = match &container {
@@ -50,7 +62,10 @@ fn extract_zip(src: &Path, dest: &Path, strip_container: bool) -> Result<()> {
 
         let out_path = match join_safely(dest, &relative) {
             Some(path) => path,
-            None => continue,
+            None => {
+                trace!(entry = i, path = %relative.display(), "skipping unsafe zip entry path");
+                continue;
+            }
         };
 
         if entry.is_dir() {
@@ -62,6 +77,8 @@ fn extract_zip(src: &Path, dest: &Path, strip_container: bool) -> Result<()> {
 
             let mut out_file = fs::File::create(&out_path).context("failed to create file")?;
             std::io::copy(&mut entry, &mut out_file).context("failed to extract file")?;
+
+            trace!(entry = i, path = %out_path.display(), "extracted zip entry");
         }
     }
 
@@ -118,6 +135,8 @@ fn join_safely(base: &Path, relative: &Path) -> Option<PathBuf> {
 fn extract_msi(src: &Path, dest: &Path) -> Result<()> {
     fs::create_dir_all(dest).context("failed to create destination directory")?;
 
+    debug!(archive = %src.display(), target = %dest.display(), "starting msi extraction");
+
     let mut cleanup_guard = MsiCleanupGuard {
         path: dest.to_path_buf(),
         keep: false,
@@ -141,6 +160,8 @@ fn extract_msi(src: &Path, dest: &Path) -> Result<()> {
         ])
         .status()
         .context("failed to run msiexec")?;
+
+    trace!(archive = %src.display(), target = %abs_dest.display(), status = ?status.code(), "msiexec completed");
 
     if !status.success() {
         let _ = fs::remove_dir_all(dest);

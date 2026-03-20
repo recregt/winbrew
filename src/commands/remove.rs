@@ -1,24 +1,27 @@
 use anyhow::Result;
 
-use crate::{services::remover, ui::Ui};
+use crate::{database, services::remover, ui::Ui};
 
-pub fn run(name: &str, yes: bool) -> Result<()> {
+pub fn run(name: &str, yes: bool, force: bool) -> Result<()> {
     let mut ui = Ui::new();
     ui.page_title("Remove");
 
-    let dependents = remover::find_dependents(name)?;
+    let conn = database::lock_conn()?;
+    let dependents = remover::find_dependents(name, &conn)?;
     if !dependents.is_empty() {
         ui.notice(format!(
             "Warning: {name} is required by installed package(s): {}",
             dependents.join(", ")
         ));
 
-        if yes {
+        if force {
+            ui.notice("Proceeding because --force was provided.");
+        } else if yes {
             ui.notice("Proceeding because --yes was provided.");
         }
     }
 
-    if !yes {
+    if !yes && !force {
         let prompt = if dependents.is_empty() {
             "Do you want to remove this package and its shims?"
         } else {
@@ -33,7 +36,11 @@ pub fn run(name: &str, yes: bool) -> Result<()> {
         }
     }
 
-    ui.spinner(format!("Removing {name}..."), || remover::remove(name))?;
+    drop(conn);
+
+    ui.spinner(format!("Removing {name}..."), || {
+        remover::remove(name, force)
+    })?;
 
     ui.success(format!("{name} was removed."));
 

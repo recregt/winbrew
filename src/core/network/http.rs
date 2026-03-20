@@ -5,6 +5,7 @@ use reqwest::{
 };
 use rusqlite::Connection;
 use std::time::Duration;
+use tracing::{debug, trace};
 
 use crate::database;
 
@@ -14,9 +15,12 @@ pub fn build_client(conn: &Connection) -> Result<Client> {
     let timeout_secs =
         database::config_u64(conn, "download_timeout")?.unwrap_or(DEFAULT_DOWNLOAD_TIMEOUT_SECS);
 
+    debug!(timeout_secs, "building HTTP client");
+
     let mut builder = Client::builder().timeout(Duration::from_secs(timeout_secs));
 
     if let Some(proxy_url) = config_value(conn, "proxy")? {
+        trace!(proxy = proxy_url.as_str(), "configuring HTTP proxy");
         builder = builder.proxy(Proxy::all(&proxy_url).context("invalid proxy URL")?);
     }
 
@@ -31,6 +35,7 @@ pub fn apply_github_auth(
     if is_github_url(url)
         && let Some(token) = config_value(conn, "github_token")?
     {
+        trace!(url = url, "applying GitHub authorization");
         return Ok(request.bearer_auth(token));
     }
 

@@ -39,6 +39,9 @@ pub enum Command {
 
         #[arg(long, short = 'y', help_heading = "Safety")]
         yes: bool,
+
+        #[arg(long, help_heading = "Safety")]
+        force: bool,
     },
 
     /// Get or set winbrew configuration values
@@ -117,6 +120,21 @@ mod tests {
             Command::Remove {
                 name: "ripgrep".to_string(),
                 yes: true,
+                force: false,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_remove_with_force() {
+        let cli = Cli::parse_from(["winbrew", "remove", "ripgrep", "--force"]);
+
+        assert_eq!(
+            cli.command,
+            Command::Remove {
+                name: "ripgrep".to_string(),
+                yes: false,
+                force: true,
             }
         );
     }

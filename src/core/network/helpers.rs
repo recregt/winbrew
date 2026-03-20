@@ -1,14 +1,14 @@
 use anyhow::{Context, Result, anyhow, bail};
+use rusqlite::Connection;
 use sha2::{Digest, Sha256};
+use tracing::{debug, trace};
+
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
 
-use rusqlite::Connection;
-
-use crate::core::{fs::DownloadTarget, hash};
-
 use crate::core::network::http;
+use crate::core::{fs::DownloadTarget, hash};
 
 const BUFFER_SIZE: usize = 64 * 1024;
 
@@ -17,6 +17,8 @@ pub fn send_request(
     url: &str,
     dest: &Path,
 ) -> Result<reqwest::blocking::Response> {
+    debug!(url = url, destination = %dest.display(), "starting download request");
+
     let client = http::build_client(conn)?;
     let requested_existing_size = existing_part_size(dest);
 
@@ -25,15 +27,28 @@ pub fn send_request(
         request = request.header("Range", format!("bytes={}-", requested_existing_size));
     }
 
-    request
-        .send()
-        .context("failed to connect")?
-        .error_for_status()
-        .context("server returned error")
+    let response = request.send().context("failed to connect")?;
+    trace!(
+        url = url,
+        status = %response.status(),
+        content_length = ?response.headers().get(reqwest::header::CONTENT_LENGTH),
+        content_range = ?response.headers().get(reqwest::header::CONTENT_RANGE),
+        "received HTTP response"
+    );
+
+    response.error_for_status().context("server returned error")
 }
 
 pub fn open_target(dest: &Path, response: &reqwest::blocking::Response) -> Result<DownloadTarget> {
     let requested_existing_size = existing_part_size(dest);
+
+    trace!(
+        destination = %dest.display(),
+        existing_size = requested_existing_size,
+        content_length = ?response.headers().get(reqwest::header::CONTENT_LENGTH),
+        "opening download target"
+    );
+
     DownloadTarget::new(dest, response, requested_existing_size)
 }
 
@@ -60,6 +75,13 @@ where
     let mut downloaded = target.existing_size;
     let mut hasher = init_hasher(expected_checksum, &target.temp_path, target.existing_size)?;
 
+    trace!(
+        temp_path = %target.temp_path.display(),
+        existing_size = target.existing_size,
+        total_size = target.total_size,
+        "streaming response to temp file"
+    );
+
     loop {
         let read = response
             .read(&mut buffer)
@@ -80,6 +102,12 @@ where
 
         downloaded += read as u64;
         on_progress(downloaded, target.total_size);
+
+        trace!(
+            downloaded,
+            total_size = target.total_size,
+            "download progress chunk written"
+        );
     }
 
     if target.total_size > 0 && downloaded != target.total_size {
@@ -89,6 +117,12 @@ where
             downloaded
         );
     }
+
+    debug!(
+        downloaded,
+        total_size = target.total_size,
+        "download stream completed"
+    );
 
     Ok(hasher)
 }
@@ -104,6 +138,12 @@ pub fn verify_download(
             hasher
                 .expect("checksum hasher must exist when verification is requested")
                 .finalize(),
+        );
+
+        trace!(
+            expected = expected,
+            actual = actual.as_str(),
+            "verifying download checksum"
         );
 
         if actual != expected {
@@ -129,6 +169,7 @@ fn init_hasher(
     if existing_size > 0
         && let Some(hasher) = hasher.as_mut()
     {
+        trace!(temp_path = %temp_path.display(), existing_size, "seeding checksum from partial download");
         hash::seed_hasher(temp_path, hasher)?;
     }
 

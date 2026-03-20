@@ -1,5 +1,6 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::collections::HashSet;
+use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -10,8 +11,11 @@ use crate::core::{
 };
 use crate::database;
 use crate::models::{Package, PackageStatus, Shim};
+use tracing::{debug, warn};
 
 pub fn install(name: &str, version: &str, on_progress: impl Fn(u64, u64)) -> Result<()> {
+    debug!(package = name, version = version, "starting install");
+
     let conn = database::lock_conn()?;
 
     let mut visited = HashSet::new();
@@ -38,8 +42,10 @@ fn install_recursive(
     let checksum = manifest.source.checksum.clone();
     let source_kind = format!("{:?}", manifest.source.kind).to_lowercase();
     let strip_container = manifest.install.strip_container;
+    let existing_pkg = database::get_package(conn, name)?;
+    let is_update = existing_pkg.is_some();
 
-    if let Some(pkg) = database::get_package(conn, name)?
+    if let Some(pkg) = &existing_pkg
         && pkg.status == PackageStatus::Ok
         && pkg.version == package_version
     {
@@ -60,9 +66,11 @@ fn install_recursive(
     paths::ensure_dirs()?;
     paths::ensure_install_dirs(&install_root)?;
 
-    let ext = detect_ext(&source_url);
+    let ext = detect_ext(&source_url, &source_kind);
     let cache_file = paths::cache_file(name, &package_version, &ext);
     let install_dir = paths::package_dir_at(&install_root, name);
+    let staging_dir = install_dir.with_extension("staging");
+    let backup_dir = install_dir.with_extension("backup");
 
     let normalized_bins = manifest.normalized_bins();
     let shims: Vec<Shim> = normalized_bins
@@ -89,24 +97,48 @@ fn install_recursive(
     )?;
 
     let result = (|| -> Result<()> {
-        download_and_verify(conn, &source_url, &cache_file, &checksum, on_progress)?;
+        download_and_verify(conn, &source_url, &cache_file, &checksum, on_progress)
+            .context("download and verification failed")?;
 
-        extractor::extract(&cache_file, &install_dir, strip_container)?;
+        if staging_dir.exists() {
+            fs::remove_dir_all(&staging_dir).context("failed to remove stale staging directory")?;
+        }
+
+        extractor::extract(&cache_file, &staging_dir, strip_container)
+            .context("extraction failed")?;
+
+        swap_in_staged_install(&staging_dir, &install_dir, &backup_dir)
+            .context("failed to finalize installation")?;
 
         for s in &shims {
             let target = install_dir.join(&s.path);
-            shim::create_at(&install_root, &s.name, &target, s.args.as_deref())?;
+            shim::create_at(&install_root, &s.name, &target, s.args.as_deref())
+                .context("failed to create shim")?;
         }
 
         Ok(())
     })();
 
     if let Err(err) = result {
-        cleanup_failed_install(conn, name, &install_root, &install_dir, &shims);
+        cleanup_failed_install(
+            conn,
+            name,
+            &install_root,
+            &staging_dir,
+            &backup_dir,
+            &install_dir,
+            &shims,
+            is_update,
+        );
         return Err(err);
     }
 
     database::update_status(conn, name, PackageStatus::Ok)?;
+    debug!(
+        package = name,
+        version = package_version.as_str(),
+        "install completed"
+    );
 
     Ok(())
 }
@@ -117,11 +149,17 @@ fn install_root(conn: &rusqlite::Connection) -> Result<PathBuf> {
     ))
 }
 
-fn detect_ext(url: &str) -> String {
-    if url.ends_with(".msi") {
+fn detect_ext(url: &str, kind: &str) -> String {
+    if kind.eq_ignore_ascii_case("msi") {
         "msi".to_string()
     } else {
-        "zip".to_string()
+        let url_path = url.split(['?', '#']).next().unwrap_or(url);
+
+        Path::new(url_path)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("zip")
+            .to_string()
     }
 }
 
@@ -135,18 +173,61 @@ fn cleanup_failed_install(
     conn: &rusqlite::Connection,
     name: &str,
     install_root: &Path,
+    staging_dir: &Path,
+    backup_dir: &Path,
     install_dir: &Path,
     shims: &[Shim],
+    is_update: bool,
 ) {
-    for shim_entry in shims {
-        let _ = shim::remove_at(install_root, &shim_entry.name);
+    if staging_dir.exists() {
+        let _ = fs::remove_dir_all(staging_dir);
     }
 
-    if install_dir.exists() {
-        let _ = std::fs::remove_dir_all(install_dir);
+    if backup_dir.exists() {
+        let _ = fs::remove_dir_all(backup_dir);
+    }
+
+    if !is_update {
+        for shim_entry in shims {
+            let _ = shim::remove_at(install_root, &shim_entry.name);
+        }
+
+        if install_dir.exists() {
+            let _ = fs::remove_dir_all(install_dir);
+        }
     }
 
     if let Err(err) = database::update_status(conn, name, PackageStatus::Failed) {
-        eprintln!("failed to mark {name} as failed: {err}");
+        warn!("failed to mark {name} as failed: {err}");
+    }
+}
+
+fn swap_in_staged_install(staging_dir: &Path, install_dir: &Path, backup_dir: &Path) -> Result<()> {
+    if backup_dir.exists() {
+        fs::remove_dir_all(backup_dir).context("failed to remove stale backup directory")?;
+    }
+
+    let mut moved_existing_install = false;
+
+    if install_dir.exists() {
+        fs::rename(install_dir, backup_dir).context("failed to move current install aside")?;
+        moved_existing_install = true;
+    }
+
+    match fs::rename(staging_dir, install_dir) {
+        Ok(_) => {
+            if backup_dir.exists() {
+                fs::remove_dir_all(backup_dir).context("failed to remove backup directory")?;
+            }
+
+            Ok(())
+        }
+        Err(err) => {
+            if moved_existing_install {
+                let _ = fs::rename(backup_dir, install_dir);
+            }
+
+            Err(err).context("failed to move staging directory to final installation path")
+        }
     }
 }
