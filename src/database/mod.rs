@@ -121,11 +121,6 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
             status       TEXT NOT NULL DEFAULT 'installing',
             installed_at TEXT NOT NULL
         );
-
-        CREATE TABLE IF NOT EXISTS config (
-            key   TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        );
     ",
     )
     .context("migration failed")?;

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Result, anyhow, bail};
 use std::io::Write;
 
 use crate::cli::ConfigCommand;
@@ -16,8 +16,7 @@ pub fn run(command: ConfigCommand) -> Result<()> {
 }
 
 fn list<W: Write>(ui: &mut Ui<W>) -> Result<()> {
-    let conn = database::lock_conn()?;
-    let entries = database::config_list(&conn)?;
+    let entries = database::config_list()?;
 
     if entries.is_empty() {
         ui.notice("No config values are set.");
@@ -32,10 +31,8 @@ fn list<W: Write>(ui: &mut Ui<W>) -> Result<()> {
 }
 
 fn get<W: Write>(ui: &mut Ui<W>, key: &str) -> Result<()> {
-    let conn = database::lock_conn()?;
-
     let value =
-        database::config_get(&conn, key)?.ok_or_else(|| anyhow!("config key '{key}' not found"))?;
+        database::config_get(key)?.ok_or_else(|| anyhow!("config key '{key}' not found"))?;
 
     ui.info(format!("{key} = {value}"));
     Ok(())
@@ -48,8 +45,7 @@ fn set<W: Write>(ui: &mut Ui<W>, key: &str, value: &str) -> Result<()> {
     }
 
     let clean_value = value.trim();
-    let conn = database::lock_conn()?;
-    database::config_set(&conn, clean_key, clean_value).context("failed to update config")?;
+    database::config_set(clean_key, clean_value)?;
     ui.success(format!("{clean_key} updated."));
     Ok(())
 }

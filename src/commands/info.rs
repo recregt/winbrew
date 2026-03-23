@@ -10,6 +10,11 @@ pub fn run() -> Result<()> {
         paths::install_root(database::config_string_cached("install_dir")?.as_deref());
     ui.notice(format!("Version: {}", version_string()));
     ui.notice(format!("Database: {}", paths::db_path().to_string_lossy()));
+    ui.notice(format!(
+        "Config file: {}",
+        paths::config_file().to_string_lossy()
+    ));
+    ui.notice(format!("Log dir: {}", paths::log_dir().to_string_lossy()));
     ui.notice(format!("Install root: {}", install_root.to_string_lossy()));
     ui.notice(format!(
         "Packages dir: {}",

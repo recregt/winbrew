@@ -12,14 +12,16 @@ use crate::database;
 const DEFAULT_DOWNLOAD_TIMEOUT_SECS: u64 = 30;
 
 pub fn build_client(conn: &Connection) -> Result<Client> {
+    let _ = conn;
+
     let timeout_secs =
-        database::config_u64(conn, "download_timeout")?.unwrap_or(DEFAULT_DOWNLOAD_TIMEOUT_SECS);
+        database::config_u64("download_timeout")?.unwrap_or(DEFAULT_DOWNLOAD_TIMEOUT_SECS);
 
     debug!(timeout_secs, "building HTTP client");
 
     let mut builder = Client::builder().timeout(Duration::from_secs(timeout_secs));
 
-    if let Some(proxy_url) = config_value(conn, "proxy")? {
+    if let Some(proxy_url) = config_value("proxy")? {
         trace!(proxy = proxy_url.as_str(), "configuring HTTP proxy");
         builder = builder.proxy(Proxy::all(&proxy_url).context("invalid proxy URL")?);
     }
@@ -32,8 +34,10 @@ pub fn apply_github_auth(
     url: &str,
     request: RequestBuilder,
 ) -> Result<RequestBuilder> {
+    let _ = conn;
+
     if is_github_url(url)
-        && let Some(token) = config_value(conn, "github_token")?
+        && let Some(token) = config_value("github_token")?
     {
         trace!(url = url, "applying GitHub authorization");
         return Ok(request.bearer_auth(token));
@@ -42,8 +46,8 @@ pub fn apply_github_auth(
     Ok(request)
 }
 
-fn config_value(conn: &Connection, key: &str) -> Result<Option<String>> {
-    database::config_string(conn, key)
+fn config_value(key: &str) -> Result<Option<String>> {
+    database::config_string(key)
 }
 
 fn is_github_url(url: &str) -> bool {

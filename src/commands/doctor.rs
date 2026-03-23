@@ -12,7 +12,7 @@ pub fn run() -> Result<()> {
     ui.info("Checking database...");
 
     let conn = database::lock_conn()?;
-    let install_root_value = database::config_string(&conn, "install_dir")?;
+    let install_root_value = database::config_string("install_dir")?;
     let install_root = paths::install_root(install_root_value.as_deref());
 
     ui.notice("Database reachable: yes");

@@ -59,6 +59,18 @@ pub fn db_path() -> PathBuf {
     base_dir().join("data").join("winbrew.db")
 }
 
+pub fn config_file() -> PathBuf {
+    base_dir().join("data").join("winbrew.toml")
+}
+
+pub fn log_dir() -> PathBuf {
+    base_dir().join("data").join("logs")
+}
+
+pub fn log_file() -> PathBuf {
+    log_dir().join("winbrew.log")
+}
+
 pub fn cache_dir() -> PathBuf {
     base_dir().join("cache")
 }
@@ -84,7 +96,13 @@ pub fn shim_path_at(root: &Path, name: &str) -> PathBuf {
 }
 
 pub fn ensure_dirs() -> std::io::Result<()> {
-    for dir in [packages_dir(), bin_dir(), data_dir(), cache_dir()] {
+    for dir in [
+        packages_dir(),
+        bin_dir(),
+        data_dir(),
+        log_dir(),
+        cache_dir(),
+    ] {
         fs::create_dir_all(dir)?;
     }
 

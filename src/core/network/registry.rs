@@ -33,7 +33,9 @@ fn manifest_url(conn: &Connection, name: &str, version: &str) -> Result<String> 
 }
 
 fn registry_url(conn: &Connection) -> Result<String> {
-    match database::config_string(conn, "registry_url")? {
+    let _ = conn;
+
+    match database::config_string("registry_url")? {
         Some(value) => Ok(value),
         None => Ok(DEFAULT_REGISTRY_URL.to_string()),
     }

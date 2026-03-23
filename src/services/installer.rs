@@ -146,8 +146,10 @@ fn install_recursive(
 }
 
 fn install_root(conn: &rusqlite::Connection) -> Result<PathBuf> {
+    let _ = conn;
+
     Ok(paths::install_root(
-        database::config_string(conn, "install_dir")?.as_deref(),
+        database::config_string("install_dir")?.as_deref(),
     ))
 }
 

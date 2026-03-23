@@ -33,6 +33,7 @@ term_size = "0.3"
 console = "0.15"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
 r2d2 = "0.8"
 
 [target.'cfg(windows)'.dependencies]
