@@ -1,18 +1,11 @@
 use super::Ui;
 use anyhow::Result;
-use console::Style;
 use dialoguer::{Confirm, theme::ColorfulTheme};
 use std::io::Write;
 
 impl<W: Write> Ui<W> {
     pub fn page_title(&mut self, title: &str) {
-        if self.color_enabled {
-            let arrow = Style::new().cyan().bold().apply_to("==>");
-            let text = Style::new().bold().apply_to(title);
-            let _ = writeln!(self.err, "{arrow} {text}");
-        } else {
-            let _ = writeln!(self.err, "==> {title}");
-        }
+        let _ = title;
     }
 
     pub fn confirm(&mut self, message: &str, default: bool) -> Result<bool> {
