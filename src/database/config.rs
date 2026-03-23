@@ -12,7 +12,7 @@ static CONFIG_CACHE: OnceLock<Mutex<Option<Config>>> = OnceLock::new();
 const DEFAULT_REGISTRY_URL: &str = "https://raw.githubusercontent.com/recregt/winbrew-pkgs/main";
 const DEFAULT_ROOT: &str = r"C:\winbrew";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub core: CoreConfig,
@@ -94,16 +94,6 @@ pub struct SourceConfig {
 pub struct ConfigSection {
     pub title: String,
     pub entries: Vec<(String, String)>,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            core: CoreConfig::default(),
-            paths: PathsConfig::default(),
-            sources: SourcesConfig::default(),
-        }
-    }
 }
 
 impl Default for CoreConfig {
@@ -298,69 +288,65 @@ impl Config {
     }
 
     pub fn sections(&self) -> Vec<ConfigSection> {
-        let mut sections = Vec::new();
-
-        sections.push(ConfigSection {
-            title: "Core".to_string(),
-            entries: vec![
-                ("log_level".to_string(), self.core.log_level.clone()),
-                ("auto_update".to_string(), self.core.auto_update.to_string()),
-                (
-                    "confirm_remove".to_string(),
-                    self.core.confirm_remove.to_string(),
-                ),
-                ("default_yes".to_string(), self.core.default_yes.to_string()),
-                ("color".to_string(), self.core.color.to_string()),
-                (
-                    "download_timeout".to_string(),
-                    self.core.download_timeout.to_string(),
-                ),
-                (
-                    "concurrent_downloads".to_string(),
-                    self.core.concurrent_downloads.to_string(),
-                ),
-                (
-                    "proxy".to_string(),
-                    self.core
-                        .proxy
-                        .clone()
-                        .unwrap_or_else(|| "(none)".to_string()),
-                ),
-                (
-                    "github_token".to_string(),
-                    self.core
-                        .github_token
-                        .as_ref()
-                        .map(|_| "(set)".to_string())
-                        .unwrap_or_else(|| "(unset)".to_string()),
-                ),
-            ],
-        });
-
-        sections.push(ConfigSection {
-            title: "Paths".to_string(),
-            entries: vec![
-                ("root".to_string(), self.paths.root.clone()),
-                ("packages".to_string(), self.paths.packages.clone()),
-                ("data".to_string(), self.paths.data.clone()),
-                ("logs".to_string(), self.paths.logs.clone()),
-                ("cache".to_string(), self.paths.cache.clone()),
-            ],
-        });
-
-        sections.push(ConfigSection {
-            title: "Sources".to_string(),
-            entries: vec![
-                ("primary".to_string(), self.sources.primary.clone()),
-                ("winget.url".to_string(), self.sources.winget.url.clone()),
-                (
-                    "winget.enabled".to_string(),
-                    self.sources.winget.enabled.to_string(),
-                ),
-            ],
-        });
-
-        sections
+        vec![
+            ConfigSection {
+                title: "Core".to_string(),
+                entries: vec![
+                    ("log_level".to_string(), self.core.log_level.clone()),
+                    ("auto_update".to_string(), self.core.auto_update.to_string()),
+                    (
+                        "confirm_remove".to_string(),
+                        self.core.confirm_remove.to_string(),
+                    ),
+                    ("default_yes".to_string(), self.core.default_yes.to_string()),
+                    ("color".to_string(), self.core.color.to_string()),
+                    (
+                        "download_timeout".to_string(),
+                        self.core.download_timeout.to_string(),
+                    ),
+                    (
+                        "concurrent_downloads".to_string(),
+                        self.core.concurrent_downloads.to_string(),
+                    ),
+                    (
+                        "proxy".to_string(),
+                        self.core
+                            .proxy
+                            .clone()
+                            .unwrap_or_else(|| "(none)".to_string()),
+                    ),
+                    (
+                        "github_token".to_string(),
+                        self.core
+                            .github_token
+                            .as_ref()
+                            .map(|_| "(set)".to_string())
+                            .unwrap_or_else(|| "(unset)".to_string()),
+                    ),
+                ],
+            },
+            ConfigSection {
+                title: "Paths".to_string(),
+                entries: vec![
+                    ("root".to_string(), self.paths.root.clone()),
+                    ("packages".to_string(), self.paths.packages.clone()),
+                    ("data".to_string(), self.paths.data.clone()),
+                    ("logs".to_string(), self.paths.logs.clone()),
+                    ("cache".to_string(), self.paths.cache.clone()),
+                ],
+            },
+            ConfigSection {
+                title: "Sources".to_string(),
+                entries: vec![
+                    ("primary".to_string(), self.sources.primary.clone()),
+                    ("winget.url".to_string(), self.sources.winget.url.clone()),
+                    (
+                        "winget.enabled".to_string(),
+                        self.sources.winget.enabled.to_string(),
+                    ),
+                ],
+            },
+        ]
     }
 
     pub fn get_value(&self, key: &str) -> Result<Option<String>> {
