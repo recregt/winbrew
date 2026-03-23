@@ -150,4 +150,33 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn parse_config_set_core_log_level() {
+        let cli = Cli::parse_from(["brew", "config", "set", "core.log_level", "debug"]);
+
+        assert_eq!(
+            cli.command,
+            Command::Config {
+                command: super::ConfigCommand::Set {
+                    key: "core.log_level".to_string(),
+                    value: "debug".to_string(),
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn parse_config_get_core_log_level() {
+        let cli = Cli::parse_from(["brew", "config", "get", "core.log_level"]);
+
+        assert_eq!(
+            cli.command,
+            Command::Config {
+                command: super::ConfigCommand::Get {
+                    key: "core.log_level".to_string(),
+                },
+            }
+        );
+    }
 }

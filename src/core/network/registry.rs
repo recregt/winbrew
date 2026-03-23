@@ -5,8 +5,6 @@ use crate::{database, manifest::Manifest};
 
 use super::http;
 
-const DEFAULT_REGISTRY_URL: &str = "https://raw.githubusercontent.com/recregt/winbrew-pkgs/main";
-
 pub fn fetch_manifest(conn: &Connection, name: &str, version: &str) -> Result<Manifest> {
     let url = manifest_url(conn, name, version)?;
     let client = http::build_client(conn)?;
@@ -35,8 +33,6 @@ fn manifest_url(conn: &Connection, name: &str, version: &str) -> Result<String> 
 fn registry_url(conn: &Connection) -> Result<String> {
     let _ = conn;
 
-    match database::config_string("registry_url")? {
-        Some(value) => Ok(value),
-        None => Ok(DEFAULT_REGISTRY_URL.to_string()),
-    }
+    let config = database::Config::current();
+    Ok(config.sources.winget.url)
 }

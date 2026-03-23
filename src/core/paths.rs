@@ -6,6 +6,19 @@ use std::sync::OnceLock;
 
 const DEFAULT_ROOT: &str = r"C:\winbrew";
 
+#[derive(Debug, Clone)]
+pub struct ResolvedPaths {
+    pub root: PathBuf,
+    pub bin: PathBuf,
+    pub packages: PathBuf,
+    pub data: PathBuf,
+    pub logs: PathBuf,
+    pub cache: PathBuf,
+    pub db: PathBuf,
+    pub config: PathBuf,
+    pub log: PathBuf,
+}
+
 // Calculates the base directory exactly ONCE and caches it globally.
 pub fn base_dir() -> &'static PathBuf {
     static BASE_DIR: OnceLock<PathBuf> = OnceLock::new();
@@ -72,11 +85,11 @@ pub fn log_file() -> PathBuf {
 }
 
 pub fn cache_dir() -> PathBuf {
-    base_dir().join("cache")
+    base_dir().join("data").join("cache")
 }
 
 pub fn cache_dir_at(root: &Path) -> PathBuf {
-    root.join("cache")
+    root.join("data").join("cache")
 }
 
 pub fn cache_file(name: &str, version: &str, ext: &str) -> PathBuf {
@@ -115,6 +128,40 @@ pub fn ensure_install_dirs(root: &Path) -> std::io::Result<()> {
     }
 
     Ok(())
+}
+
+pub fn resolve_template(root: &Path, template: &str) -> PathBuf {
+    let root_text = root.to_string_lossy();
+
+    if template.contains("${root}") {
+        PathBuf::from(template.replace("${root}", &root_text))
+    } else {
+        PathBuf::from(template)
+    }
+}
+
+pub fn resolved_paths(
+    root: &Path,
+    packages: &str,
+    data: &str,
+    logs: &str,
+    cache: &str,
+) -> ResolvedPaths {
+    let root = PathBuf::from(root);
+    let data = resolve_template(&root, data);
+    let logs = resolve_template(&root, logs);
+
+    ResolvedPaths {
+        bin: root.join("bin"),
+        packages: resolve_template(&root, packages),
+        cache: resolve_template(&root, cache),
+        db: data.join("winbrew.db"),
+        config: data.join("winbrew.toml"),
+        log: logs.join("winbrew.log"),
+        root,
+        data,
+        logs,
+    }
 }
 
 pub fn install_root_from_package_dir(install_dir: &Path) -> PathBuf {

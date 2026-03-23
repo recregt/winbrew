@@ -12,8 +12,9 @@ pub fn run() -> Result<()> {
     ui.info("Checking database...");
 
     let conn = database::lock_conn()?;
-    let install_root_value = database::config_string("install_dir")?;
-    let install_root = paths::install_root(install_root_value.as_deref());
+    let config = database::Config::current();
+    let paths_config = config.resolved_paths();
+    let install_root = paths_config.root.clone();
 
     ui.notice("Database reachable: yes");
     ui.notice(format!("Database: {}", paths::db_path().to_string_lossy()));
@@ -25,26 +26,16 @@ pub fn run() -> Result<()> {
             "no"
         }
     ));
-    ui.notice(format!(
-        "Install root source: {}",
-        if install_root_value.is_some() {
-            "config:install_dir"
-        } else {
-            "default"
-        }
-    ));
+    ui.notice("Install root source: config:paths.root");
     ui.notice(format!("Install root: {}", install_root.to_string_lossy()));
     ui.notice(format!(
         "Install root exists: {}",
         if install_root.exists() { "yes" } else { "no" }
     ));
-    ui.notice(format!(
-        "Bin dir: {}",
-        paths::bin_dir_at(&install_root).to_string_lossy()
-    ));
+    ui.notice(format!("Bin dir: {}", paths_config.bin.to_string_lossy()));
     ui.notice(format!(
         "Packages dir: {}",
-        paths::packages_dir_at(&install_root).to_string_lossy()
+        paths_config.packages.to_string_lossy()
     ));
 
     ui.info("Loading installed packages...");

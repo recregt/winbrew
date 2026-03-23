@@ -11,8 +11,8 @@ mod config;
 mod packages;
 
 pub use config::{
-    clear_config_cache, config_bool, config_bool_cached, config_get, config_list, config_set,
-    config_string, config_string_cached, config_u64, config_u64_cached,
+    Config, ConfigSection, CoreConfig, PathsConfig, SourceConfig, SourcesConfig, config_sections,
+    config_set,
 };
 pub use packages::{delete_package, get_package, insert_package, list_packages, update_status};
 

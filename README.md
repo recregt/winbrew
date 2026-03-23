@@ -1,4 +1,4 @@
-# winbrew (`brew`)
+# WinBrew
 
 [![CI](https://github.com/recregt/winbrew/actions/workflows/ci.yml/badge.svg)](https://github.com/recregt/winbrew/actions)
 [![Release](https://github.com/recregt/winbrew/actions/workflows/release.yml/badge.svg)](https://github.com/recregt/winbrew/actions)
@@ -7,23 +7,35 @@
 A modern package manager for Windows that installs, tracks, and cleanly removes software.
 
 > [!IMPORTANT]
-> Early development. Core install/list/remove+ flows are available and still evolving.
+> Early development.
 
 ## Requirements
 
 - Windows 10 or later
-- Internet access (for package manifests and artifacts)
 
 ## Installation
 
-### From source
-```bash
-cargo install --path .
+Just copy and paste this command to Powershell (Admin):
+
+```powershell
+PowerShell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/recregt/winbrew/main/scripts/install.ps1 | iex"
 ```
 
-### From release
+### Installed layout
 
-Download the latest `winbrew-vX.X.X-windows-x86_64.zip` from [Releases](https://github.com/recregt/winbrew/releases), extract it, and place `brew.exe` somewhere in your `PATH`.
+By default, `brew` uses `C:\winbrew` as its root directory:
+
+```text
+C:\winbrew
+├── bin
+├── packages
+└── data
+	├── winbrew.db
+	├── winbrew.toml
+	├── logs
+	│   └── winbrew.log
+	└── cache
+```
 
 ## Usage
 
@@ -44,28 +56,17 @@ brew remove node         # interactive confirmation
 brew remove node --yes   # skip confirmation
 ```
 
-## How it works
+### Config
+```bash
+brew config list
+brew config get core.log_level
+brew config set core.log_level debug
+```
 
-`brew install` does the following:
-
-- Fetches package manifest from the configured package repository
-- Downloads and verifies artifact checksum
-- Extracts package under `%WINBREW_ROOT%\packages\<name>`
-- Creates shims under `%WINBREW_ROOT%\bin`
-- Persists metadata into `%WINBREW_ROOT%\data\winbrew.db`
-
-`brew remove` removes shims and package directory, then deletes package metadata.
-
-Default root is `C:\winbrew`, override with `WINBREW_ROOT`.
-
-### Package repository
-
-Current manifest source:
-- `https://raw.githubusercontent.com/recregt/winbrew-pkgs/main/<name>/<version>.toml`
-
-### Legacy cleanup mode
-
-Currently, registry scan/cleanup command group (`scan`/`clean`) is removed.
+Config is stored in `C:\winbrew\data\winbrew.toml` and uses typed sections:
+- `core`
+- `paths`
+- `sources`
 
 ## License
 

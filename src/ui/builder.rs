@@ -1,5 +1,5 @@
 use super::Ui;
-use crate::database;
+use crate::database::Config;
 use crate::ui::theme;
 use std::io::{self, BufWriter, Write};
 use tracing::warn;
@@ -75,11 +75,12 @@ impl<W: Write> UiBuilder<W> {
 
     pub fn build(self) -> Ui<W> {
         let no_color_env = std::env::var_os("NO_COLOR").is_some();
+        let config = Config::current();
 
         let config_color = self
             .color_enabled
             .or(self.config_overrides.color)
-            .or_else(|| database::config_bool_cached("color").ok().flatten());
+            .or(Some(config.core.color));
 
         let color_enabled = if no_color_env {
             false
@@ -90,7 +91,7 @@ impl<W: Write> UiBuilder<W> {
         let default_yes = self
             .default_yes
             .or(self.config_overrides.default_yes)
-            .or_else(|| database::config_bool_cached("default_yes").ok().flatten())
+            .or(Some(config.core.default_yes))
             .unwrap_or(false);
 
         let spinner_style = theme::make_spinner_style(color_enabled);

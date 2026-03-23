@@ -2,7 +2,10 @@ use anyhow::{Result, anyhow, bail};
 use std::io::Write;
 
 use crate::cli::ConfigCommand;
-use crate::{database, ui::Ui};
+use crate::{
+    database::{Config, config_sections},
+    ui::Ui,
+};
 
 pub fn run(command: ConfigCommand) -> Result<()> {
     let mut ui = Ui::new();
@@ -16,23 +19,28 @@ pub fn run(command: ConfigCommand) -> Result<()> {
 }
 
 fn list<W: Write>(ui: &mut Ui<W>) -> Result<()> {
-    let entries = database::config_list()?;
+    let sections = config_sections()?;
 
-    if entries.is_empty() {
+    if sections.is_empty() {
         ui.notice("No config values are set.");
         return Ok(());
     }
 
-    for (key, value) in entries {
-        ui.info(format!("{key} = {value}"));
+    for section in sections {
+        ui.notice(format!("[{}]", section.title));
+        for (key, value) in section.entries {
+            ui.info(format!("{key} = {value}"));
+        }
     }
 
     Ok(())
 }
 
 fn get<W: Write>(ui: &mut Ui<W>, key: &str) -> Result<()> {
-    let value =
-        database::config_get(key)?.ok_or_else(|| anyhow!("config key '{key}' not found"))?;
+    let config = Config::current();
+    let value = config
+        .get_value(key)?
+        .ok_or_else(|| anyhow!("config key '{key}' not found"))?;
 
     ui.info(format!("{key} = {value}"));
     Ok(())
@@ -45,7 +53,9 @@ fn set<W: Write>(ui: &mut Ui<W>, key: &str, value: &str) -> Result<()> {
     }
 
     let clean_value = value.trim();
-    database::config_set(clean_key, clean_value)?;
+    let mut config = Config::current();
+    config.set_value(clean_key, clean_value)?;
+    config.save_default()?;
     ui.success(format!("{clean_key} updated."));
     Ok(())
 }
