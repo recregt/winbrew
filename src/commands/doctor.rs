@@ -1,10 +1,7 @@
 use anyhow::Result;
+use std::path::Path;
 
-use crate::{
-    core::{paths, shim},
-    database,
-    ui::Ui,
-};
+use crate::{core::paths, database, ui::Ui};
 
 pub fn run() -> Result<()> {
     let mut ui = Ui::new();
@@ -32,7 +29,6 @@ pub fn run() -> Result<()> {
         "Install root exists: {}",
         if install_root.exists() { "yes" } else { "no" }
     ));
-    ui.notice(format!("Bin dir: {}", paths_config.bin.to_string_lossy()));
     ui.notice(format!(
         "Packages dir: {}",
         paths_config.packages.to_string_lossy()
@@ -44,7 +40,7 @@ pub fn run() -> Result<()> {
     ui.notice(format!("Installed packages: {}", packages.len()));
 
     let mut broken = Vec::new();
-    ui.info("Scanning installed shims...");
+    ui.info("Scanning installed packages...");
     for (index, pkg) in packages.iter().enumerate() {
         if index % 25 == 0 {
             ui.info(format!(
@@ -54,32 +50,34 @@ pub fn run() -> Result<()> {
             ));
         }
 
-        for shim_entry in &pkg.shims {
-            if !shim::exists_at(&install_root, &shim_entry.name) {
-                broken.push(format!("{} -> {}", pkg.name, shim_entry.name));
-                continue;
-            }
+        let install_dir = Path::new(&pkg.install_dir);
+        if !install_dir.exists() {
+            broken.push(format!(
+                "{} -> {} (missing install directory)",
+                pkg.name, pkg.install_dir
+            ));
+            continue;
+        }
 
-            match shim::read_at(&install_root, &shim_entry.name) {
-                Ok((path, _)) => {
-                    if path.is_empty() {
-                        broken.push(format!(
-                            "{} -> {} (empty target)",
-                            pkg.name, shim_entry.name
-                        ));
-                    }
-                }
-                Err(_) => broken.push(format!("{} -> {} (unreadable)", pkg.name, shim_entry.name)),
-            }
+        if !install_dir.is_dir() {
+            broken.push(format!(
+                "{} -> {} (not a directory)",
+                pkg.name, pkg.install_dir
+            ));
+            continue;
+        }
+
+        if std::fs::read_dir(install_dir).is_err() {
+            broken.push(format!("{} -> {} (unreadable)", pkg.name, pkg.install_dir));
         }
     }
 
-    ui.notice(format!("Broken shims: {}", broken.len()));
+    ui.notice(format!("Broken installs: {}", broken.len()));
 
     if broken.is_empty() {
-        ui.success("No broken shims found.");
+        ui.success("No broken installs found.");
     } else {
-        ui.notice("Broken shims:");
+        ui.notice("Broken installs:");
         for entry in broken {
             ui.notice(format!("  {entry}"));
         }

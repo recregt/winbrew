@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{services::installer, ui::Ui};
+use crate::{services::install, ui::Ui};
 
 pub fn run(name: &str, version: &str) -> Result<()> {
     let mut ui = Ui::new();
@@ -8,7 +8,7 @@ pub fn run(name: &str, version: &str) -> Result<()> {
 
     let pb = ui.progress_bar();
 
-    installer::install(name, version, |downloaded, total| {
+    install::install(name, version, |downloaded, total| {
         pb.set_length(total);
         pb.set_position(downloaded);
     })?;

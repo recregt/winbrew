@@ -9,7 +9,6 @@ const DEFAULT_ROOT: &str = r"C:\winbrew";
 #[derive(Debug, Clone)]
 pub struct ResolvedPaths {
     pub root: PathBuf,
-    pub bin: PathBuf,
     pub packages: PathBuf,
     pub data: PathBuf,
     pub logs: PathBuf,
@@ -56,14 +55,6 @@ pub fn package_dir_at(root: &Path, name: &str) -> PathBuf {
     packages_dir_at(root).join(name)
 }
 
-pub fn bin_dir() -> PathBuf {
-    base_dir().join("bin")
-}
-
-pub fn bin_dir_at(root: &Path) -> PathBuf {
-    root.join("bin")
-}
-
 pub fn data_dir() -> PathBuf {
     base_dir().join("data")
 }
@@ -108,23 +99,8 @@ pub fn cache_file_at(root: &Path, name: &str, version: &str, ext: &str) -> PathB
     cache_dir_at(root).join(format!("{}-{}.{}", name, version, ext))
 }
 
-pub fn shim_path(name: &str) -> PathBuf {
-    bin_dir().join(format!("{}.shim", name))
-}
-
-pub fn shim_path_at(root: &Path, name: &str) -> PathBuf {
-    bin_dir_at(root).join(format!("{}.shim", name))
-}
-
 pub fn ensure_dirs() -> std::io::Result<()> {
-    for dir in [
-        packages_dir(),
-        bin_dir(),
-        data_dir(),
-        db_dir(),
-        log_dir(),
-        cache_dir(),
-    ] {
+    for dir in [packages_dir(), data_dir(), db_dir(), log_dir(), cache_dir()] {
         fs::create_dir_all(dir)?;
     }
 
@@ -132,7 +108,7 @@ pub fn ensure_dirs() -> std::io::Result<()> {
 }
 
 pub fn ensure_install_dirs(root: &Path) -> std::io::Result<()> {
-    for dir in [packages_dir_at(root), bin_dir_at(root)] {
+    for dir in [packages_dir_at(root)] {
         fs::create_dir_all(dir)?;
     }
 
@@ -162,7 +138,6 @@ pub fn resolved_paths(
     let db = data.join("db");
 
     ResolvedPaths {
-        bin: root.join("bin"),
         packages: resolve_template(&root, packages),
         cache: resolve_template(&root, cache),
         db: db.join("winbrew.db"),

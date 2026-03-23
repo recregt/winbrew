@@ -1,10 +1,9 @@
 use anyhow::{Context, Result, bail};
 use tracing::{debug, warn};
 
-use std::path::Path;
 use std::path::PathBuf;
+use std::process::Command;
 
-use crate::core::{paths, shim};
 use crate::database;
 
 pub fn find_dependents(name: &str, conn: &rusqlite::Connection) -> Result<Vec<String>> {
@@ -46,15 +45,34 @@ fn remove_with_conn(name: &str, force: bool, conn: &rusqlite::Connection) -> Res
     }
 
     let pkg = database::get_package(conn, name)?.context(format!("{} is not installed", name))?;
-    let install_root = paths::install_root_from_package_dir(Path::new(&pkg.install_dir));
-
-    for s in &pkg.shims {
-        if let Err(err) = shim::remove_at(&install_root, &s.name) {
-            warn!("failed to remove shim '{}': {err}", s.name);
-        }
-    }
 
     let install_dir = PathBuf::from(&pkg.install_dir);
+
+    if pkg.kind.eq_ignore_ascii_case("msi") {
+        let product_code = pkg
+            .product_code
+            .as_deref()
+            .context("missing MSI product code in package record")?;
+
+        let status = Command::new("msiexec")
+            .args(["/x", product_code])
+            .status()
+            .context("failed to start msiexec")?;
+
+        if !status.success() {
+            bail!("msi uninstall failed with code: {:?}", status.code());
+        }
+
+        if install_dir.exists() {
+            if let Err(err) = std::fs::remove_dir_all(&install_dir) {
+                warn!("failed to remove package directory for {name}: {err}");
+            }
+        }
+
+        database::delete_package(conn, name)?;
+        debug!(package = name, force, "remove completed");
+        return Ok(());
+    }
 
     if install_dir.exists() {
         let trash_dir = install_dir.with_extension("trash");

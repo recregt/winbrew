@@ -27,7 +27,6 @@ By default, `brew` uses `C:\winbrew` as its root directory:
 
 ```text
 C:\winbrew
-├── bin
 ├── packages
 └── data
 	├── winbrew.toml
@@ -37,6 +36,33 @@ C:\winbrew
 	│   └── winbrew.log
 	└── cache
 ```
+
+### Winget manifests
+
+WinBrew now resolves manifests from Winget-compatible YAML files by default.
+
+Default source settings:
+- repository root: `https://raw.githubusercontent.com/microsoft/winget-pkgs/master`
+- manifest format: `yaml`
+- manifest kind: `installer`
+- path template: `manifests/${partition}/${publisher}/${package}/${version}/${identifier}.${kind}.yaml`
+
+Example:
+
+```yaml
+PackageIdentifier: Microsoft.WindowsTerminal
+PackageVersion: 1.9.1942.0
+Installers:
+	- Architecture: x64
+		InstallerType: msix
+		InstallerUrl: https://github.com/microsoft/terminal/releases/download/v1.9.1942.0/Microsoft.WindowsTerminal_1.9.1942.0_8wekyb3d8bbwe.msixbundle
+		InstallerSha256: 578D987D58B3CE5F6BF3316C6A5AECE8EB6B94DBCD1963413D81CB313D6C28D5
+ManifestType: installer
+ManifestVersion: 1.10.0
+```
+
+> [!NOTE]
+> Only `portable` and `msi` installer kinds are supported for now. Any other installer type will fail during manifest validation.
 
 ## Usage
 

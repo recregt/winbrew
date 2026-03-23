@@ -116,7 +116,7 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
             version      TEXT NOT NULL,
             kind         TEXT NOT NULL,
             install_dir  TEXT NOT NULL,
-            shims        TEXT NOT NULL DEFAULT '[]',
+            product_code TEXT,
             dependencies TEXT NOT NULL DEFAULT '[]',
             status       TEXT NOT NULL DEFAULT 'installing',
             installed_at TEXT NOT NULL
@@ -125,5 +125,27 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
     )
     .context("migration failed")?;
 
+    if !table_has_column(conn, "packages", "product_code")? {
+        conn.execute_batch("ALTER TABLE packages ADD COLUMN product_code TEXT;")
+            .context("failed to add product_code column")?;
+    }
+
     Ok(())
+}
+
+fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .context("failed to inspect table schema")?;
+    let columns = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .context("failed to read table schema")?;
+
+    for entry in columns {
+        if entry.context("failed to read schema row")? == column {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }

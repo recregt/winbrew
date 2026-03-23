@@ -9,7 +9,9 @@ use crate::core::paths;
 
 static CONFIG_CACHE: OnceLock<Mutex<Option<Config>>> = OnceLock::new();
 
-const DEFAULT_REGISTRY_URL: &str = "https://raw.githubusercontent.com/recregt/winbrew-pkgs/main";
+const DEFAULT_REGISTRY_URL: &str = "https://raw.githubusercontent.com/microsoft/winget-pkgs/master";
+const DEFAULT_WINGET_PATH_TEMPLATE: &str =
+    "manifests/${partition}/${publisher}/${package}/${version}/${identifier}.${kind}.yaml";
 const DEFAULT_ROOT: &str = r"C:\winbrew";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -89,6 +91,12 @@ pub struct SourceConfig {
     #[serde(default = "default_source_format")]
     pub format: String,
 
+    #[serde(default = "default_manifest_kind")]
+    pub manifest_kind: String,
+
+    #[serde(default = "default_manifest_path_template")]
+    pub manifest_path_template: String,
+
     #[serde(default = "default_true")]
     pub enabled: bool,
 }
@@ -141,6 +149,8 @@ impl Default for SourceConfig {
         Self {
             url: default_registry_url(),
             format: default_source_format(),
+            manifest_kind: default_manifest_kind(),
+            manifest_path_template: default_manifest_path_template(),
             enabled: default_true(),
         }
     }
@@ -191,7 +201,15 @@ fn default_registry_url() -> String {
 }
 
 fn default_source_format() -> String {
-    "toml".to_string()
+    "yaml".to_string()
+}
+
+fn default_manifest_kind() -> String {
+    "installer".to_string()
+}
+
+fn default_manifest_path_template() -> String {
+    DEFAULT_WINGET_PATH_TEMPLATE.to_string()
 }
 
 fn config_path() -> PathBuf {
@@ -353,6 +371,14 @@ impl Config {
                         self.sources.winget.format.clone(),
                     ),
                     (
+                        "winget.manifest_kind".to_string(),
+                        self.sources.winget.manifest_kind.clone(),
+                    ),
+                    (
+                        "winget.manifest_path_template".to_string(),
+                        self.sources.winget.manifest_path_template.clone(),
+                    ),
+                    (
                         "winget.enabled".to_string(),
                         self.sources.winget.enabled.to_string(),
                     ),
@@ -386,6 +412,10 @@ impl Config {
             "sources.primary" => Some(self.sources.primary.clone()),
             "sources.winget.url" => Some(self.sources.winget.url.clone()),
             "sources.winget.format" => Some(self.sources.winget.format.clone()),
+            "sources.winget.manifest_kind" => Some(self.sources.winget.manifest_kind.clone()),
+            "sources.winget.manifest_path_template" => {
+                Some(self.sources.winget.manifest_path_template.clone())
+            }
             "sources.winget.enabled" => Some(self.sources.winget.enabled.to_string()),
             _ => return Err(anyhow!("unknown config key: {key}")),
         })
@@ -426,6 +456,10 @@ impl Config {
             "sources.primary" => self.sources.primary = value.to_string(),
             "sources.winget.url" => self.sources.winget.url = value.to_string(),
             "sources.winget.format" => self.sources.winget.format = value.to_string(),
+            "sources.winget.manifest_kind" => self.sources.winget.manifest_kind = value.to_string(),
+            "sources.winget.manifest_path_template" => {
+                self.sources.winget.manifest_path_template = value.to_string()
+            }
             "sources.winget.enabled" => self.sources.winget.enabled = parse_bool(key, value)?,
             _ => return Err(anyhow!("unknown config key: {key}")),
         }

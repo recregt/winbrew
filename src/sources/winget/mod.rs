@@ -1,10 +1,13 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 use crate::core::network::http;
-use crate::database;
 use crate::manifest::Manifest;
 use crate::sources::SourceAdapter;
+
+mod manifest;
+
+use manifest::{manifest_format, manifest_url, parse_manifest};
 
 pub struct WingetSource;
 
@@ -23,39 +26,5 @@ impl SourceAdapter for WingetSource {
             .context("failed to read manifest")?;
 
         parse_manifest(&format, &content)
-    }
-}
-
-pub(crate) fn manifest_url(conn: &Connection, name: &str, version: &str) -> Result<String> {
-    let registry = registry_url(conn)?;
-    Ok(format!(
-        "{}/{}/{}.toml",
-        registry.trim_end_matches('/'),
-        name,
-        version
-    ))
-}
-
-fn registry_url(conn: &Connection) -> Result<String> {
-    let _ = conn;
-
-    let config = database::Config::current();
-    Ok(config.sources.winget.url)
-}
-
-pub(crate) fn manifest_format(conn: &Connection) -> Result<String> {
-    let _ = conn;
-
-    let config = database::Config::current();
-    Ok(config.sources.winget.format)
-}
-
-pub(crate) fn parse_manifest(format: &str, content: &str) -> Result<Manifest> {
-    match format.trim().to_ascii_lowercase().as_str() {
-        "toml" | "winget_toml" | "custom_toml" => Manifest::parse_toml(content),
-        "yaml" | "yml" | "winget_yaml" => {
-            bail!("yaml parsing is not wired yet; add a YAML manifest adapter for this source")
-        }
-        other => bail!("unsupported manifest format: {other}"),
     }
 }

@@ -1,5 +1,5 @@
 pub mod adapter;
-pub mod installer;
+pub mod install;
 pub mod list;
 pub mod remover;
 

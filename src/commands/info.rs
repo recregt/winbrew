@@ -17,7 +17,6 @@ pub fn run() -> Result<()> {
         "Packages dir: {}",
         paths.packages.to_string_lossy()
     ));
-    ui.notice(format!("Bin dir: {}", paths.bin.to_string_lossy()));
     ui.notice(format!("Cache dir: {}", paths.cache.to_string_lossy()));
     ui.notice(format!(
         "Registry URL: {}",
