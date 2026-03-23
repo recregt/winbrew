@@ -88,6 +88,10 @@ pub struct Manifest {
 
 impl Manifest {
     pub fn parse(content: &str) -> Result<Self> {
+        Self::parse_toml(content)
+    }
+
+    pub fn parse_toml(content: &str) -> Result<Self> {
         toml::from_str(content).context("failed to parse manifest")
     }
 

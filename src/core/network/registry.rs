@@ -3,11 +3,12 @@ use rusqlite::Connection;
 
 use crate::{database, manifest::Manifest};
 
-use super::http;
+use super::{http, parser::parse_manifest};
 
 pub fn fetch_manifest(conn: &Connection, name: &str, version: &str) -> Result<Manifest> {
     let url = manifest_url(conn, name, version)?;
     let client = http::build_client(conn)?;
+    let format = manifest_format(conn)?;
 
     let content = http::apply_github_auth(conn, &url, client.get(&url))?
         .send()
@@ -17,7 +18,7 @@ pub fn fetch_manifest(conn: &Connection, name: &str, version: &str) -> Result<Ma
         .text()
         .context("failed to read manifest")?;
 
-    Manifest::parse(&content)
+    parse_manifest(&format, &content)
 }
 
 fn manifest_url(conn: &Connection, name: &str, version: &str) -> Result<String> {
@@ -35,4 +36,11 @@ fn registry_url(conn: &Connection) -> Result<String> {
 
     let config = database::Config::current();
     Ok(config.sources.winget.url)
+}
+
+fn manifest_format(conn: &Connection) -> Result<String> {
+    let _ = conn;
+
+    let config = database::Config::current();
+    Ok(config.sources.winget.format)
 }

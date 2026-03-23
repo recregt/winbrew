@@ -24,6 +24,10 @@ pub fn run() -> Result<()> {
         config.sources.winget.url.as_str()
     ));
     ui.notice(format!(
+        "Registry format: {}",
+        config.sources.winget.format.as_str()
+    ));
+    ui.notice(format!(
         "Proxy: {}",
         config.core.proxy.as_deref().unwrap_or("(none)")
     ));

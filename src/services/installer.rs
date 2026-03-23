@@ -4,13 +4,10 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
-use crate::core::{
-    extractor,
-    network::{download_and_verify, fetch_manifest},
-    paths, shim, time,
-};
+use crate::core::{extractor, network::download_and_verify, paths, shim, time};
 use crate::database;
 use crate::models::{Package, PackageStatus, Shim};
+use crate::services::fetch_manifest;
 use tracing::{debug, warn};
 
 pub fn install(name: &str, version: &str, on_progress: impl Fn(u64, u64)) -> Result<()> {

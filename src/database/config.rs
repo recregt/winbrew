@@ -86,6 +86,9 @@ pub struct SourceConfig {
     #[serde(default = "default_registry_url")]
     pub url: String,
 
+    #[serde(default = "default_source_format")]
+    pub format: String,
+
     #[serde(default = "default_true")]
     pub enabled: bool,
 }
@@ -137,6 +140,7 @@ impl Default for SourceConfig {
     fn default() -> Self {
         Self {
             url: default_registry_url(),
+            format: default_source_format(),
             enabled: default_true(),
         }
     }
@@ -184,6 +188,10 @@ fn default_primary_source() -> String {
 
 fn default_registry_url() -> String {
     DEFAULT_REGISTRY_URL.to_string()
+}
+
+fn default_source_format() -> String {
+    "toml".to_string()
 }
 
 fn config_path() -> PathBuf {
@@ -341,6 +349,10 @@ impl Config {
                     ("primary".to_string(), self.sources.primary.clone()),
                     ("winget.url".to_string(), self.sources.winget.url.clone()),
                     (
+                        "winget.format".to_string(),
+                        self.sources.winget.format.clone(),
+                    ),
+                    (
                         "winget.enabled".to_string(),
                         self.sources.winget.enabled.to_string(),
                     ),
@@ -373,6 +385,7 @@ impl Config {
             "paths.cache" => Some(self.paths.cache.clone()),
             "sources.primary" => Some(self.sources.primary.clone()),
             "sources.winget.url" => Some(self.sources.winget.url.clone()),
+            "sources.winget.format" => Some(self.sources.winget.format.clone()),
             "sources.winget.enabled" => Some(self.sources.winget.enabled.to_string()),
             _ => return Err(anyhow!("unknown config key: {key}")),
         })
@@ -412,6 +425,7 @@ impl Config {
             "paths.cache" => self.paths.cache = value.to_string(),
             "sources.primary" => self.sources.primary = value.to_string(),
             "sources.winget.url" => self.sources.winget.url = value.to_string(),
+            "sources.winget.format" => self.sources.winget.format = value.to_string(),
             "sources.winget.enabled" => self.sources.winget.enabled = parse_bool(key, value)?,
             _ => return Err(anyhow!("unknown config key: {key}")),
         }
