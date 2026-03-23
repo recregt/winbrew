@@ -46,7 +46,7 @@ jobs:
     runs-on: windows-latest
     needs: checks
     env:
-      WB_EXE: .\target\x86_64-pc-windows-msvc\debug\wb.exe
+      BREW_EXE: .\target\x86_64-pc-windows-msvc\debug\brew.exe
 
     steps:
       - name: Checkout
@@ -61,50 +61,50 @@ jobs:
       - name: Build
         run: cargo build
 
-      - name: wb --version
+      - name: brew --version
         continue-on-error: true
-        run: $env:WB_EXE --version
+        run: $env:BREW_EXE --version
 
-      - name: wb --help
+      - name: brew --help
         continue-on-error: true
-        run: $env:WB_EXE --help
+        run: $env:BREW_EXE --help
 
-      - name: wb list (empty)
+      - name: brew list (empty)
         continue-on-error: true
         run: |
-          & $env:WB_EXE list
+          & $env:BREW_EXE list
 
-      - name: wb config seed values
+      - name: brew config seed values
         continue-on-error: true
         run: |
-          & $env:WB_EXE config set ci.integration enabled
-          & $env:WB_EXE config set default_yes true
-          & $env:WB_EXE config set color false
-          & $env:WB_EXE config set download_timeout 31
-          & $env:WB_EXE config set concurrent_downloads 3
+          & $env:BREW_EXE config set ci.integration enabled
+          & $env:BREW_EXE config set default_yes true
+          & $env:BREW_EXE config set color false
+          & $env:BREW_EXE config set download_timeout 31
+          & $env:BREW_EXE config set concurrent_downloads 3
 
-      - name: wb config get ci.integration
+      - name: brew config get ci.integration
         continue-on-error: true
         run: |
-          $out = & $env:WB_EXE config get ci.integration | Out-String
+          $out = & $env:BREW_EXE config get ci.integration | Out-String
           Write-Host $out
           if ($out -notmatch "ci.integration = enabled") {
             Write-Error "Expected config get to return the CI test value"; exit 1
           }
 
-      - name: wb config get download_timeout
+      - name: brew config get download_timeout
         continue-on-error: true
         run: |
-          $out = & $env:WB_EXE config get download_timeout | Out-String
+          $out = & $env:BREW_EXE config get download_timeout | Out-String
           Write-Host $out
           if ($out -notmatch "download_timeout = 31") {
             Write-Error "Expected config get to return the seeded timeout"; exit 1
           }
 
-      - name: wb config list includes seeded values
+      - name: brew config list includes seeded values
         continue-on-error: true
         run: |
-          $out = & $env:WB_EXE config list | Out-String
+          $out = & $env:BREW_EXE config list | Out-String
           Write-Host $out
           foreach ($needle in @(
             "ci.integration = enabled",
@@ -118,10 +118,10 @@ jobs:
             }
           }
 
-      - name: wb info
+      - name: brew info
         continue-on-error: true
         run: |
-          $out = & $env:WB_EXE info | Out-String
+          $out = & $env:BREW_EXE info | Out-String
           Write-Host $out
           if ($out -notmatch "Version:") {
             Write-Error "Expected 'Version:' in info output"; exit 1
@@ -140,10 +140,10 @@ jobs:
             }
           }
 
-      - name: wb doctor
+      - name: brew doctor
         continue-on-error: true
         run: |
-          $out = & $env:WB_EXE doctor | Out-String
+          $out = & $env:BREW_EXE doctor | Out-String
           Write-Host $out
           if ($out -notmatch "No broken shims found\.") {
             Write-Error "Expected doctor to report no broken shims"; exit 1
@@ -157,29 +157,29 @@ jobs:
             }
           }
 
-      - name: wb install node
+      - name: brew install node
         continue-on-error: true
         run: |
-          & $env:WB_EXE install node
+          & $env:BREW_EXE install node
 
-      - name: wb list (node should appear)
+      - name: brew list (node should appear)
         continue-on-error: true
         run: |
-          $out = & $env:WB_EXE list | Out-String
+          $out = & $env:BREW_EXE list | Out-String
           Write-Host $out
           if ($out -notmatch "node") {
             Write-Error "Expected 'node' in list output"; exit 1
           }
 
-      - name: wb remove node
+      - name: brew remove node
         continue-on-error: true
         run: |
-          & $env:WB_EXE remove node --yes
+          & $env:BREW_EXE remove node --yes
 
-      - name: wb list (node should be gone)
+      - name: brew list (node should be gone)
         continue-on-error: true
         run: |
-          $out = & $env:WB_EXE list | Out-String
+          $out = & $env:BREW_EXE list | Out-String
           Write-Host $out
           if ($out -match "node") {
             Write-Error "node should not appear after remove"; exit 1

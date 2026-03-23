@@ -4,7 +4,7 @@ use crate::{services::list, ui::Ui};
 
 pub fn run() -> Result<()> {
     let mut ui = Ui::new();
-    ui.page_title("Winbrew Packages");
+    ui.page_title("Brew Packages");
 
     let packages = list::list_packages()?;
     ui.display_packages(&packages);

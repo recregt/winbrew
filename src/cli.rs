@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(
-    name = "winbrew",
+    name = "brew",
     version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("WINBREW_GIT_HASH"), ")"),
     about = "A modern package manager for Windows that installs, tracks, and cleanly removes software.",
     arg_required_else_help = true
@@ -14,13 +14,13 @@ pub struct Cli {
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
 pub enum Command {
-    /// List packages installed by winbrew
+    /// List packages installed by brew
     List,
 
     /// Show effective runtime settings and paths
     Info,
 
-    /// Check local winbrew installation health
+    /// Check local brew installation health
     Doctor,
 
     /// Install a package from the configured package repository
@@ -44,7 +44,7 @@ pub enum Command {
         force: bool,
     },
 
-    /// Get or set winbrew configuration values
+    /// Get or set brew configuration values
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
@@ -79,28 +79,28 @@ mod tests {
 
     #[test]
     fn parse_list() {
-        let cli = Cli::parse_from(["winbrew", "list"]);
+        let cli = Cli::parse_from(["brew", "list"]);
 
         assert_eq!(cli.command, Command::List);
     }
 
     #[test]
     fn parse_info() {
-        let cli = Cli::parse_from(["winbrew", "info"]);
+        let cli = Cli::parse_from(["brew", "info"]);
 
         assert_eq!(cli.command, Command::Info);
     }
 
     #[test]
     fn parse_doctor() {
-        let cli = Cli::parse_from(["winbrew", "doctor"]);
+        let cli = Cli::parse_from(["brew", "doctor"]);
 
         assert_eq!(cli.command, Command::Doctor);
     }
 
     #[test]
     fn parse_install_with_default_version() {
-        let cli = Cli::parse_from(["winbrew", "install", "ripgrep"]);
+        let cli = Cli::parse_from(["brew", "install", "ripgrep"]);
 
         assert_eq!(
             cli.command,
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn parse_remove_with_yes() {
-        let cli = Cli::parse_from(["winbrew", "remove", "ripgrep", "--yes"]);
+        let cli = Cli::parse_from(["brew", "remove", "ripgrep", "--yes"]);
 
         assert_eq!(
             cli.command,
@@ -127,7 +127,7 @@ mod tests {
 
     #[test]
     fn parse_remove_with_force() {
-        let cli = Cli::parse_from(["winbrew", "remove", "ripgrep", "--force"]);
+        let cli = Cli::parse_from(["brew", "remove", "ripgrep", "--force"]);
 
         assert_eq!(
             cli.command,
@@ -141,7 +141,7 @@ mod tests {
 
     #[test]
     fn parse_config_list() {
-        let cli = Cli::parse_from(["winbrew", "config", "list"]);
+        let cli = Cli::parse_from(["brew", "config", "list"]);
 
         assert_eq!(
             cli.command,
