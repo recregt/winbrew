@@ -88,6 +88,7 @@ $release = Get-LatestReleaseAsset -Repo $Repository
 $binDir = Join-Path $InstallRoot 'bin'
 $packagesDir = Join-Path $InstallRoot 'packages'
 $dataDir = Join-Path $InstallRoot 'data'
+$dbDir = Join-Path $dataDir 'db'
 $logsDir = Join-Path $dataDir 'logs'
 $cacheDir = Join-Path $dataDir 'cache'
 
@@ -96,6 +97,7 @@ Ensure-Directory -Path $InstallRoot
 Ensure-Directory -Path $binDir
 Ensure-Directory -Path $packagesDir
 Ensure-Directory -Path $dataDir
+Ensure-Directory -Path $dbDir
 Ensure-Directory -Path $logsDir
 Ensure-Directory -Path $cacheDir
 

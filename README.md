@@ -6,8 +6,8 @@
 
 A modern package manager for Windows that installs, tracks, and cleanly removes software.
 
-> [!IMPORTANT]
-> Early development.
+> [!WARNING]
+> This project is in the early stages of development.
 
 ## Requirements
 
@@ -30,8 +30,9 @@ C:\winbrew
 ├── bin
 ├── packages
 └── data
-	├── winbrew.db
 	├── winbrew.toml
+	├── db
+	│   └── winbrew.db
 	├── logs
 	│   └── winbrew.log
 	└── cache

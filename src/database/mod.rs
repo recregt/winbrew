@@ -62,7 +62,7 @@ pub fn get_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
     }
 
     if let Some(parent) = paths::db_path().parent() {
-        std::fs::create_dir_all(parent).context("failed to create winbrew data directory")?;
+        std::fs::create_dir_all(parent).context("failed to create winbrew database directory")?;
     }
 
     let manager = SqliteConnectionManager::file(paths::db_path());

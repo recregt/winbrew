@@ -68,8 +68,16 @@ pub fn data_dir() -> PathBuf {
     base_dir().join("data")
 }
 
+pub fn db_dir() -> PathBuf {
+    data_dir().join("db")
+}
+
+pub fn db_dir_at(root: &Path) -> PathBuf {
+    root.join("data").join("db")
+}
+
 pub fn db_path() -> PathBuf {
-    base_dir().join("data").join("winbrew.db")
+    db_dir().join("winbrew.db")
 }
 
 pub fn config_file() -> PathBuf {
@@ -113,6 +121,7 @@ pub fn ensure_dirs() -> std::io::Result<()> {
         packages_dir(),
         bin_dir(),
         data_dir(),
+        db_dir(),
         log_dir(),
         cache_dir(),
     ] {
@@ -150,12 +159,13 @@ pub fn resolved_paths(
     let root = PathBuf::from(root);
     let data = resolve_template(&root, data);
     let logs = resolve_template(&root, logs);
+    let db = data.join("db");
 
     ResolvedPaths {
         bin: root.join("bin"),
         packages: resolve_template(&root, packages),
         cache: resolve_template(&root, cache),
-        db: data.join("winbrew.db"),
+        db: db.join("winbrew.db"),
         config: data.join("winbrew.toml"),
         log: logs.join("winbrew.log"),
         root,
