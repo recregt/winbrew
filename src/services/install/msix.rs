@@ -30,11 +30,9 @@ pub fn install(
             "-ExecutionPolicy",
             "Bypass",
             "-Command",
-            &format!(
-                "Add-AppxPackage -Path '{}' -ForceApplicationShutdown",
-                context.cache_file.display()
-            ),
+            "Add-AppxPackage -Path $env:MSIX_PATH -ForceApplicationShutdown",
         ])
+        .env("MSIX_PATH", &context.cache_file)
         .status()
         .context("failed to start PowerShell")?;
 

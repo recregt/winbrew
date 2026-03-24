@@ -83,7 +83,7 @@ fn candidate_score(query: &str, candidate: &PackageCandidate) -> usize {
     }
 
     if description.as_deref() == Some(query.as_str()) {
-        return 0;
+        return 2;
     }
 
     if publisher.as_deref() == Some(query.as_str()) {
@@ -234,6 +234,19 @@ mod tests {
         );
 
         assert_eq!(candidate_score(query, &candidate), 0);
+    }
+
+    #[test]
+    fn description_exact_match_is_lower_priority_than_identifier_match() {
+        let query = "Windows Terminal is a modern terminal application";
+        let description_match = candidate(
+            "Microsoft.WindowsTerminal",
+            Some("Windows Terminal"),
+            Some("Windows Terminal is a modern terminal application"),
+            Some("Microsoft Corporation"),
+        );
+
+        assert_eq!(candidate_score(query, &description_match), 2);
     }
 
     #[test]

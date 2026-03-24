@@ -24,8 +24,20 @@ pub fn install(
     )
     .context("download and verification failed")?;
 
+    if context.cache_file.extension().and_then(|ext| ext.to_str()) != Some("msi") {
+        bail!(
+            "msi installer cache file must have a .msi extension: {}",
+            context.cache_file.display()
+        );
+    }
+
     let status = Command::new("msiexec")
-        .args(["/i", &context.cache_file.to_string_lossy()])
+        .args([
+            "/i",
+            &context.cache_file.to_string_lossy(),
+            "/quiet",
+            "/norestart",
+        ])
         .status()
         .context("failed to start msiexec")?;
 
