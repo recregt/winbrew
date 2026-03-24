@@ -183,9 +183,9 @@ mod tests {
             plan.install_dir
                 .ends_with(r"packages\Microsoft.WindowsTerminal")
         );
-        assert!(
-            plan.cache_file
-                .ends_with(r"winbrew\data\cache\Microsoft.WindowsTerminal-1.21.2361.0.msi")
+        assert_eq!(
+            plan.cache_file,
+            paths::cache_file("Microsoft.WindowsTerminal", "1.21.2361.0", "msi")
         );
         assert_eq!(plan.backup_dir.parent(), plan.install_dir.parent());
         assert_eq!(
