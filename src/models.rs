@@ -46,3 +46,25 @@ pub struct Package {
     pub status: PackageStatus,
     pub installed_at: String,
 }
+
+#[derive(Debug, Clone)]
+pub struct PackageQuery {
+    pub terms: Vec<String>,
+    pub version: Option<String>,
+}
+
+impl PackageQuery {
+    pub fn text(&self) -> String {
+        self.terms.join(" ")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PackageCandidate {
+    pub identifier: String,
+    pub package_name: Option<String>,
+    pub version: String,
+    pub description: Option<String>,
+    pub publisher: Option<String>,
+    pub manifest_path: Option<String>,
+}

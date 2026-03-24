@@ -7,7 +7,10 @@ use std::path::Path;
 const BUFFER_SIZE: usize = 64 * 1024;
 
 pub fn verify_file(path: &Path, expected: &str) -> Result<()> {
-    let expected = expected.strip_prefix("sha256:").unwrap_or(expected);
+    let expected = expected
+        .strip_prefix("sha256:")
+        .unwrap_or(expected)
+        .to_ascii_lowercase();
     let file = File::open(path).context("failed to open file for checksum")?;
 
     let actual = match unsafe { memmap2::MmapOptions::new().map(&file) } {

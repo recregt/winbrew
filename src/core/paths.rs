@@ -108,9 +108,8 @@ pub fn ensure_dirs() -> std::io::Result<()> {
 }
 
 pub fn ensure_install_dirs(root: &Path) -> std::io::Result<()> {
-    for dir in [packages_dir_at(root)] {
-        fs::create_dir_all(dir)?;
-    }
+    let dir = packages_dir_at(root);
+    fs::create_dir_all(dir)?;
 
     Ok(())
 }

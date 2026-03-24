@@ -63,10 +63,37 @@ fn remove_with_conn(name: &str, force: bool, conn: &rusqlite::Connection) -> Res
             bail!("msi uninstall failed with code: {:?}", status.code());
         }
 
-        if install_dir.exists() {
-            if let Err(err) = std::fs::remove_dir_all(&install_dir) {
-                warn!("failed to remove package directory for {name}: {err}");
-            }
+        if install_dir.exists()
+            && let Err(err) = std::fs::remove_dir_all(&install_dir)
+        {
+            warn!("failed to remove package directory for {name}: {err}");
+        }
+
+        database::delete_package(conn, name)?;
+        debug!(package = name, force, "remove completed");
+        return Ok(());
+    }
+
+    if pkg.kind.eq_ignore_ascii_case("msix") {
+        let status = Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                &format!("Get-AppxPackage -Name '{}' | Remove-AppxPackage", pkg.name),
+            ])
+            .status()
+            .context("failed to start PowerShell")?;
+
+        if !status.success() {
+            bail!("msix uninstall failed with code: {:?}", status.code());
+        }
+
+        if install_dir.exists()
+            && let Err(err) = std::fs::remove_dir_all(&install_dir)
+        {
+            warn!("failed to remove package directory for {name}: {err}");
         }
 
         database::delete_package(conn, name)?;

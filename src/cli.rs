@@ -25,11 +25,11 @@ pub enum Command {
 
     /// Install a package from the configured package repository
     Install {
-        #[arg(value_name = "PACKAGE")]
-        name: String,
+        #[arg(value_name = "QUERY", num_args = 1..)]
+        query: Vec<String>,
 
-        #[arg(value_name = "VERSION", default_value = "latest")]
-        version: String,
+        #[arg(long, short = 'v', value_name = "VERSION")]
+        version: Option<String>,
     },
 
     /// Remove a package and its tracked files
@@ -99,14 +99,46 @@ mod tests {
     }
 
     #[test]
-    fn parse_install_with_default_version() {
+    fn parse_install_with_single_word_query() {
         let cli = Cli::parse_from(["brew", "install", "ripgrep"]);
 
         assert_eq!(
             cli.command,
             Command::Install {
-                name: "ripgrep".to_string(),
-                version: "latest".to_string(),
+                query: vec!["ripgrep".to_string()],
+                version: None,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_install_with_version_flag() {
+        let cli = Cli::parse_from([
+            "brew",
+            "install",
+            "Microsoft.WindowsTerminal",
+            "--version",
+            "1.9.1942.0",
+        ]);
+
+        assert_eq!(
+            cli.command,
+            Command::Install {
+                query: vec!["Microsoft.WindowsTerminal".to_string()],
+                version: Some("1.9.1942.0".to_string()),
+            }
+        );
+    }
+
+    #[test]
+    fn parse_install_with_multi_word_query() {
+        let cli = Cli::parse_from(["brew", "install", "windows", "terminal"]);
+
+        assert_eq!(
+            cli.command,
+            Command::Install {
+                query: vec!["windows".to_string(), "terminal".to_string()],
+                version: None,
             }
         );
     }

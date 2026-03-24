@@ -1,20 +1,32 @@
 use anyhow::{Result, bail};
 use rusqlite::Connection;
 
+use crate::models::PackageCandidate;
 use crate::{database, manifest::Manifest};
 
 pub mod winget;
 
 pub trait SourceAdapter {
     fn fetch_manifest(&self, conn: &Connection, name: &str, version: &str) -> Result<Manifest>;
+
+    fn search_packages(&self, query: &str) -> Result<Vec<PackageCandidate>>;
 }
 
-pub fn active_source(conn: &Connection) -> Result<Box<dyn SourceAdapter + Send + Sync>> {
-    resolve_source(conn)
+pub fn active_source() -> Result<Box<dyn SourceAdapter + Send + Sync>> {
+    resolve_source()
 }
 
 pub(crate) fn winget_registry_url() -> String {
     database::Config::current().sources.winget.url
+}
+
+pub(crate) fn winget_repo_slug() -> Option<String> {
+    let url = winget_registry_url();
+    let trimmed = url.strip_prefix("https://raw.githubusercontent.com/")?;
+    let mut parts = trimmed.split('/');
+    let owner = parts.next()?;
+    let repo = parts.next()?;
+    Some(format!("{owner}/{repo}"))
 }
 
 pub(crate) fn winget_manifest_format() -> String {
@@ -37,9 +49,7 @@ pub(crate) fn winget_manifest_path_template() -> String {
         .clone()
 }
 
-fn resolve_source(conn: &Connection) -> Result<Box<dyn SourceAdapter + Send + Sync>> {
-    let _ = conn;
-
+fn resolve_source() -> Result<Box<dyn SourceAdapter + Send + Sync>> {
     let config = database::Config::current();
 
     match config.sources.primary.as_str() {

@@ -4,7 +4,9 @@ use crate::database;
 use crate::models::PackageStatus;
 
 pub mod msi;
+pub mod msix;
 pub mod portable;
+pub mod resolve;
 
 pub use crate::core::install::InstallPlan;
 
@@ -25,6 +27,7 @@ pub fn install(name: &str, version: &str, on_progress: impl Fn(u64, u64)) -> Res
     match context.source.kind.trim().to_ascii_lowercase().as_str() {
         "portable" => portable::install(&conn, &context, &on_progress),
         "msi" => msi::install(&conn, &context, &on_progress),
+        "msix" => msix::install(&conn, &context, &on_progress),
         other => bail!("unsupported download type: {other}"),
     }
 }

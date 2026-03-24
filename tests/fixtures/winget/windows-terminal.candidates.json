@@ -1,0 +1,26 @@
+[
+  {
+    "identifier": "Microsoft.WindowsTerminalPreview",
+    "package_name": "Windows Terminal Preview",
+    "version": "1.22.1000.0",
+    "description": "Preview channel for Windows Terminal.",
+    "publisher": "Microsoft Corporation",
+    "manifest_path": "manifests/m/Microsoft/WindowsTerminalPreview/1.22.1000.0/Microsoft.WindowsTerminalPreview.installer.yaml"
+  },
+  {
+    "identifier": "Microsoft.WindowsTerminal",
+    "package_name": "Windows Terminal",
+    "version": "1.21.2361.0",
+    "description": "Windows Terminal is a modern terminal application.",
+    "publisher": "Microsoft Corporation",
+    "manifest_path": "manifests/m/Microsoft/WindowsTerminal/1.21.2361.0/Microsoft.WindowsTerminal.installer.yaml"
+  },
+  {
+    "identifier": "Microsoft.WindowsTerminalCanary",
+    "package_name": "Windows Terminal Canary",
+    "version": "1.23.0.0",
+    "description": "Canary channel for Windows Terminal.",
+    "publisher": "Microsoft Corporation",
+    "manifest_path": "manifests/m/Microsoft/WindowsTerminalCanary/1.23.0.0/Microsoft.WindowsTerminalCanary.installer.yaml"
+  }
+]

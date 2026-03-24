@@ -13,6 +13,10 @@ use crate::sources::{
 pub(crate) fn manifest_url(conn: &Connection, name: &str, version: &str) -> Result<String> {
     let _ = conn;
 
+    manifest_url_for(name, version)
+}
+
+pub(crate) fn manifest_url_for(name: &str, version: &str) -> Result<String> {
     let registry = winget_registry_url();
     let manifest_kind = winget_manifest_kind();
     let path_template = winget_manifest_path_template();
@@ -83,6 +87,7 @@ fn parse_winget_yaml(content: &str) -> Result<Manifest> {
     let package = Package {
         name: raw.package_identifier.clone(),
         version: raw.package_version.clone(),
+        package_name: raw.package_name,
         description: raw.short_description.or(raw.description),
         publisher: raw.publisher,
         homepage: raw.homepage,
@@ -112,6 +117,73 @@ fn parse_winget_yaml(content: &str) -> Result<Manifest> {
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn fixture_path() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join("winget")
+            .join("windows-terminal.installer.yaml")
+    }
+
+    #[test]
+    fn parses_winget_yaml_fixture_from_disk() {
+        let content = fs::read_to_string(fixture_path()).expect("fixture file should exist");
+        let manifest = parse_manifest("yaml", &content).expect("fixture should parse");
+
+        assert_eq!(manifest.package.name, "Microsoft.WindowsTerminal");
+        assert_eq!(
+            manifest.package.package_name.as_deref(),
+            Some("Windows Terminal")
+        );
+        assert_eq!(manifest.package.version, "1.21.2361.0");
+        assert_eq!(
+            manifest.package.publisher.as_deref(),
+            Some("Microsoft Corporation")
+        );
+        assert_eq!(
+            manifest.package.description.as_deref(),
+            Some("Open source terminal application for developers.")
+        );
+        assert_eq!(manifest.source.kind, "msix");
+        assert_eq!(manifest.installers.len(), 1);
+        assert_eq!(
+            manifest.installers[0].display_name.as_deref(),
+            Some("Windows Terminal")
+        );
+    }
+
+    #[test]
+    fn parses_winget_msi_fixture_from_disk() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join("winget")
+            .join("windows-terminal.msi.yaml");
+        let content = fs::read_to_string(path).expect("fixture file should exist");
+        let manifest = parse_manifest("yaml", &content).expect("fixture should parse");
+
+        assert_eq!(manifest.package.name, "Microsoft.WindowsTerminal");
+        assert_eq!(
+            manifest.package.package_name.as_deref(),
+            Some("Windows Terminal")
+        );
+        assert_eq!(manifest.package.version, "1.21.2361.0");
+        assert_eq!(manifest.source.kind, "msi");
+        assert_eq!(manifest.installers.len(), 1);
+        assert_eq!(manifest.installers[0].installer_type, "msi");
+        assert_eq!(
+            manifest.installers[0].product_code.as_deref(),
+            Some("{11111111-1111-1111-1111-111111111111}")
+        );
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct WingetManifest {
     #[serde(rename = "ManifestType")]
@@ -128,6 +200,9 @@ struct WingetManifest {
 
     #[serde(rename = "Publisher")]
     publisher: Option<String>,
+
+    #[serde(rename = "PackageName")]
+    package_name: Option<String>,
 
     #[serde(rename = "ShortDescription")]
     short_description: Option<String>,

@@ -66,15 +66,17 @@ ManifestVersion: 1.10.0
 
 ## Usage
 
+### Install package
+```bash
+brew install windows terminal
+brew install Microsoft.WindowsTerminal --version 1.9.1942.0
+```
+
+If multiple packages match the query, WinBrew shows a numbered list and asks you to pick one.
+
 ### List installed packages
 ```bash
 brew list
-```
-
-### Install package
-```bash
-brew install node
-brew install ripgrep latest
 ```
 
 ### Remove package

@@ -495,3 +495,32 @@ pub fn config_set(key: &str, value: &str) -> Result<()> {
 pub fn config_sections() -> Result<Vec<ConfigSection>> {
     Ok(Config::load_cached()?.sections())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_include_winget_master_and_manifest_template() {
+        let config = Config::default();
+
+        assert_eq!(config.sources.winget.url, DEFAULT_REGISTRY_URL);
+        assert_eq!(config.sources.winget.format, "yaml");
+        assert_eq!(config.sources.winget.manifest_kind, "installer");
+        assert_eq!(
+            config.sources.winget.manifest_path_template,
+            DEFAULT_WINGET_PATH_TEMPLATE
+        );
+        assert_eq!(config.paths.root, DEFAULT_ROOT);
+    }
+
+    #[test]
+    fn resolved_paths_place_database_under_data_db() {
+        let config = Config::default();
+        let paths = config.resolved_paths();
+
+        assert!(paths.db.ends_with(r"data\db\winbrew.db"));
+        assert!(paths.config.ends_with(r"data\winbrew.toml"));
+        assert!(paths.log.ends_with(r"data\logs\winbrew.log"));
+    }
+}

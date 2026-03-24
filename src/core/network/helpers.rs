@@ -17,12 +17,14 @@ pub fn send_request(
     url: &str,
     dest: &Path,
 ) -> Result<reqwest::blocking::Response> {
+    let _ = conn;
+
     debug!(url = url, destination = %dest.display(), "starting download request");
 
-    let client = http::build_client(conn)?;
+    let client = http::build_client()?;
     let requested_existing_size = existing_part_size(dest);
 
-    let mut request = http::apply_github_auth(conn, url, client.get(url))?;
+    let mut request = http::apply_github_auth(url, client.get(url))?;
     if requested_existing_size > 0 {
         request = request.header("Range", format!("bytes={}-", requested_existing_size));
     }
@@ -133,7 +135,10 @@ pub fn verify_download(
     expected_checksum: Option<&str>,
 ) -> Result<()> {
     if let Some(expected) = expected_checksum {
-        let expected = expected.strip_prefix("sha256:").unwrap_or(expected);
+        let expected = expected
+            .strip_prefix("sha256:")
+            .unwrap_or(expected)
+            .to_ascii_lowercase();
         let actual = hex::encode(
             hasher
                 .expect("checksum hasher must exist when verification is requested")

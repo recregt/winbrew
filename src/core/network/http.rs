@@ -3,20 +3,20 @@ use reqwest::{
     Proxy,
     blocking::{Client, RequestBuilder},
 };
-use rusqlite::Connection;
 use std::time::Duration;
 use tracing::{debug, trace};
 
 use crate::database;
 
-pub fn build_client(conn: &Connection) -> Result<Client> {
-    let _ = conn;
+pub fn build_client() -> Result<Client> {
     let config = database::Config::current();
     let timeout_secs = config.core.download_timeout;
 
     debug!(timeout_secs, "building HTTP client");
 
-    let mut builder = Client::builder().timeout(Duration::from_secs(timeout_secs));
+    let mut builder = Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .user_agent("winbrew/0.1");
 
     if let Some(proxy_url) = config.core.proxy {
         trace!(proxy = proxy_url.as_str(), "configuring HTTP proxy");
@@ -26,13 +26,7 @@ pub fn build_client(conn: &Connection) -> Result<Client> {
     builder.build().context("failed to build HTTP client")
 }
 
-pub fn apply_github_auth(
-    conn: &Connection,
-    url: &str,
-    request: RequestBuilder,
-) -> Result<RequestBuilder> {
-    let _ = conn;
-
+pub fn apply_github_auth(url: &str, request: RequestBuilder) -> Result<RequestBuilder> {
     let config = database::Config::current();
 
     if is_github_url(url)

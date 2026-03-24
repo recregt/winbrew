@@ -15,6 +15,7 @@ pub struct ManifestInfo {
 pub struct Package {
     pub name: String,
     pub version: String,
+    pub package_name: Option<String>,
     pub description: Option<String>,
     pub publisher: Option<String>,
     pub homepage: Option<String>,
@@ -157,7 +158,7 @@ impl Source {
         let kind = self.kind.trim().to_ascii_lowercase();
 
         match kind.as_str() {
-            "portable" | "msi" => Ok(()),
+            "portable" | "msi" | "msix" => Ok(()),
             other => anyhow::bail!("unsupported download type: {other}"),
         }
     }
@@ -169,4 +170,55 @@ fn default_manifest_type() -> String {
 
 fn default_manifest_version() -> String {
     "1.9.0".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_installer_list_keeps_selected_source_empty() {
+        let manifest = Manifest {
+            manifest: ManifestInfo::default(),
+            package: Package {
+                name: "Microsoft.WindowsTerminal".to_string(),
+                version: "1.21.2361.0".to_string(),
+                package_name: None,
+                description: None,
+                publisher: None,
+                homepage: None,
+                license: None,
+                moniker: None,
+                tags: vec![],
+                dependencies: vec![],
+            },
+            source: Source {
+                url: "https://example.invalid/app.exe".to_string(),
+                checksum: "abc123".to_string(),
+                kind: "portable".to_string(),
+            },
+            installers: vec![],
+            metadata: None,
+        };
+
+        assert!(manifest.preferred_installer().is_none());
+        assert!(manifest.selected_source().is_none());
+    }
+
+    #[test]
+    fn validates_supported_and_unsupported_download_kinds() {
+        let portable = Source {
+            url: "https://example.invalid/app.exe".to_string(),
+            checksum: "abc123".to_string(),
+            kind: "portable".to_string(),
+        };
+        let unsupported = Source {
+            url: "https://example.invalid/app.zip".to_string(),
+            checksum: "abc123".to_string(),
+            kind: "zip".to_string(),
+        };
+
+        assert!(portable.validate_download_kind().is_ok());
+        assert!(unsupported.validate_download_kind().is_err());
+    }
 }

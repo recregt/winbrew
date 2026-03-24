@@ -14,7 +14,7 @@ pub fn run(command: Command) -> Result<()> {
         Command::List => list::run(),
         Command::Info => info::run(),
         Command::Doctor => doctor::run(),
-        Command::Install { name, version } => install::run(&name, &version),
+        Command::Install { query, version } => install::run(&query, version.as_deref()),
         Command::Remove { name, yes, force } => remove::run(&name, yes, force),
         Command::Config { command } => config::run(command),
     }
