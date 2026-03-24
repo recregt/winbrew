@@ -5,6 +5,16 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use crate::database;
+use crate::models::Package;
+
+#[derive(Debug, Clone)]
+pub struct RemovalPlan {
+    pub name: String,
+    pub kind: String,
+    pub install_dir: String,
+    pub product_code: Option<String>,
+    pub dependents: Vec<String>,
+}
 
 pub fn find_dependents(name: &str, conn: &rusqlite::Connection) -> Result<Vec<String>> {
     let mut dependents = database::list_packages(conn)?
@@ -25,31 +35,55 @@ pub fn find_dependents(name: &str, conn: &rusqlite::Connection) -> Result<Vec<St
     Ok(dependents)
 }
 
-pub fn remove(name: &str, force: bool) -> Result<()> {
-    debug!(package = name, force, "starting remove");
-
+pub fn plan_removal(name: &str) -> Result<RemovalPlan> {
     let conn = database::lock_conn()?;
+    let pkg = database::get_package(&conn, name)?.context(format!("{} is not installed", name))?;
+    let dependents = find_dependents(name, &conn)?;
 
-    remove_with_conn(name, force, &conn)
+    Ok(removal_plan(pkg, dependents))
 }
 
-fn remove_with_conn(name: &str, force: bool, conn: &rusqlite::Connection) -> Result<()> {
-    if !force {
-        let dependents = find_dependents(name, conn)?;
-        if !dependents.is_empty() {
-            bail!(
-                "cannot remove '{name}' because it is required by: {}",
-                dependents.join(", ")
-            );
-        }
+pub fn execute_removal(plan: &RemovalPlan, force: bool) -> Result<()> {
+    let conn = database::lock_conn()?;
+
+    execute_removal_with_conn(plan, force, &conn)
+}
+
+pub fn remove(name: &str, force: bool) -> Result<()> {
+    let plan = plan_removal(name)?;
+
+    execute_removal(&plan, force)
+}
+
+fn removal_plan(pkg: Package, dependents: Vec<String>) -> RemovalPlan {
+    RemovalPlan {
+        name: pkg.name,
+        kind: pkg.kind,
+        install_dir: pkg.install_dir,
+        product_code: pkg.product_code,
+        dependents,
+    }
+}
+
+fn execute_removal_with_conn(
+    plan: &RemovalPlan,
+    force: bool,
+    conn: &rusqlite::Connection,
+) -> Result<()> {
+    debug!(package = plan.name.as_str(), force, "starting remove");
+
+    if !force && !plan.dependents.is_empty() {
+        bail!(
+            "cannot remove '{name}' because it is required by: {}",
+            plan.dependents.join(", "),
+            name = plan.name
+        );
     }
 
-    let pkg = database::get_package(conn, name)?.context(format!("{} is not installed", name))?;
+    let install_dir = PathBuf::from(&plan.install_dir);
 
-    let install_dir = PathBuf::from(&pkg.install_dir);
-
-    if pkg.kind.eq_ignore_ascii_case("msi") {
-        let product_code = pkg
+    if plan.kind.eq_ignore_ascii_case("msi") {
+        let product_code = plan
             .product_code
             .as_deref()
             .context("missing MSI product code in package record")?;
@@ -66,22 +100,25 @@ fn remove_with_conn(name: &str, force: bool, conn: &rusqlite::Connection) -> Res
         if install_dir.exists()
             && let Err(err) = std::fs::remove_dir_all(&install_dir)
         {
-            warn!("failed to remove package directory for {name}: {err}");
+            warn!(
+                "failed to remove package directory for {}: {err}",
+                plan.name
+            );
         }
 
-        database::delete_package(conn, name)?;
-        debug!(package = name, force, "remove completed");
+        database::delete_package(conn, &plan.name)?;
+        debug!(package = plan.name.as_str(), force, "remove completed");
         return Ok(());
     }
 
-    if pkg.kind.eq_ignore_ascii_case("msix") {
+    if plan.kind.eq_ignore_ascii_case("msix") {
         let status = Command::new("powershell")
             .args([
                 "-NoProfile",
                 "-ExecutionPolicy",
                 "Bypass",
                 "-Command",
-                &format!("Get-AppxPackage -Name '{}' | Remove-AppxPackage", pkg.name),
+                &format!("Get-AppxPackage -Name '{}' | Remove-AppxPackage", plan.name),
             ])
             .status()
             .context("failed to start PowerShell")?;
@@ -93,11 +130,14 @@ fn remove_with_conn(name: &str, force: bool, conn: &rusqlite::Connection) -> Res
         if install_dir.exists()
             && let Err(err) = std::fs::remove_dir_all(&install_dir)
         {
-            warn!("failed to remove package directory for {name}: {err}");
+            warn!(
+                "failed to remove package directory for {}: {err}",
+                plan.name
+            );
         }
 
-        database::delete_package(conn, name)?;
-        debug!(package = name, force, "remove completed");
+        database::delete_package(conn, &plan.name)?;
+        debug!(package = plan.name.as_str(), force, "remove completed");
         return Ok(());
     }
 
@@ -111,19 +151,19 @@ fn remove_with_conn(name: &str, force: bool, conn: &rusqlite::Connection) -> Res
 
         std::fs::rename(&install_dir, &trash_dir).context("failed to stage package for removal")?;
 
-        if let Err(err) = database::delete_package(conn, name) {
+        if let Err(err) = database::delete_package(conn, &plan.name) {
             let _ = std::fs::rename(&trash_dir, &install_dir);
             return Err(err).context("failed to remove package from database");
         }
 
         if let Err(err) = std::fs::remove_dir_all(&trash_dir) {
-            warn!("failed to completely remove trash for {name}: {err}");
+            warn!("failed to completely remove trash for {}: {err}", plan.name);
         }
     } else {
-        database::delete_package(conn, name)?;
+        database::delete_package(conn, &plan.name)?;
     }
 
-    debug!(package = name, force, "remove completed");
+    debug!(package = plan.name.as_str(), force, "remove completed");
 
     Ok(())
 }
