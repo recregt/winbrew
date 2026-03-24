@@ -29,12 +29,12 @@ By default, `brew` uses `C:\winbrew` as its root directory:
 C:\winbrew
 ├── packages
 └── data
-	├── winbrew.toml
-	├── db
-	│   └── winbrew.db
-	├── logs
-	│   └── winbrew.log
-	└── cache
+    ├── winbrew.toml
+    ├── db
+    │   └── winbrew.db
+    ├── logs
+    │   └── winbrew.log
+    └── cache
 ```
 
 ### Winget manifests
@@ -100,18 +100,37 @@ Config is stored in `C:\winbrew\data\winbrew.toml` and it's like this:
 [core]
 log_level = "info"
 file_log_level = "debug,winbrew::core::network=trace"
+auto_update = true
+confirm_remove = true
+default_yes = false
+color = true
+download_timeout = 30
+concurrent_downloads = 3
+github_token = ""
+proxy = ""
 
 [paths]
 root = "C:\\winbrew"
+packages = "${root}\\packages"
+data = "${root}\\data"
+logs = "${root}\\data\\logs"
+cache = "${root}\\data\\cache"
 
 [sources]
 primary = "winget"
+
+[sources.winget]
+url = "https://raw.githubusercontent.com/microsoft/winget-pkgs/master"
+format = "yaml"
+manifest_kind = "installer"
+manifest_path_template = "manifests/${partition}/${publisher}/${package}/${version}/${identifier}.${kind}.yaml"
+enabled = true
 ```
 
 > [!NOTE]
 > Logging is split across two settings:
-> - `core.log_level` controls what appears in the terminal.
-> - `core.file_log_level` controls the background log file and accepts full `EnvFilter` strings.
+> - core.log_level controls what appears in the terminal.
+> - core.file_log_level controls the background log file and accepts full EnvFilter strings.
 
 For a quieter log file:
 ```toml
@@ -120,6 +139,6 @@ file_log_level = "warn,winbrew::core::network=trace"
 
 ## License
 
-`winbrew` is dual-licensed under **MIT OR Apache-2.0**.
+`WinBrew` is dual-licensed under **MIT OR Apache-2.0**.
 
 See [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE) for details.
