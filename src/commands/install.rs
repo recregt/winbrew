@@ -24,8 +24,12 @@ pub fn run(query: &[String], version: Option<&str>) -> Result<()> {
     let pb = ui.progress_bar();
     let result = install::execute_plan(&plan, |event| match event {
         install::Progress::Downloading { current, total } => {
-            pb.set_length(total);
-            pb.set_position(current);
+            if total == 0 {
+                pb.set_message(format!("Downloading {} bytes...", current));
+            } else {
+                pb.set_length(total);
+                pb.set_position(current);
+            }
         }
         install::Progress::Status(msg) => pb.set_message(msg),
     });

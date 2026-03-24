@@ -2,6 +2,7 @@ use anyhow::{Context, Result, bail};
 use std::process::Command;
 
 use crate::core::install::InstallTransaction;
+use crate::core::network::NetworkSettings;
 use crate::core::network::download_and_verify;
 
 use super::InstallPlan;
@@ -12,9 +13,10 @@ pub fn install(
     on_progress: &mut impl FnMut(u64, u64),
 ) -> Result<()> {
     let tx = InstallTransaction::start(conn, context)?;
+    let settings = NetworkSettings::current();
 
     download_and_verify(
-        conn,
+        &settings,
         &context.source.url,
         &context.cache_file,
         &context.source.checksum,

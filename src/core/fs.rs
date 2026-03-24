@@ -4,6 +4,9 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
+#[cfg(windows)]
+use std::os::windows::fs::OpenOptionsExt;
+
 const BUFFER_SIZE: usize = 64 * 1024;
 
 pub struct TempFileGuard {
@@ -52,11 +55,19 @@ impl DownloadTarget {
         let existing_size = if resuming { requested_existing_size } else { 0 };
         let total_size = response.content_length().unwrap_or(0) + existing_size;
 
-        let file = OpenOptions::new()
+        let mut options = OpenOptions::new();
+        options
             .create(true)
             .write(true)
             .append(resuming)
-            .truncate(!resuming)
+            .truncate(!resuming);
+
+        #[cfg(windows)]
+        {
+            options.share_mode(1);
+        }
+
+        let file = options
             .open(&temp_path)
             .context("failed to open destination file")?;
 

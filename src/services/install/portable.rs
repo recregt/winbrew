@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 
 use crate::core::install::{InstallTransaction, source_file_name};
+use crate::core::network::NetworkSettings;
 use crate::core::network::download_and_verify;
 
 use super::InstallPlan;
@@ -11,13 +12,14 @@ pub fn install(
     on_progress: &mut impl FnMut(u64, u64),
 ) -> Result<()> {
     let tx = InstallTransaction::start(conn, context)?;
+    let settings = NetworkSettings::current();
 
     let install_file_name = source_file_name(&context.source.url)
         .unwrap_or_else(|| format!("{}-{}.exe", context.name, context.package_version));
     let install_file = context.install_dir.join(install_file_name);
 
     download_and_verify(
-        conn,
+        &settings,
         &context.source.url,
         &context.cache_file,
         &context.source.checksum,

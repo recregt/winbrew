@@ -145,12 +145,12 @@ jobs:
         run: |
           $out = & $env:BREW_EXE doctor | Out-String
           Write-Host $out
-          if ($out -notmatch "No broken shims found\.") {
-            Write-Error "Expected doctor to report no broken shims"; exit 1
+          if ($out -notmatch "Your Winbrew installation is healthy!") {
+            Write-Error "Expected doctor to report a healthy installation"; exit 1
           }
           foreach ($needle in @(
             "Installed packages: 0",
-            "Broken shims: 0"
+            "Broken installs: 0"
           )) {
             if ($out -notmatch [regex]::Escape($needle)) {
               Write-Error "Expected doctor output to include '$needle'"; exit 1

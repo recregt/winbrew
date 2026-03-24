@@ -1,19 +1,24 @@
 use anyhow::Result;
-use rusqlite::Connection;
 use std::path::Path;
 
 use crate::core::fs::TempFileGuard;
-use crate::core::network::helpers::{open_target, send_request, stream_response, verify_download};
+use crate::core::network::http::NetworkSettings;
 
-pub fn download<F>(conn: &Connection, url: &str, dest: &Path, on_progress: F) -> Result<()>
+mod request;
+mod stream;
+
+pub use request::{open_target, send_request};
+pub use stream::{stream_response, verify_download};
+
+pub fn download<F>(settings: &NetworkSettings, url: &str, dest: &Path, on_progress: F) -> Result<()>
 where
     F: FnMut(u64, u64),
 {
-    download_inner(conn, url, dest, on_progress, None)
+    download_inner(settings, url, dest, on_progress, None)
 }
 
 pub fn download_and_verify<F>(
-    conn: &Connection,
+    settings: &NetworkSettings,
     url: &str,
     dest: &Path,
     checksum: &str,
@@ -22,11 +27,11 @@ pub fn download_and_verify<F>(
 where
     F: FnMut(u64, u64),
 {
-    download_inner(conn, url, dest, on_progress, Some(checksum))
+    download_inner(settings, url, dest, on_progress, Some(checksum))
 }
 
 fn download_inner<F>(
-    conn: &Connection,
+    settings: &NetworkSettings,
     url: &str,
     dest: &Path,
     mut on_progress: F,
@@ -35,7 +40,7 @@ fn download_inner<F>(
 where
     F: FnMut(u64, u64),
 {
-    let mut response = send_request(conn, url, dest)?;
+    let mut response = send_request(settings, url, dest)?;
     let mut target = open_target(dest, &response)?;
     let mut temp_guard = TempFileGuard::new(&target.temp_path);
 

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 
-use crate::core::network::http;
+use crate::core::network::http::{self, NetworkSettings};
 use crate::manifest::Manifest;
 use crate::models::PackageCandidate;
 use crate::sources::SourceAdapter;
@@ -16,10 +16,11 @@ pub struct WingetSource;
 impl SourceAdapter for WingetSource {
     fn fetch_manifest(&self, conn: &Connection, name: &str, version: &str) -> Result<Manifest> {
         let url = manifest_url(conn, name, version)?;
-        let client = http::build_client()?;
+        let settings = NetworkSettings::current();
+        let client = http::build_client_with(&settings)?;
         let format = manifest_format(conn)?;
 
-        let content = http::apply_github_auth(&url, client.get(&url))?
+        let content = http::apply_github_auth_with(&settings, &url, client.get(&url))?
             .send()
             .context("failed to connect")?
             .error_for_status()

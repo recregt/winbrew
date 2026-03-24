@@ -1,68 +1,15 @@
 use anyhow::{Context, Result, anyhow, bail};
-use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use tracing::{debug, trace};
 
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::time::{Duration, Instant};
 
-use crate::core::network::http;
 use crate::core::{fs::DownloadTarget, hash};
 
 const BUFFER_SIZE: usize = 64 * 1024;
-
-pub fn send_request(
-    conn: &Connection,
-    url: &str,
-    dest: &Path,
-) -> Result<reqwest::blocking::Response> {
-    let _ = conn;
-
-    debug!(url = url, destination = %dest.display(), "starting download request");
-
-    let client = http::build_client()?;
-    let requested_existing_size = existing_part_size(dest);
-
-    let mut request = http::apply_github_auth(url, client.get(url))?;
-    if requested_existing_size > 0 {
-        request = request.header("Range", format!("bytes={}-", requested_existing_size));
-    }
-
-    let response = request.send().context("failed to connect")?;
-    trace!(
-        url = url,
-        status = %response.status(),
-        content_length = ?response.headers().get(reqwest::header::CONTENT_LENGTH),
-        content_range = ?response.headers().get(reqwest::header::CONTENT_RANGE),
-        "received HTTP response"
-    );
-
-    response.error_for_status().context("server returned error")
-}
-
-pub fn open_target(dest: &Path, response: &reqwest::blocking::Response) -> Result<DownloadTarget> {
-    let requested_existing_size = existing_part_size(dest);
-
-    trace!(
-        destination = %dest.display(),
-        existing_size = requested_existing_size,
-        content_length = ?response.headers().get(reqwest::header::CONTENT_LENGTH),
-        "opening download target"
-    );
-
-    DownloadTarget::new(dest, response, requested_existing_size)
-}
-
-fn existing_part_size(dest: &Path) -> u64 {
-    let temp_dest = dest.with_extension("part");
-
-    if temp_dest.exists() {
-        fs::metadata(&temp_dest).map(|m| m.len()).unwrap_or(0)
-    } else {
-        0
-    }
-}
 
 pub fn stream_response<F>(
     response: &mut reqwest::blocking::Response,
@@ -76,6 +23,8 @@ where
     let mut buffer = [0u8; BUFFER_SIZE];
     let mut downloaded = target.existing_size;
     let mut hasher = init_hasher(expected_checksum, &target.temp_path, target.existing_size)?;
+    let mut last_reported_thousandths = progress_thousandths(downloaded, target.total_size);
+    let mut last_report = Instant::now();
 
     trace!(
         temp_path = %target.temp_path.display(),
@@ -103,7 +52,18 @@ where
         }
 
         downloaded += read as u64;
-        on_progress(downloaded, target.total_size);
+
+        let current_thousandths = progress_thousandths(downloaded, target.total_size);
+        let elapsed = last_report.elapsed();
+
+        if downloaded == target.total_size
+            || current_thousandths != last_reported_thousandths
+            || elapsed >= Duration::from_millis(100)
+        {
+            on_progress(downloaded, target.total_size);
+            last_reported_thousandths = current_thousandths;
+            last_report = Instant::now();
+        }
 
         trace!(
             downloaded,
@@ -174,9 +134,21 @@ fn init_hasher(
     if existing_size > 0
         && let Some(hasher) = hasher.as_mut()
     {
-        trace!(temp_path = %temp_path.display(), existing_size, "seeding checksum from partial download");
+        trace!(
+            temp_path = %temp_path.display(),
+            existing_size,
+            "seeding checksum from partial download"
+        );
         hash::seed_hasher(temp_path, hasher)?;
     }
 
     Ok(hasher)
+}
+
+fn progress_thousandths(downloaded: u64, total_size: u64) -> u64 {
+    if total_size == 0 {
+        0
+    } else {
+        downloaded.saturating_mul(1000) / total_size
+    }
 }

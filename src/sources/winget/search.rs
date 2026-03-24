@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, anyhow};
 use serde::Deserialize;
 
-use crate::core::network::http;
+use crate::core::network::http::{self, NetworkSettings};
 use crate::manifest::Manifest;
 use crate::models::PackageCandidate;
 use crate::sources::{winget_manifest_format, winget_registry_url, winget_repo_slug};
@@ -23,11 +23,9 @@ pub(crate) fn search_packages(query: &str) -> Result<Vec<PackageCandidate>> {
 }
 
 fn search_via_code_search(query: &str) -> Result<Option<Vec<PackageCandidate>>> {
-    if crate::database::Config::current()
-        .core
-        .github_token
-        .is_none()
-    {
+    let settings = NetworkSettings::current();
+
+    if settings.github_token.is_none() {
         return Ok(None);
     }
 
@@ -44,32 +42,36 @@ fn search_via_code_search(query: &str) -> Result<Option<Vec<PackageCandidate>>> 
     )
     .context("failed to build GitHub search URL")?;
 
-    let client = http::build_client()?;
+    let client = http::build_client_with(&settings)?;
     let search_url_string = search_url.to_string();
-    let response =
-        http::apply_github_auth(&search_url_string, client.get(search_url_string.clone()))?
-            .send()
-            .context("failed to search winget repository")?
-            .error_for_status()
-            .context("winget repository search failed")?
-            .text()
-            .context("failed to read winget search response")?;
+    let response = http::apply_github_auth_with(
+        &settings,
+        &search_url_string,
+        client.get(search_url_string.clone()),
+    )?
+    .send()
+    .context("failed to search winget repository")?
+    .error_for_status()
+    .context("winget repository search failed")?
+    .text()
+    .context("failed to read winget search response")?;
 
     let results: SearchResponse =
         serde_json::from_str(&response).context("failed to parse winget search response")?;
-    let candidates = candidates_from_search_items(&client, results.items)?;
+    let candidates = candidates_from_search_items(&settings, &client, results.items)?;
     Ok(Some(candidates))
 }
 
 fn search_via_contents(query: &str) -> Result<Vec<PackageCandidate>> {
-    let client = http::build_client()?;
+    let settings = NetworkSettings::current();
+    let client = http::build_client_with(&settings)?;
     let listing_url = reqwest::Url::parse_with_params(
         "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/Microsoft",
         [("ref", DEFAULT_BRANCH)],
     )
     .context("failed to build winget contents URL")?;
 
-    let entries: Vec<ContentEntry> = fetch_contents(&client, listing_url.as_str())?;
+    let entries: Vec<ContentEntry> = fetch_contents(&settings, &client, listing_url.as_str())?;
     let query_terms = normalize_query(query);
     let mut candidates = Vec::new();
 
@@ -78,7 +80,9 @@ fn search_via_contents(query: &str) -> Result<Vec<PackageCandidate>> {
             continue;
         }
 
-        if let Some(candidate) = candidate_from_package_dir(&client, &entry, &query_terms)? {
+        if let Some(candidate) =
+            candidate_from_package_dir(&settings, &client, &entry, &query_terms)?
+        {
             candidates.push(candidate);
         }
 
@@ -91,6 +95,7 @@ fn search_via_contents(query: &str) -> Result<Vec<PackageCandidate>> {
 }
 
 fn candidates_from_search_items(
+    settings: &NetworkSettings,
     client: &reqwest::blocking::Client,
     items: Vec<SearchItem>,
 ) -> Result<Vec<PackageCandidate>> {
@@ -106,7 +111,7 @@ fn candidates_from_search_items(
             item.path.trim_start_matches('/')
         );
 
-        let content = http::apply_github_auth(&raw_url, client.get(&raw_url))?
+        let content = http::apply_github_auth_with(settings, &raw_url, client.get(&raw_url))?
             .send()
             .context("failed to fetch winget manifest")?
             .error_for_status()
@@ -130,11 +135,12 @@ fn candidates_from_search_items(
 }
 
 fn candidate_from_package_dir(
+    settings: &NetworkSettings,
     client: &reqwest::blocking::Client,
     package_dir: &ContentEntry,
     query_terms: &str,
 ) -> Result<Option<PackageCandidate>> {
-    let versions: Vec<ContentEntry> = fetch_contents(client, &package_dir.url)?;
+    let versions: Vec<ContentEntry> = fetch_contents(settings, client, &package_dir.url)?;
     let Some(version) = latest_version_entry(&versions) else {
         return Ok(None);
     };
@@ -143,7 +149,7 @@ fn candidate_from_package_dir(
     let manifest_url = manifest_url_for(&identifier, &version.name)?;
     let format = winget_manifest_format();
 
-    let content = http::apply_github_auth(&manifest_url, client.get(&manifest_url))?
+    let content = http::apply_github_auth_with(settings, &manifest_url, client.get(&manifest_url))?
         .send()
         .context("failed to fetch winget manifest")?
         .error_for_status()
@@ -171,8 +177,12 @@ fn candidate_label_for(manifest: &Manifest) -> String {
     )
 }
 
-fn fetch_contents(client: &reqwest::blocking::Client, url: &str) -> Result<Vec<ContentEntry>> {
-    let content = http::apply_github_auth(url, client.get(url))?
+fn fetch_contents(
+    settings: &NetworkSettings,
+    client: &reqwest::blocking::Client,
+    url: &str,
+) -> Result<Vec<ContentEntry>> {
+    let content = http::apply_github_auth_with(settings, url, client.get(url))?
         .send()
         .context("failed to fetch winget repository contents")?
         .error_for_status()
