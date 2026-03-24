@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -387,6 +388,53 @@ impl Config {
         ]
     }
 
+    pub fn effective_value(&self, key: &str) -> Result<(String, &'static str)> {
+        let key = key.trim();
+
+        if key.is_empty() {
+            bail!("config key cannot be empty");
+        }
+
+        if let Some(value) = env_override(key) {
+            return Ok((value, "env"));
+        }
+
+        let value = self
+            .get_value(key)?
+            .ok_or_else(|| anyhow!("config key '{key}' not found"))?;
+
+        Ok((value, "file"))
+    }
+
+    pub fn effective_sections(&self) -> Result<Vec<ConfigSection>> {
+        let mut sections = Vec::new();
+
+        for section in self.sections() {
+            let mut entries = Vec::with_capacity(section.entries.len());
+
+            for (key, file_value) in section.entries {
+                let full_key = section_key(&section.title, &key);
+                let (value, source) = self
+                    .effective_value(&full_key)
+                    .unwrap_or((file_value, "file"));
+                let display_value = if source == "env" {
+                    format!("{value} [env override]")
+                } else {
+                    value
+                };
+
+                entries.push((key, display_value));
+            }
+
+            sections.push(ConfigSection {
+                title: section.title,
+                entries,
+            });
+        }
+
+        Ok(sections)
+    }
+
     pub fn get_value(&self, key: &str) -> Result<Option<String>> {
         let key = key.trim();
 
@@ -429,13 +477,15 @@ impl Config {
         }
 
         let value = value.trim();
+        validate_config_value(key, value)?;
+        let value = normalize_config_value(key, value);
 
         match key {
             "core.log_level" => self.core.log_level = value.to_string(),
-            "core.auto_update" => self.core.auto_update = parse_bool(key, value)?,
-            "core.confirm_remove" => self.core.confirm_remove = parse_bool(key, value)?,
-            "core.default_yes" => self.core.default_yes = parse_bool(key, value)?,
-            "core.color" => self.core.color = parse_bool(key, value)?,
+            "core.auto_update" => self.core.auto_update = parse_bool(key, &value)?,
+            "core.confirm_remove" => self.core.confirm_remove = parse_bool(key, &value)?,
+            "core.default_yes" => self.core.default_yes = parse_bool(key, &value)?,
+            "core.color" => self.core.color = parse_bool(key, &value)?,
             "core.download_timeout" => {
                 self.core.download_timeout = value
                     .parse::<u64>()
@@ -446,8 +496,8 @@ impl Config {
                     .parse::<u64>()
                     .with_context(|| format!("invalid {key} value"))?
             }
-            "core.proxy" => self.core.proxy = parse_value(value),
-            "core.github_token" => self.core.github_token = parse_value(value),
+            "core.proxy" => self.core.proxy = parse_value(&value),
+            "core.github_token" => self.core.github_token = parse_value(&value),
             "paths.root" => self.paths.root = value.to_string(),
             "paths.packages" => self.paths.packages = value.to_string(),
             "paths.data" => self.paths.data = value.to_string(),
@@ -460,7 +510,7 @@ impl Config {
             "sources.winget.manifest_path_template" => {
                 self.sources.winget.manifest_path_template = value.to_string()
             }
-            "sources.winget.enabled" => self.sources.winget.enabled = parse_bool(key, value)?,
+            "sources.winget.enabled" => self.sources.winget.enabled = parse_bool(key, &value)?,
             _ => return Err(anyhow!("unknown config key: {key}")),
         }
 
@@ -493,7 +543,99 @@ pub fn config_set(key: &str, value: &str) -> Result<()> {
 }
 
 pub fn config_sections() -> Result<Vec<ConfigSection>> {
-    Ok(Config::load_cached()?.sections())
+    Config::load_cached()?.effective_sections()
+}
+
+pub fn get_effective_value(key: &str) -> Result<(String, &'static str)> {
+    Config::current().effective_value(key)
+}
+
+fn env_override(key: &str) -> Option<String> {
+    env_override_names(key)
+        .into_iter()
+        .find_map(|name| env::var(&name).ok())
+        .filter(|value| !value.trim().is_empty())
+}
+
+fn env_override_names(key: &str) -> Vec<String> {
+    let mut names = vec![format!("WINBREW_{}", key.replace('.', "_").to_uppercase())];
+
+    match key {
+        "core.log_level" => names.push("WINBREW_LOG_LEVEL".to_string()),
+        "core.auto_update" => names.push("WINBREW_AUTO_UPDATE".to_string()),
+        "core.confirm_remove" => names.push("WINBREW_CONFIRM_REMOVE".to_string()),
+        "core.default_yes" => names.push("WINBREW_DEFAULT_YES".to_string()),
+        "core.color" => names.push("WINBREW_COLOR".to_string()),
+        "core.download_timeout" => names.push("WINBREW_DOWNLOAD_TIMEOUT".to_string()),
+        "core.concurrent_downloads" => {
+            names.push("WINBREW_THREADS".to_string());
+            names.push("WINBREW_CONCURRENT_DOWNLOADS".to_string());
+        }
+        "core.github_token" => names.push("WINBREW_GITHUB_TOKEN".to_string()),
+        "core.proxy" => names.push("WINBREW_PROXY".to_string()),
+        "paths.root" => names.push("WINBREW_ROOT".to_string()),
+        "sources.primary" => names.push("WINBREW_PRIMARY_SOURCE".to_string()),
+        "sources.winget.url" => names.push("WINBREW_REGISTRY_URL".to_string()),
+        "sources.winget.format" => names.push("WINBREW_REGISTRY_FORMAT".to_string()),
+        "sources.winget.manifest_kind" => names.push("WINBREW_MANIFEST_KIND".to_string()),
+        "sources.winget.manifest_path_template" => {
+            names.push("WINBREW_MANIFEST_PATH_TEMPLATE".to_string())
+        }
+        "sources.winget.enabled" => names.push("WINBREW_WINGET_ENABLED".to_string()),
+        _ => {}
+    }
+
+    names
+}
+
+fn section_key(section_title: &str, key: &str) -> String {
+    match section_title.to_lowercase().as_str() {
+        "core" => format!("core.{key}"),
+        "paths" => format!("paths.{key}"),
+        "sources" => format!("sources.{key}"),
+        _ => key.to_string(),
+    }
+}
+
+fn validate_config_value(key: &str, value: &str) -> Result<()> {
+    match key {
+        "core.log_level" => {
+            let normalized = value.trim().to_ascii_lowercase();
+            let allowed_levels = ["trace", "debug", "info", "warn", "error"];
+
+            if !allowed_levels.contains(&normalized.as_str()) {
+                bail!("{key} must be one of: {}", allowed_levels.join(", "));
+            }
+        }
+        "core.auto_update"
+        | "core.confirm_remove"
+        | "core.default_yes"
+        | "core.color"
+        | "sources.winget.enabled" => {
+            value
+                .parse::<bool>()
+                .map_err(|_| anyhow!("{key} requires a boolean value (true or false)"))?;
+        }
+        "core.download_timeout" | "core.concurrent_downloads" => {
+            let parsed = value
+                .parse::<u64>()
+                .map_err(|_| anyhow!("{key} requires a whole number"))?;
+
+            if parsed == 0 {
+                return Err(anyhow!("{key} requires a positive number"));
+            }
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
+fn normalize_config_value(key: &str, value: &str) -> String {
+    match key {
+        "core.log_level" => value.trim().to_ascii_lowercase(),
+        _ => value.to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -522,5 +664,21 @@ mod tests {
         assert!(paths.db.ends_with(r"data\db\winbrew.db"));
         assert!(paths.config.ends_with(r"data\winbrew.toml"));
         assert!(paths.log.ends_with(r"data\logs\winbrew.log"));
+    }
+
+    #[test]
+    fn get_and_set_trim_whitespace_around_keys_and_values() {
+        let mut config = Config::default();
+
+        config
+            .set_value(" core.log_level ", " debug ")
+            .expect("set_value should trim surrounding whitespace");
+
+        assert_eq!(
+            config
+                .get_value(" core.log_level ")
+                .expect("get_value should trim surrounding whitespace"),
+            Some("debug".to_string())
+        );
     }
 }

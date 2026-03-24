@@ -12,7 +12,7 @@ mod packages;
 
 pub use config::{
     Config, ConfigSection, CoreConfig, PathsConfig, SourceConfig, SourcesConfig, config_sections,
-    config_set,
+    config_set, get_effective_value,
 };
 pub use packages::{delete_package, get_package, insert_package, list_packages, update_status};
 

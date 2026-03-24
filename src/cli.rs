@@ -68,7 +68,7 @@ pub enum ConfigCommand {
         key: String,
 
         #[arg(value_name = "VALUE")]
-        value: String,
+        value: Option<String>,
     },
 }
 
@@ -192,7 +192,22 @@ mod tests {
             Command::Config {
                 command: super::ConfigCommand::Set {
                     key: "core.log_level".to_string(),
-                    value: "debug".to_string(),
+                    value: Some("debug".to_string()),
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn parse_config_set_without_value() {
+        let cli = Cli::parse_from(["brew", "config", "set", "core.log_level"]);
+
+        assert_eq!(
+            cli.command,
+            Command::Config {
+                command: super::ConfigCommand::Set {
+                    key: "core.log_level".to_string(),
+                    value: None,
                 },
             }
         );
