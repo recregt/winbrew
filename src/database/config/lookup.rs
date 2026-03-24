@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use tracing::warn;
 
 use super::keys::{env_override, section_key};
@@ -45,10 +45,7 @@ impl Config {
                     EntrySpec::required("confirm_remove", self.core.confirm_remove.to_string()),
                     EntrySpec::required("default_yes", self.core.default_yes.to_string()),
                     EntrySpec::required("color", self.core.color.to_string()),
-                    EntrySpec::required(
-                        "download_timeout",
-                        self.core.download_timeout.to_string(),
-                    ),
+                    EntrySpec::required("download_timeout", self.core.download_timeout.to_string()),
                     EntrySpec::required(
                         "concurrent_downloads",
                         self.core.concurrent_downloads.to_string(),
@@ -123,10 +120,7 @@ impl Config {
         })
     }
 
-    pub fn effective_optional_value(
-        &self,
-        key: &str,
-    ) -> Result<Option<(String, ConfigSource)>> {
+    pub fn effective_optional_value(&self, key: &str) -> Result<Option<(String, ConfigSource)>> {
         self.lookup_effective(key)
     }
 
@@ -192,7 +186,9 @@ impl Config {
             return Ok(Some((value, ConfigSource::Env)));
         }
 
-        Ok(self.get_value(key)?.map(|value| (value, ConfigSource::File)))
+        Ok(self
+            .get_value(key)?
+            .map(|value| (value, ConfigSource::File)))
     }
 }
 
@@ -245,7 +241,12 @@ mod tests {
         let config = Config::default();
 
         assert_eq!(config.effective_optional_value("core.proxy").unwrap(), None);
-        assert_eq!(config.effective_optional_value("core.github_token").unwrap(), None);
+        assert_eq!(
+            config
+                .effective_optional_value("core.github_token")
+                .unwrap(),
+            None
+        );
     }
 
     #[test]

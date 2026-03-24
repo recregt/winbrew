@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use rusqlite::{Connection, Error as SqlError, OptionalExtension, params, types::Type};
 
 use crate::models::{Package, PackageStatus};
@@ -28,11 +28,12 @@ pub fn insert_package(conn: &Connection, pkg: &Package) -> Result<()> {
 }
 
 pub fn update_status(conn: &Connection, name: &str, status: PackageStatus) -> Result<()> {
-    let affected = conn.execute(
-        "UPDATE packages SET status = ?1 WHERE name = ?2",
-        params![status.as_str(), name],
-    )
-    .context("failed to update status")?;
+    let affected = conn
+        .execute(
+            "UPDATE packages SET status = ?1 WHERE name = ?2",
+            params![status.as_str(), name],
+        )
+        .context("failed to update status")?;
 
     if affected == 0 {
         return Err(anyhow!("package '{name}' not found"));

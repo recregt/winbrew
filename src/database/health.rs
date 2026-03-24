@@ -192,11 +192,7 @@ fn render_section(config: &Config, section: &ConfigSection) -> Result<ReportSect
     })
 }
 
-fn render_optional_value(
-    value: String,
-    source: ConfigSource,
-    empty_label: &str,
-) -> String {
+fn render_optional_value(value: String, source: ConfigSource, empty_label: &str) -> String {
     if value.trim().is_empty() {
         empty_label.to_string()
     } else if matches!(source, ConfigSource::Env) {
@@ -206,11 +202,7 @@ fn render_optional_value(
     }
 }
 
-fn render_sensitive_value(
-    value: String,
-    _source: ConfigSource,
-    empty_label: &str,
-) -> String {
+fn render_sensitive_value(value: String, _source: ConfigSource, empty_label: &str) -> String {
     if value.trim().is_empty() {
         empty_label.to_string()
     } else {
@@ -303,7 +295,11 @@ mod tests {
     #[test]
     fn optional_and_sensitive_helpers_format_values() {
         assert_eq!(
-            render_optional_value("http://localhost:8080".to_string(), ConfigSource::Env, "(none)"),
+            render_optional_value(
+                "http://localhost:8080".to_string(),
+                ConfigSource::Env,
+                "(none)"
+            ),
             "http://localhost:8080 [env override]"
         );
         assert_eq!(

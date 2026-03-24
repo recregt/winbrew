@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use tracing_subscriber::EnvFilter;
 
 pub struct KeyDef {
@@ -25,37 +25,106 @@ pub static KEYS: &[KeyDef] = &[
         key: "core.file_log_level",
         env_aliases: &["WINBREW_FILE_LOG_LEVEL"],
         validator: Some(|value| {
-            EnvFilter::try_new(value).map_err(|err| anyhow!("invalid core.file_log_level: {err}"))?;
+            EnvFilter::try_new(value)
+                .map_err(|err| anyhow!("invalid core.file_log_level: {err}"))?;
             Ok(())
         }),
     },
-    KeyDef { key: "core.auto_update", env_aliases: &["WINBREW_AUTO_UPDATE"], validator: Some(validate_bool) },
-    KeyDef { key: "core.confirm_remove", env_aliases: &["WINBREW_CONFIRM_REMOVE"], validator: Some(validate_bool) },
-    KeyDef { key: "core.default_yes", env_aliases: &["WINBREW_DEFAULT_YES"], validator: Some(validate_bool) },
-    KeyDef { key: "core.color", env_aliases: &["WINBREW_COLOR"], validator: Some(validate_bool) },
-    KeyDef { key: "core.download_timeout", env_aliases: &["WINBREW_DOWNLOAD_TIMEOUT"], validator: Some(validate_positive_u64) },
+    KeyDef {
+        key: "core.auto_update",
+        env_aliases: &["WINBREW_AUTO_UPDATE"],
+        validator: Some(validate_bool),
+    },
+    KeyDef {
+        key: "core.confirm_remove",
+        env_aliases: &["WINBREW_CONFIRM_REMOVE"],
+        validator: Some(validate_bool),
+    },
+    KeyDef {
+        key: "core.default_yes",
+        env_aliases: &["WINBREW_DEFAULT_YES"],
+        validator: Some(validate_bool),
+    },
+    KeyDef {
+        key: "core.color",
+        env_aliases: &["WINBREW_COLOR"],
+        validator: Some(validate_bool),
+    },
+    KeyDef {
+        key: "core.download_timeout",
+        env_aliases: &["WINBREW_DOWNLOAD_TIMEOUT"],
+        validator: Some(validate_positive_u64),
+    },
     KeyDef {
         key: "core.concurrent_downloads",
         env_aliases: &["WINBREW_THREADS", "WINBREW_CONCURRENT_DOWNLOADS"],
         validator: Some(validate_positive_u64),
     },
-    KeyDef { key: "core.github_token", env_aliases: &["WINBREW_GITHUB_TOKEN"], validator: None },
-    KeyDef { key: "core.proxy", env_aliases: &["WINBREW_PROXY"], validator: None },
-    KeyDef { key: "paths.root", env_aliases: &["WINBREW_ROOT"], validator: None },
-    KeyDef { key: "paths.packages", env_aliases: &[], validator: None },
-    KeyDef { key: "paths.data", env_aliases: &[], validator: None },
-    KeyDef { key: "paths.logs", env_aliases: &[], validator: None },
-    KeyDef { key: "paths.cache", env_aliases: &[], validator: None },
-    KeyDef { key: "sources.primary", env_aliases: &["WINBREW_PRIMARY_SOURCE"], validator: None },
-    KeyDef { key: "sources.winget.url", env_aliases: &["WINBREW_REGISTRY_URL"], validator: None },
-    KeyDef { key: "sources.winget.format", env_aliases: &["WINBREW_REGISTRY_FORMAT"], validator: None },
-    KeyDef { key: "sources.winget.manifest_kind", env_aliases: &["WINBREW_MANIFEST_KIND"], validator: None },
+    KeyDef {
+        key: "core.github_token",
+        env_aliases: &["WINBREW_GITHUB_TOKEN"],
+        validator: None,
+    },
+    KeyDef {
+        key: "core.proxy",
+        env_aliases: &["WINBREW_PROXY"],
+        validator: None,
+    },
+    KeyDef {
+        key: "paths.root",
+        env_aliases: &["WINBREW_ROOT"],
+        validator: None,
+    },
+    KeyDef {
+        key: "paths.packages",
+        env_aliases: &[],
+        validator: None,
+    },
+    KeyDef {
+        key: "paths.data",
+        env_aliases: &[],
+        validator: None,
+    },
+    KeyDef {
+        key: "paths.logs",
+        env_aliases: &[],
+        validator: None,
+    },
+    KeyDef {
+        key: "paths.cache",
+        env_aliases: &[],
+        validator: None,
+    },
+    KeyDef {
+        key: "sources.primary",
+        env_aliases: &["WINBREW_PRIMARY_SOURCE"],
+        validator: None,
+    },
+    KeyDef {
+        key: "sources.winget.url",
+        env_aliases: &["WINBREW_REGISTRY_URL"],
+        validator: None,
+    },
+    KeyDef {
+        key: "sources.winget.format",
+        env_aliases: &["WINBREW_REGISTRY_FORMAT"],
+        validator: None,
+    },
+    KeyDef {
+        key: "sources.winget.manifest_kind",
+        env_aliases: &["WINBREW_MANIFEST_KIND"],
+        validator: None,
+    },
     KeyDef {
         key: "sources.winget.manifest_path_template",
         env_aliases: &["WINBREW_MANIFEST_PATH_TEMPLATE"],
         validator: None,
     },
-    KeyDef { key: "sources.winget.enabled", env_aliases: &["WINBREW_WINGET_ENABLED"], validator: Some(validate_bool) },
+    KeyDef {
+        key: "sources.winget.enabled",
+        env_aliases: &["WINBREW_WINGET_ENABLED"],
+        validator: Some(validate_bool),
+    },
 ];
 
 pub fn find(key: &str) -> Option<&'static KeyDef> {

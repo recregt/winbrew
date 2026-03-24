@@ -5,15 +5,15 @@ use std::path::Path;
 use tracing::warn;
 
 mod keys;
-mod registry;
 mod lookup;
+mod registry;
 mod storage;
 mod types;
 mod validation;
 
+pub(crate) use keys::section_key;
 pub use storage::{config_sections, config_set, get_effective_value};
 pub use types::*;
-pub(crate) use keys::section_key;
 
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
@@ -89,9 +89,21 @@ mod tests {
         let config = Config::default();
         let paths = config.resolved_paths();
 
-        assert!(paths.db.ends_with(Path::new("data").join("db").join("winbrew.db")));
-        assert!(paths.config.ends_with(Path::new("data").join("winbrew.toml")));
-        assert!(paths.log.ends_with(Path::new("data").join("logs").join("winbrew.log")));
+        assert!(
+            paths
+                .db
+                .ends_with(Path::new("data").join("db").join("winbrew.db"))
+        );
+        assert!(
+            paths
+                .config
+                .ends_with(Path::new("data").join("winbrew.toml"))
+        );
+        assert!(
+            paths
+                .log
+                .ends_with(Path::new("data").join("logs").join("winbrew.log"))
+        );
     }
 
     #[test]

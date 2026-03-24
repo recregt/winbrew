@@ -48,13 +48,12 @@ pub fn backup_dir_for(install_dir: &Path) -> PathBuf {
 }
 
 pub fn install_root() -> PathBuf {
-    let (root, _) = database::get_effective_value("paths.root")
-        .unwrap_or_else(|_| {
-            (
-                database::Config::current().paths.root,
-                database::ConfigSource::File,
-            )
-        });
+    let (root, _) = database::get_effective_value("paths.root").unwrap_or_else(|_| {
+        (
+            database::Config::current().paths.root,
+            database::ConfigSource::File,
+        )
+    });
 
     PathBuf::from(root)
 }
