@@ -193,10 +193,20 @@ fn effective_string(config: &Config, key: &str) -> Result<String> {
 }
 
 fn mask_optional(config: &Config, key: &str, empty_label: &str) -> Result<String> {
-    Ok(match effective_string(config, key)?.trim() {
-        "" => empty_label.to_string(),
-        _ if key == "core.github_token" => "(set)".to_string(),
-        value => value.to_string(),
+    Ok(match config.effective_optional_value(key)? {
+        Some((value, "env")) => {
+            if value.trim().is_empty() {
+                empty_label.to_string()
+            } else if key == "core.github_token" {
+                "(set)".to_string()
+            } else {
+                format!("{value} [env override]")
+            }
+        }
+        Some((value, _)) if value.trim().is_empty() => empty_label.to_string(),
+        Some((_, _)) if key == "core.github_token" => "(set)".to_string(),
+        Some((value, _)) => value,
+        None => empty_label.to_string(),
     })
 }
 

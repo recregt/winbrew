@@ -96,6 +96,20 @@ impl Config {
         Ok((value, "file"))
     }
 
+    pub fn effective_optional_value(&self, key: &str) -> Result<Option<(String, &'static str)>> {
+        let key = key.trim();
+
+        if key.is_empty() {
+            bail!("config key cannot be empty");
+        }
+
+        if let Some(value) = env_override(key) {
+            return Ok(Some((value, "env")));
+        }
+
+        Ok(self.get_value(key)?.map(|value| (value, "file")))
+    }
+
     pub fn effective_sections(&self) -> Result<Vec<ConfigSection>> {
         let mut sections = Vec::new();
 
