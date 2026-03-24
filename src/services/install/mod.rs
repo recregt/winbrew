@@ -23,7 +23,7 @@ pub fn resolve_plan(name: &str, version: &str) -> Result<InstallPlan> {
 
     manifest.validate_download_kind()?;
 
-    Ok(crate::core::install::build_plan(name, &manifest)?)
+    crate::core::install::build_plan(name, &manifest)
 }
 
 pub fn execute_plan<F>(context: &InstallPlan, mut on_progress: F) -> Result<()>

@@ -38,7 +38,7 @@ fn package_matches(pkg: &Package, query: &str) -> bool {
         pkg.product_code.as_deref().unwrap_or(""),
     ]
     .into_iter()
-    .map(|value| normalize(value))
+    .map(normalize)
     .collect::<Vec<_>>()
     .join(" ");
 

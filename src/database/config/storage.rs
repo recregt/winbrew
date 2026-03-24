@@ -70,7 +70,7 @@ pub fn config_set(key: &str, value: &str) -> Result<()> {
 }
 
 pub fn config_sections() -> Result<Vec<ConfigSection>> {
-    Ok(load_cached()?.effective_sections()?)
+    load_cached()?.effective_sections()
 }
 
 pub fn get_effective_value(key: &str) -> Result<(String, &'static str)> {
