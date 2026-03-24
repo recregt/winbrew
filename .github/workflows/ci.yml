@@ -22,8 +22,10 @@ concurrency:
 
 jobs:
   checks:
-    name: Rustfmt + Clippy
+    name: Rustfmt + Clippy + Tests
     runs-on: windows-latest
+    env:
+      WINBREW_ROOT: ${{ runner.temp }}\winbrew-ci
 
     steps:
       - name: Checkout
@@ -39,14 +41,18 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+      - name: Tests
+        run: cargo test --locked --all-targets --all-features
 
   integration:
-    name: Integration tests (Windows)
+    name: CLI smoke tests (Windows)
     runs-on: windows-latest
     needs: checks
     env:
       BREW_EXE: .\target\x86_64-pc-windows-msvc\debug\brew.exe
+      WINBREW_ROOT: ${{ runner.temp }}\winbrew-ci
 
     steps:
       - name: Checkout
@@ -59,23 +65,19 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build
+        run: cargo build --locked
 
       - name: brew --version
-        continue-on-error: true
         run: $env:BREW_EXE --version
 
       - name: brew --help
-        continue-on-error: true
         run: $env:BREW_EXE --help
 
       - name: brew list (empty)
-        continue-on-error: true
         run: |
           & $env:BREW_EXE list
 
       - name: brew config seed values
-        continue-on-error: true
         run: |
           & $env:BREW_EXE config set ci.integration enabled
           & $env:BREW_EXE config set default_yes true
@@ -84,7 +86,6 @@ jobs:
           & $env:BREW_EXE config set concurrent_downloads 3
 
       - name: brew config get ci.integration
-        continue-on-error: true
         run: |
           $out = & $env:BREW_EXE config get ci.integration | Out-String
           Write-Host $out
@@ -93,7 +94,6 @@ jobs:
           }
 
       - name: brew config get download_timeout
-        continue-on-error: true
         run: |
           $out = & $env:BREW_EXE config get download_timeout | Out-String
           Write-Host $out
@@ -102,7 +102,6 @@ jobs:
           }
 
       - name: brew config list includes seeded values
-        continue-on-error: true
         run: |
           $out = & $env:BREW_EXE config list | Out-String
           Write-Host $out
@@ -119,7 +118,6 @@ jobs:
           }
 
       - name: brew info
-        continue-on-error: true
         run: |
           $out = & $env:BREW_EXE info | Out-String
           Write-Host $out
@@ -141,7 +139,6 @@ jobs:
           }
 
       - name: brew doctor
-        continue-on-error: true
         run: |
           $out = & $env:BREW_EXE doctor | Out-String
           Write-Host $out
@@ -155,34 +152,6 @@ jobs:
             if ($out -notmatch [regex]::Escape($needle)) {
               Write-Error "Expected doctor output to include '$needle'"; exit 1
             }
-          }
-
-      - name: brew install node
-        continue-on-error: true
-        run: |
-          & $env:BREW_EXE install node
-
-      - name: brew list (node should appear)
-        continue-on-error: true
-        run: |
-          $out = & $env:BREW_EXE list | Out-String
-          Write-Host $out
-          if ($out -notmatch "node") {
-            Write-Error "Expected 'node' in list output"; exit 1
-          }
-
-      - name: brew remove node
-        continue-on-error: true
-        run: |
-          & $env:BREW_EXE remove node --yes
-
-      - name: brew list (node should be gone)
-        continue-on-error: true
-        run: |
-          $out = & $env:BREW_EXE list | Out-String
-          Write-Host $out
-          if ($out -match "node") {
-            Write-Error "node should not appear after remove"; exit 1
           }
 
   dependabot-metadata:

@@ -13,8 +13,9 @@ static GLOBAL: MiMalloc = MiMalloc;
 fn main() -> Result<()> {
     logging::init()?;
 
+    let cli = Cli::parse();
+
     database::init()?;
 
-    let cli = Cli::parse();
     run(cli.command)
 }
