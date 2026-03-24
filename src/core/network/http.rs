@@ -18,11 +18,23 @@ pub struct NetworkSettings {
 impl NetworkSettings {
     pub fn current() -> Self {
         let config = database::Config::current();
+        let timeout_secs = database::get_effective_value("core.download_timeout")
+            .ok()
+            .and_then(|(value, _)| value.parse::<u64>().ok())
+            .unwrap_or(config.core.download_timeout);
+        let proxy_url = database::get_effective_value("core.proxy")
+            .ok()
+            .and_then(|(value, _)| if value.is_empty() { None } else { Some(value) })
+            .or(config.core.proxy);
+        let github_token = database::get_effective_value("core.github_token")
+            .ok()
+            .and_then(|(value, _)| if value.is_empty() { None } else { Some(value) })
+            .or(config.core.github_token);
 
         Self {
-            timeout_secs: config.core.download_timeout,
-            proxy_url: config.core.proxy,
-            github_token: config.core.github_token,
+            timeout_secs,
+            proxy_url,
+            github_token,
         }
     }
 }
@@ -32,12 +44,13 @@ pub fn build_client_with(settings: &NetworkSettings) -> Result<Client> {
 
     debug!(timeout_secs, "building HTTP client");
 
+    let user_agent = format!("winbrew/{}", env!("CARGO_PKG_VERSION"));
     let mut builder = Client::builder()
         .timeout(Duration::from_secs(timeout_secs))
-        .user_agent("winbrew/0.1");
+        .user_agent(user_agent);
 
     if let Some(proxy_url) = &settings.proxy_url {
-        trace!(proxy = proxy_url.as_str(), "configuring HTTP proxy");
+        trace!(proxy = %proxy_url, "configuring HTTP proxy");
         builder = builder.proxy(Proxy::all(proxy_url.as_str()).context("invalid proxy URL")?);
     }
 
@@ -49,7 +62,7 @@ pub fn apply_github_auth_with(
     url: &str,
     request: RequestBuilder,
 ) -> Result<RequestBuilder> {
-    if is_github_url(url)
+    if is_github_domain(url)
         && let Some(token) = &settings.github_token
     {
         trace!(url = url, "applying GitHub authorization");
@@ -59,8 +72,18 @@ pub fn apply_github_auth_with(
     Ok(request)
 }
 
-fn is_github_url(url: &str) -> bool {
-    url.contains("github.com")
-        || url.contains("githubusercontent.com")
-        || url.contains("api.github.com")
+fn is_github_domain(url: &str) -> bool {
+    let host = reqwest::Url::parse(url)
+        .ok()
+        .and_then(|url| url.host_str().map(|host| host.to_ascii_lowercase()));
+
+    let Some(host) = host.as_deref() else {
+        return false;
+    };
+
+    host == "github.com"
+        || host == "api.github.com"
+        || host == "raw.githubusercontent.com"
+        || host.ends_with(".github.com")
+        || host.ends_with(".githubusercontent.com")
 }
