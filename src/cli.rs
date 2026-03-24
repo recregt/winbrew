@@ -15,7 +15,10 @@ pub struct Cli {
 #[derive(Debug, PartialEq, Eq, Subcommand)]
 pub enum Command {
     /// List packages installed by brew
-    List,
+    List {
+        #[arg(value_name = "QUERY", num_args = 0..)]
+        query: Vec<String>,
+    },
 
     /// Show effective runtime settings and paths
     Info,
@@ -81,7 +84,19 @@ mod tests {
     fn parse_list() {
         let cli = Cli::parse_from(["brew", "list"]);
 
-        assert_eq!(cli.command, Command::List);
+        assert_eq!(cli.command, Command::List { query: vec![] });
+    }
+
+    #[test]
+    fn parse_list_with_query() {
+        let cli = Cli::parse_from(["brew", "list", "python"]);
+
+        assert_eq!(
+            cli.command,
+            Command::List {
+                query: vec!["python".to_string()],
+            }
+        );
     }
 
     #[test]

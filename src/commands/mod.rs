@@ -11,7 +11,7 @@ pub mod remove;
 
 pub fn run(command: Command) -> Result<()> {
     match command {
-        Command::List => list::run(),
+        Command::List { query } => list::run(&query),
         Command::Info => info::run(),
         Command::Doctor => doctor::run(),
         Command::Install { query, version } => install::run(&query, version.as_deref()),
