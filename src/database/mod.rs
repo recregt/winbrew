@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use r2d2::{ManageConnection, Pool, PooledConnection};
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use crate::core::paths;
@@ -12,8 +12,8 @@ mod health;
 mod packages;
 
 pub use config::{
-    Config, ConfigSection, CoreConfig, PathsConfig, SourceConfig, SourcesConfig, config_sections,
-    config_set, get_effective_value,
+    Config, ConfigSection, ConfigSource, CoreConfig, PathsConfig, SourceConfig, SourcesConfig,
+    config_sections, config_set, get_effective_value,
 };
 pub use health::{
     HealthReport, ReportSection, RuntimeReport, get_health_report, get_runtime_report,
@@ -21,6 +21,7 @@ pub use health::{
 pub use packages::{delete_package, get_package, insert_package, list_packages, update_status};
 
 static DB_POOL: OnceLock<Pool<SqliteConnectionManager>> = OnceLock::new();
+static DB_POOL_INIT: Mutex<()> = Mutex::new(());
 
 #[derive(Clone, Debug)]
 pub struct SqliteConnectionManager {
@@ -50,12 +51,8 @@ impl ManageConnection for SqliteConnectionManager {
     }
 }
 
-pub fn connect() -> Result<Connection> {
-    open_connection(&paths::db_path()).context("failed to open database")
-}
-
 pub fn init() -> Result<()> {
-    let _ = pool()?;
+    let _ = get_pool()?;
 
     Ok(())
 }
@@ -65,6 +62,43 @@ pub fn get_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
         return Ok(pool);
     }
 
+    let _guard = DB_POOL_INIT
+        .lock()
+        .map_err(|_| anyhow::anyhow!("database pool init lock poisoned"))?;
+
+    if let Some(pool) = DB_POOL.get() {
+        return Ok(pool);
+    }
+
+    let pool = build_pool()?;
+
+    DB_POOL
+        .set(pool)
+        .map_err(|_| anyhow::anyhow!("database pool was initialized concurrently"))?;
+
+    DB_POOL
+        .get()
+        .context("failed to initialize database connection pool")
+}
+
+pub fn get_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
+    let pool = get_pool()?;
+    pool.get()
+        .context("failed to acquire database connection from pool")
+}
+
+fn open_connection(path: &Path) -> std::result::Result<Connection, rusqlite::Error> {
+    let conn = Connection::open(path)?;
+    conn.busy_timeout(Duration::from_secs(5))?;
+
+    conn.execute_batch(
+        "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;",
+    )?;
+
+    Ok(conn)
+}
+
+fn build_pool() -> Result<Pool<SqliteConnectionManager>> {
     if let Some(parent) = paths::db_path().parent() {
         std::fs::create_dir_all(parent).context("failed to create winbrew database directory")?;
     }
@@ -80,36 +114,7 @@ pub fn get_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
         .context("failed to get database connection for migrations")?;
     migrate(&conn)?;
 
-    let _ = DB_POOL.set(pool);
-
-    DB_POOL
-        .get()
-        .context("failed to initialize database connection pool")
-}
-
-pub fn get_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
-    let pool = get_pool()?;
-    pool.get()
-        .context("failed to acquire database connection from pool")
-}
-
-pub fn lock_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
-    get_conn()
-}
-
-fn pool() -> Result<&'static Pool<SqliteConnectionManager>> {
-    get_pool()
-}
-
-fn open_connection(path: &Path) -> std::result::Result<Connection, rusqlite::Error> {
-    let conn = Connection::open(path)?;
-    conn.busy_timeout(Duration::from_secs(5))?;
-
-    conn.execute_batch(
-        "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;",
-    )?;
-
-    Ok(conn)
+    Ok(pool)
 }
 
 pub(crate) fn migrate(conn: &Connection) -> Result<()> {
@@ -129,27 +134,5 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
     )
     .context("migration failed")?;
 
-    if !table_has_column(conn, "packages", "product_code")? {
-        conn.execute_batch("ALTER TABLE packages ADD COLUMN product_code TEXT;")
-            .context("failed to add product_code column")?;
-    }
-
     Ok(())
-}
-
-fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
-    let mut stmt = conn
-        .prepare(&format!("PRAGMA table_info({table})"))
-        .context("failed to inspect table schema")?;
-    let columns = stmt
-        .query_map([], |row| row.get::<_, String>(1))
-        .context("failed to read table schema")?;
-
-    for entry in columns {
-        if entry.context("failed to read schema row")? == column {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
 }

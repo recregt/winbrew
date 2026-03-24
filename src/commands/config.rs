@@ -3,7 +3,7 @@ use std::io::Write;
 
 use crate::cli::ConfigCommand;
 use crate::{
-    database::{config_sections, config_set, get_effective_value},
+    database::{ConfigSource, config_sections, config_set, get_effective_value},
     ui::Ui,
 };
 
@@ -38,7 +38,7 @@ fn get<W: Write>(ui: &mut Ui<W>, key: &str) -> Result<()> {
     let clean_key = key.trim();
     let (value, source) = get_effective_value(clean_key)?;
 
-    if source == "env" {
+    if source == ConfigSource::Env {
         ui.info(format!("{clean_key} = {value} (overridden by environment)"));
     } else {
         ui.info(format!("{clean_key} = {value}"));

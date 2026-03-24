@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use rusqlite::{Connection, Error as SqlError, OptionalExtension, params, types::Type};
 
 use crate::models::{Package, PackageStatus};
@@ -8,7 +8,7 @@ pub fn insert_package(conn: &Connection, pkg: &Package) -> Result<()> {
         serde_json::to_string(&pkg.dependencies).context("failed to serialize dependencies")?;
 
     conn.execute(
-        "INSERT OR REPLACE INTO packages
+        "INSERT INTO packages
          (name, version, kind, install_dir, product_code, dependencies, status, installed_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
@@ -28,11 +28,15 @@ pub fn insert_package(conn: &Connection, pkg: &Package) -> Result<()> {
 }
 
 pub fn update_status(conn: &Connection, name: &str, status: PackageStatus) -> Result<()> {
-    conn.execute(
+    let affected = conn.execute(
         "UPDATE packages SET status = ?1 WHERE name = ?2",
         params![status.as_str(), name],
     )
     .context("failed to update status")?;
+
+    if affected == 0 {
+        return Err(anyhow!("package '{name}' not found"));
+    }
 
     Ok(())
 }
@@ -50,19 +54,15 @@ pub fn get_package(conn: &Connection, name: &str) -> Result<Option<Package>> {
 
 pub fn list_packages(conn: &Connection) -> Result<Vec<Package>> {
     let mut stmt = conn.prepare(
+        // Returns only packages that completed successfully.
         "SELECT name, version, kind, install_dir, product_code, dependencies, status, installed_at
          FROM packages WHERE status = 'ok'
          ORDER BY name ASC",
     )?;
 
-    let rows = stmt.query_map([], |row| Ok(row_to_package(row)))?;
-
-    let mut packages = Vec::new();
-    for row in rows {
-        packages.push(row?.context("failed to read row")?);
-    }
-
-    Ok(packages)
+    stmt.query_map([], |row| Ok(row_to_package(row)))?
+        .map(|row| row?.context("failed to read row"))
+        .collect()
 }
 
 pub fn delete_package(conn: &Connection, name: &str) -> Result<bool> {
@@ -93,4 +93,69 @@ fn row_to_package(row: &rusqlite::Row) -> std::result::Result<Package, SqlError>
         status: PackageStatus::parse(&status_raw),
         installed_at: row.get("installed_at")?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database;
+    use crate::models::PackageStatus;
+
+    fn test_connection() -> Connection {
+        let conn = Connection::open_in_memory().expect("failed to open in-memory database");
+        database::migrate(&conn).expect("failed to migrate test database");
+        conn
+    }
+
+    fn sample_package(name: &str, status: PackageStatus) -> Package {
+        Package {
+            name: name.to_string(),
+            version: "1.0.0".to_string(),
+            kind: "installer".to_string(),
+            install_dir: format!(r"C:\\winbrew\\packages\\{name}"),
+            product_code: Some("{00000000-0000-0000-0000-000000000000}".to_string()),
+            dependencies: vec!["dep-a".to_string()],
+            status,
+            installed_at: "2026-03-24T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn insert_package_rejects_duplicates() {
+        let conn = test_connection();
+        let package = sample_package("demo", PackageStatus::Installing);
+
+        insert_package(&conn, &package).expect("first insert should succeed");
+        let second = insert_package(&conn, &package);
+
+        assert!(second.is_err());
+    }
+
+    #[test]
+    fn update_status_errors_when_package_is_missing() {
+        let conn = test_connection();
+
+        let error = update_status(&conn, "missing", PackageStatus::Ok)
+            .expect_err("missing package should fail");
+
+        assert!(error.to_string().contains("package 'missing' not found"));
+    }
+
+    #[test]
+    fn list_packages_returns_only_ok_packages() {
+        let conn = test_connection();
+
+        insert_package(&conn, &sample_package("ok-package", PackageStatus::Ok))
+            .expect("ok package should insert");
+        insert_package(
+            &conn,
+            &sample_package("installing-package", PackageStatus::Installing),
+        )
+        .expect("installing package should insert");
+
+        let packages = list_packages(&conn).expect("list should succeed");
+
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name, "ok-package");
+    }
 }

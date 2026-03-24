@@ -18,7 +18,7 @@ pub enum Progress {
 }
 
 pub fn resolve_plan(name: &str, version: &str) -> Result<InstallPlan> {
-    let conn = database::lock_conn()?;
+    let conn = database::get_conn()?;
     let manifest = crate::services::fetch_manifest(&conn, name, version)?;
 
     manifest.validate_download_kind()?;
@@ -30,7 +30,7 @@ pub fn execute_plan<F>(context: &InstallPlan, mut on_progress: F) -> Result<()>
 where
     F: FnMut(Progress),
 {
-    let conn = database::lock_conn()?;
+    let conn = database::get_conn()?;
     if let Some(pkg) = database::get_package(&conn, &context.name)?
         && pkg.status == PackageStatus::Ok
         && pkg.version == context.package_version

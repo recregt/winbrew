@@ -102,6 +102,12 @@ pub struct ConfigSection {
     pub entries: Vec<(String, String)>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigSource {
+    Env,
+    File,
+}
+
 impl Default for CoreConfig {
     fn default() -> Self {
         Self {
@@ -152,6 +158,7 @@ impl Default for SourceConfig {
     }
 }
 
+// Shared serde helper for bool fields that default to true.
 fn default_true() -> bool {
     true
 }
@@ -176,6 +183,8 @@ fn default_root_path() -> String {
     DEFAULT_ROOT.to_string()
 }
 
+// These path defaults are templates, not final paths.
+// They are expanded from the configured root in core::paths::resolve_template.
 fn default_packages_path() -> String {
     "${root}\\packages".to_string()
 }

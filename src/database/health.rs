@@ -1,8 +1,11 @@
 use anyhow::Result;
+use std::collections::HashMap;
+use std::path::Path;
 
 use crate::core::paths;
+use crate::database::ConfigSource;
 
-use super::Config;
+use super::{Config, ConfigSection};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HealthReport {
@@ -35,12 +38,21 @@ impl HealthReport {
 
 pub fn get_health_report() -> Result<HealthReport> {
     let config = Config::current();
-    let paths = config.resolved_paths();
-
+    let (root, source) = config.effective_value("paths.root")?;
+    let paths = paths::resolved_paths(
+        Path::new(&root),
+        &config.paths.packages,
+        &config.paths.data,
+        &config.paths.logs,
+        &config.paths.cache,
+    );
     Ok(HealthReport {
         database_path: paths::db_path().to_string_lossy().to_string(),
         database_exists: paths::db_path().exists(),
-        install_root_source: "config:paths.root".to_string(),
+        install_root_source: match source {
+            ConfigSource::Env => "env override".to_string(),
+            ConfigSource::File => "config:paths.root".to_string(),
+        },
         install_root: paths.root.to_string_lossy().to_string(),
         install_root_exists: paths.root.exists(),
         packages_dir: paths.packages.to_string_lossy().to_string(),
@@ -77,14 +89,19 @@ pub fn get_runtime_report() -> Result<RuntimeReport> {
 }
 
 fn build_runtime_report(config: &Config) -> Result<RuntimeReport> {
-    let root = effective_path_value(config, "paths.root")?;
-    let packages = effective_path_value(config, "paths.packages")?;
-    let data = effective_path_value(config, "paths.data")?;
-    let logs = effective_path_value(config, "paths.logs")?;
-    let cache = effective_path_value(config, "paths.cache")?;
+    let sections = config.sections();
+    let paths_section = section(&sections, "Paths")?;
+    let core_section = section(&sections, "Core")?;
+    let sources_section = section(&sections, "Sources")?;
 
-    let resolved_paths =
-        paths::resolved_paths(std::path::Path::new(&root), &packages, &data, &logs, &cache);
+    let path_values = effective_values(config, paths_section)?;
+    let resolved_paths = paths::resolved_paths(
+        std::path::Path::new(&path_values["root"]),
+        &path_values["packages"],
+        &path_values["data"],
+        &path_values["logs"],
+        &path_values["cache"],
+    );
 
     let sections = vec![
         ReportSection {
@@ -116,111 +133,123 @@ fn build_runtime_report(config: &Config) -> Result<RuntimeReport> {
                 ),
             ],
         },
-        ReportSection {
-            title: "Core".to_string(),
-            entries: vec![
-                (
-                    "log_level".to_string(),
-                    effective_string(config, "core.log_level")?,
-                ),
-                (
-                    "file_log_level".to_string(),
-                    effective_string(config, "core.file_log_level")?,
-                ),
-                (
-                    "auto_update".to_string(),
-                    effective_string(config, "core.auto_update")?,
-                ),
-                (
-                    "confirm_remove".to_string(),
-                    effective_string(config, "core.confirm_remove")?,
-                ),
-                (
-                    "default_yes".to_string(),
-                    effective_string(config, "core.default_yes")?,
-                ),
-                ("color".to_string(), effective_string(config, "core.color")?),
-                (
-                    "download_timeout".to_string(),
-                    format!("{}s", effective_string(config, "core.download_timeout")?),
-                ),
-                (
-                    "concurrent_downloads".to_string(),
-                    effective_string(config, "core.concurrent_downloads")?,
-                ),
-                (
-                    "proxy".to_string(),
-                    mask_optional(config, "core.proxy", "(none)")?,
-                ),
-                (
-                    "github_token".to_string(),
-                    mask_optional(config, "core.github_token", "(unset)")?,
-                ),
-            ],
-        },
-        ReportSection {
-            title: "Sources".to_string(),
-            entries: vec![
-                (
-                    "primary".to_string(),
-                    effective_string(config, "sources.primary")?,
-                ),
-                (
-                    "winget.url".to_string(),
-                    effective_string(config, "sources.winget.url")?,
-                ),
-                (
-                    "winget.format".to_string(),
-                    effective_string(config, "sources.winget.format")?,
-                ),
-                (
-                    "winget.manifest_kind".to_string(),
-                    effective_string(config, "sources.winget.manifest_kind")?,
-                ),
-                (
-                    "winget.manifest_path_template".to_string(),
-                    effective_string(config, "sources.winget.manifest_path_template")?,
-                ),
-                (
-                    "winget.enabled".to_string(),
-                    effective_string(config, "sources.winget.enabled")?,
-                ),
-            ],
-        },
+        render_section(config, core_section)?,
+        render_section(config, sources_section)?,
     ];
 
     Ok(RuntimeReport::new(sections))
 }
 
-fn effective_string(config: &Config, key: &str) -> Result<String> {
-    config.effective_value(key).map(|(value, _)| value)
+fn section<'a>(sections: &'a [ConfigSection], title: &str) -> Result<&'a ConfigSection> {
+    sections
+        .iter()
+        .find(|section| section.title == title)
+        .ok_or_else(|| anyhow::anyhow!("missing config section: {title}"))
 }
 
-fn mask_optional(config: &Config, key: &str, empty_label: &str) -> Result<String> {
-    Ok(match config.effective_optional_value(key)? {
-        Some((value, "env")) => {
-            if value.trim().is_empty() {
-                empty_label.to_string()
-            } else if key == "core.github_token" {
-                "(set)".to_string()
-            } else {
-                format!("{value} [env override]")
+fn effective_values(config: &Config, section: &ConfigSection) -> Result<HashMap<String, String>> {
+    let mut values = HashMap::with_capacity(section.entries.len());
+
+    for (key, _) in &section.entries {
+        let full_key = crate::database::config::section_key(&section.title, key);
+        let (value, _) = config.effective_value(&full_key)?;
+        values.insert(key.clone(), value);
+    }
+
+    Ok(values)
+}
+
+fn render_section(config: &Config, section: &ConfigSection) -> Result<ReportSection> {
+    let mut entries = Vec::with_capacity(section.entries.len());
+
+    for (key, file_value) in &section.entries {
+        let full_key = crate::database::config::section_key(&section.title, key);
+        let value = match full_key.as_str() {
+            "core.proxy" => match config.effective_optional_value(&full_key)? {
+                Some((value, source)) => render_optional_value(value, source, "(none)"),
+                None => "(none)".to_string(),
+            },
+            "core.github_token" => match config.effective_optional_value(&full_key)? {
+                Some((value, source)) => render_sensitive_value(value, source, "(unset)"),
+                None => "(unset)".to_string(),
+            },
+            "core.download_timeout" => {
+                let (value, _) = config.effective_value(&full_key)?;
+                format!("{value}s")
             }
-        }
-        Some((value, _)) if value.trim().is_empty() => empty_label.to_string(),
-        Some((_, _)) if key == "core.github_token" => "(set)".to_string(),
-        Some((value, _)) => value,
-        None => empty_label.to_string(),
+            _ => config
+                .effective_value(&full_key)
+                .map(|(value, _)| value)
+                .unwrap_or_else(|_| file_value.clone()),
+        };
+
+        entries.push((key.clone(), value));
+    }
+
+    Ok(ReportSection {
+        title: section.title.clone(),
+        entries,
     })
 }
 
-fn effective_path_value(config: &Config, key: &str) -> Result<String> {
-    effective_string(config, key)
+fn render_optional_value(
+    value: String,
+    source: ConfigSource,
+    empty_label: &str,
+) -> String {
+    if value.trim().is_empty() {
+        empty_label.to_string()
+    } else if matches!(source, ConfigSource::Env) {
+        format!("{value} [env override]")
+    } else {
+        value
+    }
+}
+
+fn render_sensitive_value(
+    value: String,
+    _source: ConfigSource,
+    empty_label: &str,
+) -> String {
+    if value.trim().is_empty() {
+        empty_label.to_string()
+    } else {
+        "(set)".to_string()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        ENV_LOCK.lock().unwrap()
+    }
+
+    struct TestEnvVar {
+        key: &'static str,
+    }
+
+    impl TestEnvVar {
+        fn set(key: &'static str, value: &str) -> Self {
+            unsafe {
+                std::env::set_var(key, value);
+            }
+
+            Self { key }
+        }
+    }
+
+    impl Drop for TestEnvVar {
+        fn drop(&mut self) {
+            unsafe {
+                std::env::remove_var(self.key);
+            }
+        }
+    }
 
     #[test]
     fn runtime_report_builds_expected_sections() {
@@ -230,5 +259,64 @@ mod tests {
         assert_eq!(report.sections[0].title, "Paths");
         assert_eq!(report.sections[1].title, "Core");
         assert_eq!(report.sections[2].title, "Sources");
+    }
+
+    #[test]
+    fn health_report_marks_env_root_source() {
+        let _guard = env_lock();
+        let _env = TestEnvVar::set("WINBREW_ROOT", r"C:\temp\winbrew");
+        let report = get_health_report().expect("health report should build");
+
+        assert_eq!(report.install_root_source, "env override");
+        assert_eq!(report.install_root, r"C:\temp\winbrew");
+    }
+
+    #[test]
+    fn runtime_report_masks_sensitive_and_marks_env_overrides() {
+        let _guard = env_lock();
+        let _root = TestEnvVar::set("WINBREW_ROOT", r"C:\temp\winbrew");
+        let _proxy = TestEnvVar::set("WINBREW_CORE_PROXY", "http://localhost:8080");
+        let _token = TestEnvVar::set("WINBREW_GITHUB_TOKEN", "secret-token");
+
+        let report = build_runtime_report(&Config::default()).expect("report should build");
+        let core = report
+            .sections
+            .iter()
+            .find(|section| section.title == "Core")
+            .expect("core section should exist");
+
+        let proxy = core
+            .entries
+            .iter()
+            .find(|(key, _)| key == "proxy")
+            .expect("proxy entry should exist");
+        assert_eq!(proxy.1, "http://localhost:8080 [env override]");
+
+        let token = core
+            .entries
+            .iter()
+            .find(|(key, _)| key == "github_token")
+            .expect("github_token entry should exist");
+        assert_eq!(token.1, "(set)");
+    }
+
+    #[test]
+    fn optional_and_sensitive_helpers_format_values() {
+        assert_eq!(
+            render_optional_value("http://localhost:8080".to_string(), ConfigSource::Env, "(none)"),
+            "http://localhost:8080 [env override]"
+        );
+        assert_eq!(
+            render_optional_value("".to_string(), ConfigSource::File, "(none)"),
+            "(none)"
+        );
+        assert_eq!(
+            render_sensitive_value("secret-token".to_string(), ConfigSource::Env, "(unset)"),
+            "(set)"
+        );
+        assert_eq!(
+            render_sensitive_value("".to_string(), ConfigSource::File, "(unset)"),
+            "(unset)"
+        );
     }
 }

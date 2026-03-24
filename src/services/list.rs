@@ -5,7 +5,7 @@ use crate::models::Package;
 use crate::models::PackageQuery;
 
 pub fn list_packages(query: Option<&str>) -> Result<Vec<Package>> {
-    let conn = database::lock_conn()?;
+    let conn = database::get_conn()?;
     let packages = database::list_packages(&conn)?;
 
     Ok(match query {

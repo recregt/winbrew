@@ -1,43 +1,69 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::{anyhow, bail, Result};
+use tracing::warn;
 
 use super::keys::{env_override, section_key};
-use super::types::{Config, ConfigSection};
+use super::types::{Config, ConfigSection, ConfigSource};
+
+struct SectionSpec {
+    title: &'static str,
+    entries: Vec<EntrySpec>,
+}
+
+struct EntrySpec {
+    key: &'static str,
+    value: Option<String>,
+    display_value: String,
+}
+
+impl EntrySpec {
+    fn required(key: &'static str, value: String) -> Self {
+        Self {
+            key,
+            display_value: value.clone(),
+            value: Some(value),
+        }
+    }
+
+    fn optional(key: &'static str, value: Option<String>, display_value: String) -> Self {
+        Self {
+            key,
+            value,
+            display_value,
+        }
+    }
+}
 
 impl Config {
-    pub fn sections(&self) -> Vec<ConfigSection> {
+    fn section_specs(&self) -> Vec<SectionSpec> {
         vec![
-            ConfigSection {
-                title: "Core".to_string(),
+            SectionSpec {
+                title: "Core",
                 entries: vec![
-                    ("log_level".to_string(), self.core.log_level.clone()),
-                    (
-                        "file_log_level".to_string(),
-                        self.core.file_log_level.clone(),
-                    ),
-                    ("auto_update".to_string(), self.core.auto_update.to_string()),
-                    (
-                        "confirm_remove".to_string(),
-                        self.core.confirm_remove.to_string(),
-                    ),
-                    ("default_yes".to_string(), self.core.default_yes.to_string()),
-                    ("color".to_string(), self.core.color.to_string()),
-                    (
-                        "download_timeout".to_string(),
+                    EntrySpec::required("log_level", self.core.log_level.clone()),
+                    EntrySpec::required("file_log_level", self.core.file_log_level.clone()),
+                    EntrySpec::required("auto_update", self.core.auto_update.to_string()),
+                    EntrySpec::required("confirm_remove", self.core.confirm_remove.to_string()),
+                    EntrySpec::required("default_yes", self.core.default_yes.to_string()),
+                    EntrySpec::required("color", self.core.color.to_string()),
+                    EntrySpec::required(
+                        "download_timeout",
                         self.core.download_timeout.to_string(),
                     ),
-                    (
-                        "concurrent_downloads".to_string(),
+                    EntrySpec::required(
+                        "concurrent_downloads",
                         self.core.concurrent_downloads.to_string(),
                     ),
-                    (
-                        "proxy".to_string(),
+                    EntrySpec::optional(
+                        "proxy",
+                        self.core.proxy.clone(),
                         self.core
                             .proxy
                             .clone()
                             .unwrap_or_else(|| "(none)".to_string()),
                     ),
-                    (
-                        "github_token".to_string(),
+                    EntrySpec::optional(
+                        "github_token",
+                        self.core.github_token.clone(),
                         self.core
                             .github_token
                             .as_ref()
@@ -46,96 +72,90 @@ impl Config {
                     ),
                 ],
             },
-            ConfigSection {
-                title: "Paths".to_string(),
+            SectionSpec {
+                title: "Paths",
                 entries: vec![
-                    ("root".to_string(), self.paths.root.clone()),
-                    ("packages".to_string(), self.paths.packages.clone()),
-                    ("data".to_string(), self.paths.data.clone()),
-                    ("logs".to_string(), self.paths.logs.clone()),
-                    ("cache".to_string(), self.paths.cache.clone()),
+                    EntrySpec::required("root", self.paths.root.clone()),
+                    EntrySpec::required("packages", self.paths.packages.clone()),
+                    EntrySpec::required("data", self.paths.data.clone()),
+                    EntrySpec::required("logs", self.paths.logs.clone()),
+                    EntrySpec::required("cache", self.paths.cache.clone()),
                 ],
             },
-            ConfigSection {
-                title: "Sources".to_string(),
+            SectionSpec {
+                title: "Sources",
                 entries: vec![
-                    ("primary".to_string(), self.sources.primary.clone()),
-                    ("winget.url".to_string(), self.sources.winget.url.clone()),
-                    (
-                        "winget.format".to_string(),
-                        self.sources.winget.format.clone(),
-                    ),
-                    (
-                        "winget.manifest_kind".to_string(),
+                    EntrySpec::required("primary", self.sources.primary.clone()),
+                    EntrySpec::required("winget.url", self.sources.winget.url.clone()),
+                    EntrySpec::required("winget.format", self.sources.winget.format.clone()),
+                    EntrySpec::required(
+                        "winget.manifest_kind",
                         self.sources.winget.manifest_kind.clone(),
                     ),
-                    (
-                        "winget.manifest_path_template".to_string(),
+                    EntrySpec::required(
+                        "winget.manifest_path_template",
                         self.sources.winget.manifest_path_template.clone(),
                     ),
-                    (
-                        "winget.enabled".to_string(),
-                        self.sources.winget.enabled.to_string(),
-                    ),
+                    EntrySpec::required("winget.enabled", self.sources.winget.enabled.to_string()),
                 ],
             },
         ]
     }
 
-    pub fn effective_value(&self, key: &str) -> Result<(String, &'static str)> {
-        let key = key.trim();
-
-        if key.is_empty() {
-            bail!("config key cannot be empty");
-        }
-
-        if let Some(value) = env_override(key) {
-            return Ok((value, "env"));
-        }
-
-        let value = self
-            .get_value(key)?
-            .ok_or_else(|| anyhow!("config key '{key}' not found"))?;
-
-        Ok((value, "file"))
+    pub fn sections(&self) -> Vec<ConfigSection> {
+        self.section_specs()
+            .into_iter()
+            .map(|section| ConfigSection {
+                title: section.title.to_string(),
+                entries: section
+                    .entries
+                    .into_iter()
+                    .map(|entry| (entry.key.to_string(), entry.display_value))
+                    .collect(),
+            })
+            .collect()
     }
 
-    pub fn effective_optional_value(&self, key: &str) -> Result<Option<(String, &'static str)>> {
-        let key = key.trim();
+    pub fn effective_value(&self, key: &str) -> Result<(String, ConfigSource)> {
+        self.lookup_effective(key)?.ok_or_else(|| {
+            let key = key.trim();
+            anyhow!("config key '{key}' not found")
+        })
+    }
 
-        if key.is_empty() {
-            bail!("config key cannot be empty");
-        }
-
-        if let Some(value) = env_override(key) {
-            return Ok(Some((value, "env")));
-        }
-
-        Ok(self.get_value(key)?.map(|value| (value, "file")))
+    pub fn effective_optional_value(
+        &self,
+        key: &str,
+    ) -> Result<Option<(String, ConfigSource)>> {
+        self.lookup_effective(key)
     }
 
     pub fn effective_sections(&self) -> Result<Vec<ConfigSection>> {
         let mut sections = Vec::new();
 
-        for section in self.sections() {
+        for section in self.section_specs() {
             let mut entries = Vec::with_capacity(section.entries.len());
 
-            for (key, file_value) in section.entries {
-                let full_key = section_key(&section.title, &key);
-                let (value, source) = self
-                    .effective_value(&full_key)
-                    .unwrap_or((file_value, "file"));
-                let display_value = if source == "env" {
-                    format!("{value} [env override]")
-                } else {
-                    value
+            for entry in section.entries {
+                let full_key = section_key(section.title, entry.key);
+
+                let display_value = match self.lookup_effective(&full_key) {
+                    Ok(Some((value, ConfigSource::Env))) => {
+                        format!("{value} [env override]")
+                    }
+                    Ok(Some((value, ConfigSource::File))) => value,
+                    Ok(None) => entry.display_value,
+                    Err(err) => {
+                        warn!(key = %full_key, error = %err, "falling back to file config value");
+                        entry.display_value
+                    }
                 };
 
-                entries.push((key, display_value));
+                entries.push((entry.key.to_string(), display_value));
             }
 
             sections.push(ConfigSection {
-                title: section.title,
+                title: section.title.to_string(),
                 entries,
             });
         }
@@ -150,31 +170,96 @@ impl Config {
             bail!("config key cannot be empty");
         }
 
-        Ok(match key {
-            "core.log_level" => Some(self.core.log_level.clone()),
-            "core.file_log_level" => Some(self.core.file_log_level.clone()),
-            "core.auto_update" => Some(self.core.auto_update.to_string()),
-            "core.confirm_remove" => Some(self.core.confirm_remove.to_string()),
-            "core.default_yes" => Some(self.core.default_yes.to_string()),
-            "core.color" => Some(self.core.color.to_string()),
-            "core.download_timeout" => Some(self.core.download_timeout.to_string()),
-            "core.concurrent_downloads" => Some(self.core.concurrent_downloads.to_string()),
-            "core.proxy" => self.core.proxy.clone(),
-            "core.github_token" => self.core.github_token.clone(),
-            "paths.root" => Some(self.paths.root.clone()),
-            "paths.packages" => Some(self.paths.packages.clone()),
-            "paths.data" => Some(self.paths.data.clone()),
-            "paths.logs" => Some(self.paths.logs.clone()),
-            "paths.cache" => Some(self.paths.cache.clone()),
-            "sources.primary" => Some(self.sources.primary.clone()),
-            "sources.winget.url" => Some(self.sources.winget.url.clone()),
-            "sources.winget.format" => Some(self.sources.winget.format.clone()),
-            "sources.winget.manifest_kind" => Some(self.sources.winget.manifest_kind.clone()),
-            "sources.winget.manifest_path_template" => {
-                Some(self.sources.winget.manifest_path_template.clone())
+        for section in self.section_specs() {
+            for entry in section.entries {
+                if section_key(section.title, entry.key) == key {
+                    return Ok(entry.value);
+                }
             }
-            "sources.winget.enabled" => Some(self.sources.winget.enabled.to_string()),
-            _ => return Err(anyhow!("unknown config key: {key}")),
-        })
+        }
+
+        Err(anyhow!("unknown config key: {key}"))
+    }
+
+    fn lookup_effective(&self, key: &str) -> Result<Option<(String, ConfigSource)>> {
+        let key = key.trim();
+
+        if key.is_empty() {
+            bail!("config key cannot be empty");
+        }
+
+        if let Some(value) = env_override(key) {
+            return Ok(Some((value, ConfigSource::Env)));
+        }
+
+        Ok(self.get_value(key)?.map(|value| (value, ConfigSource::File)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        ENV_LOCK.lock().unwrap()
+    }
+
+    struct TestEnvVar {
+        key: &'static str,
+    }
+
+    impl TestEnvVar {
+        fn set(key: &'static str, value: &str) -> Self {
+            // Rust 2024 makes env mutation unsafe because it can race with readers.
+            unsafe {
+                std::env::set_var(key, value);
+            }
+
+            Self { key }
+        }
+    }
+
+    impl Drop for TestEnvVar {
+        fn drop(&mut self) {
+            unsafe {
+                std::env::remove_var(self.key);
+            }
+        }
+    }
+
+    #[test]
+    fn get_value_returns_none_for_unset_optional_fields() {
+        let _guard = env_lock();
+        let config = Config::default();
+
+        assert_eq!(config.get_value("core.proxy").unwrap(), None);
+        assert_eq!(config.get_value("core.github_token").unwrap(), None);
+    }
+
+    #[test]
+    fn effective_optional_value_returns_none_for_unset_optional_fields() {
+        let _guard = env_lock();
+        let config = Config::default();
+
+        assert_eq!(config.effective_optional_value("core.proxy").unwrap(), None);
+        assert_eq!(config.effective_optional_value("core.github_token").unwrap(), None);
+    }
+
+    #[test]
+    fn effective_optional_value_prefers_env_override() {
+        let _guard = env_lock();
+        let _env = TestEnvVar::set("WINBREW_CORE_PROXY", "http://localhost:8080");
+        let config = Config::default();
+
+        assert_eq!(
+            config.effective_optional_value("core.proxy").unwrap(),
+            Some((
+                "http://localhost:8080".to_string(),
+                super::ConfigSource::Env,
+            ))
+        );
     }
 }

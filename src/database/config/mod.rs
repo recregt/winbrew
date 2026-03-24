@@ -2,15 +2,18 @@ use crate::core::paths;
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
+use tracing::warn;
 
 mod keys;
+mod registry;
 mod lookup;
 mod storage;
 mod types;
 mod validation;
 
 pub use storage::{config_sections, config_set, get_effective_value};
-pub use types::{Config, ConfigSection, CoreConfig, PathsConfig, SourceConfig, SourcesConfig};
+pub use types::*;
+pub(crate) use keys::section_key;
 
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
@@ -41,7 +44,10 @@ impl Config {
     }
 
     pub fn current() -> Self {
-        storage::load_cached().unwrap_or_default()
+        storage::load_cached().unwrap_or_else(|err| {
+            warn!(error = %err, "failed to load cached config, using defaults");
+            Self::default()
+        })
     }
 
     pub fn resolved_paths(&self) -> paths::ResolvedPaths {
@@ -83,9 +89,9 @@ mod tests {
         let config = Config::default();
         let paths = config.resolved_paths();
 
-        assert!(paths.db.ends_with(r"data\db\winbrew.db"));
-        assert!(paths.config.ends_with(r"data\winbrew.toml"));
-        assert!(paths.log.ends_with(r"data\logs\winbrew.log"));
+        assert!(paths.db.ends_with(Path::new("data").join("db").join("winbrew.db")));
+        assert!(paths.config.ends_with(Path::new("data").join("winbrew.toml")));
+        assert!(paths.log.ends_with(Path::new("data").join("logs").join("winbrew.log")));
     }
 
     #[test]

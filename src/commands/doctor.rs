@@ -11,7 +11,7 @@ pub fn run() -> Result<()> {
     ui.info("");
 
     ui.info("Loading installed packages...");
-    let conn = database::lock_conn()?;
+    let conn = database::get_conn()?;
     let packages = database::list_packages(&conn)?;
     ui.info(format!("Found {} package(s). Scanning...", packages.len()));
 

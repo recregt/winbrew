@@ -1,7 +1,6 @@
 use anyhow::{Context, Result, anyhow, bail};
-use tracing_subscriber::EnvFilter;
 
-use super::types::Config;
+use super::{registry, types::Config};
 
 impl Config {
     pub fn set_value(&mut self, key: &str, value: &str) -> Result<()> {
@@ -72,41 +71,15 @@ fn parse_bool(key: &str, value: &str) -> Result<bool> {
 }
 
 fn validate_config_value(key: &str, value: &str) -> Result<()> {
-    match key {
-        "core.log_level" => {
-            let normalized = value.trim().to_ascii_lowercase();
-            let allowed_levels = ["trace", "debug", "info", "warn", "error"];
+    if let Some(def) = registry::find(key) {
+        if let Some(validator) = def.validator {
+            return validator(value).with_context(|| format!("invalid value for '{key}'"));
+        }
 
-            if !allowed_levels.contains(&normalized.as_str()) {
-                bail!("{key} must be one of: {}", allowed_levels.join(", "));
-            }
-        }
-        "core.file_log_level" => {
-            EnvFilter::try_new(value.trim())
-                .map_err(|err| anyhow!("invalid {key} value: {err}"))?;
-        }
-        "core.auto_update"
-        | "core.confirm_remove"
-        | "core.default_yes"
-        | "core.color"
-        | "sources.winget.enabled" => {
-            value
-                .parse::<bool>()
-                .map_err(|_| anyhow!("{key} requires a boolean value (true or false)"))?;
-        }
-        "core.download_timeout" | "core.concurrent_downloads" => {
-            let parsed = value
-                .parse::<u64>()
-                .map_err(|_| anyhow!("{key} requires a whole number"))?;
-
-            if parsed == 0 {
-                return Err(anyhow!("{key} requires a positive number"));
-            }
-        }
-        _ => {}
+        return Ok(());
     }
 
-    Ok(())
+    Err(anyhow!("unknown config key: {key}"))
 }
 
 fn normalize_config_value(key: &str, value: &str) -> String {
@@ -114,5 +87,25 @@ fn normalize_config_value(key: &str, value: &str) -> String {
         "core.log_level" => value.trim().to_ascii_lowercase(),
         "core.file_log_level" => value.trim().to_string(),
         _ => value.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+
+    #[test]
+    fn set_value_accepts_boolean_aliases_in_validation() {
+        let mut config = Config::default();
+
+        config.set_value("core.auto_update", "yes").unwrap();
+        config.set_value("core.confirm_remove", "on").unwrap();
+        config.set_value("core.default_yes", "1").unwrap();
+        config.set_value("sources.winget.enabled", "no").unwrap();
+
+        assert!(config.core.auto_update);
+        assert!(config.core.confirm_remove);
+        assert!(config.core.default_yes);
+        assert!(!config.sources.winget.enabled);
     }
 }
