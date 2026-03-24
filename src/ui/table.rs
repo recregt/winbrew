@@ -104,7 +104,7 @@ mod tests {
     struct BufferWriter(Rc<RefCell<Vec<u8>>>);
 
     impl BufferWriter {
-        fn into_string(&self) -> String {
+        fn as_string(&self) -> String {
             String::from_utf8(self.0.borrow().clone()).expect("table output should be valid utf8")
         }
     }
@@ -137,7 +137,7 @@ mod tests {
         ui.display_candidates(&candidates);
         drop(ui);
 
-        let output = capture.into_string();
+        let output = capture.as_string();
         assert!(output.contains("Windows Terminal"));
         assert!(output.contains("Microsoft.WindowsTerminal"));
         assert!(output.contains('1'));

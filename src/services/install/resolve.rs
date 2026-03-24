@@ -223,7 +223,7 @@ mod tests {
         assert_eq!(candidate_score(query, &exact), 0);
         assert!(candidate_score(query, &partial) > 0);
 
-        let mut ranked = vec![partial.clone(), exact.clone()];
+        let mut ranked = [partial.clone(), exact.clone()];
         ranked.sort_by(|left, right| {
             candidate_score(query, left)
                 .cmp(&candidate_score(query, right))
