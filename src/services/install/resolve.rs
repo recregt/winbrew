@@ -2,7 +2,6 @@ use anyhow::{Result, bail};
 
 use crate::models::{PackageCandidate, PackageQuery};
 use crate::sources;
-use crate::ui::Ui;
 
 #[derive(Debug, Clone)]
 pub struct ResolvedInstall {
@@ -10,11 +9,13 @@ pub struct ResolvedInstall {
     pub version: String,
 }
 
-pub fn resolve<W: std::io::Write>(
-    query: &[String],
-    version: Option<&str>,
-    ui: &mut Ui<W>,
-) -> Result<ResolvedInstall> {
+#[derive(Debug, Clone)]
+pub enum Resolution {
+    Resolved(ResolvedInstall),
+    Candidates(Vec<PackageCandidate>),
+}
+
+pub fn resolve(query: &[String], version: Option<&str>) -> Result<Resolution> {
     let query = PackageQuery {
         terms: query.to_vec(),
         version: version.map(ToOwned::to_owned),
@@ -24,10 +25,10 @@ pub fn resolve<W: std::io::Write>(
     if is_canonical_identifier(&query_text)
         && let Some(version) = query.version.clone()
     {
-        return Ok(ResolvedInstall {
+        return Ok(Resolution::Resolved(ResolvedInstall {
             identifier: query_text,
             version,
-        });
+        }));
     }
 
     // Fall through to search so we can discover the latest manifest version.
@@ -39,42 +40,31 @@ pub fn resolve<W: std::io::Write>(
         bail!("no packages matched: {query_text}");
     }
 
-    let candidate = pick_candidate(ui, &candidates, &query_text)?;
-    Ok(ResolvedInstall {
-        identifier: candidate.identifier,
-        version: query.version.unwrap_or(candidate.version),
-    })
-}
-
-fn pick_candidate<W: std::io::Write>(
-    ui: &mut Ui<W>,
-    candidates: &[PackageCandidate],
-    query: &str,
-) -> Result<PackageCandidate> {
     let mut ranked = candidates.to_vec();
     ranked.sort_by(|left, right| {
-        candidate_score(query, left)
-            .cmp(&candidate_score(query, right))
+        candidate_score(&query_text, left)
+            .cmp(&candidate_score(&query_text, right))
             .then_with(|| candidate_label(left).cmp(&candidate_label(right)))
     });
 
     if let Some(candidate) = ranked.first()
-        && candidate_score(query, candidate) == 0
+        && candidate_score(&query_text, candidate) == 0
     {
-        return Ok(candidate.clone());
+        return Ok(Resolution::Resolved(ResolvedInstall {
+            identifier: candidate.identifier.clone(),
+            version: query.version.unwrap_or_else(|| candidate.version.clone()),
+        }));
     }
 
     if ranked.len() == 1 {
-        return Ok(ranked.remove(0));
+        let candidate = ranked.remove(0);
+        return Ok(Resolution::Resolved(ResolvedInstall {
+            identifier: candidate.identifier,
+            version: query.version.unwrap_or(candidate.version),
+        }));
     }
 
-    ui.notice(format!(
-        "Multiple packages matched '{query}'. Select one by number:"
-    ));
-    ui.display_candidates(&ranked);
-
-    let choice = ui.prompt_number("Choose package", ranked.len())?;
-    Ok(ranked[choice].clone())
+    Ok(Resolution::Candidates(ranked))
 }
 
 fn candidate_score(query: &str, candidate: &PackageCandidate) -> usize {

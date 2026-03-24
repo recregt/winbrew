@@ -10,7 +10,7 @@ use super::InstallPlan;
 pub fn install(
     conn: &rusqlite::Connection,
     context: &InstallPlan,
-    on_progress: &impl Fn(u64, u64),
+    on_progress: &mut impl FnMut(u64, u64),
 ) -> Result<()> {
     begin_install(context)?;
 
