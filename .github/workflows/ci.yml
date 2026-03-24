@@ -68,10 +68,12 @@ jobs:
         run: cargo build --locked
 
       - name: brew --version
-        run: $env:BREW_EXE --version
+        run: |
+          & $env:BREW_EXE --version
 
       - name: brew --help
-        run: $env:BREW_EXE --help
+        run: |
+          & $env:BREW_EXE --help
 
       - name: brew list (empty)
         run: |
