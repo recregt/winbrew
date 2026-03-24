@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, anyhow, bail};
+use tracing_subscriber::EnvFilter;
 
 use super::types::Config;
 
@@ -16,6 +17,7 @@ impl Config {
 
         match key {
             "core.log_level" => self.core.log_level = value,
+            "core.file_log_level" => self.core.file_log_level = value,
             "core.auto_update" => self.core.auto_update = parse_bool(key, &value)?,
             "core.confirm_remove" => self.core.confirm_remove = parse_bool(key, &value)?,
             "core.default_yes" => self.core.default_yes = parse_bool(key, &value)?,
@@ -79,6 +81,10 @@ fn validate_config_value(key: &str, value: &str) -> Result<()> {
                 bail!("{key} must be one of: {}", allowed_levels.join(", "));
             }
         }
+        "core.file_log_level" => {
+            EnvFilter::try_new(value.trim())
+                .map_err(|err| anyhow!("invalid {key} value: {err}"))?;
+        }
         "core.auto_update"
         | "core.confirm_remove"
         | "core.default_yes"
@@ -106,6 +112,7 @@ fn validate_config_value(key: &str, value: &str) -> Result<()> {
 fn normalize_config_value(key: &str, value: &str) -> String {
     match key {
         "core.log_level" => value.trim().to_ascii_lowercase(),
+        "core.file_log_level" => value.trim().to_string(),
         _ => value.to_string(),
     }
 }

@@ -72,6 +72,10 @@ mod tests {
             types::DEFAULT_WINGET_PATH_TEMPLATE
         );
         assert_eq!(config.paths.root, types::DEFAULT_ROOT);
+        assert_eq!(
+            config.core.file_log_level,
+            "debug,winbrew::core::network=trace"
+        );
     }
 
     #[test]
@@ -92,11 +96,25 @@ mod tests {
             .set_value(" core.log_level ", " debug ")
             .expect("set_value should trim surrounding whitespace");
 
+        config
+            .set_value(
+                " core.file_log_level ",
+                " warn,winbrew::core::network=trace ",
+            )
+            .expect("set_value should accept EnvFilter strings");
+
         assert_eq!(
             config
                 .get_value(" core.log_level ")
                 .expect("get_value should trim surrounding whitespace"),
             Some("debug".to_string())
+        );
+
+        assert_eq!(
+            config
+                .get_value(" core.file_log_level ")
+                .expect("get_value should trim surrounding whitespace"),
+            Some("warn,winbrew::core::network=trace".to_string())
         );
     }
 }

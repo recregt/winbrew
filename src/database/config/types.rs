@@ -23,6 +23,9 @@ pub struct CoreConfig {
     #[serde(default = "default_log_level")]
     pub log_level: String,
 
+    #[serde(default = "default_file_log_level")]
+    pub file_log_level: String,
+
     #[serde(default = "default_true")]
     pub auto_update: bool,
 
@@ -103,6 +106,7 @@ impl Default for CoreConfig {
     fn default() -> Self {
         Self {
             log_level: default_log_level(),
+            file_log_level: default_file_log_level(),
             auto_update: default_true(),
             confirm_remove: default_true(),
             default_yes: false,
@@ -154,6 +158,10 @@ fn default_true() -> bool {
 
 fn default_log_level() -> String {
     "info".to_string()
+}
+
+fn default_file_log_level() -> String {
+    "debug,winbrew::core::network=trace".to_string()
 }
 
 fn default_download_timeout() -> u64 {

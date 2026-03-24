@@ -10,6 +10,10 @@ impl Config {
                 title: "Core".to_string(),
                 entries: vec![
                     ("log_level".to_string(), self.core.log_level.clone()),
+                    (
+                        "file_log_level".to_string(),
+                        self.core.file_log_level.clone(),
+                    ),
                     ("auto_update".to_string(), self.core.auto_update.to_string()),
                     (
                         "confirm_remove".to_string(),
@@ -148,6 +152,7 @@ impl Config {
 
         Ok(match key {
             "core.log_level" => Some(self.core.log_level.clone()),
+            "core.file_log_level" => Some(self.core.file_log_level.clone()),
             "core.auto_update" => Some(self.core.auto_update.to_string()),
             "core.confirm_remove" => Some(self.core.confirm_remove.to_string()),
             "core.default_yes" => Some(self.core.default_yes.to_string()),

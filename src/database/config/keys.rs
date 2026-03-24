@@ -21,6 +21,7 @@ fn env_override_names(key: &str) -> Vec<String> {
 
     match key {
         "core.log_level" => names.push("WINBREW_LOG_LEVEL".to_string()),
+        "core.file_log_level" => names.push("WINBREW_FILE_LOG_LEVEL".to_string()),
         "core.auto_update" => names.push("WINBREW_AUTO_UPDATE".to_string()),
         "core.confirm_remove" => names.push("WINBREW_CONFIRM_REMOVE".to_string()),
         "core.default_yes" => names.push("WINBREW_DEFAULT_YES".to_string()),

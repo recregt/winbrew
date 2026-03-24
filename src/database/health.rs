@@ -124,6 +124,10 @@ fn build_runtime_report(config: &Config) -> Result<RuntimeReport> {
                     effective_string(config, "core.log_level")?,
                 ),
                 (
+                    "file_log_level".to_string(),
+                    effective_string(config, "core.file_log_level")?,
+                ),
+                (
                     "auto_update".to_string(),
                     effective_string(config, "core.auto_update")?,
                 ),

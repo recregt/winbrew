@@ -53,10 +53,10 @@ Example:
 PackageIdentifier: Microsoft.WindowsTerminal
 PackageVersion: 1.9.1942.0
 Installers:
-	- Architecture: x64
-		InstallerType: msix
-		InstallerUrl: https://github.com/microsoft/terminal/releases/download/v1.9.1942.0/Microsoft.WindowsTerminal_1.9.1942.0_8wekyb3d8bbwe.msixbundle
-		InstallerSha256: 578D987D58B3CE5F6BF3316C6A5AECE8EB6B94DBCD1963413D81CB313D6C28D5
+  - Architecture: x64
+    InstallerType: msix
+    InstallerUrl: https://github.com/microsoft/terminal/releases/download/v1.9.1942.0/Microsoft.WindowsTerminal_1.9.1942.0_8wekyb3d8bbwe.msixbundle
+    InstallerSha256: 578D987D58B3CE5F6BF3316C6A5AECE8EB6B94DBCD1963413D81CB313D6C28D5
 ManifestType: installer
 ManifestVersion: 1.10.0
 ```
@@ -89,13 +89,34 @@ brew remove node --yes   # skip confirmation
 ```bash
 brew config list
 brew config get core.log_level
+brew config get core.file_log_level
 brew config set core.log_level debug
+brew config set core.file_log_level "debug,winbrew::core::network=trace"
 ```
 
-Config is stored in `C:\winbrew\data\winbrew.toml` and uses typed sections:
-- `core`
-- `paths`
-- `sources`
+Config is stored in `C:\winbrew\data\winbrew.toml` and it's like this:
+
+```toml
+[core]
+log_level = "info"
+file_log_level = "debug,winbrew::core::network=trace"
+
+[paths]
+root = "C:\\winbrew"
+
+[sources]
+primary = "winget"
+```
+
+> [!NOTE]
+> Logging is split across two settings:
+> - `core.log_level` controls what appears in the terminal.
+> - `core.file_log_level` controls the background log file and accepts full `EnvFilter` strings.
+
+For a quieter log file:
+```toml
+file_log_level = "warn,winbrew::core::network=trace"
+```
 
 ## License
 
