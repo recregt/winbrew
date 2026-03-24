@@ -1,5 +1,5 @@
-use anyhow::Result;
-use std::path::{Path, PathBuf};
+use anyhow::{Result, bail};
+use std::path::{Component, Path, PathBuf};
 
 use crate::core::paths;
 use crate::database;
@@ -18,6 +18,8 @@ pub struct InstallPlan {
 }
 
 pub fn build_plan(name: &str, manifest: &Manifest) -> Result<InstallPlan> {
+    validate_package_name(name)?;
+
     let install_root = install_root();
     let source = manifest
         .selected_source()
@@ -33,7 +35,7 @@ pub fn build_plan(name: &str, manifest: &Manifest) -> Result<InstallPlan> {
         source,
         cache_file,
         install_dir: install_dir.clone(),
-        backup_dir: install_dir.with_extension("backup"),
+        backup_dir: backup_dir_for(&install_dir),
         product_code: manifest
             .preferred_installer()
             .and_then(|entry| entry.product_code.clone()),
@@ -41,9 +43,15 @@ pub fn build_plan(name: &str, manifest: &Manifest) -> Result<InstallPlan> {
     })
 }
 
+pub fn backup_dir_for(install_dir: &Path) -> PathBuf {
+    install_dir.with_extension("backup")
+}
+
 pub fn install_root() -> PathBuf {
-    let config = database::Config::current();
-    PathBuf::from(config.paths.root)
+    let (root, _) = database::get_effective_value("paths.root")
+        .unwrap_or_else(|_| (database::Config::current().paths.root, "file"));
+
+    PathBuf::from(root)
 }
 
 pub fn detect_ext(url: &str) -> String {
@@ -53,7 +61,7 @@ pub fn detect_ext(url: &str) -> String {
         .extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or("exe")
-        .to_string()
+        .to_ascii_lowercase()
 }
 
 pub fn source_file_name(url: &str) -> Option<String> {
@@ -63,6 +71,30 @@ pub fn source_file_name(url: &str) -> Option<String> {
         .file_name()
         .and_then(|name| name.to_str())
         .map(|name| name.to_string())
+}
+
+fn validate_package_name(name: &str) -> Result<()> {
+    let trimmed = name.trim();
+
+    if trimmed.is_empty() {
+        bail!("invalid package name: empty value");
+    }
+
+    if trimmed
+        .chars()
+        .any(|ch| matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'))
+    {
+        bail!("invalid package name: forbidden Windows filename characters detected");
+    }
+
+    if !Path::new(trimmed)
+        .components()
+        .all(|component| matches!(component, Component::Normal(_)))
+    {
+        bail!("invalid package name: traversal characters detected");
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -151,6 +183,51 @@ mod tests {
             plan.cache_file
                 .ends_with(r"winbrew\data\cache\Microsoft.WindowsTerminal-1.21.2361.0.msi")
         );
+        assert_eq!(plan.backup_dir.parent(), plan.install_dir.parent());
+        assert_eq!(
+            plan.backup_dir.extension().and_then(|ext| ext.to_str()),
+            Some("backup")
+        );
         assert_eq!(plan.dependencies, vec!["Microsoft.VCLibs".to_string()]);
+    }
+
+    #[test]
+    fn detect_ext_normalizes_uppercase_extensions() {
+        assert_eq!(
+            detect_ext("https://example.invalid/app.MSI?download=1"),
+            "msi"
+        );
+    }
+
+    #[test]
+    fn build_plan_rejects_traversal_package_names() {
+        let manifest = manifest_with_installer(
+            "msi",
+            "https://example.invalid/WindowsTerminal.msi",
+            Some("{11111111-1111-1111-1111-111111111111}"),
+        );
+
+        let err = build_plan("..", &manifest).expect_err("plan should fail");
+
+        assert!(
+            err.to_string()
+                .contains("invalid package name: traversal characters detected")
+        );
+    }
+
+    #[test]
+    fn build_plan_rejects_windows_forbidden_filename_characters() {
+        let manifest = manifest_with_installer(
+            "msi",
+            "https://example.invalid/WindowsTerminal.msi",
+            Some("{11111111-1111-1111-1111-111111111111}"),
+        );
+
+        let err = build_plan("Microsoft:WindowsTerminal", &manifest).expect_err("plan should fail");
+
+        assert!(
+            err.to_string()
+                .contains("invalid package name: forbidden Windows filename characters detected")
+        );
     }
 }
