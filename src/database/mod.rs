@@ -8,12 +8,14 @@ use std::time::Duration;
 use crate::core::paths;
 
 mod config;
+mod health;
 mod packages;
 
 pub use config::{
     Config, ConfigSection, CoreConfig, PathsConfig, SourceConfig, SourcesConfig, config_sections,
     config_set, get_effective_value,
 };
+pub use health::{HealthReport, get_health_report};
 pub use packages::{delete_package, get_package, insert_package, list_packages, update_status};
 
 static DB_POOL: OnceLock<Pool<SqliteConnectionManager>> = OnceLock::new();

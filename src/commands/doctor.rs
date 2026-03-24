@@ -1,88 +1,43 @@
 use anyhow::Result;
-use std::path::Path;
 
-use crate::{core::paths, database, ui::Ui};
+use crate::{database, services::doctor, ui::Ui};
 
 pub fn run() -> Result<()> {
     let mut ui = Ui::new();
-    ui.page_title("Doctor");
-    ui.info("Checking database...");
-
-    let conn = database::lock_conn()?;
-    let config = database::Config::current();
-    let paths_config = config.resolved_paths();
-    let install_root = paths_config.root.clone();
-
-    ui.notice("Database reachable: yes");
-    ui.notice(format!("Database: {}", paths::db_path().to_string_lossy()));
-    ui.notice(format!(
-        "Database exists: {}",
-        if paths::db_path().exists() {
-            "yes"
-        } else {
-            "no"
-        }
-    ));
-    ui.notice("Install root source: config:paths.root");
-    ui.notice(format!("Install root: {}", install_root.to_string_lossy()));
-    ui.notice(format!(
-        "Install root exists: {}",
-        if install_root.exists() { "yes" } else { "no" }
-    ));
-    ui.notice(format!(
-        "Packages dir: {}",
-        paths_config.packages.to_string_lossy()
-    ));
+    ui.page_title("System Health Check");
+    ui.info("Inspecting environment...");
+    let report = database::get_health_report()?;
+    ui.display_key_values(&report.to_kv());
+    ui.info("");
 
     ui.info("Loading installed packages...");
+    let conn = database::lock_conn()?;
     let packages = database::list_packages(&conn)?;
-    ui.info(format!("Loaded {} package(s).", packages.len()));
-    ui.notice(format!("Installed packages: {}", packages.len()));
+    ui.info(format!("Found {} package(s). Scanning...", packages.len()));
 
-    let mut broken = Vec::new();
-    ui.info("Scanning installed packages...");
-    for (index, pkg) in packages.iter().enumerate() {
-        if index % 25 == 0 {
-            ui.info(format!(
-                "Scanning package {}/{}...",
-                index + 1,
-                packages.len()
-            ));
-        }
+    let progress = ui.progress_bar();
+    let broken = doctor::scan_packages_with_progress(&packages, &progress);
+    progress.finish_and_clear();
 
-        let install_dir = Path::new(&pkg.install_dir);
-        if !install_dir.exists() {
-            broken.push(format!(
-                "{} -> {} (missing install directory)",
-                pkg.name, pkg.install_dir
-            ));
-            continue;
-        }
+    render_results(&mut ui, broken);
 
-        if !install_dir.is_dir() {
-            broken.push(format!(
-                "{} -> {} (not a directory)",
-                pkg.name, pkg.install_dir
-            ));
-            continue;
-        }
+    Ok(())
+}
 
-        if std::fs::read_dir(install_dir).is_err() {
-            broken.push(format!("{} -> {} (unreadable)", pkg.name, pkg.install_dir));
-        }
-    }
-
+fn render_results<W: std::io::Write>(ui: &mut Ui<W>, broken: Vec<doctor::Diagnosis>) {
     ui.notice(format!("Broken installs: {}", broken.len()));
 
     if broken.is_empty() {
-        ui.success("No broken installs found.");
+        ui.success("Your Winbrew installation is healthy!");
     } else {
-        ui.notice("Broken installs:");
+        ui.warn("Found the following issues:");
         for entry in broken {
-            ui.notice(format!("  {entry}"));
+            ui.notice(format!(
+                "  - {} -> {} ({})",
+                entry.package_name, entry.install_dir, entry.issue
+            ));
         }
-        ui.notice("Health check completed with issues.");
+        ui.info("");
+        ui.info("Suggestion: Try running 'winbrew repair' or reinstalling the affected packages.");
     }
-
-    Ok(())
 }
