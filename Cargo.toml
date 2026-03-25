@@ -9,33 +9,41 @@ name = "brew"
 path = "src/main.rs"
 
 [dependencies]
+# Platform-specific
 winreg = "0.56"
-clap = { version = "4", features = ["derive"] }
-dialoguer = "0.12"
-indicatif = "0.18"
-anyhow = "1"
-dashmap = "6"
-strum = "0.28.0"
-strum_macros = "0.28.0"
-regex = "1.12.3"
-rayon = "1.11.0"
-comfy-table = "7.2.2"
-rusqlite = { version = "0.39", features = ["bundled", "unlock_notify"] }
+
+# CLI and UI
+clap = { version = "4", default-features = false, features = ["color", "derive", "error-context", "help", "std", "suggestions", "usage"] }
+dialoguer = { version = "0.12", default-features = false }
+indicatif = { version = "0.18", default-features = false, features = ["unicode-width"] }
+comfy-table = "7.2"
+console = { version = "0.16", default-features = false, features = ["std"] }
+terminal_size = "0.4"
+
+# Networking and downloads
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "native-tls"] }
+
+# Storage and configuration
+rusqlite = { version = "0.39", default-features = false, features = ["bundled", "unlock_notify"] }
+chrono = { version = "0.4", features = ["serde"] }
+hex = "0.4"
+memmap2 = "0.9"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-serde_yaml = "0.9"
-chrono = { version = "0.4", features = ["serde"] }
+serde_norway = "0.9"
 toml = "1"
-hex = "0.4"
-reqwest = { version = "0.13", features = ["blocking"] }
-memmap2 = "0.9"
-zip = "8.4.0"
-term_size = "0.3"
-console = "0.16.3"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing-appender = "0.2"
 r2d2 = "0.8"
+
+# Parsing, matching, and runtime helpers
+anyhow = "1"
+dashmap = "6"
+regex = "1.12"
+rayon = "1.11"
+strum = "0.28"
+strum_macros = "0.28"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["ansi", "env-filter", "fmt", "registry", "std"] }
+tracing-appender = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 mimalloc = "0.1"
@@ -50,8 +58,9 @@ sha2 = { version = "0.10", features = ["asm"] }
 chrono = { version = "0.4", features = ["clock"] }
 winresource = "0.1"
 
-[lints.rust]
-dead_code = "warn"
+[dev-dependencies]
+mockito = "1"
+tempfile = "3"
 
 [profile.release]
 opt-level = "z"

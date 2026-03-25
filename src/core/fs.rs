@@ -84,14 +84,21 @@ impl DownloadTarget {
         })
     }
 
-    pub fn finalize(mut self, dest: &Path) -> Result<()> {
-        self.writer.flush().context("failed to flush buffer")?;
+    pub fn finalize(self, dest: &Path) -> Result<()> {
+        let DownloadTarget {
+            mut writer,
+            temp_path,
+            ..
+        } = self;
+
+        writer.flush().context("failed to flush buffer")?;
+        drop(writer);
 
         if dest.exists() {
             fs::remove_file(dest).context("failed to replace existing destination file")?;
         }
 
-        fs::rename(&self.temp_path, dest).context("failed to finalize downloaded file")?;
+        fs::rename(&temp_path, dest).context("failed to finalize downloaded file")?;
         Ok(())
     }
 }

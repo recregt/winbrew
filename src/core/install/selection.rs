@@ -1,7 +1,7 @@
 use crate::manifest::InstallerEntry;
 use std::cmp::Ordering;
 
-pub fn select_installer<'a>(installers: &'a [InstallerEntry]) -> Option<&'a InstallerEntry> {
+pub fn select_installer(installers: &[InstallerEntry]) -> Option<&InstallerEntry> {
     select_installer_with_context(installers, &SelectionContext::current())
 }
 

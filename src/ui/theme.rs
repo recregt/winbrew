@@ -6,8 +6,8 @@ use std::sync::Arc;
 pub const DEFAULT_TABLE_WIDTH: u16 = 80;
 
 pub fn terminal_width() -> u16 {
-    term_size::dimensions()
-        .map(|(w, _)| w as u16)
+    terminal_size::terminal_size()
+        .map(|(terminal_size::Width(width), _)| width)
         .unwrap_or(DEFAULT_TABLE_WIDTH)
 }
 

@@ -2,7 +2,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use rusqlite::Connection;
 
 use serde::Deserialize;
-use serde_yaml::Value;
+use serde_norway::Value;
 
 use crate::manifest::{InstallerEntry, Manifest, ManifestInfo, Metadata, Package};
 use crate::sources::{
@@ -79,7 +79,7 @@ fn resolve_manifest_path(
 
 fn parse_winget_yaml(content: &str) -> Result<Manifest> {
     let raw: WingetManifest =
-        serde_yaml::from_str(content).context("failed to parse winget yaml")?;
+        serde_norway::from_str(content).context("failed to parse winget yaml")?;
 
     let manifest_type = raw
         .manifest_type
