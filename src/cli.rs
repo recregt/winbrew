@@ -33,6 +33,9 @@ pub enum Command {
 
         #[arg(long, short = 'v', value_name = "VERSION")]
         version: Option<String>,
+
+        #[arg(long, value_name = "INDEX")]
+        select: Option<usize>,
     },
 
     /// Remove a package and its tracked files

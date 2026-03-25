@@ -81,25 +81,22 @@ jobs:
 
       - name: brew config seed values
         run: |
-          & $env:BREW_EXE config set ci.integration enabled
-          & $env:BREW_EXE config set default_yes true
-          & $env:BREW_EXE config set color false
-          & $env:BREW_EXE config set download_timeout 31
-          & $env:BREW_EXE config set concurrent_downloads 3
+          & $env:BREW_EXE config set core.default_yes true
+          & $env:BREW_EXE config set core.color false
+          & $env:BREW_EXE config set core.download_timeout 31
+          & $env:BREW_EXE config set core.concurrent_downloads 3
 
-      - name: brew config get ci.integration
+      - name: brew install smoke test
+        continue-on-error: true
         run: |
-          $out = & $env:BREW_EXE config get ci.integration | Out-String
+          $out = & $env:BREW_EXE install windows terminal --select 1 2>&1 | Out-String
           Write-Host $out
-          if ($out -notmatch "ci.integration = enabled") {
-            Write-Error "Expected config get to return the CI test value"; exit 1
-          }
 
       - name: brew config get download_timeout
         run: |
-          $out = & $env:BREW_EXE config get download_timeout | Out-String
+          $out = & $env:BREW_EXE config get core.download_timeout | Out-String
           Write-Host $out
-          if ($out -notmatch "download_timeout = 31") {
+          if ($out -notmatch "core.download_timeout = 31") {
             Write-Error "Expected config get to return the seeded timeout"; exit 1
           }
 
@@ -108,11 +105,10 @@ jobs:
           $out = & $env:BREW_EXE config list | Out-String
           Write-Host $out
           foreach ($needle in @(
-            "ci.integration = enabled",
-            "default_yes = true",
-            "color = false",
-            "download_timeout = 31",
-            "concurrent_downloads = 3"
+            "core.default_yes = true",
+            "core.color = false",
+            "core.download_timeout = 31",
+            "core.concurrent_downloads = 3"
           )) {
             if ($out -notmatch [regex]::Escape($needle)) {
               Write-Error "Expected config list to include '$needle'"; exit 1

@@ -43,6 +43,7 @@ fn parse_install_with_single_word_query() {
         Command::Install {
             query: vec!["ripgrep".to_string()],
             version: None,
+            select: None,
         }
     );
 }
@@ -62,6 +63,21 @@ fn parse_install_with_version_flag() {
         Command::Install {
             query: vec!["Microsoft.WindowsTerminal".to_string()],
             version: Some("1.9.1942.0".to_string()),
+            select: None,
+        }
+    );
+}
+
+#[test]
+fn parse_install_with_select_flag() {
+    let cli = Cli::parse_from(["brew", "install", "windows", "terminal", "--select", "1"]);
+
+    assert_eq!(
+        cli.command,
+        Command::Install {
+            query: vec!["windows".to_string(), "terminal".to_string()],
+            version: None,
+            select: Some(1),
         }
     );
 }
@@ -75,6 +91,7 @@ fn parse_install_with_multi_word_query() {
         Command::Install {
             query: vec!["windows".to_string(), "terminal".to_string()],
             version: None,
+            select: None,
         }
     );
 }

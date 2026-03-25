@@ -73,6 +73,7 @@ brew install Microsoft.WindowsTerminal --version 1.9.1942.0
 ```
 
 If multiple packages match the query, WinBrew shows a numbered list and asks you to pick one.
+You can also preselect a match non-interactively with `--select 1`.
 
 ### List installed packages
 ```bash
@@ -127,7 +128,7 @@ manifest_path_template = "manifests/${partition}/${publisher}/${package}/${versi
 enabled = true
 ```
 
-> [!NOTE]
+> [!TIP]
 > Logging is split across two settings:
 > - core.log_level controls what appears in the terminal.
 > - core.file_log_level controls the background log file and accepts full EnvFilter strings.
