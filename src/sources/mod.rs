@@ -17,10 +17,24 @@ pub fn active_source() -> Result<Box<dyn SourceAdapter + Send + Sync>> {
 }
 
 pub(crate) fn winget_registry_url() -> String {
-    database::Config::current().sources.winget.url
+    let config = database::Config::current();
+    config
+        .effective_value("sources.winget.url")
+        .map(|(value, _)| value)
+        .unwrap_or(config.sources.winget.url)
 }
 
 pub(crate) fn winget_repo_slug() -> Option<String> {
+    let config = database::Config::current();
+
+    if let Ok(Some((value, _))) = config.effective_optional_value("sources.winget.repo_slug") {
+        let trimmed = value.trim();
+
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+
     let url = winget_registry_url();
     let trimmed = url.strip_prefix("https://raw.githubusercontent.com/")?;
     let mut parts = trimmed.split('/');
@@ -29,24 +43,36 @@ pub(crate) fn winget_repo_slug() -> Option<String> {
     Some(format!("{owner}/{repo}"))
 }
 
+pub(crate) fn winget_api_base() -> String {
+    let config = database::Config::current();
+    config
+        .effective_value("sources.winget.api_base")
+        .map(|(value, _)| value)
+        .unwrap_or(config.sources.winget.api_base)
+}
+
 pub(crate) fn winget_manifest_format() -> String {
-    database::Config::current().sources.winget.format
+    let config = database::Config::current();
+    config
+        .effective_value("sources.winget.format")
+        .map(|(value, _)| value)
+        .unwrap_or(config.sources.winget.format)
 }
 
 pub(crate) fn winget_manifest_kind() -> String {
-    database::Config::current()
-        .sources
-        .winget
-        .manifest_kind
-        .clone()
+    let config = database::Config::current();
+    config
+        .effective_value("sources.winget.manifest_kind")
+        .map(|(value, _)| value)
+        .unwrap_or(config.sources.winget.manifest_kind)
 }
 
 pub(crate) fn winget_manifest_path_template() -> String {
-    database::Config::current()
-        .sources
-        .winget
-        .manifest_path_template
-        .clone()
+    let config = database::Config::current();
+    config
+        .effective_value("sources.winget.manifest_path_template")
+        .map(|(value, _)| value)
+        .unwrap_or(config.sources.winget.manifest_path_template)
 }
 
 fn resolve_source() -> Result<Box<dyn SourceAdapter + Send + Sync>> {

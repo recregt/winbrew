@@ -1,0 +1,57 @@
+#[path = "common/mod.rs"]
+mod common;
+
+use anyhow::Result;
+use common::{TestEnvVar, env_lock};
+use tempfile::tempdir;
+use winbrew::database;
+use winbrew::models::{Package, PackageStatus};
+
+fn sample_package(name: &str, status: PackageStatus) -> Package {
+    Package {
+        name: name.to_string(),
+        version: "1.0.0".to_string(),
+        kind: "portable".to_string(),
+        install_dir: format!(r"C:\\winbrew\\packages\\{name}"),
+        product_code: Some("{00000000-0000-0000-0000-000000000000}".to_string()),
+        dependencies: vec!["dep-a".to_string(), "dep-b".to_string()],
+        status,
+        installed_at: "2026-03-24T00:00:00Z".to_string(),
+    }
+}
+
+#[test]
+fn package_crud_round_trip() -> Result<()> {
+    let _guard = env_lock();
+    let temp_root = tempdir()?;
+    let _root_env = TestEnvVar::set("WINBREW_ROOT", temp_root.path().to_string_lossy().as_ref());
+
+    let conn = database::get_conn()?;
+    let package = sample_package("Contoso.RoundTrip", PackageStatus::Installing);
+
+    database::insert_package(&conn, &package)?;
+
+    let stored = database::get_package(&conn, &package.name)?.expect("package should exist");
+    assert_eq!(stored.name, package.name);
+    assert_eq!(stored.version, package.version);
+    assert_eq!(stored.kind, package.kind);
+    assert_eq!(stored.install_dir, package.install_dir);
+    assert_eq!(stored.product_code, package.product_code);
+    assert_eq!(stored.dependencies, package.dependencies);
+    assert_eq!(stored.status, PackageStatus::Installing);
+
+    assert!(database::list_packages(&conn)?.is_empty());
+
+    database::update_status(&conn, &package.name, PackageStatus::Ok)?;
+
+    let listed = database::list_packages(&conn)?;
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].name, package.name);
+    assert_eq!(listed[0].status, PackageStatus::Ok);
+
+    assert!(database::delete_package(&conn, &package.name)?);
+    assert!(database::get_package(&conn, &package.name)?.is_none());
+    assert!(!database::delete_package(&conn, &package.name)?);
+
+    Ok(())
+}

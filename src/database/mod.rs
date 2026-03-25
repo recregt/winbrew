@@ -12,8 +12,8 @@ mod health;
 mod packages;
 
 pub use config::{
-    Config, ConfigSection, ConfigSource, CoreConfig, PathsConfig, SourceConfig, SourcesConfig,
-    config_sections, config_set, get_effective_value,
+    Config, ConfigEnv, ConfigSection, ConfigSource, CoreConfig, PathsConfig, SourceConfig,
+    SourcesConfig, config_sections, config_set, get_effective_value,
 };
 pub use health::{
     HealthReport, ReportSection, RuntimeReport, get_health_report, get_runtime_report,

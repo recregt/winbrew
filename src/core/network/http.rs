@@ -18,18 +18,21 @@ pub struct NetworkSettings {
 impl NetworkSettings {
     pub fn current() -> Self {
         let config = database::Config::current();
-        let timeout_secs = database::get_effective_value("core.download_timeout")
+        let timeout_secs = config
+            .effective_value("core.download_timeout")
             .ok()
             .and_then(|(value, _)| value.parse::<u64>().ok())
             .unwrap_or(config.core.download_timeout);
-        let proxy_url = database::get_effective_value("core.proxy")
+        let proxy_url = config
+            .effective_value("core.proxy")
             .ok()
             .and_then(|(value, _)| if value.is_empty() { None } else { Some(value) })
-            .or(config.core.proxy);
-        let github_token = database::get_effective_value("core.github_token")
+            .or_else(|| config.core.proxy.clone());
+        let github_token = config
+            .effective_value("core.github_token")
             .ok()
             .and_then(|(value, _)| if value.is_empty() { None } else { Some(value) })
-            .or(config.core.github_token);
+            .or_else(|| config.core.github_token.clone());
 
         Self {
             timeout_secs,

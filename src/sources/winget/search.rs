@@ -4,7 +4,9 @@ use serde::Deserialize;
 use crate::core::network::http::{self, NetworkSettings};
 use crate::manifest::Manifest;
 use crate::models::PackageCandidate;
-use crate::sources::{winget_manifest_format, winget_registry_url, winget_repo_slug};
+use crate::sources::{
+    winget_api_base, winget_manifest_format, winget_registry_url, winget_repo_slug,
+};
 
 use super::manifest::manifest_url_for;
 use super::parse_manifest;
@@ -37,7 +39,7 @@ fn search_via_code_search(query: &str) -> Result<Option<Vec<PackageCandidate>>> 
     })?;
 
     let search_url = reqwest::Url::parse_with_params(
-        "https://api.github.com/search/code",
+        &format!("{}/search/code", winget_api_base().trim_end_matches('/')),
         [
             ("q", build_code_search_query(&slug, query)),
             ("per_page", MAX_CANDIDATES.to_string()),
@@ -73,7 +75,10 @@ fn search_via_contents(query: &str) -> Result<Vec<PackageCandidate>> {
     let settings = NetworkSettings::current();
     let client = http::build_client_with(&settings)?;
     let listing_url = reqwest::Url::parse_with_params(
-        "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests",
+        &format!(
+            "{}/repos/microsoft/winget-pkgs/contents/manifests",
+            winget_api_base().trim_end_matches('/')
+        ),
         [("ref", DEFAULT_BRANCH)],
     )
     .context("failed to build winget contents URL")?;

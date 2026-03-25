@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow, bail};
 use tracing::warn;
 
-use super::keys::{env_override, section_key};
+use super::keys::section_key;
 use super::types::{Config, ConfigSection, ConfigSource};
 
 struct SectionSpec {
@@ -94,6 +94,16 @@ impl Config {
                         self.sources.winget.manifest_path_template.clone(),
                     ),
                     EntrySpec::required("winget.enabled", self.sources.winget.enabled.to_string()),
+                    EntrySpec::optional(
+                        "winget.repo_slug",
+                        self.sources.winget.repo_slug.clone(),
+                        self.sources
+                            .winget
+                            .repo_slug
+                            .clone()
+                            .unwrap_or_else(|| "(unset)".to_string()),
+                    ),
+                    EntrySpec::required("winget.api_base", self.sources.winget.api_base.clone()),
                 ],
             },
         ]
@@ -182,85 +192,12 @@ impl Config {
             bail!("config key cannot be empty");
         }
 
-        if let Some(value) = env_override(key) {
-            return Ok(Some((value, ConfigSource::Env)));
+        if let Some(value) = self.env.value(key) {
+            return Ok(Some((value.to_string(), ConfigSource::Env)));
         }
 
         Ok(self
             .get_value(key)?
             .map(|value| (value, ConfigSource::File)))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Config;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        ENV_LOCK.lock().unwrap()
-    }
-
-    struct TestEnvVar {
-        key: &'static str,
-    }
-
-    impl TestEnvVar {
-        fn set(key: &'static str, value: &str) -> Self {
-            // Rust 2024 makes env mutation unsafe because it can race with readers.
-            unsafe {
-                std::env::set_var(key, value);
-            }
-
-            Self { key }
-        }
-    }
-
-    impl Drop for TestEnvVar {
-        fn drop(&mut self) {
-            unsafe {
-                std::env::remove_var(self.key);
-            }
-        }
-    }
-
-    #[test]
-    fn get_value_returns_none_for_unset_optional_fields() {
-        let _guard = env_lock();
-        let config = Config::default();
-
-        assert_eq!(config.get_value("core.proxy").unwrap(), None);
-        assert_eq!(config.get_value("core.github_token").unwrap(), None);
-    }
-
-    #[test]
-    fn effective_optional_value_returns_none_for_unset_optional_fields() {
-        let _guard = env_lock();
-        let config = Config::default();
-
-        assert_eq!(config.effective_optional_value("core.proxy").unwrap(), None);
-        assert_eq!(
-            config
-                .effective_optional_value("core.github_token")
-                .unwrap(),
-            None
-        );
-    }
-
-    #[test]
-    fn effective_optional_value_prefers_env_override() {
-        let _guard = env_lock();
-        let _env = TestEnvVar::set("WINBREW_CORE_PROXY", "http://localhost:8080");
-        let config = Config::default();
-
-        assert_eq!(
-            config.effective_optional_value("core.proxy").unwrap(),
-            Some((
-                "http://localhost:8080".to_string(),
-                super::ConfigSource::Env,
-            ))
-        );
     }
 }

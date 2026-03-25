@@ -41,24 +41,26 @@ where
     F: FnMut(u64, u64),
 {
     let mut response = send_request(settings, url, dest)?;
-    let mut target = open_target(dest, &response)?;
-    let mut temp_guard = TempFileGuard::new(&target.temp_path);
+    let mut temp_guard = TempFileGuard::new(dest.with_extension("part"));
 
-    if target.existing_size > 0 {
-        on_progress(target.existing_size, target.total_size);
+    {
+        let mut target = open_target(dest, &response)?;
+
+        if target.existing_size > 0 {
+            on_progress(target.existing_size, target.total_size);
+        }
+
+        let hasher = stream_response(
+            &mut response,
+            &mut target,
+            expected_checksum,
+            &mut on_progress,
+        )?;
+
+        verify_download(&target, hasher, expected_checksum)?;
+
+        target.finalize(dest)?;
+        temp_guard.keep();
+        Ok(())
     }
-
-    let hasher = stream_response(
-        &mut response,
-        &mut target,
-        expected_checksum,
-        &mut on_progress,
-    )?;
-
-    verify_download(&target, hasher, expected_checksum)?;
-
-    target.finalize(dest)?;
-    temp_guard.keep();
-
-    Ok(())
 }

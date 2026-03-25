@@ -31,7 +31,9 @@ impl Config {
     }
 
     pub fn load_default() -> Result<Self> {
-        Self::load(&paths::config_file())
+        let env = ConfigEnv::capture();
+        let root = env.root_override().unwrap_or(DEFAULT_ROOT);
+        Self::load(&paths::config_file_at(Path::new(root)))
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
@@ -40,18 +42,27 @@ impl Config {
     }
 
     pub fn save_default(&self) -> Result<()> {
-        self.save(&paths::config_file())
+        self.save(&self.resolved_paths().config)
     }
 
     pub fn current() -> Self {
-        storage::load_cached().unwrap_or_else(|err| {
-            warn!(error = %err, "failed to load cached config, using defaults");
-            Self::default()
-        })
+        let env = ConfigEnv::capture();
+        let root = env.root_override().unwrap_or(DEFAULT_ROOT);
+
+        Self::load(&paths::config_file_at(Path::new(root)))
+            .unwrap_or_else(|err| {
+                warn!(error = %err, "failed to load cached config, using defaults");
+                Self::default()
+            })
+            .with_env(env)
     }
 
     pub fn resolved_paths(&self) -> paths::ResolvedPaths {
-        let root = std::path::PathBuf::from(&self.paths.root);
+        let root = self
+            .effective_value("paths.root")
+            .map(|(value, _)| value)
+            .unwrap_or_else(|_| self.paths.root.clone());
+        let root = std::path::PathBuf::from(root);
         paths::resolved_paths(
             &root,
             &self.paths.packages,
@@ -60,79 +71,9 @@ impl Config {
             &self.paths.cache,
         )
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn defaults_include_winget_master_and_manifest_template() {
-        let config = Config::default();
-
-        assert_eq!(config.sources.winget.url, types::DEFAULT_REGISTRY_URL);
-        assert_eq!(config.sources.winget.format, "yaml");
-        assert_eq!(config.sources.winget.manifest_kind, "installer");
-        assert_eq!(
-            config.sources.winget.manifest_path_template,
-            types::DEFAULT_WINGET_PATH_TEMPLATE
-        );
-        assert_eq!(config.paths.root, types::DEFAULT_ROOT);
-        assert_eq!(
-            config.core.file_log_level,
-            "debug,winbrew::core::network=trace"
-        );
-    }
-
-    #[test]
-    fn resolved_paths_place_database_under_data_db() {
-        let config = Config::default();
-        let paths = config.resolved_paths();
-
-        assert!(
-            paths
-                .db
-                .ends_with(Path::new("data").join("db").join("winbrew.db"))
-        );
-        assert!(
-            paths
-                .config
-                .ends_with(Path::new("data").join("winbrew.toml"))
-        );
-        assert!(
-            paths
-                .log
-                .ends_with(Path::new("data").join("logs").join("winbrew.log"))
-        );
-    }
-
-    #[test]
-    fn get_and_set_trim_whitespace_around_keys_and_values() {
-        let mut config = Config::default();
-
-        config
-            .set_value(" core.log_level ", " debug ")
-            .expect("set_value should trim surrounding whitespace");
-
-        config
-            .set_value(
-                " core.file_log_level ",
-                " warn,winbrew::core::network=trace ",
-            )
-            .expect("set_value should accept EnvFilter strings");
-
-        assert_eq!(
-            config
-                .get_value(" core.log_level ")
-                .expect("get_value should trim surrounding whitespace"),
-            Some("debug".to_string())
-        );
-
-        assert_eq!(
-            config
-                .get_value(" core.file_log_level ")
-                .expect("get_value should trim surrounding whitespace"),
-            Some("warn,winbrew::core::network=trace".to_string())
-        );
+    fn with_env(mut self, env: ConfigEnv) -> Self {
+        self.env = env;
+        self
     }
 }

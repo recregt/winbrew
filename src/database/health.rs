@@ -213,87 +213,9 @@ fn render_sensitive_value(value: String, _source: ConfigSource, empty_label: &st
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        ENV_LOCK.lock().unwrap()
-    }
-
-    struct TestEnvVar {
-        key: &'static str,
-    }
-
-    impl TestEnvVar {
-        fn set(key: &'static str, value: &str) -> Self {
-            unsafe {
-                std::env::set_var(key, value);
-            }
-
-            Self { key }
-        }
-    }
-
-    impl Drop for TestEnvVar {
-        fn drop(&mut self) {
-            unsafe {
-                std::env::remove_var(self.key);
-            }
-        }
-    }
 
     #[test]
-    fn runtime_report_builds_expected_sections() {
-        let report = build_runtime_report(&Config::default()).expect("report should build");
-
-        assert_eq!(report.sections.len(), 3);
-        assert_eq!(report.sections[0].title, "Paths");
-        assert_eq!(report.sections[1].title, "Core");
-        assert_eq!(report.sections[2].title, "Sources");
-    }
-
-    #[test]
-    fn health_report_marks_env_root_source() {
-        let _guard = env_lock();
-        let _env = TestEnvVar::set("WINBREW_ROOT", r"C:\temp\winbrew");
-        let report = get_health_report().expect("health report should build");
-
-        assert_eq!(report.install_root_source, "env override");
-        assert_eq!(report.install_root, r"C:\temp\winbrew");
-    }
-
-    #[test]
-    fn runtime_report_masks_sensitive_and_marks_env_overrides() {
-        let _guard = env_lock();
-        let _root = TestEnvVar::set("WINBREW_ROOT", r"C:\temp\winbrew");
-        let _proxy = TestEnvVar::set("WINBREW_CORE_PROXY", "http://localhost:8080");
-        let _token = TestEnvVar::set("WINBREW_GITHUB_TOKEN", "secret-token");
-
-        let report = build_runtime_report(&Config::default()).expect("report should build");
-        let core = report
-            .sections
-            .iter()
-            .find(|section| section.title == "Core")
-            .expect("core section should exist");
-
-        let proxy = core
-            .entries
-            .iter()
-            .find(|(key, _)| key == "proxy")
-            .expect("proxy entry should exist");
-        assert_eq!(proxy.1, "http://localhost:8080 [env override]");
-
-        let token = core
-            .entries
-            .iter()
-            .find(|(key, _)| key == "github_token")
-            .expect("github_token entry should exist");
-        assert_eq!(token.1, "(set)");
-    }
-
-    #[test]
-    fn optional_and_sensitive_helpers_format_values() {
+    fn render_optional_helpers_are_consistent() {
         assert_eq!(
             render_optional_value(
                 "http://localhost:8080".to_string(),

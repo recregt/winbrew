@@ -3,21 +3,8 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process;
-use std::sync::{Mutex, OnceLock};
 
 use super::types::{Config, ConfigSection};
-
-static CONFIG_CACHE: OnceLock<Mutex<Option<Config>>> = OnceLock::new();
-
-fn cache() -> &'static Mutex<Option<Config>> {
-    CONFIG_CACHE.get_or_init(|| Mutex::new(None))
-}
-
-fn lock_cache() -> Result<std::sync::MutexGuard<'static, Option<Config>>> {
-    cache()
-        .lock()
-        .map_err(|_| anyhow::anyhow!("config cache lock poisoned"))
-}
 
 pub(crate) fn atomic_write(path: &Path, contents: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
@@ -39,35 +26,18 @@ pub(crate) fn atomic_write(path: &Path, contents: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn load_cached() -> Result<Config> {
-    let mut guard = lock_cache()?;
-
-    if let Some(config) = guard.as_ref() {
-        return Ok(config.clone());
-    }
-
-    let config = Config::load_default()?;
-    *guard = Some(config.clone());
-    Ok(config)
-}
-
 pub fn config_set(key: &str, value: &str) -> Result<()> {
-    let mut guard = lock_cache()?;
-    let mut config = match guard.as_ref() {
-        Some(current) => current.clone(),
-        None => Config::load_default()?,
-    };
+    let mut config = Config::load_default()?;
 
     config.set_value(key, value)?;
     config.save_default()?;
-    *guard = Some(config);
     Ok(())
 }
 
 pub fn config_sections() -> Result<Vec<ConfigSection>> {
-    load_cached()?.effective_sections()
+    Config::current().effective_sections()
 }
 
 pub fn get_effective_value(key: &str) -> Result<(String, super::types::ConfigSource)> {
-    load_cached()?.effective_value(key)
+    Config::current().effective_value(key)
 }

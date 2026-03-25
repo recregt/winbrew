@@ -101,6 +101,16 @@ pub static KEYS: &[KeyDef] = &[
         validator: None,
     },
     KeyDef {
+        key: "sources.winget.repo_slug",
+        env_aliases: &["WINBREW_WINGET_REPO_SLUG"],
+        validator: None,
+    },
+    KeyDef {
+        key: "sources.winget.api_base",
+        env_aliases: &["WINBREW_GITHUB_API_BASE", "WINBREW_WINGET_API_BASE"],
+        validator: None,
+    },
+    KeyDef {
         key: "sources.winget.url",
         env_aliases: &["WINBREW_REGISTRY_URL"],
         validator: None,

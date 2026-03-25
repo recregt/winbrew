@@ -1,10 +1,6 @@
-use std::env;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::OnceLock;
-
-const DEFAULT_ROOT: &str = r"C:\winbrew";
 
 #[derive(Debug, Clone)]
 pub struct ResolvedPaths {
@@ -18,17 +14,12 @@ pub struct ResolvedPaths {
     pub log: PathBuf,
 }
 
-// Calculates the base directory exactly ONCE and caches it globally.
-pub fn base_dir() -> &'static PathBuf {
-    static BASE_DIR: OnceLock<PathBuf> = OnceLock::new();
+pub fn config_file_at(root: &Path) -> PathBuf {
+    root.join("data").join("winbrew.toml")
+}
 
-    BASE_DIR.get_or_init(|| {
-        env::var("WINBREW_ROOT")
-            .ok()
-            .filter(|v| !v.trim().is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(DEFAULT_ROOT))
-    })
+pub fn base_dir() -> PathBuf {
+    crate::database::Config::current().resolved_paths().root
 }
 
 pub fn packages_dir() -> PathBuf {
@@ -44,7 +35,7 @@ pub fn install_root(value: Option<&str>) -> PathBuf {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
-        .unwrap_or_else(|| base_dir().clone())
+        .unwrap_or_else(base_dir)
 }
 
 pub fn package_dir(name: &str) -> PathBuf {
@@ -72,7 +63,7 @@ pub fn db_path() -> PathBuf {
 }
 
 pub fn config_file() -> PathBuf {
-    base_dir().join("data").join("winbrew.toml")
+    config_file_at(&base_dir())
 }
 
 pub fn log_dir() -> PathBuf {
@@ -153,5 +144,5 @@ pub fn install_root_from_package_dir(install_dir: &Path) -> PathBuf {
         .parent()
         .and_then(|path| path.parent())
         .map(PathBuf::from)
-        .unwrap_or_else(|| base_dir().clone())
+        .unwrap_or_else(base_dir)
 }

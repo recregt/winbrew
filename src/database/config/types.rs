@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+
+use super::keys::env_override;
+use super::registry;
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_REGISTRY_URL: &str =
@@ -16,6 +20,36 @@ pub struct Config {
 
     #[serde(default)]
     pub sources: SourcesConfig,
+
+    #[serde(skip, default)]
+    pub env: ConfigEnv,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ConfigEnv {
+    values: HashMap<String, String>,
+}
+
+impl ConfigEnv {
+    pub fn capture() -> Self {
+        let mut values = HashMap::new();
+
+        for def in registry::KEYS {
+            if let Some(value) = env_override(def.key) {
+                values.insert(def.key.to_string(), value);
+            }
+        }
+
+        Self { values }
+    }
+
+    pub fn value(&self, key: &str) -> Option<&str> {
+        self.values.get(key).map(String::as_str)
+    }
+
+    pub fn root_override(&self) -> Option<&str> {
+        self.value("paths.root")
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,6 +114,12 @@ pub struct SourcesConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceConfig {
+    #[serde(default)]
+    pub repo_slug: Option<String>,
+
+    #[serde(default = "default_github_api_base")]
+    pub api_base: String,
+
     #[serde(default = "default_registry_url")]
     pub url: String,
 
@@ -149,6 +189,8 @@ impl Default for SourcesConfig {
 impl Default for SourceConfig {
     fn default() -> Self {
         Self {
+            repo_slug: None,
+            api_base: default_github_api_base(),
             url: default_registry_url(),
             format: default_source_format(),
             manifest_kind: default_manifest_kind(),
@@ -207,6 +249,10 @@ fn default_primary_source() -> String {
 
 fn default_registry_url() -> String {
     DEFAULT_REGISTRY_URL.to_string()
+}
+
+fn default_github_api_base() -> String {
+    "https://api.github.com".to_string()
 }
 
 fn default_source_format() -> String {
