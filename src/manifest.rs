@@ -98,7 +98,8 @@ pub struct Manifest {
 
     pub package: Package,
 
-    pub source: Source,
+    #[serde(default)]
+    pub source: Option<Source>,
 
     #[serde(default)]
     pub installers: Vec<InstallerEntry>,
@@ -118,38 +119,6 @@ impl Manifest {
     pub fn from_file(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path).context("failed to read manifest file")?;
         Self::parse(&content)
-    }
-
-    pub fn preferred_installer(&self) -> Option<&InstallerEntry> {
-        let preferred_arch = current_architecture();
-
-        self.installers
-            .iter()
-            .find(|installer| installer.architecture.eq_ignore_ascii_case(preferred_arch))
-            .or_else(|| self.installers.first())
-    }
-
-    pub fn selected_source(&self) -> Option<Source> {
-        self.preferred_installer().map(|installer| Source {
-            url: installer.installer_url.clone(),
-            checksum: installer.installer_sha256.clone(),
-            kind: installer.installer_type.clone(),
-        })
-    }
-
-    pub fn validate_download_kind(&self) -> Result<()> {
-        self.selected_source()
-            .unwrap_or_else(|| self.source.clone())
-            .validate_download_kind()
-    }
-}
-
-fn current_architecture() -> &'static str {
-    match std::env::consts::ARCH {
-        "x86_64" => "x64",
-        "x86" => "x86",
-        "aarch64" => "arm64",
-        other => other,
     }
 }
 
@@ -177,7 +146,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn empty_installer_list_keeps_selected_source_empty() {
+    fn empty_installer_list_keeps_source_intact() {
         let manifest = Manifest {
             manifest: ManifestInfo::default(),
             package: Package {
@@ -192,17 +161,19 @@ mod tests {
                 tags: vec![],
                 dependencies: vec![],
             },
-            source: Source {
+            source: Some(Source {
                 url: "https://example.invalid/app.exe".to_string(),
                 checksum: "abc123".to_string(),
                 kind: "portable".to_string(),
-            },
+            }),
             installers: vec![],
             metadata: None,
         };
 
-        assert!(manifest.preferred_installer().is_none());
-        assert!(manifest.selected_source().is_none());
+        assert_eq!(
+            manifest.source.as_ref().map(|source| source.kind.as_str()),
+            Some("portable")
+        );
     }
 
     #[test]

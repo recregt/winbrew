@@ -81,6 +81,17 @@ fn parse_winget_yaml(content: &str) -> Result<Manifest> {
     let raw: WingetManifest =
         serde_yaml::from_str(content).context("failed to parse winget yaml")?;
 
+    let manifest_type = raw
+        .manifest_type
+        .as_deref()
+        .unwrap_or("singleton")
+        .trim()
+        .to_ascii_lowercase();
+
+    if !matches!(manifest_type.as_str(), "installer" | "singleton") {
+        bail!("SKIP_MANIFEST: unsupported winget manifest type: {manifest_type}");
+    }
+
     let installers = normalize_installers(&raw)?;
     let dependencies = extract_dependencies(raw.dependencies.as_ref());
 
@@ -97,10 +108,11 @@ fn parse_winget_yaml(content: &str) -> Result<Manifest> {
         dependencies,
     };
 
-    let source = installers
-        .first()
-        .ok_or_else(|| anyhow!("winget manifest must contain at least one installer"))?
-        .to_source();
+    if installers.is_empty() {
+        return Err(anyhow!(
+            "winget manifest must contain at least one installer"
+        ));
+    }
 
     Ok(Manifest {
         manifest: ManifestInfo {
@@ -108,7 +120,7 @@ fn parse_winget_yaml(content: &str) -> Result<Manifest> {
             manifest_version: raw.manifest_version.unwrap_or_else(|| "1.0.0".to_string()),
         },
         package,
-        source,
+        source: None,
         installers,
         metadata: raw.metadata.map(|metadata| Metadata {
             tags: metadata.tags,
@@ -150,8 +162,8 @@ mod tests {
             manifest.package.description.as_deref(),
             Some("Open source terminal application for developers.")
         );
-        assert_eq!(manifest.source.kind, "msix");
         assert_eq!(manifest.installers.len(), 1);
+        assert_eq!(manifest.installers[0].to_source().kind, "msix");
         assert_eq!(
             manifest.installers[0].display_name.as_deref(),
             Some("Windows Terminal")
@@ -174,9 +186,12 @@ mod tests {
             Some("Windows Terminal")
         );
         assert_eq!(manifest.package.version, "1.21.2361.0");
-        assert_eq!(manifest.source.kind, "msi");
         assert_eq!(manifest.installers.len(), 1);
         assert_eq!(manifest.installers[0].installer_type, "msi");
+        assert_eq!(
+            manifest.installers[0].to_source().url,
+            "https://example.invalid/WindowsTerminal.msi"
+        );
         assert_eq!(
             manifest.installers[0].product_code.as_deref(),
             Some("{11111111-1111-1111-1111-111111111111}")
@@ -330,7 +345,7 @@ fn normalize_installers(raw: &WingetManifest) -> Result<Vec<InstallerEntry>> {
             let architecture = installer
                 .architecture
                 .or_else(|| installer_defaults.architecture.clone())
-                .ok_or_else(|| anyhow!("winget installer entry is missing Architecture"))?;
+                .unwrap_or_else(|| "neutral".to_string());
 
             let installer_type = installer
                 .installer_type

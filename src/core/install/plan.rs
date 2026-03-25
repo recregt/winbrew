@@ -1,9 +1,10 @@
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use std::path::{Component, Path, PathBuf};
 
+use crate::core::install::selection;
 use crate::core::paths;
 use crate::database;
-use crate::manifest::{Manifest, Source};
+use crate::manifest::{InstallerEntry, Manifest, Source};
 
 #[derive(Debug, Clone)]
 pub struct InstallPlan {
@@ -21,9 +22,11 @@ pub fn build_plan(name: &str, manifest: &Manifest) -> Result<InstallPlan> {
     validate_package_name(name)?;
 
     let install_root = install_root();
-    let source = manifest
-        .selected_source()
-        .unwrap_or_else(|| manifest.source.clone());
+    let selected_installer = selection::select_installer(&manifest.installers);
+    let source = selected_installer
+        .map(InstallerEntry::to_source)
+        .or_else(|| manifest.source.clone())
+        .ok_or_else(|| anyhow!("manifest must define a source or installer"))?;
     let package_version = manifest.package.version.clone();
     let ext = detect_ext(&source.url);
     let cache_file = paths::cache_file(name, &package_version, &ext);
@@ -36,9 +39,7 @@ pub fn build_plan(name: &str, manifest: &Manifest) -> Result<InstallPlan> {
         cache_file,
         install_dir: install_dir.clone(),
         backup_dir: backup_dir_for(&install_dir),
-        product_code: manifest
-            .preferred_installer()
-            .and_then(|entry| entry.product_code.clone()),
+        product_code: selected_installer.and_then(|entry| entry.product_code.clone()),
         dependencies: manifest.package.dependencies.clone(),
     })
 }
@@ -125,11 +126,7 @@ mod tests {
                 tags: vec![],
                 dependencies: vec!["Microsoft.VCLibs".to_string()],
             },
-            source: Source {
-                url: url.to_string(),
-                checksum: "abc123".to_string(),
-                kind: installer_type.to_string(),
-            },
+            source: None,
             installers: vec![InstallerEntry {
                 architecture: "x64".to_string(),
                 installer_type: installer_type.to_string(),
@@ -142,6 +139,31 @@ mod tests {
                 display_name: None,
                 upgrade_behavior: None,
             }],
+            metadata: None,
+        }
+    }
+
+    fn manifest_with_source(url: &str, kind: &str) -> Manifest {
+        Manifest {
+            manifest: ManifestInfo::default(),
+            package: Package {
+                name: "Microsoft.WindowsTerminal".to_string(),
+                version: "1.21.2361.0".to_string(),
+                package_name: Some("Windows Terminal".to_string()),
+                description: Some("Terminal".to_string()),
+                publisher: Some("Microsoft Corporation".to_string()),
+                homepage: None,
+                license: None,
+                moniker: None,
+                tags: vec![],
+                dependencies: vec![],
+            },
+            source: Some(Source {
+                url: url.to_string(),
+                checksum: "abc123".to_string(),
+                kind: kind.to_string(),
+            }),
+            installers: vec![],
             metadata: None,
         }
     }
@@ -193,6 +215,21 @@ mod tests {
             Some("backup")
         );
         assert_eq!(plan.dependencies, vec!["Microsoft.VCLibs".to_string()]);
+    }
+
+    #[test]
+    fn build_plan_falls_back_to_manifest_source_when_installers_are_missing() {
+        let manifest =
+            manifest_with_source("https://example.invalid/WindowsTerminal.zip", "portable");
+
+        let plan = build_plan("Microsoft.WindowsTerminal", &manifest).expect("plan should build");
+
+        assert_eq!(plan.source.kind, "portable");
+        assert_eq!(
+            plan.source.url,
+            "https://example.invalid/WindowsTerminal.zip"
+        );
+        assert!(plan.product_code.is_none());
     }
 
     #[test]

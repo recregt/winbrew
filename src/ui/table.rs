@@ -66,6 +66,11 @@ impl<W: Write> Ui<W> {
         ]);
 
         for (index, candidate) in candidates.iter().enumerate() {
+            let display_publisher = candidate
+                .publisher
+                .as_deref()
+                .unwrap_or_else(|| candidate.identifier.split('.').next().unwrap_or("Unknown"));
+
             table.add_row([
                 Cell::new(index + 1),
                 Cell::new(
@@ -76,7 +81,7 @@ impl<W: Write> Ui<W> {
                 ),
                 Cell::new(&candidate.identifier),
                 Cell::new(&candidate.version),
-                Cell::new(candidate.publisher.as_deref().unwrap_or("")),
+                Cell::new(display_publisher),
             ]);
         }
 

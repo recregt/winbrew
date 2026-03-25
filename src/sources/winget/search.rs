@@ -13,10 +13,13 @@ const MAX_CANDIDATES: usize = 10;
 const DEFAULT_BRANCH: &str = "master";
 
 pub(crate) fn search_packages(query: &str) -> Result<Vec<PackageCandidate>> {
-    if let Ok(Some(candidates)) = search_via_code_search(query)
-        && !candidates.is_empty()
-    {
-        return Ok(candidates);
+    match search_via_code_search(query) {
+        Ok(Some(candidates)) if !candidates.is_empty() => return Ok(candidates),
+        Ok(Some(_)) => {}
+        Ok(None) => {}
+        Err(err) => {
+            tracing::warn!(error = %err, "winget code search failed; falling back to repository contents");
+        }
     }
 
     search_via_contents(query)
@@ -36,7 +39,7 @@ fn search_via_code_search(query: &str) -> Result<Option<Vec<PackageCandidate>>> 
     let search_url = reqwest::Url::parse_with_params(
         "https://api.github.com/search/code",
         [
-            ("q", format!(r#"repo:{slug} \"{query}\" path:manifests/"#)),
+            ("q", build_code_search_query(&slug, query)),
             ("per_page", MAX_CANDIDATES.to_string()),
         ],
     )
@@ -62,32 +65,45 @@ fn search_via_code_search(query: &str) -> Result<Option<Vec<PackageCandidate>>> 
     Ok(Some(candidates))
 }
 
+fn build_code_search_query(slug: &str, query: &str) -> String {
+    format!(r#"repo:{slug} "{query}" "ManifestType: installer" path:manifests/"#)
+}
+
 fn search_via_contents(query: &str) -> Result<Vec<PackageCandidate>> {
     let settings = NetworkSettings::current();
     let client = http::build_client_with(&settings)?;
     let listing_url = reqwest::Url::parse_with_params(
-        "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/Microsoft",
+        "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests",
         [("ref", DEFAULT_BRANCH)],
     )
     .context("failed to build winget contents URL")?;
 
-    let entries: Vec<ContentEntry> = fetch_contents(&settings, &client, listing_url.as_str())?;
     let query_terms = normalize_query(query);
     let mut candidates = Vec::new();
 
-    for entry in entries.into_iter().filter(|entry| entry.kind == "dir") {
-        if !matches_query(&entry.name, &query_terms) {
-            continue;
-        }
+    let partitions = fetch_contents(&settings, &client, listing_url.as_str())?;
 
-        if let Some(candidate) =
-            candidate_from_package_dir(&settings, &client, &entry, &query_terms)?
-        {
-            candidates.push(candidate);
-        }
+    for partition in partitions.into_iter().filter(|entry| entry.kind == "dir") {
+        let publishers = fetch_contents(&settings, &client, &partition.url)?;
 
-        if candidates.len() >= MAX_CANDIDATES {
-            break;
+        for publisher in publishers.into_iter().filter(|entry| entry.kind == "dir") {
+            let packages = fetch_contents(&settings, &client, &publisher.url)?;
+
+            for package_dir in packages.into_iter().filter(|entry| entry.kind == "dir") {
+                if !matches_query(&package_dir.name, &query_terms) {
+                    continue;
+                }
+
+                if let Some(candidate) =
+                    candidate_from_package_dir(&settings, &client, &package_dir, &query_terms)?
+                {
+                    candidates.push(candidate);
+                }
+
+                if candidates.len() >= MAX_CANDIDATES {
+                    return Ok(candidates);
+                }
+            }
         }
     }
 
@@ -105,6 +121,10 @@ fn candidates_from_search_items(
     let format = winget_manifest_format();
 
     for item in items {
+        if !is_installer_manifest_path(&item.path) {
+            continue;
+        }
+
         let raw_url = format!(
             "{}/{}",
             base.trim_end_matches('/'),
@@ -119,7 +139,13 @@ fn candidates_from_search_items(
             .text()
             .context("failed to read winget manifest")?;
 
-        let manifest = parse_manifest(&format, &content)?;
+        let manifest = match parse_manifest(&format, &content) {
+            Ok(manifest) => manifest,
+            Err(err) => {
+                tracing::debug!(path = %item.path, error = %err, "skipping winget manifest candidate");
+                continue;
+            }
+        };
         if !seen.insert(manifest.package.name.clone()) {
             continue;
         }
@@ -307,6 +333,24 @@ fn package_candidate(manifest: &Manifest, manifest_path: Option<String>) -> Pack
         description: manifest.package.description.clone(),
         publisher: manifest.package.publisher.clone(),
         manifest_path,
+    }
+}
+
+fn is_installer_manifest_path(path: &str) -> bool {
+    let path = path.to_ascii_lowercase();
+    path.ends_with(".installer.yaml")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_code_search_query;
+
+    #[test]
+    fn code_search_query_uses_literal_quotes() {
+        assert_eq!(
+            build_code_search_query("microsoft/winget-pkgs", "firefox"),
+            "repo:microsoft/winget-pkgs \"firefox\" \"ManifestType: installer\" path:manifests/"
+        );
     }
 }
 

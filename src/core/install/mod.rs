@@ -1,4 +1,5 @@
 pub mod plan;
+pub mod selection;
 
 use anyhow::{Context, Result};
 

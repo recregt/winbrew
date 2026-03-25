@@ -20,10 +20,11 @@ pub enum Progress {
 pub fn resolve_plan(name: &str, version: &str) -> Result<InstallPlan> {
     let conn = database::get_conn()?;
     let manifest = crate::services::fetch_manifest(&conn, name, version)?;
+    let plan = crate::core::install::build_plan(name, &manifest)?;
 
-    manifest.validate_download_kind()?;
+    plan.source.validate_download_kind()?;
 
-    crate::core::install::build_plan(name, &manifest)
+    Ok(plan)
 }
 
 pub fn execute_plan<F>(context: &InstallPlan, mut on_progress: F) -> Result<()>

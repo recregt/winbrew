@@ -62,7 +62,7 @@ mod tests {
                 tags: vec![],
                 dependencies: vec!["Microsoft.VCLibs".to_string()],
             },
-            source: source.clone(),
+            source: Some(source.clone()),
             installers: vec![InstallerEntry {
                 architecture: "x64".to_string(),
                 installer_type: "portable".to_string(),
