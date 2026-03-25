@@ -33,7 +33,7 @@ impl Config {
     pub fn load_default() -> Result<Self> {
         let env = ConfigEnv::capture();
         let root = env.root_override().unwrap_or(DEFAULT_ROOT);
-        Self::load(&paths::config_file_at(Path::new(root)))
+        Ok(Self::load(&paths::config_file_at(Path::new(root)))?.with_env(env))
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
@@ -42,7 +42,18 @@ impl Config {
     }
 
     pub fn save_default(&self) -> Result<()> {
-        self.save(&self.resolved_paths().config)
+        let root = self
+            .env
+            .root_override()
+            .map(str::to_owned)
+            .or_else(|| {
+                self.effective_value("paths.root")
+                    .ok()
+                    .map(|(value, _)| value)
+            })
+            .unwrap_or_else(|| DEFAULT_ROOT.to_string());
+
+        self.save(&paths::config_file_at(Path::new(&root)))
     }
 
     pub fn current() -> Self {
