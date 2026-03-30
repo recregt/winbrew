@@ -53,7 +53,10 @@ impl Config {
                     EntrySpec::optional(
                         "proxy",
                         self.core.proxy.clone(),
-                        self.core.proxy.clone().unwrap_or_else(|| "(none)".to_string()),
+                        self.core
+                            .proxy
+                            .clone()
+                            .unwrap_or_else(|| "(none)".to_string()),
                     ),
                     EntrySpec::optional(
                         "github_token",
