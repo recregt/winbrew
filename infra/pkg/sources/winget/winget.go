@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/recregt/winbrew-infra/pkg/normalize"
+	"winbrew/infra/pkg/normalize"
 )
 
 const (

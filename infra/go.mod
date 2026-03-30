@@ -1,4 +1,4 @@
-module github.com/recregt/winbrew-infra
+module winbrew/infra
 
 go 1.26.1
 

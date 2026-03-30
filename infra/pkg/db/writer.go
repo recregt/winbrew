@@ -8,7 +8,7 @@ import (
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 
-	"github.com/recregt/winbrew-infra/pkg/normalize"
+	"winbrew/infra/pkg/normalize"
 )
 
 type Writer struct {

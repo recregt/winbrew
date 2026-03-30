@@ -11,11 +11,11 @@ import (
 	"syscall"
 
 	"github.com/klauspost/compress/zstd"
-	"github.com/recregt/winbrew-infra/internal/config"
-	"github.com/recregt/winbrew-infra/internal/retry"
-	"github.com/recregt/winbrew-infra/pkg/cdn"
-	"github.com/recregt/winbrew-infra/pkg/cdn/r2"
-	"github.com/recregt/winbrew-infra/pkg/db"
+	"winbrew/infra/internal/config"
+	"winbrew/infra/internal/retry"
+	"winbrew/infra/pkg/cdn"
+	"winbrew/infra/pkg/cdn/r2"
+	"winbrew/infra/pkg/db"
 )
 
 const (

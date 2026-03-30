@@ -11,13 +11,13 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/recregt/winbrew-infra/internal/config"
-	"github.com/recregt/winbrew-infra/internal/retry"
-	"github.com/recregt/winbrew-infra/pkg/db"
-	"github.com/recregt/winbrew-infra/pkg/normalize"
-	"github.com/recregt/winbrew-infra/pkg/sources"
-	"github.com/recregt/winbrew-infra/pkg/sources/scoop"
-	"github.com/recregt/winbrew-infra/pkg/sources/winget"
+	"winbrew/infra/internal/config"
+	"winbrew/infra/internal/retry"
+	"winbrew/infra/pkg/db"
+	"winbrew/infra/pkg/normalize"
+	"winbrew/infra/pkg/sources"
+	"winbrew/infra/pkg/sources/scoop"
+	"winbrew/infra/pkg/sources/winget"
 )
 
 func main() {

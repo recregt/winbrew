@@ -11,6 +11,8 @@ on:
       - '.gitignore'
       - '.gitattributes'
   pull_request:
+  schedule:
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 permissions:
@@ -24,6 +26,7 @@ jobs:
   checks:
     name: Rustfmt + Clippy + Tests
     runs-on: windows-latest
+    if: github.event_name != 'schedule'
     env:
       WINBREW_ROOT: ${{ github.workspace }}\target\winbrew-ci
 
@@ -50,6 +53,7 @@ jobs:
     name: CLI smoke tests (Windows)
     runs-on: windows-latest
     needs: checks
+    if: github.event_name != 'schedule'
     env:
       BREW_EXE: .\target\x86_64-pc-windows-msvc\debug\brew.exe
       WINBREW_ROOT: ${{ github.workspace }}\target\winbrew-ci
@@ -85,6 +89,45 @@ jobs:
           & $env:BREW_EXE config set core.color false
           & $env:BREW_EXE config set core.download_timeout 31
           & $env:BREW_EXE config set core.concurrent_downloads 3
+
+  infra-sync:
+    name: Go infra sync
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    env:
+      WINBREW_R2_ACCESS_KEY_ID: ${{ secrets.WINBREW_R2_ACCESS_KEY_ID }}
+      WINBREW_R2_SECRET_ACCESS_KEY: ${{ secrets.WINBREW_R2_SECRET_ACCESS_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: infra/go.mod
+          cache-dependency-path: infra/go.sum
+          cache: true
+
+      - name: Download dependencies
+        working-directory: infra
+        run: go mod download
+
+      - name: Run tests
+        working-directory: infra
+        run: go test ./...
+
+      - name: Build
+        working-directory: infra
+        run: go build ./...
+
+      - name: Run crawler
+        working-directory: infra
+        run: go run ./cmd/crawler
+
+      - name: Run publisher
+        working-directory: infra
+        run: go run ./cmd/publisher
 
   dependabot-metadata:
     name: Dependabot metadata

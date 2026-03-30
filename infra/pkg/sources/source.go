@@ -3,7 +3,7 @@ package sources
 import (
 	"context"
 
-	"github.com/recregt/winbrew-infra/pkg/normalize"
+	"winbrew/infra/pkg/normalize"
 )
 
 type Source interface {

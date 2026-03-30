@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/recregt/winbrew-infra/pkg/normalize"
+	"winbrew/infra/pkg/normalize"
 )
 
 const sourceName = "scoop"
