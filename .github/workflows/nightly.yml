@@ -1,0 +1,39 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+env:
+  WINBREW_R2_ACCESS_KEY_ID: ${{ secrets.WINBREW_R2_ACCESS_KEY_ID }}
+  WINBREW_R2_SECRET_ACCESS_KEY: ${{ secrets.WINBREW_R2_SECRET_ACCESS_KEY }}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Run crawler
+        run: go run ./cmd/crawler
+
+      - name: Run publisher
+        run: go run ./cmd/publisher
