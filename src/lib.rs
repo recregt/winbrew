@@ -11,10 +11,8 @@ pub mod cli;
 pub mod commands;
 pub mod core;
 pub mod database;
-pub mod manifest;
 pub mod models;
 pub mod services;
-pub mod sources;
 pub mod ui;
 pub mod windows;
 

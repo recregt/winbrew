@@ -14,7 +14,7 @@ pub(crate) fn section_key(section_title: &str, key: &str) -> String {
     let section = section_title.to_lowercase();
 
     match section.as_str() {
-        "core" | "paths" | "sources" => format!("{section}.{key}"),
+        "core" | "paths" => format!("{section}.{key}"),
         _ => key.to_string(),
     }
 }
@@ -39,7 +39,6 @@ mod tests {
     fn section_key_uses_section_prefix_for_known_sections() {
         assert_eq!(section_key("Core", "log_level"), "core.log_level");
         assert_eq!(section_key("Paths", "root"), "paths.root");
-        assert_eq!(section_key("Sources", "primary"), "sources.primary");
     }
 
     #[test]

@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 #[command(
     name = "brew",
     version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("WINBREW_GIT_HASH"), ")"),
-    about = "A modern package manager for Windows that installs, tracks, and cleanly removes software.",
+    about = "A modern package manager for Windows that tracks and cleanly removes software.",
     arg_required_else_help = true
 )]
 pub struct Cli {
@@ -25,18 +25,6 @@ pub enum Command {
 
     /// Check local brew installation health
     Doctor,
-
-    /// Install a package from the configured package repository
-    Install {
-        #[arg(value_name = "QUERY", num_args = 1..)]
-        query: Vec<String>,
-
-        #[arg(long, short = 'v', value_name = "VERSION")]
-        version: Option<String>,
-
-        #[arg(long, value_name = "INDEX")]
-        select: Option<usize>,
-    },
 
     /// Remove a package and its tracked files
     Remove {

@@ -95,46 +95,6 @@ pub static KEYS: &[KeyDef] = &[
         env_aliases: &[],
         validator: None,
     },
-    KeyDef {
-        key: "sources.primary",
-        env_aliases: &["WINBREW_PRIMARY_SOURCE"],
-        validator: None,
-    },
-    KeyDef {
-        key: "sources.winget.repo_slug",
-        env_aliases: &["WINBREW_WINGET_REPO_SLUG"],
-        validator: None,
-    },
-    KeyDef {
-        key: "sources.winget.api_base",
-        env_aliases: &["WINBREW_GITHUB_API_BASE", "WINBREW_WINGET_API_BASE"],
-        validator: None,
-    },
-    KeyDef {
-        key: "sources.winget.url",
-        env_aliases: &["WINBREW_REGISTRY_URL"],
-        validator: None,
-    },
-    KeyDef {
-        key: "sources.winget.format",
-        env_aliases: &["WINBREW_REGISTRY_FORMAT"],
-        validator: None,
-    },
-    KeyDef {
-        key: "sources.winget.manifest_kind",
-        env_aliases: &["WINBREW_MANIFEST_KIND"],
-        validator: None,
-    },
-    KeyDef {
-        key: "sources.winget.manifest_path_template",
-        env_aliases: &["WINBREW_MANIFEST_PATH_TEMPLATE"],
-        validator: None,
-    },
-    KeyDef {
-        key: "sources.winget.enabled",
-        env_aliases: &["WINBREW_WINGET_ENABLED"],
-        validator: Some(validate_bool),
-    },
 ];
 
 pub fn find(key: &str) -> Option<&'static KeyDef> {

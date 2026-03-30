@@ -4,10 +4,6 @@ use super::keys::env_override;
 use super::registry;
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_REGISTRY_URL: &str =
-    "https://raw.githubusercontent.com/microsoft/winget-pkgs/master";
-pub const DEFAULT_WINGET_PATH_TEMPLATE: &str =
-    "manifests/${partition}/${publisher}/${package}/${version}/${identifier}.${kind}.yaml";
 pub const DEFAULT_ROOT: &str = r"C:\winbrew";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -17,9 +13,6 @@ pub struct Config {
 
     #[serde(default)]
     pub paths: PathsConfig,
-
-    #[serde(default)]
-    pub sources: SourcesConfig,
 
     #[serde(skip, default)]
     pub env: ConfigEnv,
@@ -103,39 +96,6 @@ pub struct PathsConfig {
     pub cache: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SourcesConfig {
-    #[serde(default = "default_primary_source")]
-    pub primary: String,
-
-    #[serde(default)]
-    pub winget: SourceConfig,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SourceConfig {
-    #[serde(default)]
-    pub repo_slug: Option<String>,
-
-    #[serde(default = "default_github_api_base")]
-    pub api_base: String,
-
-    #[serde(default = "default_registry_url")]
-    pub url: String,
-
-    #[serde(default = "default_source_format")]
-    pub format: String,
-
-    #[serde(default = "default_manifest_kind")]
-    pub manifest_kind: String,
-
-    #[serde(default = "default_manifest_path_template")]
-    pub manifest_path_template: String,
-
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigSection {
     pub title: String,
@@ -177,29 +137,6 @@ impl Default for PathsConfig {
     }
 }
 
-impl Default for SourcesConfig {
-    fn default() -> Self {
-        Self {
-            primary: default_primary_source(),
-            winget: SourceConfig::default(),
-        }
-    }
-}
-
-impl Default for SourceConfig {
-    fn default() -> Self {
-        Self {
-            repo_slug: None,
-            api_base: default_github_api_base(),
-            url: default_registry_url(),
-            format: default_source_format(),
-            manifest_kind: default_manifest_kind(),
-            manifest_path_template: default_manifest_path_template(),
-            enabled: default_true(),
-        }
-    }
-}
-
 // Shared serde helper for bool fields that default to true.
 fn default_true() -> bool {
     true
@@ -210,7 +147,7 @@ fn default_log_level() -> String {
 }
 
 fn default_file_log_level() -> String {
-    "debug,winbrew::core::network=trace".to_string()
+    "debug,winbrew::core=trace".to_string()
 }
 
 fn default_download_timeout() -> u64 {
@@ -241,28 +178,4 @@ fn default_logs_path() -> String {
 
 fn default_cache_path() -> String {
     "${root}\\data\\cache".to_string()
-}
-
-fn default_primary_source() -> String {
-    "winget".to_string()
-}
-
-fn default_registry_url() -> String {
-    DEFAULT_REGISTRY_URL.to_string()
-}
-
-fn default_github_api_base() -> String {
-    "https://api.github.com".to_string()
-}
-
-fn default_source_format() -> String {
-    "yaml".to_string()
-}
-
-fn default_manifest_kind() -> String {
-    "installer".to_string()
-}
-
-fn default_manifest_path_template() -> String {
-    DEFAULT_WINGET_PATH_TEMPLATE.to_string()
 }

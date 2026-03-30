@@ -38,16 +38,6 @@ impl Config {
             "paths.data" => self.paths.data = value,
             "paths.logs" => self.paths.logs = value,
             "paths.cache" => self.paths.cache = value,
-            "sources.primary" => self.sources.primary = value,
-            "sources.winget.repo_slug" => self.sources.winget.repo_slug = parse_value(&value),
-            "sources.winget.api_base" => self.sources.winget.api_base = value,
-            "sources.winget.url" => self.sources.winget.url = value,
-            "sources.winget.format" => self.sources.winget.format = value,
-            "sources.winget.manifest_kind" => self.sources.winget.manifest_kind = value,
-            "sources.winget.manifest_path_template" => {
-                self.sources.winget.manifest_path_template = value
-            }
-            "sources.winget.enabled" => self.sources.winget.enabled = parse_bool(key, &value)?,
             _ => return Err(anyhow!("unknown config key: {key}")),
         }
 
@@ -103,11 +93,9 @@ mod tests {
         config.set_value("core.auto_update", "yes").unwrap();
         config.set_value("core.confirm_remove", "on").unwrap();
         config.set_value("core.default_yes", "1").unwrap();
-        config.set_value("sources.winget.enabled", "no").unwrap();
 
         assert!(config.core.auto_update);
         assert!(config.core.confirm_remove);
         assert!(config.core.default_yes);
-        assert!(!config.sources.winget.enabled);
     }
 }

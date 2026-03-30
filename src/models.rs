@@ -58,13 +58,3 @@ impl PackageQuery {
         self.terms.join(" ")
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct PackageCandidate {
-    pub identifier: String,
-    pub package_name: Option<String>,
-    pub version: String,
-    pub description: Option<String>,
-    pub publisher: Option<String>,
-    pub manifest_path: Option<String>,
-}

@@ -1,6 +1,5 @@
 use std::sync::{Mutex, MutexGuard};
 
-pub mod fixtures;
 pub mod mock_server;
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());

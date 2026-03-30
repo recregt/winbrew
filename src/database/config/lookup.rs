@@ -53,10 +53,7 @@ impl Config {
                     EntrySpec::optional(
                         "proxy",
                         self.core.proxy.clone(),
-                        self.core
-                            .proxy
-                            .clone()
-                            .unwrap_or_else(|| "(none)".to_string()),
+                        self.core.proxy.clone().unwrap_or_else(|| "(none)".to_string()),
                     ),
                     EntrySpec::optional(
                         "github_token",
@@ -77,33 +74,6 @@ impl Config {
                     EntrySpec::required("data", self.paths.data.clone()),
                     EntrySpec::required("logs", self.paths.logs.clone()),
                     EntrySpec::required("cache", self.paths.cache.clone()),
-                ],
-            },
-            SectionSpec {
-                title: "Sources",
-                entries: vec![
-                    EntrySpec::required("primary", self.sources.primary.clone()),
-                    EntrySpec::required("winget.url", self.sources.winget.url.clone()),
-                    EntrySpec::required("winget.format", self.sources.winget.format.clone()),
-                    EntrySpec::required(
-                        "winget.manifest_kind",
-                        self.sources.winget.manifest_kind.clone(),
-                    ),
-                    EntrySpec::required(
-                        "winget.manifest_path_template",
-                        self.sources.winget.manifest_path_template.clone(),
-                    ),
-                    EntrySpec::required("winget.enabled", self.sources.winget.enabled.to_string()),
-                    EntrySpec::optional(
-                        "winget.repo_slug",
-                        self.sources.winget.repo_slug.clone(),
-                        self.sources
-                            .winget
-                            .repo_slug
-                            .clone()
-                            .unwrap_or_else(|| "(unset)".to_string()),
-                    ),
-                    EntrySpec::required("winget.api_base", self.sources.winget.api_base.clone()),
                 ],
             },
         ]

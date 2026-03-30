@@ -92,7 +92,6 @@ fn build_runtime_report(config: &Config) -> Result<RuntimeReport> {
     let sections = config.sections();
     let paths_section = section(&sections, "Paths")?;
     let core_section = section(&sections, "Core")?;
-    let sources_section = section(&sections, "Sources")?;
 
     let path_values = effective_values(config, paths_section)?;
     let resolved_paths = paths::resolved_paths(
@@ -134,7 +133,6 @@ fn build_runtime_report(config: &Config) -> Result<RuntimeReport> {
             ],
         },
         render_section(config, core_section)?,
-        render_section(config, sources_section)?,
     ];
 
     Ok(RuntimeReport::new(sections))

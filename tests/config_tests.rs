@@ -92,10 +92,9 @@ fn runtime_report_builds_expected_sections() {
     let _token = UnsetEnvVar::new("WINBREW_GITHUB_TOKEN");
     let report = get_runtime_report().expect("report should build");
 
-    assert_eq!(report.sections.len(), 3);
+    assert_eq!(report.sections.len(), 2);
     assert_eq!(report.sections[0].title, "Paths");
     assert_eq!(report.sections[1].title, "Core");
-    assert_eq!(report.sections[2].title, "Sources");
 }
 
 #[test]
