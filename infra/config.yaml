@@ -2,18 +2,10 @@ sources:
   - scoop
   - winget
 
-cdn:
-  provider: r2
-  bucket: winbrew-packages
-  endpoint: https://xxx.r2.cloudflarestorage.com
-  accessKeyIDEnv: WINBREW_R2_ACCESS_KEY_ID
-  secretAccessKeyEnv: WINBREW_R2_SECRET_ACCESS_KEY
-
 logLevel: info
 
 timeout:
   fetch: 5m
-  upload: 10m
 
 retry:
   max: 3
