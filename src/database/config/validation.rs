@@ -21,18 +21,6 @@ impl Config {
             "core.confirm_remove" => self.core.confirm_remove = parse_bool(key, &value)?,
             "core.default_yes" => self.core.default_yes = parse_bool(key, &value)?,
             "core.color" => self.core.color = parse_bool(key, &value)?,
-            "core.download_timeout" => {
-                self.core.download_timeout = value
-                    .parse::<u64>()
-                    .with_context(|| format!("invalid {key} value"))?
-            }
-            "core.concurrent_downloads" => {
-                self.core.concurrent_downloads = value
-                    .parse::<u64>()
-                    .with_context(|| format!("invalid {key} value"))?
-            }
-            "core.proxy" => self.core.proxy = parse_value(&value),
-            "core.github_token" => self.core.github_token = parse_value(&value),
             "paths.root" => self.paths.root = value,
             "paths.packages" => self.paths.packages = value,
             "paths.data" => self.paths.data = value,
@@ -42,15 +30,6 @@ impl Config {
         }
 
         Ok(())
-    }
-}
-
-fn parse_value(value: &str) -> Option<String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
     }
 }
 

@@ -11,7 +11,7 @@ struct SectionSpec {
 
 struct EntrySpec {
     key: &'static str,
-    value: Option<String>,
+    value: String,
     display_value: String,
 }
 
@@ -20,15 +20,7 @@ impl EntrySpec {
         Self {
             key,
             display_value: value.clone(),
-            value: Some(value),
-        }
-    }
-
-    fn optional(key: &'static str, value: Option<String>, display_value: String) -> Self {
-        Self {
-            key,
             value,
-            display_value,
         }
     }
 }
@@ -45,28 +37,6 @@ impl Config {
                     EntrySpec::required("confirm_remove", self.core.confirm_remove.to_string()),
                     EntrySpec::required("default_yes", self.core.default_yes.to_string()),
                     EntrySpec::required("color", self.core.color.to_string()),
-                    EntrySpec::required("download_timeout", self.core.download_timeout.to_string()),
-                    EntrySpec::required(
-                        "concurrent_downloads",
-                        self.core.concurrent_downloads.to_string(),
-                    ),
-                    EntrySpec::optional(
-                        "proxy",
-                        self.core.proxy.clone(),
-                        self.core
-                            .proxy
-                            .clone()
-                            .unwrap_or_else(|| "(none)".to_string()),
-                    ),
-                    EntrySpec::optional(
-                        "github_token",
-                        self.core.github_token.clone(),
-                        self.core
-                            .github_token
-                            .as_ref()
-                            .map(|_| "(set)".to_string())
-                            .unwrap_or_else(|| "(unset)".to_string()),
-                    ),
                 ],
             },
             SectionSpec {
@@ -150,7 +120,7 @@ impl Config {
         for section in self.section_specs() {
             for entry in section.entries {
                 if section_key(section.title, entry.key) == key {
-                    return Ok(entry.value);
+                    return Ok(Some(entry.value.clone()));
                 }
             }
         }

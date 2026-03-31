@@ -64,18 +64,6 @@ pub struct CoreConfig {
 
     #[serde(default = "default_true")]
     pub color: bool,
-
-    #[serde(default = "default_download_timeout")]
-    pub download_timeout: u64,
-
-    #[serde(default = "default_concurrent_downloads")]
-    pub concurrent_downloads: u64,
-
-    #[serde(default)]
-    pub github_token: Option<String>,
-
-    #[serde(default)]
-    pub proxy: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,10 +105,6 @@ impl Default for CoreConfig {
             confirm_remove: default_true(),
             default_yes: false,
             color: default_true(),
-            download_timeout: default_download_timeout(),
-            concurrent_downloads: default_concurrent_downloads(),
-            github_token: None,
-            proxy: None,
         }
     }
 }
@@ -148,14 +132,6 @@ fn default_log_level() -> String {
 
 fn default_file_log_level() -> String {
     "debug,winbrew::core=trace".to_string()
-}
-
-fn default_download_timeout() -> u64 {
-    30
-}
-
-fn default_concurrent_downloads() -> u64 {
-    3
 }
 
 fn default_root_path() -> String {

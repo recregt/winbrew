@@ -47,14 +47,10 @@ mod tests {
     }
 
     #[test]
-    fn env_override_names_prefers_canonical_before_aliases() {
+    fn env_override_names_returns_canonical_name() {
         assert_eq!(
-            env_override_names("core.concurrent_downloads"),
-            vec![
-                "WINBREW_CORE_CONCURRENT_DOWNLOADS".to_string(),
-                "WINBREW_THREADS".to_string(),
-                "WINBREW_CONCURRENT_DOWNLOADS".to_string(),
-            ]
+            env_override_names("paths.packages"),
+            vec!["WINBREW_PATHS_PACKAGES".to_string()]
         );
     }
 }

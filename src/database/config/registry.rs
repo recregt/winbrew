@@ -51,26 +51,6 @@ pub static KEYS: &[KeyDef] = &[
         validator: Some(validate_bool),
     },
     KeyDef {
-        key: "core.download_timeout",
-        env_aliases: &["WINBREW_DOWNLOAD_TIMEOUT"],
-        validator: Some(validate_positive_u64),
-    },
-    KeyDef {
-        key: "core.concurrent_downloads",
-        env_aliases: &["WINBREW_THREADS", "WINBREW_CONCURRENT_DOWNLOADS"],
-        validator: Some(validate_positive_u64),
-    },
-    KeyDef {
-        key: "core.github_token",
-        env_aliases: &["WINBREW_GITHUB_TOKEN"],
-        validator: None,
-    },
-    KeyDef {
-        key: "core.proxy",
-        env_aliases: &["WINBREW_PROXY"],
-        validator: None,
-    },
-    KeyDef {
         key: "paths.root",
         env_aliases: &["WINBREW_ROOT"],
         validator: None,
@@ -105,13 +85,5 @@ fn validate_bool(value: &str) -> Result<()> {
     match value {
         "true" | "false" | "1" | "0" | "yes" | "no" | "on" | "off" => Ok(()),
         _ => Err(anyhow!("expected a boolean value (true/false)")),
-    }
-}
-
-fn validate_positive_u64(value: &str) -> Result<()> {
-    match value.parse::<u64>() {
-        Ok(0) => Err(anyhow!("value must be greater than zero")),
-        Ok(_) => Ok(()),
-        Err(_) => Err(anyhow!("expected a positive whole number")),
     }
 }

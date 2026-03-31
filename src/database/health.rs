@@ -162,24 +162,10 @@ fn render_section(config: &Config, section: &ConfigSection) -> Result<ReportSect
 
     for (key, file_value) in &section.entries {
         let full_key = crate::database::config::section_key(&section.title, key);
-        let value = match full_key.as_str() {
-            "core.proxy" => match config.effective_optional_value(&full_key)? {
-                Some((value, source)) => render_optional_value(value, source, "(none)"),
-                None => "(none)".to_string(),
-            },
-            "core.github_token" => match config.effective_optional_value(&full_key)? {
-                Some((value, source)) => render_sensitive_value(value, source, "(unset)"),
-                None => "(unset)".to_string(),
-            },
-            "core.download_timeout" => {
-                let (value, _) = config.effective_value(&full_key)?;
-                format!("{value}s")
-            }
-            _ => config
-                .effective_value(&full_key)
-                .map(|(value, _)| value)
-                .unwrap_or_else(|_| file_value.clone()),
-        };
+        let value = config
+            .effective_value(&full_key)
+            .map(|(value, _)| value)
+            .unwrap_or_else(|_| file_value.clone());
 
         entries.push((key.clone(), value));
     }
@@ -188,51 +174,4 @@ fn render_section(config: &Config, section: &ConfigSection) -> Result<ReportSect
         title: section.title.clone(),
         entries,
     })
-}
-
-fn render_optional_value(value: String, source: ConfigSource, empty_label: &str) -> String {
-    if value.trim().is_empty() {
-        empty_label.to_string()
-    } else if matches!(source, ConfigSource::Env) {
-        format!("{value} [env override]")
-    } else {
-        value
-    }
-}
-
-fn render_sensitive_value(value: String, _source: ConfigSource, empty_label: &str) -> String {
-    if value.trim().is_empty() {
-        empty_label.to_string()
-    } else {
-        "(set)".to_string()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn render_optional_helpers_are_consistent() {
-        assert_eq!(
-            render_optional_value(
-                "http://localhost:8080".to_string(),
-                ConfigSource::Env,
-                "(none)"
-            ),
-            "http://localhost:8080 [env override]"
-        );
-        assert_eq!(
-            render_optional_value("".to_string(), ConfigSource::File, "(none)"),
-            "(none)"
-        );
-        assert_eq!(
-            render_sensitive_value("secret-token".to_string(), ConfigSource::Env, "(unset)"),
-            "(set)"
-        );
-        assert_eq!(
-            render_sensitive_value("".to_string(), ConfigSource::File, "(unset)"),
-            "(unset)"
-        );
-    }
 }
