@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+tasks:
+  default:
+    desc: Run the full local verification suite
+    cmds:
+      - task: verify
+
+  hooks:install:
+    desc: Configure git to use the repository hook scripts
+    cmds:
+      - git config core.hooksPath .githooks
+
+  hooks:commit-msg:
+    desc: Validate a commit message against Conventional Commits
+    cmds:
+      - >
+        powershell -NoProfile -ExecutionPolicy Bypass -File scripts/task-hooks.ps1 -Hook commit-msg -MsgFile '{{.MSG_FILE}}'
+
+  hooks:pre-commit:
+    desc: Run pre-commit checks
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/task-hooks.ps1 -Hook pre-commit
+
+  hooks:pre-push:
+    desc: Run pre-push checks
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/task-hooks.ps1 -Hook pre-push
+
+  verify:
+    desc: Run the full local verification suite
+    cmds:
+      - task: hooks:pre-commit
+      - task: hooks:pre-push
+
+  ci:verify:
+    desc: Run CI verification checks
+    cmds:
+      - task: verify
+
+  rust:build:
+    desc: Build the CLI
+    cmds:
+      - cargo build --locked
+
+  ci:smoke:
+    desc: Build and smoke-test the CLI
+    vars:
+      ROOT: target\winbrew-ci
+      BINARY: target\x86_64-pc-windows-msvc\debug\winbrew.exe
+    cmds:
+      - task: rust:build
+      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/task-smoke.ps1 -BinaryPath '{{.BINARY}}' -ROOT '{{.ROOT}}'

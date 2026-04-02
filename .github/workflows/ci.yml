@@ -21,12 +21,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
-    name: Rustfmt + Clippy + Tests
+  ci:
+    name: CI checks and smoke tests
     runs-on: windows-latest
     if: github.event_name != 'schedule'
     env:
-      WINBREW_ROOT: ${{ github.workspace }}\target\winbrew-ci
+      ROOT: target\winbrew-ci
+      BINARY: target\x86_64-pc-windows-msvc\debug\winbrew.exe
 
     steps:
       - name: Checkout
@@ -35,72 +36,21 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-
-      - name: Rustfmt
-        run: cargo fmt --all -- --check
-
-      - name: Clippy
-        run: cargo clippy --locked --all-targets --all-features -- -D warnings
-
-      - name: Tests
-        run: cargo test --locked --all-targets --all-features
-
-  integration:
-    name: CLI smoke tests (Windows)
-    runs-on: windows-latest
-    needs: checks
-    if: github.event_name != 'schedule'
-    env:
-      BREW_EXE: .\target\x86_64-pc-windows-msvc\debug\brew.exe
-      WINBREW_ROOT: ${{ github.workspace }}\target\winbrew-ci
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-
-      - name: Build
-        run: cargo build --locked
-
-      - name: brew --version
-        run: |
-          & $env:BREW_EXE --version
-
-      - name: brew --help
-        run: |
-          & $env:BREW_EXE --help
-
-      - name: brew list (empty)
-        run: |
-          & $env:BREW_EXE list
-
-      - name: brew config seed values
-        run: |
-          & $env:BREW_EXE config set core.default_yes true
-          & $env:BREW_EXE config set core.color false
-          & $env:BREW_EXE config set core.download_timeout 31
-          & $env:BREW_EXE config set core.concurrent_downloads 3
-
-  dependabot-metadata:
-    name: Dependabot metadata
-    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Dependabot metadata
-        id: metadata
-        uses: dependabot/fetch-metadata@v2
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          go-version-file: infra/go.mod
 
-      - name: Summary
-        run: |
-          echo "Dependency type: ${{ steps.metadata.outputs.dependency-type }}"
-          echo "Update type: ${{ steps.metadata.outputs.update-type }}"
+      - name: Setup Task
+        uses: go-task/setup-task@v1
+        with:
+          version: 3.x
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Verify checks
+        run: task ci:verify
+
+      - name: Smoke tests
+        run: task ci:smoke ROOT="$env:ROOT" BINARY="$env:BINARY"

@@ -1,5 +1,8 @@
 #!/bin/sh
 set -e
 
-echo "Running rustfmt check..."
-cargo fmt --all -- --check
+REPO_ROOT="$(git rev-parse --show-toplevel | tr -d '\r')"
+cd "$REPO_ROOT"
+
+task hooks:pre-commit
+

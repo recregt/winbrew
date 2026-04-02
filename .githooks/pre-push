@@ -1,8 +1,7 @@
 #!/bin/sh
 set -e
 
-echo "Running clippy..."
-cargo clippy --all-targets --all-features -- -D warnings
+REPO_ROOT="$(git rev-parse --show-toplevel | tr -d '\r')"
+cd "$REPO_ROOT"
 
-echo "Running tests..."
-cargo test
+task hooks:pre-push

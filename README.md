@@ -15,18 +15,32 @@ A modern package manager for Windows that tracks and cleanly removes software.
 
 ## Installation
 
-Just copy and paste this command to Powershell (Admin):
+Copy and paste this command to Powershell (Admin):
 
 ```powershell
 PowerShell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/recregt/winbrew/main/scripts/install.ps1 | iex"
 ```
 
+## Development
+
+Install the repository git hooks:
+
+```powershell
+task hooks:install
+```
+
+Run the same checks locally without going through Git:
+
+```powershell
+task hooks:pre-commit
+task hooks:pre-push
+```
+
 ### Installed layout
 
-By default, `brew` uses `C:\winbrew` as its root directory:
+By default, `winbrew` layout looks like this:
 
 ```text
-C:\winbrew
 ├── packages
 └── data
     ├── winbrew.toml
