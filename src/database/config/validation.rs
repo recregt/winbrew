@@ -26,7 +26,11 @@ impl Config {
             "paths.data" => self.paths.data = value,
             "paths.logs" => self.paths.logs = value,
             "paths.cache" => self.paths.cache = value,
-            _ => return Err(ConfigError::UnknownKey { key: key.to_string() }),
+            _ => {
+                return Err(ConfigError::UnknownKey {
+                    key: key.to_string(),
+                });
+            }
         }
 
         Ok(())
@@ -60,7 +64,9 @@ fn validate_config_value(key: &str, value: &str) -> ConfigResult<()> {
         return Ok(());
     }
 
-    Err(ConfigError::UnknownKey { key: key.to_string() })
+    Err(ConfigError::UnknownKey {
+        key: key.to_string(),
+    })
 }
 
 fn normalize_config_value(key: &str, value: &str) -> String {

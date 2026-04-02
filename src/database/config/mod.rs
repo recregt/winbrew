@@ -12,8 +12,8 @@ mod storage;
 mod types;
 mod validation;
 
-pub(crate) use keys::section_key;
 pub use errors::ConfigError;
+pub(crate) use keys::section_key;
 pub use storage::{config_sections, config_set, get_effective_value};
 pub use types::*;
 

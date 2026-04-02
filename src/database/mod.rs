@@ -25,8 +25,7 @@ pub use health::{
     HealthReport, ReportSection, RuntimeReport, get_health_report, get_runtime_report,
 };
 pub use installed_packages::{
-    delete_package, get_package, insert_package, list_packages, update_status,
-    PackageNotFoundError,
+    PackageNotFoundError, delete_package, get_package, insert_package, list_packages, update_status,
 };
 
 static DB_POOL: OnceLock<Pool<SqliteConnectionManager>> = OnceLock::new();

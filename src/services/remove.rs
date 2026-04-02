@@ -37,9 +37,10 @@ pub fn find_dependents(name: &str, conn: &rusqlite::Connection) -> Result<Vec<St
 
 pub fn plan_removal(name: &str) -> Result<RemovalPlan> {
     let conn = database::get_conn()?;
-    let pkg = database::get_package(&conn, name)?.ok_or_else(|| database::PackageNotFoundError {
-        name: name.to_string(),
-    })?;
+    let pkg =
+        database::get_package(&conn, name)?.ok_or_else(|| database::PackageNotFoundError {
+            name: name.to_string(),
+        })?;
     let dependents = find_dependents(name, &conn)?;
 
     Ok(removal_plan(pkg, dependents))

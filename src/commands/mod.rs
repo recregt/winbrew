@@ -6,10 +6,10 @@ pub mod config;
 pub mod doctor;
 pub mod info;
 pub mod list;
-pub mod search;
 pub mod remove;
-pub mod version;
+pub mod search;
 pub mod update;
+pub mod version;
 
 pub fn run(command: Command) -> Result<()> {
     match command {

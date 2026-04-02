@@ -68,12 +68,16 @@ impl Config {
     }
 
     pub fn effective_value(&self, key: &str) -> ConfigResult<(String, ConfigSource)> {
-        self.lookup_effective(key)?.ok_or_else(|| ConfigError::UnknownKey {
-            key: key.trim().to_string(),
-        })
+        self.lookup_effective(key)?
+            .ok_or_else(|| ConfigError::UnknownKey {
+                key: key.trim().to_string(),
+            })
     }
 
-    pub fn effective_optional_value(&self, key: &str) -> ConfigResult<Option<(String, ConfigSource)>> {
+    pub fn effective_optional_value(
+        &self,
+        key: &str,
+    ) -> ConfigResult<Option<(String, ConfigSource)>> {
         self.lookup_effective(key)
     }
 
@@ -125,7 +129,9 @@ impl Config {
             }
         }
 
-        Err(ConfigError::UnknownKey { key: key.to_string() })
+        Err(ConfigError::UnknownKey {
+            key: key.to_string(),
+        })
     }
 
     fn lookup_effective(&self, key: &str) -> ConfigResult<Option<(String, ConfigSource)>> {

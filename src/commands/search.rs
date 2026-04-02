@@ -10,7 +10,11 @@ pub fn run(query: &[String]) -> Result<()> {
 
     let packages = match search::search_packages(&query_text) {
         Ok(packages) => packages,
-        Err(err) if err.downcast_ref::<database::CatalogNotFoundError>().is_some() => {
+        Err(err)
+            if err
+                .downcast_ref::<database::CatalogNotFoundError>()
+                .is_some() =>
+        {
             ui.notice("Package catalog not available. Run `brew update` first.");
             return Ok(());
         }

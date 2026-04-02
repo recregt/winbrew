@@ -3,6 +3,6 @@ pub mod doctor;
 pub mod info;
 pub mod list;
 pub mod remove;
-pub mod version;
-pub mod update;
 pub mod search;
+pub mod update;
+pub mod version;
