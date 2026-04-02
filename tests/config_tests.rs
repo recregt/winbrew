@@ -2,6 +2,7 @@
 mod common;
 
 use common::{TestEnvVar, env_lock};
+use std::path::PathBuf;
 use winbrew::database::{Config, ConfigEnv, get_health_report, get_runtime_report};
 
 struct UnsetEnvVar {
@@ -47,7 +48,7 @@ fn get_value_returns_current_values() {
     );
     assert_eq!(
         config.get_value("paths.root").unwrap(),
-        Some(r"C:\winbrew".to_string())
+        Some(expected_default_root())
     );
 }
 
@@ -112,4 +113,11 @@ fn health_report_marks_env_root_source() {
 
     assert_eq!(report.install_root_source, "env override");
     assert_eq!(report.install_root, r"C:\temp\winbrew");
+}
+
+fn expected_default_root() -> String {
+    PathBuf::from(std::env::var("LOCALAPPDATA").expect("LOCALAPPDATA must be set on Windows"))
+        .join("winbrew")
+        .to_string_lossy()
+        .to_string()
 }

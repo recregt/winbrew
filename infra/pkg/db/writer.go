@@ -68,7 +68,7 @@ func (w *Writer) writePackage(pkg normalize.Package) error {
 	}
 
 	err = sqlitex.ExecuteTransient(w.conn,
-		`INSERT INTO packages(id, name, version, source, description, homepage, license, publisher, raw)
+		`INSERT INTO catalog_packages(id, name, version, source, description, homepage, license, publisher, raw)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   name=excluded.name,
@@ -91,7 +91,7 @@ func (w *Writer) writePackage(pkg normalize.Package) error {
 
 	for _, inst := range pkg.Installers {
 		err = sqlitex.ExecuteTransient(w.conn,
-			`INSERT OR IGNORE INTO installers(package_id, url, hash, arch, type)
+			`INSERT OR IGNORE INTO catalog_installers(package_id, url, hash, arch, type)
 			 VALUES (?, ?, ?, ?, ?)`,
 			&sqlitex.ExecOptions{Args: []any{pkg.ID, inst.URL, inst.Hash, inst.Arch, inst.Type}},
 		)

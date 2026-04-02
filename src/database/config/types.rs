@@ -4,8 +4,6 @@ use super::keys::env_override;
 use super::registry;
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_ROOT: &str = r"C:\winbrew";
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default)]
@@ -134,8 +132,14 @@ fn default_file_log_level() -> String {
     "debug,winbrew::core=trace".to_string()
 }
 
-fn default_root_path() -> String {
-    DEFAULT_ROOT.to_string()
+pub fn default_root_path() -> String {
+    let local_app_data =
+        std::env::var("LOCALAPPDATA").expect("LOCALAPPDATA must be set on Windows");
+
+    std::path::PathBuf::from(local_app_data)
+        .join("winbrew")
+        .to_string_lossy()
+        .to_string()
 }
 
 // These path defaults are templates, not final paths.

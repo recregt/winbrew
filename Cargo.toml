@@ -5,14 +5,12 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [[bin]]
-name = "brew"
+name = "winbrew"
 path = "src/main.rs"
 
 [dependencies]
-# Platform-specific
 winreg = "0.56"
 
-# CLI and UI
 clap = { version = "4", default-features = false, features = ["color", "derive", "error-context", "help", "std", "suggestions", "usage"] }
 dialoguer = { version = "0.12", default-features = false }
 indicatif = { version = "0.18", default-features = false, features = ["unicode-width"] }
@@ -20,7 +18,6 @@ comfy-table = "7.2"
 console = { version = "0.16", default-features = false, features = ["std"] }
 terminal_size = "0.4"
 
-# Storage and configuration
 rusqlite = { version = "0.39", default-features = false, features = ["bundled", "unlock_notify"] }
 chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
@@ -28,7 +25,6 @@ serde_json = "1"
 toml = "1"
 r2d2 = "0.8"
 
-# Parsing, matching, and runtime helpers
 anyhow = "1"
 regex = "1.12"
 rayon = "1.11"

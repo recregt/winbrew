@@ -1,16 +1,19 @@
-use anyhow::{Context, Result};
-use r2d2::{ManageConnection, Pool, PooledConnection};
-use rusqlite::Connection;
-use std::path::{Path, PathBuf};
+use anyhow::{Context, Result, bail};
+use r2d2::{Pool, PooledConnection};
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
 
 use crate::core::paths;
 
+mod catalog;
 mod config;
+mod connection;
 mod health;
-mod packages;
+mod installed_packages;
+mod migration;
 
+use self::connection::SqliteConnectionManager;
+
+pub use catalog::{get_installers, search};
 pub use config::{
     Config, ConfigEnv, ConfigSection, ConfigSource, CoreConfig, PathsConfig, config_sections,
     config_set, get_effective_value,
@@ -18,38 +21,14 @@ pub use config::{
 pub use health::{
     HealthReport, ReportSection, RuntimeReport, get_health_report, get_runtime_report,
 };
-pub use packages::{delete_package, get_package, insert_package, list_packages, update_status};
+pub use installed_packages::{
+    delete_package, get_package, insert_package, list_packages, update_status,
+};
 
 static DB_POOL: OnceLock<Pool<SqliteConnectionManager>> = OnceLock::new();
 static DB_POOL_INIT: Mutex<()> = Mutex::new(());
-
-#[derive(Clone, Debug)]
-pub struct SqliteConnectionManager {
-    path: PathBuf,
-}
-
-impl SqliteConnectionManager {
-    fn file(path: PathBuf) -> Self {
-        Self { path }
-    }
-}
-
-impl ManageConnection for SqliteConnectionManager {
-    type Connection = Connection;
-    type Error = rusqlite::Error;
-
-    fn connect(&self) -> std::result::Result<Self::Connection, Self::Error> {
-        open_connection(&self.path)
-    }
-
-    fn is_valid(&self, conn: &mut Self::Connection) -> std::result::Result<(), Self::Error> {
-        conn.execute_batch("SELECT 1;")
-    }
-
-    fn has_broken(&self, _conn: &mut Self::Connection) -> bool {
-        false
-    }
-}
+static CATALOG_DB_POOL: OnceLock<Pool<SqliteConnectionManager>> = OnceLock::new();
+static CATALOG_DB_POOL_INIT: Mutex<()> = Mutex::new(());
 
 pub fn init() -> Result<()> {
     let _ = get_pool()?;
@@ -70,7 +49,7 @@ pub fn get_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
         return Ok(pool);
     }
 
-    let pool = build_pool()?;
+    let pool = connection::build_pool(paths::db_path(), false, 10, Some(migration::migrate))?;
 
     DB_POOL
         .set(pool)
@@ -87,52 +66,36 @@ pub fn get_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
         .context("failed to acquire database connection from pool")
 }
 
-fn open_connection(path: &Path) -> std::result::Result<Connection, rusqlite::Error> {
-    let conn = Connection::open(path)?;
-    conn.busy_timeout(Duration::from_secs(5))?;
-
-    conn.execute_batch(
-        "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;",
-    )?;
-
-    Ok(conn)
-}
-
-fn build_pool() -> Result<Pool<SqliteConnectionManager>> {
-    if let Some(parent) = paths::db_path().parent() {
-        std::fs::create_dir_all(parent).context("failed to create winbrew database directory")?;
+pub fn get_catalog_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
+    if !paths::catalog_db().exists() {
+        bail!("Package catalog not found. Run `winbrew update` to download it.");
     }
 
-    let manager = SqliteConnectionManager::file(paths::db_path());
-    let pool = Pool::builder()
-        .max_size(10)
-        .build(manager)
-        .context("failed to initialize SQLite connection pool")?;
-
-    let conn = pool
-        .get()
-        .context("failed to get database connection for migrations")?;
-    migrate(&conn)?;
-
-    Ok(pool)
+    let pool = get_catalog_pool()?;
+    pool.get()
+        .context("failed to acquire catalog database connection from pool")
 }
 
-pub(crate) fn migrate(conn: &Connection) -> Result<()> {
-    conn.execute_batch(
-        "
-        CREATE TABLE IF NOT EXISTS packages (
-            name         TEXT PRIMARY KEY,
-            version      TEXT NOT NULL,
-            kind         TEXT NOT NULL,
-            install_dir  TEXT NOT NULL,
-            product_code TEXT,
-            dependencies TEXT NOT NULL DEFAULT '[]',
-            status       TEXT NOT NULL DEFAULT 'installing',
-            installed_at TEXT NOT NULL
-        );
-    ",
-    )
-    .context("migration failed")?;
+pub fn get_catalog_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
+    if let Some(pool) = CATALOG_DB_POOL.get() {
+        return Ok(pool);
+    }
 
-    Ok(())
+    let _guard = CATALOG_DB_POOL_INIT
+        .lock()
+        .map_err(|_| anyhow::anyhow!("catalog database pool init lock poisoned"))?;
+
+    if let Some(pool) = CATALOG_DB_POOL.get() {
+        return Ok(pool);
+    }
+
+    let pool = connection::build_pool(paths::catalog_db(), true, 4, None)?;
+
+    CATALOG_DB_POOL
+        .set(pool)
+        .map_err(|_| anyhow::anyhow!("catalog database pool was initialized concurrently"))?;
+
+    CATALOG_DB_POOL
+        .get()
+        .context("failed to initialize catalog database connection pool")
 }

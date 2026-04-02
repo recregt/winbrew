@@ -8,7 +8,7 @@ pub fn insert_package(conn: &Connection, pkg: &Package) -> Result<()> {
         serde_json::to_string(&pkg.dependencies).context("failed to serialize dependencies")?;
 
     conn.execute(
-        "INSERT INTO packages
+        "INSERT INTO installed_packages
          (name, version, kind, install_dir, product_code, dependencies, status, installed_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
@@ -30,7 +30,7 @@ pub fn insert_package(conn: &Connection, pkg: &Package) -> Result<()> {
 pub fn update_status(conn: &Connection, name: &str, status: PackageStatus) -> Result<()> {
     let affected = conn
         .execute(
-            "UPDATE packages SET status = ?1 WHERE name = ?2",
+            "UPDATE installed_packages SET status = ?1 WHERE name = ?2",
             params![status.as_str(), name],
         )
         .context("failed to update status")?;
@@ -45,7 +45,7 @@ pub fn update_status(conn: &Connection, name: &str, status: PackageStatus) -> Re
 pub fn get_package(conn: &Connection, name: &str) -> Result<Option<Package>> {
     let mut stmt = conn.prepare(
         "SELECT name, version, kind, install_dir, product_code, dependencies, status, installed_at
-         FROM packages WHERE name = ?1",
+            FROM installed_packages WHERE name = ?1",
     )?;
 
     stmt.query_row(params![name], row_to_package)
@@ -57,7 +57,7 @@ pub fn list_packages(conn: &Connection) -> Result<Vec<Package>> {
     let mut stmt = conn.prepare(
         // Returns only packages that completed successfully.
         "SELECT name, version, kind, install_dir, product_code, dependencies, status, installed_at
-         FROM packages WHERE status = 'ok'
+            FROM installed_packages WHERE status = 'ok'
          ORDER BY name ASC",
     )?;
 
@@ -68,7 +68,10 @@ pub fn list_packages(conn: &Connection) -> Result<Vec<Package>> {
 
 pub fn delete_package(conn: &Connection, name: &str) -> Result<bool> {
     let affected = conn
-        .execute("DELETE FROM packages WHERE name = ?1", params![name])
+        .execute(
+            "DELETE FROM installed_packages WHERE name = ?1",
+            params![name],
+        )
         .context("failed to delete package")?;
 
     Ok(affected > 0)

@@ -11,6 +11,8 @@ use super::{Config, ConfigSection};
 pub struct HealthReport {
     pub database_path: String,
     pub database_exists: bool,
+    pub catalog_database_path: String,
+    pub catalog_database_exists: bool,
     pub install_root_source: String,
     pub install_root: String,
     pub install_root_exists: bool,
@@ -22,6 +24,14 @@ impl HealthReport {
         vec![
             ("Database".to_string(), self.database_path.clone()),
             ("Database exists".to_string(), yes_no(self.database_exists)),
+            (
+                "Catalog database".to_string(),
+                self.catalog_database_path.clone(),
+            ),
+            (
+                "Catalog database exists".to_string(),
+                yes_no(self.catalog_database_exists),
+            ),
             (
                 "Install root source".to_string(),
                 self.install_root_source.clone(),
@@ -49,6 +59,8 @@ pub fn get_health_report() -> Result<HealthReport> {
     Ok(HealthReport {
         database_path: paths::db_path().to_string_lossy().to_string(),
         database_exists: paths::db_path().exists(),
+        catalog_database_path: paths::catalog_db().to_string_lossy().to_string(),
+        catalog_database_exists: paths::catalog_db().exists(),
         install_root_source: match source {
             ConfigSource::Env => "env override".to_string(),
             ConfigSource::File => "config:paths.root".to_string(),
@@ -109,6 +121,10 @@ fn build_runtime_report(config: &Config) -> Result<RuntimeReport> {
                 (
                     "Database".to_string(),
                     resolved_paths.db.to_string_lossy().to_string(),
+                ),
+                (
+                    "Catalog DB".to_string(),
+                    paths::catalog_db().to_string_lossy().to_string(),
                 ),
                 (
                     "Config file".to_string(),

@@ -62,6 +62,10 @@ pub fn db_path() -> PathBuf {
     db_dir().join("winbrew.db")
 }
 
+pub fn catalog_db() -> PathBuf {
+    db_dir().join("catalog.db")
+}
+
 pub fn config_file() -> PathBuf {
     config_file_at(&base_dir())
 }

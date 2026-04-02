@@ -1,7 +1,7 @@
 package db
 
 const schema = `
-CREATE TABLE IF NOT EXISTS packages (
+CREATE TABLE IF NOT EXISTS catalog_packages (
     id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
     version     TEXT NOT NULL,
@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS packages (
     raw         TEXT CHECK (raw IS NULL OR json_valid(raw))
 );
 
-CREATE TABLE IF NOT EXISTS installers (
+CREATE TABLE IF NOT EXISTS catalog_installers (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    package_id  TEXT NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+    package_id  TEXT NOT NULL REFERENCES catalog_packages(id) ON DELETE CASCADE,
     url         TEXT NOT NULL,
     hash        TEXT NOT NULL,
     arch        TEXT NOT NULL DEFAULT '',
@@ -23,31 +23,31 @@ CREATE TABLE IF NOT EXISTS installers (
     UNIQUE(package_id, url, hash, arch, type)
 );
 
-CREATE VIRTUAL TABLE IF NOT EXISTS packages_fts USING fts5(
+CREATE VIRTUAL TABLE IF NOT EXISTS catalog_packages_fts USING fts5(
     name,
     description,
-    content=packages,
+    content=catalog_packages,
     content_rowid=rowid
 );
 
-CREATE INDEX IF NOT EXISTS idx_packages_source  ON packages(source);
-CREATE INDEX IF NOT EXISTS idx_packages_name    ON packages(name);
-CREATE INDEX IF NOT EXISTS idx_installers_pkg   ON installers(package_id);
+CREATE INDEX IF NOT EXISTS idx_catalog_packages_source  ON catalog_packages(source);
+CREATE INDEX IF NOT EXISTS idx_catalog_packages_name    ON catalog_packages(name);
+CREATE INDEX IF NOT EXISTS idx_catalog_installers_pkg   ON catalog_installers(package_id);
 
-CREATE TRIGGER IF NOT EXISTS packages_ai AFTER INSERT ON packages BEGIN
-    INSERT INTO packages_fts(rowid, name, description)
+CREATE TRIGGER IF NOT EXISTS catalog_packages_ai AFTER INSERT ON catalog_packages BEGIN
+    INSERT INTO catalog_packages_fts(rowid, name, description)
     VALUES (new.rowid, new.name, new.description);
 END;
 
-CREATE TRIGGER IF NOT EXISTS packages_ad AFTER DELETE ON packages BEGIN
-    INSERT INTO packages_fts(packages_fts, rowid, name, description)
+CREATE TRIGGER IF NOT EXISTS catalog_packages_ad AFTER DELETE ON catalog_packages BEGIN
+    INSERT INTO catalog_packages_fts(catalog_packages_fts, rowid, name, description)
     VALUES ('delete', old.rowid, old.name, old.description);
 END;
 
-CREATE TRIGGER IF NOT EXISTS packages_au AFTER UPDATE ON packages BEGIN
-    INSERT INTO packages_fts(packages_fts, rowid, name, description)
+CREATE TRIGGER IF NOT EXISTS catalog_packages_au AFTER UPDATE ON catalog_packages BEGIN
+    INSERT INTO catalog_packages_fts(catalog_packages_fts, rowid, name, description)
     VALUES ('delete', old.rowid, old.name, old.description);
-    INSERT INTO packages_fts(rowid, name, description)
+    INSERT INTO catalog_packages_fts(rowid, name, description)
     VALUES (new.rowid, new.name, new.description);
 END;
 `

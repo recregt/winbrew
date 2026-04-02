@@ -11,7 +11,7 @@ import (
 
 const (
 	defaultLogLevel     = "info"
-	defaultFetchTimeout  = 5 * time.Minute
+	defaultFetchTimeout = 5 * time.Minute
 	defaultRetryMax     = 3
 	defaultRetryBackoff = 2 * time.Second
 )

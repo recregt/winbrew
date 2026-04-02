@@ -32,8 +32,11 @@ impl Config {
 
     pub fn load_default() -> Result<Self> {
         let env = ConfigEnv::capture();
-        let root = env.root_override().unwrap_or(DEFAULT_ROOT);
-        Ok(Self::load(&paths::config_file_at(Path::new(root)))?.with_env(env))
+        let root = env
+            .root_override()
+            .map(str::to_owned)
+            .unwrap_or_else(default_root_path);
+        Ok(Self::load(&paths::config_file_at(Path::new(&root)))?.with_env(env))
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
@@ -51,16 +54,19 @@ impl Config {
                     .ok()
                     .map(|(value, _)| value)
             })
-            .unwrap_or_else(|| DEFAULT_ROOT.to_string());
+            .unwrap_or_else(default_root_path);
 
         self.save(&paths::config_file_at(Path::new(&root)))
     }
 
     pub fn current() -> Self {
         let env = ConfigEnv::capture();
-        let root = env.root_override().unwrap_or(DEFAULT_ROOT);
+        let root = env
+            .root_override()
+            .map(str::to_owned)
+            .unwrap_or_else(default_root_path);
 
-        Self::load(&paths::config_file_at(Path::new(root)))
+        Self::load(&paths::config_file_at(Path::new(&root)))
             .unwrap_or_else(|err| {
                 warn!(error = %err, "failed to load cached config, using defaults");
                 Self::default()

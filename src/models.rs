@@ -58,3 +58,24 @@ impl PackageQuery {
         self.terms.join(" ")
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct CatalogPackage {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub source: String,
+    pub description: Option<String>,
+    pub homepage: Option<String>,
+    pub license: Option<String>,
+    pub publisher: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CatalogInstaller {
+    pub package_id: String,
+    pub url: String,
+    pub hash: String,
+    pub arch: String,
+    pub kind: String,
+}
