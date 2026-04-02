@@ -4,6 +4,7 @@ use std::fs;
 use std::path::Path;
 use tracing::warn;
 
+mod errors;
 mod keys;
 mod lookup;
 mod registry;
@@ -12,6 +13,7 @@ mod types;
 mod validation;
 
 pub(crate) use keys::section_key;
+pub use errors::ConfigError;
 pub use storage::{config_sections, config_set, get_effective_value};
 pub use types::*;
 

@@ -1,3 +1,7 @@
+use anyhow::Result;
+
+use crate::database;
+use crate::database::HealthReport;
 use crate::models::Package;
 use indicatif::ProgressBar;
 use rayon::prelude::*;
@@ -61,4 +65,13 @@ pub fn scan_packages_with_progress(packages: &[Package], progress: &ProgressBar)
 
     diagnoses.sort_by(|left, right| left.package_name.cmp(&right.package_name));
     diagnoses
+}
+
+pub fn health_report() -> Result<HealthReport> {
+    database::get_health_report()
+}
+
+pub fn installed_packages() -> Result<Vec<Package>> {
+    let conn = database::get_conn()?;
+    database::list_packages(&conn)
 }

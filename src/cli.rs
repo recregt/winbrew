@@ -20,11 +20,23 @@ pub enum Command {
         query: Vec<String>,
     },
 
+    /// Search the package catalog
+    Search {
+        #[arg(value_name = "QUERY", num_args = 1..)]
+        query: Vec<String>,
+    },
+
     /// Show effective runtime settings and paths
     Info,
 
+    /// Print the brew version
+    Version,
+
     /// Check local brew installation health
     Doctor,
+
+    /// Refresh the package catalog
+    Update,
 
     /// Remove a package and its tracked files
     Remove {

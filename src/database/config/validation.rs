@@ -1,13 +1,13 @@
-use anyhow::{Context, Result, anyhow, bail};
+use super::errors::{ConfigError, ConfigResult};
 
 use super::{registry, types::Config};
 
 impl Config {
-    pub fn set_value(&mut self, key: &str, value: &str) -> Result<()> {
+    pub fn set_value(&mut self, key: &str, value: &str) -> ConfigResult<()> {
         let key = key.trim();
 
         if key.is_empty() {
-            bail!("config key cannot be empty");
+            return Err(ConfigError::EmptyKey);
         }
 
         let value = value.trim();
@@ -26,31 +26,41 @@ impl Config {
             "paths.data" => self.paths.data = value,
             "paths.logs" => self.paths.logs = value,
             "paths.cache" => self.paths.cache = value,
-            _ => return Err(anyhow!("unknown config key: {key}")),
+            _ => return Err(ConfigError::UnknownKey { key: key.to_string() }),
         }
 
         Ok(())
     }
 }
 
-fn parse_bool(key: &str, value: &str) -> Result<bool> {
+fn parse_bool(key: &str, value: &str) -> ConfigResult<bool> {
     match value {
         "true" | "1" | "yes" | "on" => Ok(true),
         "false" | "0" | "no" | "off" => Ok(false),
-        value => Err(anyhow!("invalid {key} value: {value}")),
+        value => Err(ConfigError::InvalidValue {
+            key: key.to_string(),
+            value: value.to_string(),
+        }),
     }
 }
 
-fn validate_config_value(key: &str, value: &str) -> Result<()> {
+fn validate_config_value(key: &str, value: &str) -> ConfigResult<()> {
     if let Some(def) = registry::find(key) {
         if let Some(validator) = def.validator {
-            return validator(value).with_context(|| format!("invalid value for '{key}'"));
+            if let Err(source) = validator(value) {
+                return Err(ConfigError::Validation {
+                    key: key.to_string(),
+                    source,
+                });
+            }
+
+            return Ok(());
         }
 
         return Ok(());
     }
 
-    Err(anyhow!("unknown config key: {key}"))
+    Err(ConfigError::UnknownKey { key: key.to_string() })
 }
 
 fn normalize_config_value(key: &str, value: &str) -> String {

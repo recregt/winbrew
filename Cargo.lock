@@ -1297,6 +1297,7 @@ dependencies = [
  "strum_macros",
  "tempfile",
  "terminal_size",
+ "thiserror",
  "toml",
  "tracing",
  "tracing-appender",

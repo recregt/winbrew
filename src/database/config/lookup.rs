@@ -1,6 +1,7 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::Result;
 use tracing::warn;
 
+use super::errors::{ConfigError, ConfigResult};
 use super::keys::section_key;
 use super::types::{Config, ConfigSection, ConfigSource};
 
@@ -66,14 +67,13 @@ impl Config {
             .collect()
     }
 
-    pub fn effective_value(&self, key: &str) -> Result<(String, ConfigSource)> {
-        self.lookup_effective(key)?.ok_or_else(|| {
-            let key = key.trim();
-            anyhow!("config key '{key}' not found")
+    pub fn effective_value(&self, key: &str) -> ConfigResult<(String, ConfigSource)> {
+        self.lookup_effective(key)?.ok_or_else(|| ConfigError::UnknownKey {
+            key: key.trim().to_string(),
         })
     }
 
-    pub fn effective_optional_value(&self, key: &str) -> Result<Option<(String, ConfigSource)>> {
+    pub fn effective_optional_value(&self, key: &str) -> ConfigResult<Option<(String, ConfigSource)>> {
         self.lookup_effective(key)
     }
 
@@ -110,11 +110,11 @@ impl Config {
         Ok(sections)
     }
 
-    pub fn get_value(&self, key: &str) -> Result<Option<String>> {
+    pub fn get_value(&self, key: &str) -> ConfigResult<Option<String>> {
         let key = key.trim();
 
         if key.is_empty() {
-            bail!("config key cannot be empty");
+            return Err(ConfigError::EmptyKey);
         }
 
         for section in self.section_specs() {
@@ -125,14 +125,14 @@ impl Config {
             }
         }
 
-        Err(anyhow!("unknown config key: {key}"))
+        Err(ConfigError::UnknownKey { key: key.to_string() })
     }
 
-    fn lookup_effective(&self, key: &str) -> Result<Option<(String, ConfigSource)>> {
+    fn lookup_effective(&self, key: &str) -> ConfigResult<Option<(String, ConfigSource)>> {
         let key = key.trim();
 
         if key.is_empty() {
-            bail!("config key cannot be empty");
+            return Err(ConfigError::EmptyKey);
         }
 
         if let Some(value) = self.env.value(key) {

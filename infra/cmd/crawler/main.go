@@ -47,7 +47,7 @@ func run() error {
 		return fmt.Errorf("failed to build sources: %w", err)
 	}
 
-	dbPath := defaultDBPath()
+	dbPath := defaultCatalogDBPath()
 
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create db directory: %w", err)
@@ -85,13 +85,13 @@ func run() error {
 	return nil
 }
 
-func defaultDBPath() string {
+func defaultCatalogDBPath() string {
 	localAppData := os.Getenv("LOCALAPPDATA")
 	if localAppData == "" {
 		panic("LOCALAPPDATA must be set on Windows")
 	}
 
-	return filepath.Join(localAppData, "winbrew", "data", "db", "winbrew.db")
+	return filepath.Join(localAppData, "winbrew", "data", "db", "catalog.db")
 }
 
 func buildSources(cfg *config.Config, httpClient *http.Client, cacheDir string) ([]sources.Source, error) {

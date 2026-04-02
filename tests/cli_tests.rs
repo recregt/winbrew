@@ -21,6 +21,18 @@ fn parse_list_with_query() {
 }
 
 #[test]
+fn parse_search_with_query() {
+    let cli = Cli::parse_from(["brew", "search", "python"]);
+
+    assert_eq!(
+        cli.command,
+        Command::Search {
+            query: vec!["python".to_string()],
+        }
+    );
+}
+
+#[test]
 fn parse_info() {
     let cli = Cli::parse_from(["brew", "info"]);
 
@@ -28,10 +40,24 @@ fn parse_info() {
 }
 
 #[test]
+fn parse_version() {
+    let cli = Cli::parse_from(["brew", "version"]);
+
+    assert_eq!(cli.command, Command::Version);
+}
+
+#[test]
 fn parse_doctor() {
     let cli = Cli::parse_from(["brew", "doctor"]);
 
     assert_eq!(cli.command, Command::Doctor);
+}
+
+#[test]
+fn parse_update() {
+    let cli = Cli::parse_from(["brew", "update"]);
+
+    assert_eq!(cli.command, Command::Update);
 }
 
 #[test]

@@ -1,7 +1,14 @@
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use rusqlite::{Connection, Error as SqlError, OptionalExtension, params, types::Type};
+use thiserror::Error;
 
 use crate::models::{Package, PackageStatus};
+
+#[derive(Debug, Error)]
+#[error("package '{name}' not found")]
+pub struct PackageNotFoundError {
+    pub name: String,
+}
 
 pub fn insert_package(conn: &Connection, pkg: &Package) -> Result<()> {
     let deps =
@@ -36,7 +43,10 @@ pub fn update_status(conn: &Connection, name: &str, status: PackageStatus) -> Re
         .context("failed to update status")?;
 
     if affected == 0 {
-        return Err(anyhow!("package '{name}' not found"));
+        return Err(PackageNotFoundError {
+            name: name.to_string(),
+        }
+        .into());
     }
 
     Ok(())

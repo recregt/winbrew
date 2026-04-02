@@ -1,18 +1,17 @@
 use anyhow::Result;
 
-use crate::{database, services::doctor, ui::Ui};
+use crate::{services::doctor, ui::Ui};
 
 pub fn run() -> Result<()> {
     let mut ui = Ui::new();
     ui.page_title("System Health Check");
     ui.info("Inspecting environment...");
-    let report = database::get_health_report()?;
+    let report = doctor::health_report()?;
     ui.display_key_values(&report.to_kv());
     ui.info("");
 
     ui.info("Loading installed packages...");
-    let conn = database::get_conn()?;
-    let packages = database::list_packages(&conn)?;
+    let packages = doctor::installed_packages()?;
     ui.info(format!("Found {} package(s). Scanning...", packages.len()));
 
     let progress = ui.progress_bar();

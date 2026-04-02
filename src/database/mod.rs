@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use r2d2::{Pool, PooledConnection};
 use std::sync::{Mutex, OnceLock};
 
@@ -7,22 +7,26 @@ use crate::core::paths;
 mod catalog;
 mod config;
 mod connection;
+mod errors;
 mod health;
 mod installed_packages;
 mod migration;
 
 use self::connection::SqliteConnectionManager;
 
+pub use errors::CatalogNotFoundError;
+
 pub use catalog::{get_installers, search};
 pub use config::{
-    Config, ConfigEnv, ConfigSection, ConfigSource, CoreConfig, PathsConfig, config_sections,
-    config_set, get_effective_value,
+    Config, ConfigEnv, ConfigError, ConfigSection, ConfigSource, CoreConfig, PathsConfig,
+    config_sections, config_set, get_effective_value,
 };
 pub use health::{
     HealthReport, ReportSection, RuntimeReport, get_health_report, get_runtime_report,
 };
 pub use installed_packages::{
     delete_package, get_package, insert_package, list_packages, update_status,
+    PackageNotFoundError,
 };
 
 static DB_POOL: OnceLock<Pool<SqliteConnectionManager>> = OnceLock::new();
@@ -68,7 +72,7 @@ pub fn get_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
 
 pub fn get_catalog_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
     if !paths::catalog_db().exists() {
-        bail!("Package catalog not found. Run `winbrew update` to download it.");
+        return Err(CatalogNotFoundError.into());
     }
 
     let pool = get_catalog_pool()?;

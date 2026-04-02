@@ -1,13 +1,13 @@
 use anyhow::Result;
 
-use crate::{database, ui::Ui};
+use crate::{services::{info as info_service, version}, ui::Ui};
 
 pub fn run() -> Result<()> {
     let mut ui = Ui::new();
     ui.page_title("System Information");
-    ui.notice(format!("Version: {}", version_string()));
+    ui.notice(format!("Version: {}", version::version_string()));
 
-    let report = database::get_runtime_report()?;
+    let report = info_service::runtime_report()?;
 
     for section in report.sections {
         ui.notice(&section.title);
@@ -18,12 +18,4 @@ pub fn run() -> Result<()> {
     ui.success("Runtime settings displayed.");
 
     Ok(())
-}
-
-fn version_string() -> String {
-    format!(
-        "{} ({})",
-        env!("CARGO_PKG_VERSION"),
-        env!("WINBREW_GIT_HASH")
-    )
 }

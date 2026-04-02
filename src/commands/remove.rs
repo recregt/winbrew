@@ -1,13 +1,13 @@
 use anyhow::Result;
 
-use crate::{services::remover, ui::Ui};
+use crate::{services::remove, ui::Ui};
 
 pub fn run(name: &str, yes: bool, force: bool) -> Result<()> {
     let mut ui = Ui::new();
     ui.page_title("Remove Package");
 
     ui.info(format!("Assessing impact for {name}..."));
-    let plan = remover::plan_removal(name)?;
+    let plan = remove::plan_removal(name)?;
 
     if !plan.dependents.is_empty() {
         ui.warn(format!(
@@ -23,7 +23,7 @@ pub fn run(name: &str, yes: bool, force: bool) -> Result<()> {
     }
 
     ui.spinner(format!("Removing {}...", plan.name), || {
-        remover::execute_removal(&plan, force)
+        remove::execute_removal(&plan, force)
     })?;
 
     ui.success(format!("Successfully removed {}.", plan.name));
@@ -33,7 +33,7 @@ pub fn run(name: &str, yes: bool, force: bool) -> Result<()> {
 
 fn should_proceed<W: std::io::Write>(
     ui: &mut Ui<W>,
-    plan: &remover::RemovalPlan,
+    plan: &remove::RemovalPlan,
     yes: bool,
     force: bool,
 ) -> Result<bool> {
