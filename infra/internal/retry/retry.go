@@ -7,34 +7,32 @@ import (
 	"time"
 )
 
-const jitterDivisor = 5
+const (
+	maxBackoffDelay     = 30 * time.Second
+	jitterWindowDivisor = 5 // +/-20% jitter window
+)
 
 func Do(ctx context.Context, maxAttempts int, baseDelay time.Duration, fn func() error) error {
 	if maxAttempts < 1 {
 		maxAttempts = 1
 	}
 
-	var lastErr error
-
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
+	for attempt := 1; ; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
 		if err := fn(); err != nil {
-			lastErr = err
 			if attempt == maxAttempts {
 				return fmt.Errorf("attempt %d/%d failed: %w", attempt, maxAttempts, err)
 			}
 
-			delay := baseDelay
-			for i := 1; i < attempt; i++ {
-				delay *= 2
+			shift := uint(attempt - 1)
+			if shift > 62 {
+				shift = 62
 			}
+			delay := min(baseDelay*(time.Duration(1)<<shift), maxBackoffDelay)
 			delay = withJitter(delay)
-			if delay <= 0 {
-				continue
-			}
 
 			timer := time.NewTimer(delay)
 			select {
@@ -50,8 +48,6 @@ func Do(ctx context.Context, maxAttempts int, baseDelay time.Duration, fn func()
 
 		return nil
 	}
-
-	return lastErr
 }
 
 func withJitter(delay time.Duration) time.Duration {
@@ -59,7 +55,7 @@ func withJitter(delay time.Duration) time.Duration {
 		return 0
 	}
 
-	jitterRange := delay / jitterDivisor
+	jitterRange := delay / jitterWindowDivisor
 	if jitterRange <= 0 {
 		return delay
 	}
