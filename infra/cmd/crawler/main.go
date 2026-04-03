@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -18,17 +19,22 @@ import (
 	"winbrew/infra/pkg/sources"
 	"winbrew/infra/pkg/sources/scoop"
 	"winbrew/infra/pkg/sources/winget"
+
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
-	if err := run(); err != nil {
+	configPath := flag.String("config", "config.yaml", "path to configuration file")
+	flag.Parse()
+
+	if err := run(*configPath); err != nil {
 		slog.Error("crawler failed", "err", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	cfg, err := config.Load("config.yaml")
+func run(configPath string) error {
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -40,21 +46,21 @@ func run() error {
 	defer cancel()
 
 	httpClient := &http.Client{Timeout: cfg.Timeout.Fetch}
-	cacheDir := filepath.Join(os.TempDir(), "winbrew-cache")
+	cacheBase, err := os.UserCacheDir()
+	if err != nil {
+		return fmt.Errorf("failed to resolve cache dir: %w", err)
+	}
+	cacheDir := filepath.Join(cacheBase, "winbrew")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create cache dir: %w", err)
+	}
 
 	srcs, err := buildSources(cfg, httpClient, cacheDir)
 	if err != nil {
 		return fmt.Errorf("failed to build sources: %w", err)
 	}
 
-	dbPath, err := defaultCatalogDBPath()
-	if err != nil {
-		return fmt.Errorf("failed to resolve catalog db path: %w", err)
-	}
-
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		return fmt.Errorf("failed to create db directory: %w", err)
-	}
+	dbPath := filepath.Join(cacheDir, "db", "catalog.db")
 
 	writer, err := db.Open(dbPath)
 	if err != nil {
@@ -62,38 +68,47 @@ func run() error {
 	}
 	defer writer.Close()
 
+	doRetry := func(runCtx context.Context, fn func() error) error {
+		return retry.Do(runCtx, cfg.Retry.Max, cfg.Retry.Backoff, fn)
+	}
+
+	g, gCtx := errgroup.WithContext(ctx)
+
 	for _, src := range srcs {
-		slog.Info("fetching source", "name", src.Name())
+		g.Go(func() error {
+			slog.Info("fetching source", "name", src.Name())
 
-		var pkgs []normalize.Package
-		err := retry.Do(ctx, cfg.Retry.Max, cfg.Retry.Backoff, func() error {
-			var err error
-			pkgs, err = src.Fetch(ctx)
-			return err
+			var pkgs []normalize.Package
+			err := doRetry(gCtx, func() error {
+				var err error
+				pkgs, err = src.Fetch(gCtx)
+				return err
+			})
+			if err != nil {
+				if gCtx.Err() != nil {
+					return fmt.Errorf("source %s cancelled: %w", src.Name(), gCtx.Err())
+				}
+				slog.Warn("skipping source after retries", "source", src.Name(), "err", err)
+				return nil
+			}
+
+			slog.Info("writing packages", "source", src.Name(), "count", len(pkgs))
+
+			if err := doRetry(gCtx, func() error {
+				return writer.WritePackages(gCtx, pkgs)
+			}); err != nil {
+				return fmt.Errorf("failed to write packages from %s: %w", src.Name(), err)
+			}
+
+			return nil
 		})
-		if err != nil {
-			return fmt.Errorf("source %s: %w", src.Name(), err)
-		}
+	}
 
-		slog.Info("writing packages", "source", src.Name(), "count", len(pkgs))
-
-		if err := retry.Do(ctx, cfg.Retry.Max, cfg.Retry.Backoff, func() error {
-			return writer.WritePackages(ctx, pkgs)
-		}); err != nil {
-			return fmt.Errorf("failed to write packages from %s: %w", src.Name(), err)
-		}
+	if err := g.Wait(); err != nil {
+		return err
 	}
 	slog.Info("crawl complete", "db", dbPath)
 	return nil
-}
-
-func defaultCatalogDBPath() (string, error) {
-	localAppData := os.Getenv("LOCALAPPDATA")
-	if localAppData == "" {
-		return "", fmt.Errorf("LOCALAPPDATA environment variable is not set")
-	}
-
-	return filepath.Join(localAppData, "winbrew", "data", "db", "catalog.db"), nil
 }
 
 func buildSources(cfg *config.Config, httpClient *http.Client, cacheDir string) ([]sources.Source, error) {
@@ -122,14 +137,9 @@ func buildSources(cfg *config.Config, httpClient *http.Client, cacheDir string) 
 }
 
 func parseLogLevel(level string) slog.Level {
-	switch strings.ToLower(level) {
-	case "debug":
-		return slog.LevelDebug
-	case "warn":
-		return slog.LevelWarn
-	case "error":
-		return slog.LevelError
-	default:
+	var parsed slog.Level
+	if err := parsed.UnmarshalText([]byte(level)); err != nil {
 		return slog.LevelInfo
 	}
+	return parsed
 }

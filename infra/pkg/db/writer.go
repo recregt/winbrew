@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
 
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
@@ -13,14 +16,23 @@ import (
 
 type Writer struct {
 	conn *sqlite.Conn
+	mu   sync.Mutex
 }
 
 func Open(path string) (*Writer, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, fmt.Errorf("failed to create database directory: %w", err)
+	}
+
 	conn, err := sqlite.OpenConn(path, sqlite.OpenReadWrite|sqlite.OpenCreate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
-	if err := sqlitex.ExecScript(conn, schema); err != nil {
+	if err := sqlitex.ExecScript(conn, schema+`
+
+PRAGMA journal_mode=WAL;
+PRAGMA synchronous=NORMAL;
+`); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("failed to apply schema: %w", err)
 	}
@@ -32,6 +44,9 @@ func (w *Writer) Close() error {
 }
 
 func (w *Writer) WritePackages(ctx context.Context, pkgs []normalize.Package) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	if err := sqlitex.ExecuteTransient(w.conn, "BEGIN", nil); err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
