@@ -28,11 +28,19 @@ func Open(path string) (*Writer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
-	if err := sqlitex.ExecScript(conn, schema+`
-
-PRAGMA journal_mode=WAL;
-PRAGMA synchronous=NORMAL;
-`); err != nil {
+	if err := sqlitex.ExecuteTransient(conn, "PRAGMA journal_mode=WAL;", nil); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+	}
+	if err := sqlitex.ExecuteTransient(conn, "PRAGMA synchronous=NORMAL;", nil); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to set synchronous mode: %w", err)
+	}
+	if err := sqlitex.ExecuteTransient(conn, "PRAGMA foreign_keys=ON;", nil); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
+	}
+	if err := sqlitex.ExecScript(conn, schema); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("failed to apply schema: %w", err)
 	}
@@ -43,19 +51,11 @@ func (w *Writer) Close() error {
 	return w.conn.Close()
 }
 
-func (w *Writer) WritePackages(ctx context.Context, pkgs []normalize.Package) error {
+func (w *Writer) WritePackages(ctx context.Context, pkgs []normalize.Package) (err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if err := sqlitex.ExecuteTransient(w.conn, "BEGIN", nil); err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = sqlitex.ExecuteTransient(w.conn, "ROLLBACK", nil)
-		}
-	}()
+	defer sqlitex.Save(w.conn)(&err)
 
 	for _, pkg := range pkgs {
 		if err := ctx.Err(); err != nil {
@@ -65,14 +65,6 @@ func (w *Writer) WritePackages(ctx context.Context, pkgs []normalize.Package) er
 			return err
 		}
 	}
-
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if err := sqlitex.ExecuteTransient(w.conn, "COMMIT", nil); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-	committed = true
 	return nil
 }
 
@@ -104,9 +96,17 @@ func (w *Writer) writePackage(pkg normalize.Package) error {
 		return fmt.Errorf("failed to insert package %s: %w", pkg.ID, err)
 	}
 
+	err = sqlitex.ExecuteTransient(w.conn,
+		`DELETE FROM catalog_installers WHERE package_id = ?`,
+		&sqlitex.ExecOptions{Args: []any{pkg.ID}},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to delete old installers for %s: %w", pkg.ID, err)
+	}
+
 	for _, inst := range pkg.Installers {
 		err = sqlitex.ExecuteTransient(w.conn,
-			`INSERT OR IGNORE INTO catalog_installers(package_id, url, hash, arch, type)
+			`INSERT INTO catalog_installers(package_id, url, hash, arch, type)
 			 VALUES (?, ?, ?, ?, ?)`,
 			&sqlitex.ExecOptions{Args: []any{pkg.ID, inst.URL, inst.Hash, inst.Arch, inst.Type}},
 		)
