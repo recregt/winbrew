@@ -9,8 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
-	"syscall"
 
 	"winbrew/infra/internal/config"
 	"winbrew/infra/internal/retry"
@@ -24,6 +22,8 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
+
 	configPath := flag.String("config", "config.yaml", "path to configuration file")
 	flag.Parse()
 
@@ -39,10 +39,15 @@ func run(configPath string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	level := parseLogLevel(cfg.LogLevel)
+	var level slog.Level
+	if err := level.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
+		level = slog.LevelInfo
+	}
+
+	// Upgraded to the configured level after config is loaded.
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
 
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
 	httpClient := &http.Client{Timeout: cfg.Timeout.Fetch}
@@ -115,7 +120,7 @@ func buildSources(cfg *config.Config, httpClient *http.Client, cacheDir string) 
 	var srcs []sources.Source
 
 	for _, name := range cfg.Sources {
-		switch strings.ToLower(name) {
+		switch name {
 		case "winget":
 			s, err := winget.New(httpClient, filepath.Join(cacheDir, "winget"))
 			if err != nil {
@@ -134,12 +139,4 @@ func buildSources(cfg *config.Config, httpClient *http.Client, cacheDir string) 
 	}
 
 	return srcs, nil
-}
-
-func parseLogLevel(level string) slog.Level {
-	var parsed slog.Level
-	if err := parsed.UnmarshalText([]byte(level)); err != nil {
-		return slog.LevelInfo
-	}
-	return parsed
 }

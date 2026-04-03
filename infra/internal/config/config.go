@@ -45,6 +45,7 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg.setDefaults()
+	cfg.normalize()
 
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -85,6 +86,13 @@ func (c *Config) setDefaults() {
 	if c.Retry.Backoff == 0 {
 		c.Retry.Backoff = defaultRetryBackoff
 	}
+}
+
+func (c *Config) normalize() {
+	for i, source := range c.Sources {
+		c.Sources[i] = strings.ToLower(strings.TrimSpace(source))
+	}
+	c.LogLevel = strings.ToLower(strings.TrimSpace(c.LogLevel))
 }
 
 func isValidLogLevel(level string) bool {
