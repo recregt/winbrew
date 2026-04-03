@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,7 +81,7 @@ func (s *Source) fetchBucket(ctx context.Context, bucket Bucket) ([]normalize.Pa
 	return readBucket(ctx, bucket.Name, bucketDir)
 }
 
-// manifest JSON structer
+// manifest JSON structure
 type scoopManifest struct {
 	Version     string `json:"version"`
 	Description string `json:"description"`
@@ -112,6 +113,7 @@ func readBucket(ctx context.Context, bucketName, bucketDir string) ([]normalize.
 
 		pkg, err := readManifest(bucketName, manifestDir, entry.Name())
 		if err != nil {
+			slog.Warn("skipping manifest", "bucket", bucketName, "manifest", entry.Name(), "err", err)
 			continue
 		}
 		pkgs = append(pkgs, pkg)

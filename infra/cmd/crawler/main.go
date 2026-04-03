@@ -47,7 +47,10 @@ func run() error {
 		return fmt.Errorf("failed to build sources: %w", err)
 	}
 
-	dbPath := defaultCatalogDBPath()
+	dbPath, err := defaultCatalogDBPath()
+	if err != nil {
+		return fmt.Errorf("failed to resolve catalog db path: %w", err)
+	}
 
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create db directory: %w", err)
@@ -80,18 +83,17 @@ func run() error {
 			return fmt.Errorf("failed to write packages from %s: %w", src.Name(), err)
 		}
 	}
-
 	slog.Info("crawl complete", "db", dbPath)
 	return nil
 }
 
-func defaultCatalogDBPath() string {
+func defaultCatalogDBPath() (string, error) {
 	localAppData := os.Getenv("LOCALAPPDATA")
 	if localAppData == "" {
-		panic("LOCALAPPDATA must be set on Windows")
+		return "", fmt.Errorf("LOCALAPPDATA environment variable is not set")
 	}
 
-	return filepath.Join(localAppData, "winbrew", "data", "db", "catalog.db")
+	return filepath.Join(localAppData, "winbrew", "data", "db", "catalog.db"), nil
 }
 
 func buildSources(cfg *config.Config, httpClient *http.Client, cacheDir string) ([]sources.Source, error) {

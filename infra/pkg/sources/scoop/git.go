@@ -17,8 +17,6 @@ func syncRepo(ctx context.Context, url, dir string) error {
 
 func cloneRepo(ctx context.Context, url, dir string) error {
 	cmd := exec.CommandContext(ctx, "git", "clone", "--depth=1", url, dir)
-	cmd.Stdout = nil
-	cmd.Stderr = nil
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git clone failed: %w", err)
 	}
