@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -35,6 +36,9 @@ type Source struct {
 func New(cacheDir string, extra ...Bucket) (*Source, error) {
 	if cacheDir == "" {
 		return nil, fmt.Errorf("cache dir cannot be empty")
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		return nil, fmt.Errorf("git executable not found in PATH: %w", err)
 	}
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create cache dir: %w", err)
@@ -83,17 +87,30 @@ func (s *Source) fetchBucket(ctx context.Context, bucket Bucket) ([]normalize.Pa
 
 // manifest JSON structure
 type scoopManifest struct {
-	Version     string `json:"version"`
-	Description string `json:"description"`
-	Homepage    string `json:"homepage"`
-	License     any    `json:"license"` // string or object
-	URL         any    `json:"url"`     // string or []string
-	Hash        any    `json:"hash"`    // string or []string
-	Bin         any    `json:"bin"`     // string, []string or [][]string
+	Version      string               `json:"version"`
+	Description  string               `json:"description"`
+	Homepage     string               `json:"homepage"`
+	License      any                  `json:"license"` // string or object
+	URL          any                  `json:"url"`     // string or []string
+	Hash         any                  `json:"hash"`    // string or []string
+	Bin          any                  `json:"bin"`     // string, []string or [][]string
+	Architecture map[string]archBlock `json:"architecture"`
+}
+
+type archBlock struct {
+	URL  any `json:"url"`
+	Hash any `json:"hash"`
 }
 
 func readBucket(ctx context.Context, bucketName, bucketDir string) ([]normalize.Package, error) {
 	manifestDir := filepath.Join(bucketDir, "bucket")
+
+	if _, err := os.Stat(manifestDir); os.IsNotExist(err) {
+		slog.Warn("bucket has no manifest dir", "bucket", bucketName)
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to stat bucket dir: %w", err)
+	}
 
 	entries, err := os.ReadDir(manifestDir)
 	if err != nil {
@@ -164,6 +181,33 @@ func resolveLicense(v any) string {
 }
 
 func resolveInstallers(m scoopManifest) []normalize.Installer {
+	if len(m.Architecture) > 0 {
+		var installers []normalize.Installer
+		for _, arch := range []string{"x64", "x86", "arm64"} {
+			block, ok := m.Architecture[arch]
+			if !ok {
+				continue
+			}
+
+			urls := toStringSlice(block.URL)
+			hashes := toStringSlice(block.Hash)
+			for i, url := range urls {
+				inst := normalize.Installer{
+					URL:  url,
+					Type: "portable",
+					Arch: arch,
+				}
+				if i < len(hashes) {
+					inst.Hash = hashes[i]
+				}
+				installers = append(installers, inst)
+			}
+		}
+		if len(installers) > 0 {
+			return installers
+		}
+	}
+
 	urls := toStringSlice(m.URL)
 	hashes := toStringSlice(m.Hash)
 
