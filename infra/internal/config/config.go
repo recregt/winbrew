@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -39,19 +40,40 @@ func Load(path string) (*Config, error) {
 	}
 	defer f.Close()
 
-	var cfg Config
-	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {
+	return Parse(f)
+}
+
+// NewDefaultConfig constructs a config populated with the package defaults.
+func NewDefaultConfig() *Config {
+	return &Config{
+		LogLevel: defaultLogLevel,
+		Timeout: Timeout{
+			Fetch: defaultFetchTimeout,
+		},
+		Retry: RetryConfig{
+			Max:     defaultRetryMax,
+			Backoff: defaultRetryBackoff,
+		},
+	}
+}
+
+// Parse decodes the configuration from any reader.
+func Parse(r io.Reader) (*Config, error) {
+	cfg := NewDefaultConfig()
+
+	dec := yaml.NewDecoder(r)
+	dec.KnownFields(true)
+	if err := dec.Decode(cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	cfg.setDefaults()
 	cfg.normalize()
 
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 
-	return &cfg, nil
+	return cfg, nil
 }
 
 func (c *Config) validate() error {
@@ -73,21 +95,6 @@ func (c *Config) validate() error {
 	return nil
 }
 
-func (c *Config) setDefaults() {
-	if c.LogLevel == "" {
-		c.LogLevel = defaultLogLevel
-	}
-	if c.Timeout.Fetch == 0 {
-		c.Timeout.Fetch = defaultFetchTimeout
-	}
-	if c.Retry.Max == 0 {
-		c.Retry.Max = defaultRetryMax
-	}
-	if c.Retry.Backoff == 0 {
-		c.Retry.Backoff = defaultRetryBackoff
-	}
-}
-
 func (c *Config) normalize() {
 	for i, source := range c.Sources {
 		c.Sources[i] = strings.ToLower(strings.TrimSpace(source))
@@ -96,7 +103,7 @@ func (c *Config) normalize() {
 }
 
 func isValidLogLevel(level string) bool {
-	switch strings.ToLower(level) {
+	switch level {
 	case "debug", "info", "warn", "error":
 		return true
 	default:
