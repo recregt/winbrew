@@ -7,13 +7,15 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"winbrew/infra/pkg/normalize"
 )
 
 const (
-	sourceURL  = "https://cdn.winget.microsoft.com/cache/source.msix"
-	sourceName = "winget"
+	sourceURL       = "https://cdn.winget.microsoft.com/cache/source.msix"
+	sourceName      = "winget"
+	maxDownloadSize = 2 << 30
 )
 
 type Source struct {
@@ -67,11 +69,24 @@ func (s *Source) download(ctx context.Context, url, dst string) error {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
+	if etag, err := os.ReadFile(dst + ".etag"); err == nil {
+		if trimmed := strings.TrimSpace(string(etag)); trimmed != "" {
+			req.Header.Set("If-None-Match", trimmed)
+		}
+	}
+
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to fetch %s: %w", url, err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotModified {
+		if _, err := os.Stat(dst); err != nil {
+			return fmt.Errorf("received 304 without cached file: %w", err)
+		}
+		return nil
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status %d for %s", resp.StatusCode, url)
@@ -83,10 +98,16 @@ func (s *Source) download(ctx context.Context, url, dst string) error {
 	}
 	tempPath := tempFile.Name()
 
-	if _, err := io.Copy(tempFile, resp.Body); err != nil {
+	n, err := io.Copy(tempFile, io.LimitReader(resp.Body, maxDownloadSize+1))
+	if err != nil {
 		_ = tempFile.Close()
 		_ = os.Remove(tempPath)
 		return fmt.Errorf("failed to write file: %w", err)
+	}
+	if n > maxDownloadSize {
+		_ = tempFile.Close()
+		_ = os.Remove(tempPath)
+		return fmt.Errorf("download exceeds %d bytes", maxDownloadSize)
 	}
 
 	if err := tempFile.Close(); err != nil {
@@ -97,6 +118,10 @@ func (s *Source) download(ctx context.Context, url, dst string) error {
 	if err := os.Rename(tempPath, dst); err != nil {
 		_ = os.Remove(tempPath)
 		return fmt.Errorf("failed to move downloaded file into place: %w", err)
+	}
+
+	if etag := resp.Header.Get("ETag"); etag != "" {
+		_ = os.WriteFile(dst+".etag", []byte(etag), 0o644)
 	}
 
 	return nil
