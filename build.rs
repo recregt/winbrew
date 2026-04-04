@@ -1,18 +1,25 @@
+use chrono::{DateTime, Utc};
 use std::process::Command;
 
 fn main() {
-    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo::rerun-if-changed=build.rs");
+
+    if let Some(git_dir) = git_dir() {
+        println!("cargo::rerun-if-changed={git_dir}/HEAD");
+
+        if let Some(reference) = git_head_reference(&git_dir) {
+            println!("cargo::rerun-if-changed={git_dir}/{reference}");
+        }
+    }
 
     let git_hash = git_hash();
-    println!("cargo:rustc-env=WINBREW_GIT_HASH={git_hash}");
+    println!("cargo::rustc-env=WINBREW_GIT_HASH={git_hash}");
 
-    let build_date = chrono::Utc::now().to_rfc3339();
-    println!("cargo:rustc-env=WINBREW_BUILD_DATE={build_date}");
+    let build_date = build_date();
+    println!("cargo::rustc-env=WINBREW_BUILD_DATE={build_date}");
 
     #[cfg(target_os = "windows")]
     {
-        println!("cargo:rerun-if-env-changed=CARGO_CFG_TARGET_OS");
-
         let mut res = winresource::WindowsResource::new();
         res.set("ProductName", "winbrew");
         res.set("FileDescription", "The Windows Package Manager");
@@ -38,28 +45,48 @@ fn main() {
         );
 
         if let Err(err) = res.compile() {
-            panic!("failed to compile Windows resources: {err}");
+            println!("cargo::error=failed to compile Windows resources: {err}");
+            std::process::exit(1);
         }
     }
 }
 
-fn git_hash() -> String {
-    println!("cargo:rerun-if-changed=.git/HEAD");
+fn build_date() -> String {
+    std::env::var("SOURCE_DATE_EPOCH")
+        .ok()
+        .and_then(|ts| ts.parse::<i64>().ok())
+        .and_then(|ts| DateTime::<Utc>::from_timestamp(ts, 0))
+        .unwrap_or_else(Utc::now)
+        .to_rfc3339()
+}
 
-    if let Ok(head) = std::fs::read_to_string(".git/HEAD")
-        && let Some(reference) = head.trim().strip_prefix("ref: ")
-    {
-        println!("cargo:rerun-if-changed=.git/{reference}");
-    }
-
+fn git_dir() -> Option<String> {
     let output = Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .output();
+        .args(["rev-parse", "--absolute-git-dir"])
+        .output()
+        .ok()?;
 
-    match output {
-        Ok(output) if output.status.success() => {
-            String::from_utf8_lossy(&output.stdout).trim().to_string()
-        }
-        _ => "unknown".to_string(),
+    if !output.status.success() {
+        return None;
     }
+
+    String::from_utf8(output.stdout)
+        .ok()
+        .map(|path| path.trim().to_owned())
+}
+
+fn git_head_reference(git_dir: &str) -> Option<String> {
+    let head = std::fs::read_to_string(format!("{git_dir}/HEAD")).ok()?;
+    head.trim().strip_prefix("ref: ").map(str::to_owned)
+}
+
+fn git_hash() -> String {
+    Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|hash| hash.trim().to_owned())
+        .unwrap_or_else(|| "unknown".to_owned())
 }
