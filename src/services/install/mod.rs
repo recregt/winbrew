@@ -36,10 +36,8 @@ where
     let installer =
         catalog::select_installer(&database::get_installers(&catalog_conn, &package.id)?)?;
 
-    let package_name = package.name.clone();
-    let package_version = package.version.clone();
-    let install_dir = paths::package_dir(&package_name);
-    let temp_root = workspace::build_temp_root(&package_name, &package_version);
+    let install_dir = paths::package_dir(&package.name);
+    let temp_root = workspace::build_temp_root(&package.name, &package.version);
     let stage_dir = temp_root.join("staging");
 
     if let Some(parent) = install_dir.parent() {
@@ -48,12 +46,12 @@ where
     fs::create_dir_all(&temp_root)?;
 
     let conn = database::get_conn()?;
-    state::prepare_install_target(&conn, &package_name, &install_dir)?;
+    state::prepare_install_target(&conn, &package.name, &install_dir)?;
     state::mark_installing(
         &conn,
-        &package_name,
-        &package_version,
-        &installer.kind,
+        package.name.clone(),
+        package.version.clone(),
+        installer.kind.clone(),
         &install_dir,
     )?;
 
@@ -64,7 +62,6 @@ where
         &installer,
         &temp_root,
         &stage_dir,
-        &package_name,
         &install_dir,
         on_start,
         on_progress,
@@ -73,8 +70,8 @@ where
     match result {
         Ok(()) => {
             let install_result = InstallResult {
-                name: package_name,
-                version: package_version,
+                name: package.name,
+                version: package.version,
                 install_dir: install_dir.to_string_lossy().to_string(),
             };
 
@@ -83,7 +80,7 @@ where
             Ok(install_result)
         }
         Err(err) => {
-            let _ = state::mark_failed(&conn, &package_name);
+            let _ = state::mark_failed(&conn, &package.name);
             let _ = staging::cleanup_path(&stage_dir);
             let _ = staging::cleanup_path(&temp_root);
             Err(err)
@@ -96,7 +93,6 @@ fn perform_install<FStart, FProgress>(
     installer: &crate::models::CatalogInstaller,
     temp_root: &std::path::Path,
     stage_dir: &std::path::Path,
-    package_name: &str,
     install_dir: &std::path::Path,
     on_start: FStart,
     on_progress: FProgress,
@@ -107,8 +103,13 @@ where
 {
     let download_path = temp_root.join(installer_filename(&installer.url));
     download::download_installer(client, installer, &download_path, on_start, on_progress)?;
-    staging::stage_installer(installer, &download_path, stage_dir, package_name)?;
-    staging::replace_directory(stage_dir, install_dir)?;
+    staging::stage_installer(installer, &download_path, stage_dir)?;
+
+    if installer.kind.eq_ignore_ascii_case("msix") {
+        std::fs::create_dir_all(install_dir)?;
+    } else {
+        staging::replace_directory(stage_dir, install_dir)?;
+    }
 
     Ok(())
 }

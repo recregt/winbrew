@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::core::network::{installer_filename, is_zip_path};
@@ -10,13 +10,18 @@ pub fn stage_installer(
     installer: &CatalogInstaller,
     download_path: &Path,
     stage_dir: &Path,
-    package_name: &str,
 ) -> Result<()> {
+    let installer_kind = installer.kind.trim().to_ascii_lowercase();
+
+    if installer_kind == "msix" {
+        run_msix_installer(download_path)?;
+        return Ok(());
+    }
+
     cleanup_path(stage_dir)?;
     fs::create_dir_all(stage_dir)
         .with_context(|| format!("failed to create staging directory {}", stage_dir.display()))?;
 
-    let installer_kind = installer.kind.trim().to_ascii_lowercase();
     if installer_kind == "zip" || (installer_kind == "portable" && is_zip_path(&installer.url)) {
         extract_zip_archive(download_path, stage_dir)?;
         return Ok(());
@@ -28,18 +33,6 @@ pub fn stage_installer(
         fs::copy(download_path, &target_path).with_context(|| {
             format!(
                 "failed to stage portable installer into {}",
-                target_path.display()
-            )
-        })?;
-        return Ok(());
-    }
-
-    if installer_kind == "msix" {
-        run_msix_installer(download_path)?;
-        let target_path = stage_dir.join(msix_filename(package_name));
-        fs::copy(download_path, &target_path).with_context(|| {
-            format!(
-                "failed to stage msix installer into {}",
                 target_path.display()
             )
         })?;
@@ -62,7 +55,7 @@ pub fn replace_directory(source_dir: &Path, target_dir: &Path) -> Result<()> {
         return Ok(());
     }
 
-    let backup_dir = target_dir.with_extension("old");
+    let backup_dir = backup_directory_path(target_dir);
     cleanup_path(&backup_dir)?;
 
     fs::rename(target_dir, &backup_dir).with_context(|| {
@@ -83,7 +76,6 @@ pub fn replace_directory(source_dir: &Path, target_dir: &Path) -> Result<()> {
 
     if let Err(err) = rename_result {
         let _ = fs::rename(&backup_dir, target_dir);
-        let _ = cleanup_path(&backup_dir);
         return Err(err);
     }
 
@@ -127,20 +119,62 @@ fn run_msix_installer(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn msix_filename(package_name: &str) -> String {
-    let mut filename = String::with_capacity(package_name.len() + 5);
-    filename.push_str(package_name);
-    filename.push_str(".msix");
-    filename
-}
-
 fn powershell_add_appx_command(path: &Path) -> String {
-    let path = path.display().to_string();
+    let path = escape_powershell_single_quoted_path(path);
     let mut command = String::with_capacity("Add-AppxPackage -Path ''".len() + path.len());
     command.push_str("Add-AppxPackage -Path '");
     command.push_str(&path);
     command.push('\'');
     command
+}
+
+fn backup_directory_path(target_dir: &Path) -> PathBuf {
+    let parent = target_dir.parent().unwrap_or(target_dir);
+    let name = target_dir
+        .file_name()
+        .map(|value| value.to_string_lossy())
+        .unwrap_or_default();
+
+    parent.join(format!("{name}.old"))
+}
+
+fn escape_powershell_single_quoted_path(path: &Path) -> String {
+    let path = path.display().to_string();
+    let mut escaped = String::with_capacity(path.len() * 2);
+
+    for ch in path.chars() {
+        if ch == '\'' {
+            escaped.push_str("''");
+        } else {
+            escaped.push(ch);
+        }
+    }
+
+    escaped
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{backup_directory_path, escape_powershell_single_quoted_path, powershell_add_appx_command};
+    use std::path::Path;
+
+    #[test]
+    fn backup_directory_path_appends_old_suffix_next_to_target() {
+        let path = Path::new(r"C:\pkg\tool.exe");
+        assert_eq!(backup_directory_path(path), Path::new(r"C:\pkg\tool.exe.old"));
+    }
+
+    #[test]
+    fn escape_powershell_single_quoted_path_doubles_quotes() {
+        let escaped = escape_powershell_single_quoted_path(Path::new(r"C:\pkg\o'ne\tool.exe"));
+        assert_eq!(escaped, r"C:\pkg\o''ne\tool.exe");
+    }
+
+    #[test]
+    fn powershell_add_appx_command_escapes_path() {
+        let command = powershell_add_appx_command(Path::new(r"C:\pkg\o'ne\tool.msix"));
+        assert_eq!(command, "Add-AppxPackage -Path 'C:\\pkg\\o''ne\\tool.msix'");
+    }
 }
 
 fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()> {

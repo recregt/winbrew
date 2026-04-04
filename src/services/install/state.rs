@@ -18,7 +18,7 @@ pub fn prepare_install_target(
             PackageStatus::Installing => bail!("package '{name}' is already being installed"),
             PackageStatus::Updating => bail!("package '{name}' is currently updating"),
             PackageStatus::Failed => {
-                let _ = database::delete_package(conn, name);
+                database::delete_package(conn, name)?;
                 staging::cleanup_path(install_dir)?;
             }
         }
@@ -31,24 +31,13 @@ pub fn prepare_install_target(
 
 pub fn mark_installing(
     conn: &rusqlite::Connection,
-    name: &str,
-    version: &str,
-    kind: &str,
+    name: impl Into<String>,
+    version: impl Into<String>,
+    kind: impl Into<String>,
     install_dir: &Path,
 ) -> Result<()> {
-    database::insert_package(
-        conn,
-        &Package {
-            name: name.to_string(),
-            version: version.to_string(),
-            kind: kind.to_string(),
-            install_dir: install_dir.to_string_lossy().to_string(),
-            product_code: None,
-            dependencies: Vec::new(),
-            status: PackageStatus::Installing,
-            installed_at: Utc::now().to_rfc3339(),
-        },
-    )
+    let package = installing_package(name, version, kind, install_dir);
+    database::insert_package(conn, &package)
 }
 
 pub fn mark_ok(conn: &rusqlite::Connection, name: &str) -> Result<()> {
@@ -57,4 +46,22 @@ pub fn mark_ok(conn: &rusqlite::Connection, name: &str) -> Result<()> {
 
 pub fn mark_failed(conn: &rusqlite::Connection, name: &str) -> Result<()> {
     database::update_status(conn, name, PackageStatus::Failed)
+}
+
+fn installing_package(
+    name: impl Into<String>,
+    version: impl Into<String>,
+    kind: impl Into<String>,
+    install_dir: &Path,
+) -> Package {
+    Package {
+        name: name.into(),
+        version: version.into(),
+        kind: kind.into(),
+        install_dir: install_dir.to_string_lossy().into_owned(),
+        product_code: None,
+        dependencies: Vec::new(),
+        status: PackageStatus::Installing,
+        installed_at: Utc::now().to_rfc3339(),
+    }
 }
