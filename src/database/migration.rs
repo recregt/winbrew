@@ -9,7 +9,6 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
             version      TEXT NOT NULL,
             kind         TEXT NOT NULL,
             install_dir  TEXT NOT NULL,
-            product_code TEXT,
             dependencies TEXT NOT NULL DEFAULT '[]',
             status       TEXT NOT NULL DEFAULT 'installing',
             installed_at TEXT NOT NULL

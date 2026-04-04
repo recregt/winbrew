@@ -1,6 +1,5 @@
 pub mod catalog;
 pub mod download;
-pub mod staging;
 pub mod state;
 pub mod types;
 pub mod workspace;
@@ -11,6 +10,9 @@ use std::fs;
 use crate::core::network::installer_filename;
 use crate::core::paths;
 use crate::database;
+use crate::engines;
+use crate::engines::PackageEngine;
+use crate::engines::common::cleanup_path;
 use crate::models::CatalogPackage;
 
 pub use types::InstallResult;
@@ -35,10 +37,10 @@ where
     let package = resolve_catalog_package(&catalog_conn, &query_text, &mut choose_package)?;
     let installer =
         catalog::select_installer(&database::get_installers(&catalog_conn, &package.id)?)?;
+    let engine = engines::get_engine(&installer)?;
 
     let install_dir = paths::package_dir(&package.name);
     let temp_root = workspace::build_temp_root(&package.name, &package.version);
-    let stage_dir = temp_root.join("staging");
 
     if let Some(parent) = install_dir.parent() {
         fs::create_dir_all(parent)?;
@@ -59,9 +61,9 @@ where
 
     let result = perform_install(
         &client,
+        engine,
         &installer,
         &temp_root,
-        &stage_dir,
         &install_dir,
         on_start,
         on_progress,
@@ -76,13 +78,12 @@ where
             };
 
             state::mark_ok(&conn, &install_result.name)?;
-            let _ = staging::cleanup_path(&temp_root);
+            let _ = cleanup_path(&temp_root);
             Ok(install_result)
         }
         Err(err) => {
             let _ = state::mark_failed(&conn, &package.name);
-            let _ = staging::cleanup_path(&stage_dir);
-            let _ = staging::cleanup_path(&temp_root);
+            let _ = cleanup_path(&temp_root);
             Err(err)
         }
     }
@@ -90,9 +91,9 @@ where
 
 fn perform_install<FStart, FProgress>(
     client: &reqwest::blocking::Client,
+    engine: crate::engines::EngineKind,
     installer: &crate::models::CatalogInstaller,
     temp_root: &std::path::Path,
-    stage_dir: &std::path::Path,
     install_dir: &std::path::Path,
     on_start: FStart,
     on_progress: FProgress,
@@ -103,13 +104,8 @@ where
 {
     let download_path = temp_root.join(installer_filename(&installer.url));
     download::download_installer(client, installer, &download_path, on_start, on_progress)?;
-    staging::stage_installer(installer, &download_path, stage_dir)?;
 
-    if installer.kind.eq_ignore_ascii_case("msix") {
-        std::fs::create_dir_all(install_dir)?;
-    } else {
-        staging::replace_directory(stage_dir, install_dir)?;
-    }
+    engine.install(installer, &download_path, install_dir)?;
 
     Ok(())
 }

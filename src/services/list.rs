@@ -30,17 +30,11 @@ fn filter_packages(packages: Vec<Package>, query: &str) -> Vec<Package> {
 }
 
 fn package_matches(pkg: &Package, query: &str) -> bool {
-    let haystack = [
-        &pkg.name,
-        &pkg.version,
-        &pkg.kind,
-        &pkg.install_dir,
-        pkg.product_code.as_deref().unwrap_or(""),
-    ]
-    .into_iter()
-    .map(normalize)
-    .collect::<Vec<_>>()
-    .join(" ");
+    let haystack = [&pkg.name, &pkg.version, &pkg.kind, &pkg.install_dir]
+        .into_iter()
+        .map(|value| normalize(value))
+        .collect::<Vec<_>>()
+        .join(" ");
 
     query.split_whitespace().all(|term| haystack.contains(term))
 }

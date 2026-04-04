@@ -3,9 +3,8 @@ use chrono::Utc;
 use std::path::Path;
 
 use crate::database;
+use crate::engines::common::cleanup_path;
 use crate::models::{Package, PackageStatus};
-
-use super::staging;
 
 pub fn prepare_install_target(
     conn: &rusqlite::Connection,
@@ -19,11 +18,11 @@ pub fn prepare_install_target(
             PackageStatus::Updating => bail!("package '{name}' is currently updating"),
             PackageStatus::Failed => {
                 database::delete_package(conn, name)?;
-                staging::cleanup_path(install_dir)?;
+                cleanup_path(install_dir)?;
             }
         }
     } else if install_dir.exists() {
-        staging::cleanup_path(install_dir)?;
+        cleanup_path(install_dir)?;
     }
 
     Ok(())
@@ -59,7 +58,6 @@ fn installing_package(
         version: version.into(),
         kind: kind.into(),
         install_dir: install_dir.to_string_lossy().into_owned(),
-        product_code: None,
         dependencies: Vec::new(),
         status: PackageStatus::Installing,
         installed_at: Utc::now().to_rfc3339(),
