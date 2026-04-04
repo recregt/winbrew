@@ -125,19 +125,19 @@ if ($release.ChecksumAsset) {
 Write-Info 'Extracting archive...'
 Expand-ZipToTemp -ZipFile $zipPath -Destination $extractPath
 
-$brewExe = Get-ChildItem -Path $extractPath -Recurse -Filter 'brew.exe' | Select-Object -First 1
+$winbrewExe = Get-ChildItem -Path $extractPath -Recurse -Filter 'winbrew.exe' | Select-Object -First 1
 
-if (-not $brewExe) {
-    throw 'brew.exe was not found in the downloaded archive.'
+if (-not $winbrewExe) {
+    throw 'winbrew.exe was not found in the downloaded archive.'
 }
 
-$targetExe = Join-Path $binDir 'brew.exe'
+$targetExe = Join-Path $binDir 'winbrew.exe'
 if ((Test-Path -LiteralPath $targetExe) -and -not $Force) {
     throw "$targetExe already exists. Re-run with -Force to overwrite it."
 }
 
-Write-Info "Installing brew.exe to $targetExe..."
-Copy-Item -LiteralPath $brewExe.FullName -Destination $targetExe -Force
+Write-Info "Installing winbrew.exe to $targetExe..."
+Copy-Item -LiteralPath $winbrewExe.FullName -Destination $targetExe -Force
 
 Write-Info 'Applying permissions...'
 Grant-CurrentUserAccess -Path $InstallRoot
@@ -151,4 +151,4 @@ Write-Info ''
 Write-Info "Winbrew $($release.TagName) installed successfully."
 Write-Info "Binary: $targetExe"
 Write-Info "Root:    $InstallRoot"
-Write-Info 'Open a new terminal to use brew from PATH.'
+Write-Info 'Open a new terminal to use winbrew from PATH.'

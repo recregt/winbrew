@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(
-    name = "brew",
+    name = "winbrew",
     version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("WINBREW_GIT_HASH"), ")"),
     about = "A modern package manager for Windows that tracks and cleanly removes software.",
     arg_required_else_help = true
@@ -14,7 +14,7 @@ pub struct Cli {
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
 pub enum Command {
-    /// List packages installed by brew
+    /// List packages installed by winbrew
     List {
         #[arg(value_name = "QUERY", num_args = 0..)]
         query: Vec<String>,
@@ -29,10 +29,10 @@ pub enum Command {
     /// Show effective runtime settings and paths
     Info,
 
-    /// Print the brew version
+    /// Print the winbrew version
     Version,
 
-    /// Check local brew installation health
+    /// Check local winbrew installation health
     Doctor,
 
     /// Refresh the package catalog
@@ -50,7 +50,7 @@ pub enum Command {
         force: bool,
     },
 
-    /// Get or set brew configuration values
+    /// Get or set winbrew configuration values
     Config {
         #[command(subcommand)]
         command: ConfigCommand,

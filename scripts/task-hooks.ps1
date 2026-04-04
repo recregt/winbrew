@@ -38,7 +38,7 @@ function Test-ConventionalCommit {
     if ($message -notmatch $pattern) {
         Write-Host "Invalid commit message: $message"
         Write-Host 'Expected Conventional Commits format, e.g.:'
-        Write-Host '  feat(cli): add brew alias'
+        Write-Host '  feat(cli): rename binary to winbrew'
         Write-Host '  fix(cleaner)!: remove legacy behavior'
         exit 1
     }

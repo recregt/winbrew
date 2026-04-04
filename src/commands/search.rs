@@ -15,7 +15,7 @@ pub fn run(query: &[String]) -> Result<()> {
                 .downcast_ref::<database::CatalogNotFoundError>()
                 .is_some() =>
         {
-            ui.notice("Package catalog not available. Run `brew update` first.");
+            ui.notice("Package catalog not available. Run `winbrew update` first.");
             return Ok(());
         }
         Err(err) => return Err(err),

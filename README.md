@@ -55,31 +55,31 @@ By default, `winbrew` layout looks like this:
 
 ### List installed packages
 ```bash
-brew list
+winbrew list
 ```
 
 ### Show runtime info
 ```bash
-brew info
+winbrew info
 ```
 
 ### Check health
 ```bash
-brew doctor
+winbrew doctor
 ```
 
 ### Remove package
 ```bash
-brew remove node
-brew remove node --yes
+winbrew remove node
+winbrew remove node --yes
 ```
 
 ### Config
 ```bash
-brew config list
-brew config get core.log_level
-brew config set core.log_level debug
-brew config set core.file_log_level "debug,winbrew::core=trace"
+winbrew config list
+winbrew config get core.log_level
+winbrew config set core.log_level debug
+winbrew config set core.file_log_level "debug,winbrew::core=trace"
 ```
 
 Config is stored in `C:\winbrew\data\winbrew.toml` and it's like this:

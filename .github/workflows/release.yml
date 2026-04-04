@@ -13,7 +13,7 @@ jobs:
     name: Build and Release
     runs-on: windows-latest
     env:
-      BREW_EXE: .\target\x86_64-pc-windows-msvc\release\brew.exe
+      WINBREW_EXE: .\target\x86_64-pc-windows-msvc\release\winbrew.exe
 
     steps:
       - name: Checkout
@@ -33,7 +33,7 @@ jobs:
       - name: Package
         run: |
           mkdir release_pkg
-          copy $env:BREW_EXE release_pkg\
+          copy $env:WINBREW_EXE release_pkg\
           copy README.md release_pkg\
           Compress-Archive -Path release_pkg\* -DestinationPath winbrew-${{ github.ref_name }}-windows-x86_64.zip
 
