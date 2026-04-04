@@ -1,33 +1,83 @@
-use anyhow::{Context, Result, bail};
-use std::path::PathBuf;
+use anyhow::{Context, Result};
+use std::fs;
+use std::io::{Read, Write};
+use std::path::Path;
 
-pub fn refresh_catalog() -> Result<()> {
-    let crawler_dir = crawler_working_dir()?;
+use crate::core::paths;
 
-    let status = std::process::Command::new("go")
-        .current_dir(&crawler_dir)
-        .args(["run", "./cmd/crawler"])
-        .status()
-        .context("failed to start the Go catalog crawler")?;
+const CATALOG_DIRECT_DOWNLOAD_URL: &str =
+    "https://github.com/recregt/winbrew/releases/latest/download/catalog.db";
 
-    if !status.success() {
-        bail!("Go catalog crawler failed with code: {:?}", status.code());
+pub fn refresh_catalog<FStart, FProgress>(on_start: FStart, on_progress: FProgress) -> Result<()>
+where
+    FStart: FnOnce(Option<u64>),
+    FProgress: FnMut(u64),
+{
+    let catalog_path = paths::catalog_db();
+    let catalog_dir = catalog_path
+        .parent()
+        .context("failed to resolve catalog database directory")?;
+
+    fs::create_dir_all(catalog_dir).context("failed to create catalog database directory")?;
+
+    let temp_path = catalog_dir.join("catalog.db.download");
+    if temp_path.exists() {
+        fs::remove_file(&temp_path).context("failed to clear previous catalog download")?;
     }
+
+    download_catalog_release(&temp_path, on_start, on_progress)?;
+
+    fs::rename(&temp_path, &catalog_path).with_context(|| {
+        format!(
+            "failed to move downloaded catalog into place: {} -> {}",
+            temp_path.display(),
+            catalog_path.display()
+        )
+    })?;
 
     Ok(())
 }
 
-fn crawler_working_dir() -> Result<PathBuf> {
-    let current_dir = std::env::current_dir().context("failed to resolve current directory")?;
+fn download_catalog_release<FStart, FProgress>(
+    temp_path: &Path,
+    on_start: FStart,
+    mut on_progress: FProgress,
+) -> Result<()>
+where
+    FStart: FnOnce(Option<u64>),
+    FProgress: FnMut(u64),
+{
+    let client = reqwest::blocking::Client::builder()
+        .user_agent("winbrew-catalog-downloader")
+        .build()
+        .context("failed to build HTTP client")?;
 
-    if current_dir.join("config.yaml").exists() && current_dir.join("cmd/crawler").exists() {
-        return Ok(current_dir);
+    let mut response = client
+        .get(CATALOG_DIRECT_DOWNLOAD_URL)
+        .send()
+        .context("failed to request catalog asset")?
+        .error_for_status()
+        .context("catalog asset request failed")?;
+
+    let total_bytes = response.content_length();
+    on_start(total_bytes);
+
+    let mut file = fs::File::create(temp_path)
+        .with_context(|| format!("failed to create download file at {}", temp_path.display()))?;
+
+    let mut buffer = [0u8; 16 * 1024];
+    loop {
+        let read = response
+            .read(&mut buffer)
+            .context("failed to read catalog asset")?;
+        if read == 0 {
+            break;
+        }
+
+        file.write_all(&buffer[..read])
+            .context("failed to write catalog asset to disk")?;
+        on_progress(read as u64);
     }
 
-    let infra_dir = current_dir.join("infra");
-    if infra_dir.join("config.yaml").exists() && infra_dir.join("cmd/crawler").exists() {
-        return Ok(infra_dir);
-    }
-
-    Ok(current_dir)
+    Ok(())
 }

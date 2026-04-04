@@ -12,17 +12,23 @@ function Write-Info {
     Write-Host $Message
 }
 
-function Get-LatestReleaseAsset {
+function Get-LatestBinaryReleaseAsset {
     param(
         [string]$Repo
     )
 
     $headers = @{ 'User-Agent' = 'winbrew-installer' }
-    $release = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$Repo/releases/latest"
+    $releases = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$Repo/releases?per_page=100"
+    $release = $releases | Where-Object { $_.tag_name -match '^v' -and -not $_.draft -and -not $_.prerelease } | Select-Object -First 1
+
+    if (-not $release) {
+        throw "Could not find a published binary release for $Repo."
+    }
+
     $zipAsset = $release.assets | Where-Object { $_.name -match '^winbrew-.*-windows-x86_64\.zip$' } | Select-Object -First 1
 
     if (-not $zipAsset) {
-        throw "Could not find a Windows release asset in the latest GitHub release for $Repo."
+        throw "Could not find a Windows release asset in the latest binary release for $Repo."
     }
 
     $checksumAsset = $release.assets | Where-Object { $_.name -eq ($zipAsset.name + '.sha256') } | Select-Object -First 1
@@ -82,8 +88,8 @@ function Expand-ZipToTemp {
     Expand-Archive -LiteralPath $ZipFile -DestinationPath $Destination -Force
 }
 
-Write-Info "Fetching latest release from GitHub..."
-$release = Get-LatestReleaseAsset -Repo $Repository
+Write-Info "Fetching latest binary release from GitHub..."
+$release = Get-LatestBinaryReleaseAsset -Repo $Repository
 
 $binDir = Join-Path $InstallRoot 'bin'
 $packagesDir = Join-Path $InstallRoot 'packages'

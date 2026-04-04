@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 
 	"winbrew/infra/internal/config"
 	"winbrew/infra/internal/retry"
@@ -25,15 +26,16 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 
 	configPath := flag.String("config", "config.yaml", "path to configuration file")
+	outputPath := flag.String("output", "", "path to the catalog database output file")
 	flag.Parse()
 
-	if err := run(*configPath); err != nil {
+	if err := run(*configPath, *outputPath); err != nil {
 		slog.Error("crawler failed", "err", err)
 		os.Exit(1)
 	}
 }
 
-func run(configPath string) error {
+func run(configPath, outputPath string) error {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -60,12 +62,15 @@ func run(configPath string) error {
 		return fmt.Errorf("failed to create cache dir: %w", err)
 	}
 
+	dbPath, err := resolveCatalogDBPath(outputPath)
+	if err != nil {
+		return err
+	}
+
 	srcs, err := buildSources(cfg, httpClient, cacheDir)
 	if err != nil {
 		return fmt.Errorf("failed to build sources: %w", err)
 	}
-
-	dbPath := filepath.Join(cacheDir, "db", "catalog.db")
 
 	writer, err := db.Open(dbPath)
 	if err != nil {
@@ -114,6 +119,25 @@ func run(configPath string) error {
 	}
 	slog.Info("crawl complete", "db", dbPath)
 	return nil
+}
+
+func resolveCatalogDBPath(outputPath string) (string, error) {
+	if trimmed := strings.TrimSpace(outputPath); trimmed != "" {
+		return filepath.Clean(trimmed), nil
+	}
+
+	if envPath, ok := os.LookupEnv("WINBREW_DB_PATH"); ok {
+		if trimmed := strings.TrimSpace(envPath); trimmed != "" {
+			return filepath.Clean(trimmed), nil
+		}
+	}
+
+	cacheBase, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve cache dir: %w", err)
+	}
+
+	return filepath.Join(cacheBase, "winbrew", "db", "catalog.db"), nil
 }
 
 func buildSources(cfg *config.Config, httpClient *http.Client, cacheDir string) ([]sources.Source, error) {
