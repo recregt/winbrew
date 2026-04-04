@@ -26,28 +26,13 @@ where
     FStart: FnOnce(Option<u64>),
     FProgress: FnMut(u64),
 {
-    let query_text = query.join(" ");
-    install_package(&query_text, &mut choose_package, on_start, on_progress)
-}
-
-fn install_package<FChoose, FStart, FProgress>(
-    query: &str,
-    choose_package: &mut FChoose,
-    on_start: FStart,
-    on_progress: FProgress,
-) -> Result<InstallResult>
-where
-    FChoose: FnMut(&str, &[CatalogPackage]) -> Result<usize>,
-    FStart: FnOnce(Option<u64>),
-    FProgress: FnMut(u64),
-{
-    let query = query.trim();
-    if query.is_empty() {
+    let query_text = query.join(" ").trim().to_owned();
+    if query_text.is_empty() {
         anyhow::bail!("package query cannot be empty");
     }
 
     let catalog_conn = database::get_catalog_conn()?;
-    let package = resolve_catalog_package(&catalog_conn, query, choose_package)?;
+    let package = resolve_catalog_package(&catalog_conn, &query_text, &mut choose_package)?;
     let installer =
         catalog::select_installer(&database::get_installers(&catalog_conn, &package.id)?)?;
 
@@ -55,7 +40,7 @@ where
     let package_version = package.version.clone();
     let install_dir = paths::package_dir(&package_name);
     let temp_root = workspace::build_temp_root(&package_name, &package_version);
-    let stage_dir = install_dir.with_extension("staging");
+    let stage_dir = temp_root.join("staging");
 
     if let Some(parent) = install_dir.parent() {
         fs::create_dir_all(parent)?;
@@ -74,24 +59,28 @@ where
 
     let client = download::build_client()?;
 
-    let result = (|| -> Result<InstallResult> {
-        let download_path = temp_root.join(installer_filename(&installer.url));
-        download::download_installer(&client, &installer, &download_path, on_start, on_progress)?;
-        staging::stage_installer(&installer, &download_path, &stage_dir, &package_name)?;
-        staging::replace_directory(&stage_dir, &install_dir)?;
-        state::mark_ok(&conn, &package_name)?;
-
-        Ok(InstallResult {
-            name: package_name.clone(),
-            version: package_version.clone(),
-            install_dir: install_dir.to_string_lossy().to_string(),
-        })
-    })();
+    let result = perform_install(
+        &client,
+        &installer,
+        &temp_root,
+        &stage_dir,
+        &package_name,
+        &install_dir,
+        on_start,
+        on_progress,
+    );
 
     match result {
-        Ok(result) => {
+        Ok(()) => {
+            let install_result = InstallResult {
+                name: package_name,
+                version: package_version,
+                install_dir: install_dir.to_string_lossy().to_string(),
+            };
+
+            state::mark_ok(&conn, &install_result.name)?;
             let _ = staging::cleanup_path(&temp_root);
-            Ok(result)
+            Ok(install_result)
         }
         Err(err) => {
             let _ = state::mark_failed(&conn, &package_name);
@@ -100,6 +89,28 @@ where
             Err(err)
         }
     }
+}
+
+fn perform_install<FStart, FProgress>(
+    client: &reqwest::blocking::Client,
+    installer: &crate::models::CatalogInstaller,
+    temp_root: &std::path::Path,
+    stage_dir: &std::path::Path,
+    package_name: &str,
+    install_dir: &std::path::Path,
+    on_start: FStart,
+    on_progress: FProgress,
+) -> Result<()>
+where
+    FStart: FnOnce(Option<u64>),
+    FProgress: FnMut(u64),
+{
+    let download_path = temp_root.join(installer_filename(&installer.url));
+    download::download_installer(client, installer, &download_path, on_start, on_progress)?;
+    staging::stage_installer(installer, &download_path, stage_dir, package_name)?;
+    staging::replace_directory(stage_dir, install_dir)?;
+
+    Ok(())
 }
 
 fn resolve_catalog_package<FChoose>(
@@ -124,10 +135,7 @@ where
         .iter()
         .position(|pkg| pkg.name.eq_ignore_ascii_case(query))
     {
-        return Ok(matches
-            .into_iter()
-            .nth(exact_index)
-            .expect("exact match index must be in range"));
+        return Ok(matches.into_iter().nth(exact_index).unwrap());
     }
 
     let selected = choose_package(query, &matches)?;
