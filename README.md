@@ -68,6 +68,11 @@ winbrew info
 winbrew doctor
 ```
 
+### Install package
+```bash
+winbrew install node
+```
+
 ### Remove package
 ```bash
 winbrew remove node

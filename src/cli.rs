@@ -26,6 +26,12 @@ pub enum Command {
         query: Vec<String>,
     },
 
+    /// Install a package from the catalog
+    Install {
+        #[arg(value_name = "QUERY", num_args = 1..)]
+        query: Vec<String>,
+    },
+
     /// Show effective runtime settings and paths
     Info,
 
