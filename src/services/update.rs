@@ -3,7 +3,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
 
-use crate::core::paths;
+use crate::database::Config;
 
 const CATALOG_DIRECT_DOWNLOAD_URL: &str =
     "https://github.com/recregt/winbrew/releases/latest/download/catalog.db";
@@ -13,7 +13,7 @@ where
     FStart: FnOnce(Option<u64>),
     FProgress: FnMut(u64),
 {
-    let catalog_path = paths::catalog_db();
+    let catalog_path = Config::current().resolved_paths().catalog_db;
     let catalog_dir = catalog_path
         .parent()
         .context("failed to resolve catalog database directory")?;

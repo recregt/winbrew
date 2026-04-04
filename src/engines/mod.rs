@@ -1,4 +1,3 @@
-pub mod common;
 pub mod msix;
 pub mod portable;
 pub mod zip;

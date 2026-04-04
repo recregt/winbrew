@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{database, services::search, ui::Ui};
+use crate::{services::search, ui::Ui};
 
 pub fn run(query: &[String]) -> Result<()> {
     let mut ui = Ui::new();
@@ -10,11 +10,7 @@ pub fn run(query: &[String]) -> Result<()> {
 
     let packages = match search::search_packages(&query_text) {
         Ok(packages) => packages,
-        Err(err)
-            if err
-                .downcast_ref::<database::CatalogNotFoundError>()
-                .is_some() =>
-        {
+        Err(err) if search::is_catalog_unavailable(&err) => {
             ui.notice("Package catalog not available. Run `winbrew update` first.");
             return Ok(());
         }

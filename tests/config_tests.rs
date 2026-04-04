@@ -6,7 +6,8 @@ mod test_env;
 use common::env_lock;
 use std::path::PathBuf;
 use test_env::TestEnvVar;
-use winbrew::database::{Config, ConfigEnv, get_health_report, get_runtime_report};
+use winbrew::database::{Config, ConfigEnv};
+use winbrew::services::report::{health_report, runtime_report};
 
 struct UnsetEnvVar {
     key: &'static str,
@@ -82,7 +83,7 @@ fn removed_network_config_keys_are_rejected() {
 fn runtime_report_builds_expected_sections() {
     let _guard = env_lock();
     let _root = UnsetEnvVar::new("WINBREW_ROOT");
-    let report = get_runtime_report().expect("report should build");
+    let report = runtime_report().expect("report should build");
 
     assert_eq!(report.sections.len(), 2);
     assert_eq!(report.sections[0].title, "Paths");
@@ -112,7 +113,7 @@ fn runtime_report_builds_expected_sections() {
 fn health_report_marks_env_root_source() {
     let _guard = env_lock();
     let _env = TestEnvVar::set("WINBREW_ROOT", r"C:\temp\winbrew");
-    let report = get_health_report().expect("health report should build");
+    let report = health_report().expect("health report should build");
 
     assert_eq!(report.install_root_source, "env override");
     assert_eq!(report.install_root, r"C:\temp\winbrew");

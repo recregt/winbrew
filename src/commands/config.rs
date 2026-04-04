@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use std::io::Write;
 
 use crate::cli::ConfigCommand;
-use crate::database::ConfigSource;
 use crate::{services::config, ui::Ui};
 
 pub fn run(command: ConfigCommand) -> Result<()> {
@@ -34,12 +33,15 @@ fn list<W: Write>(ui: &mut Ui<W>) -> Result<()> {
 
 fn get<W: Write>(ui: &mut Ui<W>, key: &str) -> Result<()> {
     let clean_key = key.trim();
-    let (value, source) = config::get_value(clean_key)?;
+    let value = config::get_display_value(clean_key)?;
 
-    if source == ConfigSource::Env {
-        ui.info(format!("{clean_key} = {value} (overridden by environment)"));
+    if value.overridden_by_env {
+        ui.info(format!(
+            "{clean_key} = {} (overridden by environment)",
+            value.value
+        ));
     } else {
-        ui.info(format!("{clean_key} = {value}"));
+        ui.info(format!("{clean_key} = {}", value.value));
     }
     Ok(())
 }

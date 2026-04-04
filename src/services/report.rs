@@ -4,8 +4,7 @@ use std::path::Path;
 
 use crate::core::paths;
 use crate::database::ConfigSource;
-
-use super::{Config, ConfigSection};
+use crate::database::{Config, ConfigSection};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HealthReport {
@@ -46,28 +45,29 @@ impl HealthReport {
     }
 }
 
-pub fn get_health_report() -> Result<HealthReport> {
+pub fn health_report() -> Result<HealthReport> {
     let config = Config::current();
     let (root, source) = config.effective_value("paths.root")?;
-    let paths = paths::resolved_paths(
+    let resolved_paths = paths::resolved_paths(
         Path::new(&root),
         &config.paths.packages,
         &config.paths.data,
         &config.paths.logs,
         &config.paths.cache,
     );
+
     Ok(HealthReport {
-        database_path: paths::db_path().to_string_lossy().to_string(),
-        database_exists: paths::db_path().exists(),
-        catalog_database_path: paths::catalog_db().to_string_lossy().to_string(),
-        catalog_database_exists: paths::catalog_db().exists(),
+        database_path: resolved_paths.db.to_string_lossy().to_string(),
+        database_exists: resolved_paths.db.exists(),
+        catalog_database_path: resolved_paths.catalog_db.to_string_lossy().to_string(),
+        catalog_database_exists: resolved_paths.catalog_db.exists(),
         install_root_source: match source {
             ConfigSource::Env => "env override".to_string(),
             ConfigSource::File => "config:paths.root".to_string(),
         },
-        install_root: paths.root.to_string_lossy().to_string(),
-        install_root_exists: paths.root.exists(),
-        packages_dir: paths.packages.to_string_lossy().to_string(),
+        install_root: resolved_paths.root.to_string_lossy().to_string(),
+        install_root_exists: resolved_paths.root.exists(),
+        packages_dir: resolved_paths.packages.to_string_lossy().to_string(),
     })
 }
 
@@ -96,7 +96,7 @@ impl RuntimeReport {
     }
 }
 
-pub fn get_runtime_report() -> Result<RuntimeReport> {
+pub fn runtime_report() -> Result<RuntimeReport> {
     build_runtime_report(&Config::current())
 }
 
@@ -124,7 +124,7 @@ fn build_runtime_report(config: &Config) -> Result<RuntimeReport> {
                 ),
                 (
                     "Catalog DB".to_string(),
-                    paths::catalog_db().to_string_lossy().to_string(),
+                    resolved_paths.catalog_db.to_string_lossy().to_string(),
                 ),
                 (
                     "Config file".to_string(),
@@ -165,7 +165,7 @@ fn effective_values(config: &Config, section: &ConfigSection) -> Result<HashMap<
     let mut values = HashMap::with_capacity(section.entries.len());
 
     for (key, _) in &section.entries {
-        let full_key = crate::database::config::section_key(&section.title, key);
+        let full_key = crate::database::section_key(&section.title, key);
         let (value, _) = config.effective_value(&full_key)?;
         values.insert(key.clone(), value);
     }
@@ -177,7 +177,7 @@ fn render_section(config: &Config, section: &ConfigSection) -> Result<ReportSect
     let mut entries = Vec::with_capacity(section.entries.len());
 
     for (key, file_value) in &section.entries {
-        let full_key = crate::database::config::section_key(&section.title, key);
+        let full_key = crate::database::section_key(&section.title, key);
         let value = config
             .effective_value(&full_key)
             .map(|(value, _)| value)

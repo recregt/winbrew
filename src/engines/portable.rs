@@ -4,7 +4,7 @@ use std::path::Path;
 
 use crate::core::network::installer_filename;
 
-use super::common::{cleanup_path, extract_zip_archive, replace_directory};
+use crate::core::fs::{cleanup_path, extract_zip_archive, replace_directory};
 
 pub fn install(download_path: &Path, install_dir: &Path, installer_url: &str) -> Result<()> {
     let stage_dir = install_dir.parent().unwrap_or(install_dir).join("staging");

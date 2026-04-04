@@ -2,13 +2,10 @@ use anyhow::{Context, Result};
 use r2d2::{Pool, PooledConnection};
 use std::sync::{Mutex, OnceLock};
 
-use crate::core::paths;
-
 mod catalog;
 mod config;
 mod connection;
 mod errors;
-mod health;
 mod installed_packages;
 mod migration;
 
@@ -17,12 +14,10 @@ use self::connection::SqliteConnectionManager;
 pub use errors::CatalogNotFoundError;
 
 pub use catalog::{get_installers, search};
+pub(crate) use config::section_key;
 pub use config::{
     Config, ConfigEnv, ConfigError, ConfigSection, ConfigSource, CoreConfig, PathsConfig,
     config_sections, config_set, get_effective_value,
-};
-pub use health::{
-    HealthReport, ReportSection, RuntimeReport, get_health_report, get_runtime_report,
 };
 pub use installed_packages::{
     PackageNotFoundError, delete_package, get_package, insert_package, list_packages, update_status,
@@ -52,7 +47,12 @@ pub fn get_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
         return Ok(pool);
     }
 
-    let pool = connection::build_pool(paths::db_path(), false, 10, Some(migration::migrate))?;
+    let pool = connection::build_pool(
+        Config::current().resolved_paths().db,
+        false,
+        10,
+        Some(migration::migrate),
+    )?;
 
     DB_POOL
         .set(pool)
@@ -70,7 +70,9 @@ pub fn get_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
 }
 
 pub fn get_catalog_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
-    if !paths::catalog_db().exists() {
+    let catalog_db = Config::current().resolved_paths().catalog_db;
+
+    if !catalog_db.exists() {
         return Err(CatalogNotFoundError.into());
     }
 
@@ -92,7 +94,8 @@ pub fn get_catalog_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
         return Ok(pool);
     }
 
-    let pool = connection::build_pool(paths::catalog_db(), true, 4, None)?;
+    let catalog_db = Config::current().resolved_paths().catalog_db;
+    let pool = connection::build_pool(catalog_db, true, 4, None)?;
 
     CATALOG_DB_POOL
         .set(pool)

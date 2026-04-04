@@ -1,7 +1,7 @@
 use anyhow::Result;
 
-use crate::database::RuntimeReport;
+use crate::services::report::{RuntimeReport, runtime_report as report_runtime_report};
 
 pub fn runtime_report() -> Result<RuntimeReport> {
-    crate::database::get_runtime_report()
+    report_runtime_report()
 }

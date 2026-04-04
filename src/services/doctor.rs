@@ -1,11 +1,12 @@
 use anyhow::Result;
 
 use crate::database;
-use crate::database::HealthReport;
 use crate::models::Package;
 use indicatif::ProgressBar;
 use rayon::prelude::*;
 use std::path::Path;
+
+use crate::services::report::{HealthReport, health_report as report_health_report};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnosis {
@@ -68,7 +69,7 @@ pub fn scan_packages_with_progress(packages: &[Package], progress: &ProgressBar)
 }
 
 pub fn health_report() -> Result<HealthReport> {
-    database::get_health_report()
+    report_health_report()
 }
 
 pub fn installed_packages() -> Result<Vec<Package>> {

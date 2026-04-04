@@ -7,6 +7,8 @@ mod theme;
 
 pub use builder::UiBuilder;
 
+use std::sync::OnceLock;
+
 use indicatif::ProgressStyle;
 use std::io::{self, BufWriter, Write};
 use std::sync::Arc;
@@ -36,4 +38,23 @@ impl Default for Ui<io::Stdout> {
     fn default() -> Self {
         Ui::new()
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UiSettings {
+    pub color_enabled: bool,
+    pub default_yes: bool,
+}
+
+static UI_SETTINGS: OnceLock<UiSettings> = OnceLock::new();
+
+pub fn init_settings(settings: UiSettings) {
+    let _ = UI_SETTINGS.set(settings);
+}
+
+pub(crate) fn current_settings() -> UiSettings {
+    *UI_SETTINGS.get_or_init(|| UiSettings {
+        color_enabled: true,
+        default_yes: false,
+    })
 }

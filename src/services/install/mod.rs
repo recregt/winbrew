@@ -7,12 +7,11 @@ pub mod workspace;
 use anyhow::Result;
 use std::fs;
 
+use crate::core::fs::cleanup_path;
 use crate::core::network::installer_filename;
-use crate::core::paths;
 use crate::database;
 use crate::engines;
 use crate::engines::PackageEngine;
-use crate::engines::common::cleanup_path;
 use crate::models::CatalogPackage;
 
 pub use types::InstallResult;
@@ -39,7 +38,10 @@ where
         catalog::select_installer(&database::get_installers(&catalog_conn, &package.id)?)?;
     let engine = engines::get_engine(&installer)?;
 
-    let install_dir = paths::package_dir(&package.name);
+    let install_dir = database::Config::current()
+        .resolved_paths()
+        .packages
+        .join(&package.name);
     let temp_root = workspace::build_temp_root(&package.name, &package.version);
 
     if let Some(parent) = install_dir.parent() {

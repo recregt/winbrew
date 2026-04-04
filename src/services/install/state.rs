@@ -2,8 +2,8 @@ use anyhow::{Result, bail};
 use chrono::Utc;
 use std::path::Path;
 
+use crate::core::fs::cleanup_path;
 use crate::database;
-use crate::engines::common::cleanup_path;
 use crate::models::{Package, PackageStatus};
 
 pub fn prepare_install_target(

@@ -22,7 +22,15 @@ pub use commands::run;
 
 #[cfg(windows)]
 pub fn run_app() -> Result<()> {
-    core::logging::init()?;
+    let config = database::Config::current();
+    let paths = config.resolved_paths();
+
+    ui::init_settings(ui::UiSettings {
+        color_enabled: config.core.color,
+        default_yes: config.core.default_yes,
+    });
+
+    core::logging::init(&paths, &config.core.log_level, &config.core.file_log_level)?;
 
     let cli = Cli::parse();
 
