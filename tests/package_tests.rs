@@ -1,9 +1,12 @@
 #[path = "common/mod.rs"]
 mod common;
+#[path = "common/env.rs"]
+mod test_env;
 
 use anyhow::Result;
-use common::{TestEnvVar, env_lock};
+use common::env_lock;
 use tempfile::tempdir;
+use test_env::TestEnvVar;
 use winbrew::database;
 use winbrew::models::{Package, PackageStatus};
 

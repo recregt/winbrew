@@ -54,3 +54,42 @@ fn normalize(input: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{filter_packages, normalize};
+    use crate::models::{Package, PackageStatus};
+
+    fn package(name: &str, version: &str, kind: &str, install_dir: &str) -> Package {
+        Package {
+            name: name.to_string(),
+            version: version.to_string(),
+            kind: kind.to_string(),
+            install_dir: install_dir.to_string(),
+            dependencies: Vec::new(),
+            status: PackageStatus::Ok,
+            installed_at: "2026-04-05T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn normalize_collapses_punctuation_and_whitespace() {
+        assert_eq!(
+            normalize("Contoso.App v1.0\t(Stable)"),
+            "contoso app v1 0 stable"
+        );
+    }
+
+    #[test]
+    fn filter_packages_matches_terms_across_display_fields() {
+        let packages = vec![
+            package("Contoso App", "1.2.3", "msix", r"C:\Packages\Contoso.App"),
+            package("Other Tool", "2.0.0", "portable", r"C:\Tools\Other"),
+        ];
+
+        let matches = filter_packages(packages, "contoso 1.2 msix");
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].name, "Contoso App");
+    }
+}

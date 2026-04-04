@@ -54,22 +54,21 @@ fn matching_package_full_names(
 fn package_matches(package: &Package, expected_name: &str) -> Result<bool> {
     let package_id = package.Id().context("failed to read package identity")?;
 
-    Ok([
-        package_id
+    Ok(identity_matches(
+        &package_id
             .Name()
             .context("failed to read package name")?
             .to_string(),
-        package_id
+        &package_id
             .FamilyName()
             .context("failed to read package family name")?
             .to_string(),
-        package_id
+        &package_id
             .FullName()
             .context("failed to read package full name")?
             .to_string(),
-    ]
-    .into_iter()
-    .any(|value| value.eq_ignore_ascii_case(expected_name)))
+        expected_name,
+    ))
 }
 
 fn package_full_name(package: &Package) -> Result<HSTRING> {
@@ -78,4 +77,47 @@ fn package_full_name(package: &Package) -> Result<HSTRING> {
         .context("failed to read package identity")?
         .FullName()
         .context("failed to read package full name")
+}
+
+fn identity_matches(name: &str, family_name: &str, full_name: &str, expected_name: &str) -> bool {
+    [name, family_name, full_name]
+        .into_iter()
+        .any(|value| value.eq_ignore_ascii_case(expected_name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::identity_matches;
+
+    #[test]
+    fn identity_matches_name_family_or_full_name() {
+        assert!(identity_matches(
+            "Contoso.App",
+            "Contoso.App_123abc",
+            "Contoso.App_123abc!App",
+            "contoso.app"
+        ));
+        assert!(identity_matches(
+            "Contoso.App",
+            "Contoso.App_123abc",
+            "Contoso.App_123abc!App",
+            "contoso.app_123abc"
+        ));
+        assert!(identity_matches(
+            "Contoso.App",
+            "Contoso.App_123abc",
+            "Contoso.App_123abc!App",
+            "contoso.app_123abc!app"
+        ));
+    }
+
+    #[test]
+    fn identity_matches_rejects_other_names() {
+        assert!(!identity_matches(
+            "Contoso.App",
+            "Contoso.App_123abc",
+            "Contoso.App_123abc!App",
+            "fabrikam.tool"
+        ));
+    }
 }

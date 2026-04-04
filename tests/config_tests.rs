@@ -1,8 +1,11 @@
 #[path = "common/mod.rs"]
 mod common;
+#[path = "common/env.rs"]
+mod test_env;
 
-use common::{TestEnvVar, env_lock};
+use common::env_lock;
 use std::path::PathBuf;
+use test_env::TestEnvVar;
 use winbrew::database::{Config, ConfigEnv, get_health_report, get_runtime_report};
 
 struct UnsetEnvVar {

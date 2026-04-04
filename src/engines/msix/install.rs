@@ -65,4 +65,11 @@ mod tests {
 
         assert_eq!(encoded, "C:/pkg/o%27ne%20tool/app%23.msix");
     }
+
+    #[test]
+    fn encode_file_uri_path_keeps_safe_segments() {
+        let encoded = encode_file_uri_path(Path::new(r"C:\Packages\Contoso.App\tool-1.0.msix"));
+
+        assert_eq!(encoded, "C:/Packages/Contoso.App/tool-1.0.msix");
+    }
 }

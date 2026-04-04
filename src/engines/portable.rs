@@ -30,3 +30,36 @@ fn is_zip_installer(url: &str) -> bool {
         .map(|(_, ext)| ext.eq_ignore_ascii_case("zip"))
         .unwrap_or(false)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::install;
+    use std::fs;
+    use std::io::Read;
+    use tempfile::tempdir;
+
+    #[test]
+    fn install_copies_non_zip_installer_into_place() {
+        let temp_root = tempdir().expect("temp root");
+        let download_path = temp_root.path().join("tool.exe");
+        let install_dir = temp_root.path().join("packages").join("Contoso.Portable");
+
+        fs::write(&download_path, b"portable-binary").expect("write download");
+
+        install(
+            &download_path,
+            &install_dir,
+            "https://example.invalid/downloads/tool.exe",
+        )
+        .expect("portable install");
+
+        let installed_file = install_dir.join("tool.exe");
+        let mut contents = String::new();
+        fs::File::open(&installed_file)
+            .expect("installed file")
+            .read_to_string(&mut contents)
+            .expect("read installed file");
+
+        assert_eq!(contents, "portable-binary");
+    }
+}

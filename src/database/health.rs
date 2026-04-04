@@ -191,3 +191,44 @@ fn render_section(config: &Config, section: &ConfigSection) -> Result<ReportSect
         entries,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn health_report_to_kv_formats_boolean_flags() {
+        let report = HealthReport {
+            database_path: "db.sqlite".to_string(),
+            database_exists: true,
+            catalog_database_path: "catalog.sqlite".to_string(),
+            catalog_database_exists: false,
+            install_root_source: "env override".to_string(),
+            install_root: "C:\\winbrew".to_string(),
+            install_root_exists: true,
+            packages_dir: "C:\\winbrew\\packages".to_string(),
+        };
+
+        let entries = report.to_kv();
+
+        assert_eq!(
+            entries,
+            vec![
+                ("Database".to_string(), "db.sqlite".to_string()),
+                ("Database exists".to_string(), "yes".to_string()),
+                ("Catalog database".to_string(), "catalog.sqlite".to_string()),
+                ("Catalog database exists".to_string(), "no".to_string()),
+                (
+                    "Install root source".to_string(),
+                    "env override".to_string()
+                ),
+                ("Install root".to_string(), "C:\\winbrew".to_string()),
+                ("Install root exists".to_string(), "yes".to_string()),
+                (
+                    "Packages dir".to_string(),
+                    "C:\\winbrew\\packages".to_string()
+                ),
+            ]
+        );
+    }
+}
