@@ -155,13 +155,18 @@ fn escape_powershell_single_quoted_path(path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{backup_directory_path, escape_powershell_single_quoted_path, powershell_add_appx_command};
+    use super::{
+        backup_directory_path, escape_powershell_single_quoted_path, powershell_add_appx_command,
+    };
     use std::path::Path;
 
     #[test]
     fn backup_directory_path_appends_old_suffix_next_to_target() {
         let path = Path::new(r"C:\pkg\tool.exe");
-        assert_eq!(backup_directory_path(path), Path::new(r"C:\pkg\tool.exe.old"));
+        assert_eq!(
+            backup_directory_path(path),
+            Path::new(r"C:\pkg\tool.exe.old")
+        );
     }
 
     #[test]
