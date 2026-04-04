@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
@@ -28,7 +29,7 @@ func TestWritePackagesReplacesInstallers(t *testing.T) {
 		ID:      packageID,
 		Name:    "example",
 		Version: "1.0.0",
-		Source:  "scoop",
+		Raw:     json.RawMessage(`{"version":"1.0.0"}`),
 		Installers: []normalize.Installer{{
 			URL:  "https://example.invalid/one.zip",
 			Hash: "hash-one",
@@ -43,7 +44,7 @@ func TestWritePackagesReplacesInstallers(t *testing.T) {
 		ID:      packageID,
 		Name:    "example",
 		Version: "2.0.0",
-		Source:  "scoop",
+		Raw:     json.RawMessage(`{"version":"2.0.0"}`),
 		Installers: []normalize.Installer{{
 			URL:  "https://example.invalid/two.zip",
 			Hash: "hash-two",
@@ -62,15 +63,18 @@ func TestWritePackagesReplacesInstallers(t *testing.T) {
 
 	var installerCount int64
 	var version string
+	var raw string
 	err = sqlitex.ExecuteTransient(conn, `
 SELECT
 	(SELECT COUNT(*) FROM catalog_installers WHERE package_id = ?),
-	(SELECT version FROM catalog_packages WHERE id = ?)
+	(SELECT version FROM catalog_packages WHERE id = ?),
+	(SELECT raw FROM catalog_packages_raw WHERE package_id = ?)
 `, &sqlitex.ExecOptions{
-		Args: []any{packageID, packageID},
+		Args: []any{packageID, packageID, packageID},
 		ResultFunc: func(stmt *sqlite.Stmt) error {
 			installerCount = stmt.ColumnInt64(0)
 			version = stmt.ColumnText(1)
+			raw = stmt.ColumnText(2)
 			return nil
 		},
 	})
@@ -83,5 +87,8 @@ SELECT
 	}
 	if got, want := version, "2.0.0"; got != want {
 		t.Fatalf("version = %q, want %q", got, want)
+	}
+	if got, want := raw, `{"version":"2.0.0"}`; got != want {
+		t.Fatalf("raw = %q, want %q", got, want)
 	}
 }

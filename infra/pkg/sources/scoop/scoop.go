@@ -159,7 +159,6 @@ func readManifest(bucketName, dir, filename string) (normalize.Package, error) {
 		ID:          id,
 		Name:        name,
 		Version:     m.Version,
-		Source:      sourceName,
 		Description: m.Description,
 		Homepage:    m.Homepage,
 		License:     resolveLicense(m.License),

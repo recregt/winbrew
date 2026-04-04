@@ -66,7 +66,6 @@ func readPackages(ctx context.Context, dbPath string) ([]normalize.Package, erro
 				ID:        "winget/" + id,
 				Name:      name,
 				Version:   version,
-				Source:    sourceName,
 				Publisher: strings.TrimSpace(publisher),
 				Raw:       raw,
 			})

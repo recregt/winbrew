@@ -24,6 +24,10 @@ func Open(path string) (*Writer, error) {
 		return nil, fmt.Errorf("failed to create database directory: %w", err)
 	}
 
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		_ = os.Remove(path + suffix)
+	}
+
 	conn, err := sqlite.OpenConn(path, sqlite.OpenReadWrite|sqlite.OpenCreate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
@@ -75,25 +79,33 @@ func (w *Writer) writePackage(pkg normalize.Package) error {
 	}
 
 	err = sqlitex.ExecuteTransient(w.conn,
-		`INSERT INTO catalog_packages(id, name, version, source, description, homepage, license, publisher, raw)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO catalog_packages(id, name, version, description, homepage, license, publisher)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   name=excluded.name,
 		   version=excluded.version,
-		   source=excluded.source,
 		   description=excluded.description,
 		   homepage=excluded.homepage,
 		   license=excluded.license,
-		   publisher=excluded.publisher,
-		   raw=excluded.raw`,
+		   publisher=excluded.publisher`,
 		&sqlitex.ExecOptions{Args: []any{
-			pkg.ID, pkg.Name, pkg.Version, pkg.Source,
+			pkg.ID, pkg.Name, pkg.Version,
 			pkg.Description, pkg.Homepage, pkg.License, pkg.Publisher,
-			string(raw),
 		}},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert package %s: %w", pkg.ID, err)
+	}
+
+	err = sqlitex.ExecuteTransient(w.conn,
+		`INSERT INTO catalog_packages_raw(package_id, raw)
+		 VALUES (?, ?)
+		 ON CONFLICT(package_id) DO UPDATE SET
+		   raw=excluded.raw`,
+		&sqlitex.ExecOptions{Args: []any{pkg.ID, string(raw)}},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert raw package %s: %w", pkg.ID, err)
 	}
 
 	err = sqlitex.ExecuteTransient(w.conn,

@@ -5,12 +5,10 @@ CREATE TABLE IF NOT EXISTS catalog_packages (
     id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
     version     TEXT NOT NULL,
-    source      TEXT NOT NULL,
     description TEXT,
     homepage    TEXT,
     license     TEXT,
-    publisher   TEXT,
-    raw         TEXT CHECK (raw IS NULL OR json_valid(raw))
+    publisher   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS catalog_installers (
@@ -23,6 +21,11 @@ CREATE TABLE IF NOT EXISTS catalog_installers (
     UNIQUE(package_id, url, hash, arch, type)
 );
 
+CREATE TABLE IF NOT EXISTS catalog_packages_raw (
+    package_id  TEXT PRIMARY KEY REFERENCES catalog_packages(id) ON DELETE CASCADE,
+    raw         TEXT NOT NULL CHECK (json_valid(raw))
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS catalog_packages_fts USING fts5(
     name,
     description,
@@ -30,7 +33,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS catalog_packages_fts USING fts5(
     content_rowid=rowid
 );
 
-CREATE INDEX IF NOT EXISTS idx_catalog_packages_source  ON catalog_packages(source);
 CREATE INDEX IF NOT EXISTS idx_catalog_packages_name    ON catalog_packages(name);
 CREATE INDEX IF NOT EXISTS idx_catalog_installers_pkg   ON catalog_installers(package_id);
 

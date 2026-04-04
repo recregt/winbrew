@@ -7,7 +7,6 @@ type Package struct {
 	ID      string // "winget/Microsoft.VSCode" | "scoop/vscode"
 	Name    string
 	Version string
-	Source  string // "winget" | "scoop"
 
 	// Optional
 	Description string
@@ -17,7 +16,7 @@ type Package struct {
 
 	Installers []Installer
 
-	Raw json.RawMessage
+	Raw json.RawMessage // Stored separately in catalog_packages_raw.
 }
 
 type Installer struct {
