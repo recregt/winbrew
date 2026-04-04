@@ -3,9 +3,8 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use crate::core::network::{installer_filename, is_zip_path};
 use crate::models::CatalogInstaller;
-
-use super::download::{installer_filename, is_zip_path};
 
 pub fn stage_installer(
     installer: &CatalogInstaller,
@@ -37,7 +36,7 @@ pub fn stage_installer(
 
     if installer_kind == "msix" {
         run_msix_installer(download_path)?;
-        let target_path = stage_dir.join(format!("{package_name}.msix"));
+        let target_path = stage_dir.join(msix_filename(package_name));
         fs::copy(download_path, &target_path).with_context(|| {
             format!(
                 "failed to stage msix installer into {}",
@@ -51,17 +50,44 @@ pub fn stage_installer(
 }
 
 pub fn replace_directory(source_dir: &Path, target_dir: &Path) -> Result<()> {
-    if target_dir.exists() {
-        cleanup_path(target_dir)?;
+    if !target_dir.exists() {
+        fs::rename(source_dir, target_dir).with_context(|| {
+            format!(
+                "failed to move staged installation into place: {} -> {}",
+                source_dir.display(),
+                target_dir.display()
+            )
+        })?;
+
+        return Ok(());
     }
 
-    fs::rename(source_dir, target_dir).with_context(|| {
+    let backup_dir = target_dir.with_extension("old");
+    cleanup_path(&backup_dir)?;
+
+    fs::rename(target_dir, &backup_dir).with_context(|| {
+        format!(
+            "failed to move existing installation aside: {} -> {}",
+            target_dir.display(),
+            backup_dir.display()
+        )
+    })?;
+
+    let rename_result = fs::rename(source_dir, target_dir).with_context(|| {
         format!(
             "failed to move staged installation into place: {} -> {}",
             source_dir.display(),
             target_dir.display()
         )
-    })?;
+    });
+
+    if let Err(err) = rename_result {
+        let _ = fs::rename(&backup_dir, target_dir);
+        let _ = cleanup_path(&backup_dir);
+        return Err(err);
+    }
+
+    let _ = cleanup_path(&backup_dir);
 
     Ok(())
 }
@@ -81,13 +107,15 @@ pub fn cleanup_path(path: &Path) -> Result<()> {
 }
 
 fn run_msix_installer(path: &Path) -> Result<()> {
+    let command = powershell_add_appx_command(path);
+
     let status = Command::new("powershell")
         .args([
             "-NoProfile",
             "-ExecutionPolicy",
             "Bypass",
             "-Command",
-            &format!("Add-AppxPackage -Path '{}'", path.display()),
+            &command,
         ])
         .status()
         .context("failed to start PowerShell for msix installation")?;
@@ -97,6 +125,22 @@ fn run_msix_installer(path: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn msix_filename(package_name: &str) -> String {
+    let mut filename = String::with_capacity(package_name.len() + 5);
+    filename.push_str(package_name);
+    filename.push_str(".msix");
+    filename
+}
+
+fn powershell_add_appx_command(path: &Path) -> String {
+    let path = path.display().to_string();
+    let mut command = String::with_capacity("Add-AppxPackage -Path ''".len() + path.len());
+    command.push_str("Add-AppxPackage -Path '");
+    command.push_str(&path);
+    command.push('\'');
+    command
 }
 
 fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()> {

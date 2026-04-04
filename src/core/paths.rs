@@ -87,11 +87,21 @@ pub fn cache_dir_at(root: &Path) -> PathBuf {
 }
 
 pub fn cache_file(name: &str, version: &str, ext: &str) -> PathBuf {
-    cache_dir().join(format!("{}-{}.{}", name, version, ext))
+    cache_dir().join(cache_filename(name, version, ext))
 }
 
 pub fn cache_file_at(root: &Path, name: &str, version: &str, ext: &str) -> PathBuf {
-    cache_dir_at(root).join(format!("{}-{}.{}", name, version, ext))
+    cache_dir_at(root).join(cache_filename(name, version, ext))
+}
+
+fn cache_filename(name: &str, version: &str, ext: &str) -> String {
+    let mut filename = String::with_capacity(name.len() + version.len() + ext.len() + 2);
+    filename.push_str(name);
+    filename.push('-');
+    filename.push_str(version);
+    filename.push('.');
+    filename.push_str(ext);
+    filename
 }
 
 pub fn ensure_dirs() -> std::io::Result<()> {

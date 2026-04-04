@@ -1,6 +1,6 @@
 use super::Ui;
 use anyhow::{Result, bail};
-use dialoguer::{Confirm, Input, theme::ColorfulTheme};
+use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
 use std::io::Write;
 
 impl<W: Write> Ui<W> {
@@ -44,5 +44,18 @@ impl<W: Write> Ui<W> {
                 _ => self.warn(format!("Enter a number between 1 and {max}.")),
             }
         }
+    }
+
+    pub fn select_index(&mut self, message: &str, items: &[String]) -> Result<usize> {
+        if items.is_empty() {
+            bail!("cannot prompt for selection from an empty list");
+        }
+
+        Select::with_theme(&ColorfulTheme::default())
+            .with_prompt(message)
+            .items(items)
+            .default(0)
+            .interact()
+            .map_err(Into::into)
     }
 }
