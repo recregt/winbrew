@@ -16,6 +16,7 @@ fn sample_package(name: &str, status: PackageStatus) -> Package {
         version: "1.0.0".to_string(),
         kind: "portable".to_string(),
         install_dir: format!(r"C:\\winbrew\\packages\\{name}"),
+        msix_package_full_name: Some(format!("{name}_1.0.0_x64__8wekyb3d8bbwe")),
         dependencies: vec!["dep-a".to_string(), "dep-b".to_string()],
         status,
         installed_at: "2026-03-24T00:00:00Z".to_string(),
@@ -41,6 +42,10 @@ fn package_crud_round_trip() -> Result<()> {
     assert_eq!(stored.version, package.version);
     assert_eq!(stored.kind, package.kind);
     assert_eq!(stored.install_dir, package.install_dir);
+    assert_eq!(
+        stored.msix_package_full_name,
+        package.msix_package_full_name
+    );
     assert_eq!(stored.dependencies, package.dependencies);
     assert_eq!(stored.status, PackageStatus::Installing);
 

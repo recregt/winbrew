@@ -1,10 +1,26 @@
 use anyhow::{Context, Result, bail};
+use std::path::Path;
 use windows::ApplicationModel::Package;
 use windows::Management::Deployment::PackageManager;
 use windows::core::HSTRING;
 
-pub fn remove(package_name: &str) -> Result<()> {
+pub fn remove(
+    package_name: &str,
+    _install_dir: &Path,
+    package_full_name: Option<&str>,
+) -> Result<()> {
     let package_manager = PackageManager::new().context("failed to create package manager")?;
+
+    if let Some(package_full_name) = package_full_name {
+        package_manager
+            .RemovePackageAsync(&HSTRING::from(package_full_name))
+            .with_context(|| format!("failed to start uninstall for {package_full_name}"))?
+            .get()
+            .with_context(|| format!("msix uninstall failed for {package_full_name}"))?;
+
+        return Ok(());
+    }
+
     let matching_full_names = matching_package_full_names(&package_manager, package_name)?;
 
     if matching_full_names.is_empty() {
@@ -22,7 +38,7 @@ pub fn remove(package_name: &str) -> Result<()> {
     Ok(())
 }
 
-fn matching_package_full_names(
+pub(crate) fn matching_package_full_names(
     package_manager: &PackageManager,
     package_name: &str,
 ) -> Result<Vec<HSTRING>> {

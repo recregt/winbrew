@@ -16,13 +16,14 @@ pub fn insert_package(conn: &Connection, pkg: &Package) -> Result<()> {
 
     conn.execute(
         "INSERT INTO installed_packages
-         (name, version, kind, install_dir, dependencies, status, installed_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+         (name, version, kind, install_dir, msix_package_full_name, dependencies, status, installed_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             pkg.name,
             pkg.version,
             pkg.kind,
             pkg.install_dir,
+            pkg.msix_package_full_name,
             deps,
             pkg.status.as_str(),
             pkg.installed_at,
@@ -51,9 +52,35 @@ pub fn update_status(conn: &Connection, name: &str, status: PackageStatus) -> Re
     Ok(())
 }
 
+pub fn update_status_and_msix_package_full_name(
+    conn: &Connection,
+    name: &str,
+    status: PackageStatus,
+    msix_package_full_name: Option<&str>,
+) -> Result<()> {
+    let affected = conn
+        .execute(
+            "UPDATE installed_packages
+                SET status = ?1,
+                    msix_package_full_name = COALESCE(?2, msix_package_full_name)
+              WHERE name = ?3",
+            params![status.as_str(), msix_package_full_name, name],
+        )
+        .context("failed to update status and msix package full name")?;
+
+    if affected == 0 {
+        return Err(PackageNotFoundError {
+            name: name.to_string(),
+        }
+        .into());
+    }
+
+    Ok(())
+}
+
 pub fn get_package(conn: &Connection, name: &str) -> Result<Option<Package>> {
     let mut stmt = conn.prepare(
-        "SELECT name, version, kind, install_dir, dependencies, status, installed_at
+        "SELECT name, version, kind, install_dir, msix_package_full_name, dependencies, status, installed_at
             FROM installed_packages WHERE name = ?1",
     )?;
 
@@ -65,7 +92,7 @@ pub fn get_package(conn: &Connection, name: &str) -> Result<Option<Package>> {
 pub fn list_packages(conn: &Connection) -> Result<Vec<Package>> {
     let mut stmt = conn.prepare(
         // Returns only packages that completed successfully.
-        "SELECT name, version, kind, install_dir, dependencies, status, installed_at
+        "SELECT name, version, kind, install_dir, msix_package_full_name, dependencies, status, installed_at
             FROM installed_packages WHERE status = 'ok'
          ORDER BY name ASC",
     )?;
@@ -101,6 +128,7 @@ fn row_to_package(row: &rusqlite::Row) -> std::result::Result<Package, SqlError>
         version: row.get("version")?,
         kind: row.get("kind")?,
         install_dir: row.get("install_dir")?,
+        msix_package_full_name: row.get("msix_package_full_name")?,
         dependencies,
         status: PackageStatus::parse(&status_raw),
         installed_at: row.get("installed_at")?,

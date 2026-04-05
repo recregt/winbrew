@@ -39,8 +39,17 @@ pub fn mark_installing(
     database::insert_package(conn, &package)
 }
 
-pub fn mark_ok(conn: &rusqlite::Connection, name: &str) -> Result<()> {
-    database::update_status(conn, name, PackageStatus::Ok)
+pub fn mark_ok(
+    conn: &rusqlite::Connection,
+    name: &str,
+    msix_package_full_name: Option<&str>,
+) -> Result<()> {
+    database::update_status_and_msix_package_full_name(
+        conn,
+        name,
+        PackageStatus::Ok,
+        msix_package_full_name,
+    )
 }
 
 pub fn mark_failed(conn: &rusqlite::Connection, name: &str) -> Result<()> {
@@ -58,6 +67,7 @@ fn installing_package(
         version: version.into(),
         kind: kind.into(),
         install_dir: install_dir.to_string_lossy().into_owned(),
+        msix_package_full_name: None,
         dependencies: Vec::new(),
         status: PackageStatus::Installing,
         installed_at: Utc::now().to_rfc3339(),

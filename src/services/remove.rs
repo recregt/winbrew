@@ -4,9 +4,7 @@ use tracing::{debug, warn};
 use std::path::PathBuf;
 
 use crate::database;
-use crate::engines::msix::remove as msix_remove;
-use crate::engines::portable::remove as portable_remove;
-use crate::engines::zip::remove as zip_remove;
+use crate::engines::{self, EngineKind, PackageEngine};
 use crate::models::Package;
 
 #[derive(Debug, Clone)]
@@ -14,6 +12,7 @@ pub struct RemovalPlan {
     pub name: String,
     pub kind: String,
     pub install_dir: String,
+    pub msix_package_full_name: Option<String>,
     pub dependents: Vec<String>,
 }
 
@@ -64,6 +63,7 @@ fn removal_plan(pkg: Package, dependents: Vec<String>) -> RemovalPlan {
         name: pkg.name,
         kind: pkg.kind,
         install_dir: pkg.install_dir,
+        msix_package_full_name: pkg.msix_package_full_name,
         dependents,
     }
 }
@@ -84,10 +84,18 @@ fn execute_removal_with_conn(
     }
 
     let install_dir = PathBuf::from(&plan.install_dir);
+    let engine_kind = match engines::get_engine_kind(&plan.kind) {
+        Ok(engine_kind) => engine_kind,
+        Err(_) => bail!("unsupported package type: {}", plan.kind),
+    };
 
-    match plan.kind.to_ascii_lowercase().as_str() {
-        "msix" => {
-            msix_remove::remove(&plan.name)?;
+    match engine_kind {
+        EngineKind::Msix => {
+            engine_kind.remove(
+                &plan.name,
+                &install_dir,
+                plan.msix_package_full_name.as_deref(),
+            )?;
 
             if install_dir.exists()
                 && let Err(err) = std::fs::remove_dir_all(&install_dir)
@@ -100,7 +108,7 @@ fn execute_removal_with_conn(
 
             database::delete_package(conn, &plan.name)?;
         }
-        "zip" | "portable" => {
+        EngineKind::Zip | EngineKind::Portable => {
             if install_dir.exists() {
                 let trash_dir = install_dir.with_extension("trash");
 
@@ -112,24 +120,18 @@ fn execute_removal_with_conn(
                 std::fs::rename(&install_dir, &trash_dir)
                     .context("failed to stage package for removal")?;
 
-                let remove_dir = match plan.kind.to_ascii_lowercase().as_str() {
-                    "zip" => zip_remove::remove,
-                    _ => portable_remove::remove,
-                };
-
                 if let Err(err) = database::delete_package(conn, &plan.name) {
                     let _ = std::fs::rename(&trash_dir, &install_dir);
                     return Err(err).context("failed to remove package from database");
                 }
 
-                if let Err(err) = remove_dir(&trash_dir) {
+                if let Err(err) = engine_kind.remove(&plan.name, &trash_dir, None) {
                     warn!("failed to completely remove trash for {}: {err}", plan.name);
                 }
             } else {
                 database::delete_package(conn, &plan.name)?;
             }
         }
-        _ => bail!("unsupported package type: {}", plan.kind),
     }
 
     debug!(package = plan.name.as_str(), force, "remove completed");

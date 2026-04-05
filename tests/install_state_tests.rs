@@ -18,6 +18,7 @@ fn sample_package(name: &str, status: PackageStatus, install_dir: &Path) -> Pack
         version: "1.0.0".to_string(),
         kind: "portable".to_string(),
         install_dir: install_dir.to_string_lossy().into_owned(),
+        msix_package_full_name: None,
         dependencies: Vec::new(),
         status,
         installed_at: "2026-04-05T00:00:00Z".to_string(),
@@ -120,7 +121,7 @@ fn mark_installing_and_mark_ok_update_status() -> Result<()> {
     assert_eq!(stored.status, PackageStatus::Installing);
     assert_eq!(stored.dependencies, Vec::<String>::new());
 
-    state::mark_ok(&conn, "Contoso.Installing")?;
+    state::mark_ok(&conn, "Contoso.Installing", None)?;
 
     let stored = database::get_package(&conn, "Contoso.Installing")?
         .expect("package should still exist after mark_ok");

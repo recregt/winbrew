@@ -23,6 +23,7 @@ fn sample_package(
         version: "1.0.0".to_string(),
         kind: kind.to_string(),
         install_dir: install_dir.to_string_lossy().into_owned(),
+        msix_package_full_name: None,
         dependencies,
         status: PackageStatus::Ok,
         installed_at: "2026-04-05T00:00:00Z".to_string(),

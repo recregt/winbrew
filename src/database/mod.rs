@@ -21,7 +21,8 @@ pub use config::{
     config_sections, config_set, get_effective_value,
 };
 pub use installed_packages::{
-    PackageNotFoundError, delete_package, get_package, insert_package, list_packages, update_status,
+    PackageNotFoundError, delete_package, get_package, insert_package, list_packages,
+    update_status, update_status_and_msix_package_full_name,
 };
 
 static DB_POOL: OnceLock<Pool<SqliteConnectionManager>> = OnceLock::new();

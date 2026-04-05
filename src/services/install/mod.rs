@@ -11,8 +11,7 @@ use crate::AppContext;
 use crate::core::fs::cleanup_path;
 use crate::core::network::installer_filename;
 use crate::database;
-use crate::engines;
-use crate::engines::PackageEngine;
+use crate::engines::{self, EngineKind, PackageEngine};
 use crate::models::CatalogPackage;
 
 pub use types::InstallResult;
@@ -78,7 +77,24 @@ where
                 install_dir: install_dir.to_string_lossy().to_string(),
             };
 
-            state::mark_ok(&conn, &install_result.name)?;
+            let msix_package_full_name = if engine == EngineKind::Msix {
+                match engines::msix::installed_package_full_name(&install_result.name) {
+                    Ok(full_name) => Some(full_name),
+                    Err(err) => {
+                        let _ = state::mark_failed(&conn, &install_result.name);
+                        let _ = cleanup_path(&temp_root);
+                        return Err(err);
+                    }
+                }
+            } else {
+                None
+            };
+
+            state::mark_ok(
+                &conn,
+                &install_result.name,
+                msix_package_full_name.as_deref(),
+            )?;
             let _ = cleanup_path(&temp_root);
             Ok(install_result)
         }

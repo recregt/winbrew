@@ -41,6 +41,7 @@ pub struct Package {
     pub version: String,
     pub kind: String,
     pub install_dir: String,
+    pub msix_package_full_name: Option<String>,
     pub dependencies: Vec<String>,
     pub status: PackageStatus,
     pub installed_at: String,
