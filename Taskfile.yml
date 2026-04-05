@@ -6,12 +6,12 @@ tasks:
   tools:install-lefthook:
     desc: Install Lefthook for local or CI use
     cmds:
-      - go install github.com/evilmartians/lefthook/v2@v2.1.4
+      - go install github.com/evilmartians/lefthook/v2@v1.13.6
 
   tools:install-nextest:
     desc: Install cargo-nextest for local development
     cmds:
-      - cargo install --locked cargo-nextest --version 0.9.122 --force
+      - cargo install --locked cargo-nextest --version 0.9.132 --force
 
   test:
     desc: Run Rust tests with cargo test
@@ -79,10 +79,15 @@ tasks:
       - task: ci:smoke
 
   ci:verify:
-    desc: Run the full Lefthook verification flow for CI
+    desc: Run the CI verification task set directly
     cmds:
-      - lefthook run pre-commit --all-files
-      - lefthook run pre-push --all-files
+      - task: infra:pre-commit
+      - task: infra:pre-push
+      - task: check
+      - cargo check --locked
+      - task: check:clippy
+      - task: test:nextest
+      - task: ci:smoke
 
   dev:run:
     desc: Run the CLI with a repo-local development root

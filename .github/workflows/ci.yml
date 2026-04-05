@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   ci:
-    name: CI checks
+    name: Checks
     runs-on: windows-latest
     if: github.event_name != 'schedule'
 
@@ -44,15 +44,10 @@ jobs:
         with:
           version: 3.x
 
-      - name: Install Lefthook
-        uses: taiki-e/install-action@v2
-        with:
-          tool: lefthook
-
       - name: Install cargo-nextest
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-nextest@0.9.122
+          tool: cargo-nextest@0.9.132
 
       - name: Verify checks
         run: task ci:verify
