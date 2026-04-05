@@ -1,11 +1,8 @@
-#[path = "common/mod.rs"]
-mod common;
 #[path = "common/shared_root.rs"]
 mod shared_root;
 
 use anyhow::Result;
-use common::env_lock;
-use shared_root::shared_test_root;
+use shared_root::test_root;
 use std::fs;
 use std::path::Path;
 use winbrew::database;
@@ -38,10 +35,16 @@ fn reset_database(root: &Path) -> Result<()> {
     Ok(())
 }
 
+fn init_database(root: &Path) -> Result<()> {
+    let config = database::Config::load_at(root)?;
+    database::init(&config.resolved_paths())
+}
+
 #[test]
 fn prepare_install_target_removes_orphaned_directory() -> Result<()> {
-    let _guard = env_lock();
-    let root = shared_test_root();
+    let test_root = test_root();
+    let root = test_root.path();
+    init_database(root)?;
     reset_database(root)?;
     let conn = database::get_conn()?;
 
@@ -59,8 +62,9 @@ fn prepare_install_target_removes_orphaned_directory() -> Result<()> {
 
 #[test]
 fn prepare_install_target_deletes_failed_package_and_directory() -> Result<()> {
-    let _guard = env_lock();
-    let root = shared_test_root();
+    let test_root = test_root();
+    let root = test_root.path();
+    init_database(root)?;
     reset_database(root)?;
     let conn = database::get_conn()?;
 
@@ -81,8 +85,9 @@ fn prepare_install_target_deletes_failed_package_and_directory() -> Result<()> {
 
 #[test]
 fn prepare_install_target_rejects_installed_package() -> Result<()> {
-    let _guard = env_lock();
-    let root = shared_test_root();
+    let test_root = test_root();
+    let root = test_root.path();
+    init_database(root)?;
     reset_database(root)?;
     let conn = database::get_conn()?;
 
@@ -101,8 +106,9 @@ fn prepare_install_target_rejects_installed_package() -> Result<()> {
 
 #[test]
 fn mark_installing_and_mark_ok_update_status() -> Result<()> {
-    let _guard = env_lock();
-    let root = shared_test_root();
+    let test_root = test_root();
+    let root = test_root.path();
+    init_database(root)?;
     reset_database(root)?;
     let conn = database::get_conn()?;
 

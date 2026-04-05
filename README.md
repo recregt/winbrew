@@ -4,124 +4,73 @@
 [![Release](https://github.com/recregt/winbrew/actions/workflows/release.yml/badge.svg)](https://github.com/recregt/winbrew/actions)
 [![Version](https://img.shields.io/github/v/release/recregt/winbrew?include_prereleases&color=blue&logo=github&label=Version)](https://github.com/recregt/winbrew/releases/latest)
 
-A modern package manager for Windows that tracks and cleanly removes software.
+A modern package manager for Windows that installs, tracks, and cleanly removes software.
 
-> [!WARNING]
-> This project is in the early stages of development.
+> [!IMPORTANT]
+> This project is currently in the **early stages** of development. Use with caution.
 
-## Requirements
+## Quick Start
 
-- Windows 10 or later
+### Installation
 
-## Installation
-
-Copy and paste this command to Powershell (Admin):
+Run the following command in a **PowerShell (Admin)**:
 
 ```powershell
 PowerShell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/recregt/winbrew/main/scripts/install.ps1 | iex"
 ```
 
+### Basic Usage
+
+| Command | Description |
+| :--- | :--- |
+| `winbrew search <query>` | Search for a package |
+| `winbrew install <pkg>` | Install a new package |
+| `winbrew remove <pkg>` | Remove a package and its leftovers |
+| `winbrew list` | List all installed packages |
+| `winbrew doctor` | Check system health and configuration |
+
 ## Development
 
-Install the repository git hooks:
+`WinBrew` uses `go-task` to manage the development workflow.
 
-```powershell
-task hooks:install
-```
+1.  **Install Git Hooks:** `task hooks:install`
+2.  **Run Tests:** `task ci:test`  
+    *(This automatically bootstraps a pinned version of `cargo-nextest` for lightning-fast, parallel testing.)*
+3.  **Smoke Test:** `task ci:smoke`
 
-Run the same checks locally without going through Git:
+### File Layout
 
-```powershell
-task hooks:pre-commit
-task hooks:pre-push
-```
+By default, WinBrew isolates everything within the current user's local app data directory:
 
-### Installed layout
-
-By default, `winbrew` layout looks like this:
+`%LOCALAPPDATA%\winbrew`
 
 ```text
-├── packages
+%LOCALAPPDATA%\winbrew
+├── packages    # Installed applications
 └── data
-    ├── winbrew.toml
-    ├── db
-    │   └── winbrew.db
-    ├── logs
-    │   └── winbrew.log
-    └── cache
+    ├── db      # SQLite metadata (winbrew.db)
+    ├── logs    # Rolling execution logs
+    └── cache   # Downloaded installers/temporary files
 ```
 
-## Usage
+## Configuration
 
-### List installed packages
-```bash
-winbrew list
-```
+Settings are stored in `%LOCALAPPDATA%\winbrew\data\winbrew.toml` by default.
 
-### Show runtime info
-```bash
-winbrew info
-```
-
-### Check health
-```bash
-winbrew doctor
-```
-
-### Install package
-```bash
-winbrew install node
-```
-
-### Remove package
-```bash
-winbrew remove node
-winbrew remove node --yes
-```
-
-### Config
-```bash
-winbrew config list
-winbrew config get core.log_level
-winbrew config set core.log_level debug
-winbrew config set core.file_log_level "debug,winbrew::core=trace"
-```
-
-Config is stored in `C:\winbrew\data\winbrew.toml` and it's like this:
+Set `WINBREW_PATHS_ROOT` or `[paths].root` to use a different install root.
 
 ```toml
 [core]
 log_level = "info"
-file_log_level = "debug,winbrew::core=trace"
 auto_update = true
 confirm_remove = true
-default_yes = false
-color = true
-download_timeout = 30
-concurrent_downloads = 3
-github_token = ""
-proxy = ""
 
 [paths]
-root = "C:\\winbrew"
-packages = "${root}\\packages"
-data = "${root}\\data"
-logs = "${root}\\data\\logs"
-cache = "${root}\\data\\cache"
+root = "C:\\Users\\<you>\\AppData\\Local\\winbrew"
 ```
 
-> [!TIP]
-> Logging is split across two settings:
-> - core.log_level controls what appears in the terminal.
-> - core.file_log_level controls the background log file and accepts full EnvFilter strings.
-
-For a quieter log file:
-```toml
-file_log_level = "warn,winbrew::core=trace"
-```
+*Note: You can override any setting using environment variables with the `WINBREW_` prefix (e.g., `WINBREW_CORE_LOG_LEVEL=debug`).*
 
 ## License
 
-`WinBrew` is dual-licensed under **MIT OR Apache-2.0**.
-
-See [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE) for details.
+WinBrew is dual-licensed under **[MIT](LICENSE-MIT)** and **[Apache-2.0](LICENSE-APACHE)**.

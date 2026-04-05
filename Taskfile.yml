@@ -43,7 +43,12 @@ tasks:
   ci:test:
     desc: Run CI test suite
     cmds:
-      - cargo test --locked --all-targets --all-features
+      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/nextest.ps1 -Action run --locked --all-targets --all-features
+
+  tools:install-nextest:
+    desc: Install cargo-nextest for local test runs
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/nextest.ps1 -Action install
 
   rust:build:
     desc: Build the CLI

@@ -39,6 +39,12 @@ impl Config {
         Ok(Self::load(&paths::config_file_at(Path::new(&root)))?.with_env(env))
     }
 
+    pub fn load_at(root: &Path) -> Result<Self> {
+        let mut config = Self::load(&paths::config_file_at(root))?;
+        config.paths.root = root.to_string_lossy().to_string();
+        Ok(config.with_env(ConfigEnv::default()))
+    }
+
     pub fn save(&self, path: &Path) -> Result<()> {
         let contents = toml::to_string_pretty(self).context("failed to serialize config file")?;
         storage::atomic_write(path, &contents)

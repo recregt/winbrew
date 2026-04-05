@@ -36,6 +36,15 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Cache cargo-nextest binary
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\winbrew\nextest
+          key: nextest-0.9.132-${{ runner.os }}
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -45,9 +54,6 @@ jobs:
         uses: go-task/setup-task@v1
         with:
           version: 3.x
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
 
       - name: Verify checks
         run: task ci:verify

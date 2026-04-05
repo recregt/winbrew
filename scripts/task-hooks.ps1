@@ -80,7 +80,7 @@ switch ($Hook) {
 
     'pre-push' {
         Invoke-RepoCommand { cargo clippy --all-targets --all-features -- -D warnings }
-        Invoke-RepoCommand { cargo test --locked --all-targets --all-features }
+        Invoke-RepoCommand { powershell -NoProfile -ExecutionPolicy Bypass -File scripts/nextest.ps1 -Action run --locked --all-targets --all-features }
         Invoke-RepoCommand {
             if (Test-Path infra/go.mod) {
                 Push-Location infra

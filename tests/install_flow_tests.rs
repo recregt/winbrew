@@ -1,19 +1,17 @@
-#[path = "common/mod.rs"]
-mod common;
 #[path = "common/shared_root.rs"]
 mod shared_root;
 
 use anyhow::Result;
-use common::env_lock;
 use md5::Md5;
 use rusqlite::{Connection, params};
 use sha2::{Digest, Sha512};
-use shared_root::shared_test_root;
+use shared_root::test_root;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
 use std::thread;
+use winbrew::AppContext;
 use winbrew::database;
 use winbrew::services::install;
 use zip::ZipWriter;
@@ -55,6 +53,13 @@ fn sha512_hex(bytes: &[u8]) -> String {
     digest.iter().map(|byte| format!("{:02x}", byte)).collect()
 }
 
+fn init_context(root: &Path) -> Result<AppContext> {
+    let config = database::Config::load_at(root)?;
+    let context = AppContext::from_config(config)?;
+    database::init(&context.paths)?;
+    Ok(context)
+}
+
 fn start_file_server(
     body: Vec<u8>,
     content_type: &'static str,
@@ -84,8 +89,8 @@ fn start_file_server(
 
 #[test]
 fn install_runs_end_to_end_in_an_isolated_root() -> Result<()> {
-    let _guard = env_lock();
-    let root = shared_test_root();
+    let test_root = test_root();
+    let root = test_root.path();
 
     reset_install_state(root)?;
 
@@ -107,9 +112,7 @@ fn install_runs_end_to_end_in_an_isolated_root() -> Result<()> {
         &sha512_hash,
     )?;
 
-    let config = database::Config::load_current()?;
-    let ctx = winbrew::AppContext::from_config(config)?;
-    database::init(&ctx.paths)?;
+    let ctx = init_context(root)?;
 
     let result = install::run(
         &ctx,
@@ -139,8 +142,8 @@ fn install_runs_end_to_end_in_an_isolated_root() -> Result<()> {
 
 #[test]
 fn install_rejects_md5_without_override() -> Result<()> {
-    let _guard = env_lock();
-    let root = shared_test_root();
+    let test_root = test_root();
+    let root = test_root.path();
 
     reset_install_state(root)?;
 
@@ -155,9 +158,7 @@ fn install_rejects_md5_without_override() -> Result<()> {
         &md5_hash,
     )?;
 
-    let config = database::Config::load_current()?;
-    let ctx = winbrew::AppContext::from_config(config)?;
-    database::init(&ctx.paths)?;
+    let ctx = init_context(root)?;
 
     let err = install::run(
         &ctx,
@@ -179,8 +180,8 @@ fn install_rejects_md5_without_override() -> Result<()> {
 
 #[test]
 fn install_allows_md5_with_override() -> Result<()> {
-    let _guard = env_lock();
-    let root = shared_test_root();
+    let test_root = test_root();
+    let root = test_root.path();
 
     reset_install_state(root)?;
 
@@ -202,9 +203,7 @@ fn install_allows_md5_with_override() -> Result<()> {
         &md5_hash,
     )?;
 
-    let config = database::Config::load_current()?;
-    let ctx = winbrew::AppContext::from_config(config)?;
-    database::init(&ctx.paths)?;
+    let ctx = init_context(root)?;
 
     let result = install::run(
         &ctx,

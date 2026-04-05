@@ -1,12 +1,9 @@
-#[path = "common/mod.rs"]
-mod common;
-#[path = "common/env.rs"]
-mod test_env;
+#[path = "common/shared_root.rs"]
+mod shared_root;
 
 use anyhow::Result;
-use common::env_lock;
-use tempfile::tempdir;
-use test_env::TestEnvVar;
+use shared_root::test_root;
+use std::path::Path;
 use winbrew::database;
 use winbrew::models::{Package, PackageStatus};
 
@@ -29,14 +26,16 @@ fn reset_database(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+fn init_database(root: &Path) -> Result<()> {
+    let config = database::Config::load_at(root)?;
+    database::init(&config.resolved_paths())
+}
+
 #[test]
 fn package_crud_round_trip() -> Result<()> {
-    let _guard = env_lock();
-    let temp_root = tempdir()?;
-    let _root_env = TestEnvVar::set(
-        "WINBREW_PATHS_ROOT",
-        temp_root.path().to_string_lossy().as_ref(),
-    );
+    let test_root = test_root();
+    let root = test_root.path();
+    init_database(root)?;
 
     let conn = database::get_conn()?;
     reset_database(&conn)?;
@@ -74,12 +73,9 @@ fn package_crud_round_trip() -> Result<()> {
 
 #[test]
 fn update_status_and_msix_package_full_name_round_trip() -> Result<()> {
-    let _guard = env_lock();
-    let temp_root = tempdir()?;
-    let _root_env = TestEnvVar::set(
-        "WINBREW_PATHS_ROOT",
-        temp_root.path().to_string_lossy().as_ref(),
-    );
+    let test_root = test_root();
+    let root = test_root.path();
+    init_database(root)?;
 
     let conn = database::get_conn()?;
     reset_database(&conn)?;

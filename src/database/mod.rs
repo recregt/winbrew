@@ -1,5 +1,8 @@
 use anyhow::{Context, Result};
 use r2d2::{Pool, PooledConnection};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use crate::core::paths::ResolvedPaths;
@@ -25,68 +28,48 @@ pub use installed_packages::{
     update_status, update_status_and_msix_package_full_name,
 };
 
-static DB_POOL: OnceLock<Pool<SqliteConnectionManager>> = OnceLock::new();
-static DB_POOL_INIT: Mutex<()> = Mutex::new(());
-static CATALOG_DB_POOL: OnceLock<Pool<SqliteConnectionManager>> = OnceLock::new();
-static CATALOG_DB_POOL_INIT: Mutex<()> = Mutex::new(());
-static DB_PATHS: OnceLock<ResolvedPaths> = OnceLock::new();
-static DB_PATHS_INIT: Mutex<()> = Mutex::new(());
+thread_local! {
+    static CURRENT_PATHS: RefCell<Option<ResolvedPaths>> = const { RefCell::new(None) };
+}
+
+static DB_POOLS: OnceLock<Mutex<HashMap<PathBuf, &'static Pool<SqliteConnectionManager>>>> =
+    OnceLock::new();
+static CATALOG_DB_POOLS: OnceLock<Mutex<HashMap<PathBuf, &'static Pool<SqliteConnectionManager>>>> =
+    OnceLock::new();
 
 pub fn init(paths: &ResolvedPaths) -> Result<()> {
-    let _ = DB_PATHS.set(paths.clone());
+    CURRENT_PATHS.with(|current_paths| {
+        *current_paths.borrow_mut() = Some(paths.clone());
+    });
+
     let _ = get_pool()?;
 
     Ok(())
 }
 
-fn resolved_paths() -> Result<&'static ResolvedPaths> {
-    if let Some(paths) = DB_PATHS.get() {
-        return Ok(paths);
-    }
+fn resolved_paths() -> Result<ResolvedPaths> {
+    CURRENT_PATHS.with(|current_paths| {
+        if current_paths.borrow().is_none() {
+            let paths = Config::load_current()?.resolved_paths();
+            *current_paths.borrow_mut() = Some(paths);
+        }
 
-    let _guard = DB_PATHS_INIT
-        .lock()
-        .map_err(|_| anyhow::anyhow!("database paths init lock poisoned"))?;
-
-    if let Some(paths) = DB_PATHS.get() {
-        return Ok(paths);
-    }
-
-    let paths = Config::load_current()?.resolved_paths();
-
-    let _ = DB_PATHS.set(paths);
-    DB_PATHS
-        .get()
-        .context("failed to initialize database resolved paths")
+        current_paths
+            .borrow()
+            .as_ref()
+            .cloned()
+            .context("failed to initialize database resolved paths")
+    })
 }
 
 pub fn get_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
-    if let Some(pool) = DB_POOL.get() {
-        return Ok(pool);
-    }
-
-    let _guard = DB_POOL_INIT
-        .lock()
-        .map_err(|_| anyhow::anyhow!("database pool init lock poisoned"))?;
-
-    if let Some(pool) = DB_POOL.get() {
-        return Ok(pool);
-    }
-
-    let pool = connection::build_pool(
+    pool_for(
+        DB_POOLS.get_or_init(|| Mutex::new(HashMap::new())),
         resolved_paths()?.db.clone(),
         false,
         10,
         Some(migration::migrate),
-    )?;
-
-    DB_POOL
-        .set(pool)
-        .map_err(|_| anyhow::anyhow!("database pool was initialized concurrently"))?;
-
-    DB_POOL
-        .get()
-        .context("failed to initialize database connection pool")
+    )
 }
 
 pub fn get_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
@@ -106,25 +89,37 @@ pub fn get_catalog_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
 }
 
 pub fn get_catalog_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
-    if let Some(pool) = CATALOG_DB_POOL.get() {
-        return Ok(pool);
-    }
+    pool_for(
+        CATALOG_DB_POOLS.get_or_init(|| Mutex::new(HashMap::new())),
+        resolved_paths()?.catalog_db.clone(),
+        true,
+        4,
+        None,
+    )
+}
 
-    let _guard = CATALOG_DB_POOL_INIT
+fn pool_for(
+    pools: &'static Mutex<HashMap<PathBuf, &'static Pool<SqliteConnectionManager>>>,
+    path: PathBuf,
+    read_only: bool,
+    max_size: u32,
+    migrate: Option<fn(&rusqlite::Connection) -> Result<()>>,
+) -> Result<&'static Pool<SqliteConnectionManager>> {
+    let mut pools = pools
         .lock()
-        .map_err(|_| anyhow::anyhow!("catalog database pool init lock poisoned"))?;
+        .map_err(|_| anyhow::anyhow!("database pool registry lock poisoned"))?;
 
-    if let Some(pool) = CATALOG_DB_POOL.get() {
-        return Ok(pool);
+    if let Some(pool) = pools.get(&path) {
+        return Ok(*pool);
     }
 
-    let pool = connection::build_pool(resolved_paths()?.catalog_db.clone(), true, 4, None)?;
+    let pool = Box::leak(Box::new(connection::build_pool(
+        path.clone(),
+        read_only,
+        max_size,
+        migrate,
+    )?)) as &'static Pool<SqliteConnectionManager>;
 
-    CATALOG_DB_POOL
-        .set(pool)
-        .map_err(|_| anyhow::anyhow!("catalog database pool was initialized concurrently"))?;
-
-    CATALOG_DB_POOL
-        .get()
-        .context("failed to initialize catalog database connection pool")
+    pools.insert(path, pool);
+    Ok(pool)
 }
