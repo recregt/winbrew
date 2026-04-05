@@ -62,7 +62,7 @@ pub fn update_status_and_msix_package_full_name(
         .execute(
             "UPDATE installed_packages
                 SET status = ?1,
-                    msix_package_full_name = COALESCE(?2, msix_package_full_name)
+                    msix_package_full_name = ?2
               WHERE name = ?3",
             params![status.as_str(), msix_package_full_name, name],
         )

@@ -64,3 +64,35 @@ fn package_crud_round_trip() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn update_status_and_msix_package_full_name_round_trip() -> Result<()> {
+    let _guard = env_lock();
+    let temp_root = tempdir()?;
+    let _root_env = TestEnvVar::set(
+        "WINBREW_PATHS_ROOT",
+        temp_root.path().to_string_lossy().as_ref(),
+    );
+
+    let conn = database::get_conn()?;
+    let mut package = sample_package("Contoso.Msix", PackageStatus::Installing);
+    package.msix_package_full_name = None;
+
+    database::insert_package(&conn, &package)?;
+
+    database::update_status_and_msix_package_full_name(
+        &conn,
+        &package.name,
+        PackageStatus::Ok,
+        Some("Contoso.Msix_1.0.0_x64__8wekyb3d8bbwe"),
+    )?;
+
+    let stored = database::get_package(&conn, &package.name)?.expect("package should exist");
+    assert_eq!(stored.status, PackageStatus::Ok);
+    assert_eq!(
+        stored.msix_package_full_name,
+        Some("Contoso.Msix_1.0.0_x64__8wekyb3d8bbwe".to_string())
+    );
+
+    Ok(())
+}
