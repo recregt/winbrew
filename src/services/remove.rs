@@ -5,6 +5,8 @@ use std::path::PathBuf;
 
 use crate::database;
 use crate::engines::msix::remove as msix_remove;
+use crate::engines::portable::remove as portable_remove;
+use crate::engines::zip::remove as zip_remove;
 use crate::models::Package;
 
 #[derive(Debug, Clone)]
@@ -110,12 +112,17 @@ fn execute_removal_with_conn(
                 std::fs::rename(&install_dir, &trash_dir)
                     .context("failed to stage package for removal")?;
 
+                let remove_dir = match plan.kind.to_ascii_lowercase().as_str() {
+                    "zip" => zip_remove::remove,
+                    _ => portable_remove::remove,
+                };
+
                 if let Err(err) = database::delete_package(conn, &plan.name) {
                     let _ = std::fs::rename(&trash_dir, &install_dir);
                     return Err(err).context("failed to remove package from database");
                 }
 
-                if let Err(err) = std::fs::remove_dir_all(&trash_dir) {
+                if let Err(err) = remove_dir(&trash_dir) {
                     warn!("failed to completely remove trash for {}: {err}", plan.name);
                 }
             } else {

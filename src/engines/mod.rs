@@ -45,8 +45,10 @@ impl PackageEngine for EngineKind {
     ) -> Result<()> {
         match self {
             EngineKind::Msix => msix::install::install(download_path, install_dir),
-            EngineKind::Zip => zip::install(download_path, install_dir),
-            EngineKind::Portable => portable::install(download_path, install_dir, &installer.url),
+            EngineKind::Zip => zip::install::install(download_path, install_dir),
+            EngineKind::Portable => {
+                portable::install::install(download_path, install_dir, &installer.url)
+            }
         }
     }
 }
