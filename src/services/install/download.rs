@@ -101,7 +101,7 @@ where
 
 enum Verification {
     None,
-    Active(Hasher),
+    Active(Box<Hasher>),
 }
 
 impl Verification {
@@ -136,7 +136,7 @@ fn verify_strategy(expected_hash: &str, ignore_checksum_security: bool) -> Resul
         Some(HashAlgorithm::Md5) => anyhow::bail!(
             "MD5 checksums are disabled by default for security. Re-run with --ignore-checksum-security to install this package."
         ),
-        Some(algorithm) => Ok(Verification::Active(Hasher::new(algorithm))),
+        Some(algorithm) => Ok(Verification::Active(Box::new(Hasher::new(algorithm)))),
         None => anyhow::bail!("unsupported checksum format for installer: {expected_hash}"),
     }
 }

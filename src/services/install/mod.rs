@@ -60,16 +60,16 @@ where
 
     let client = download::build_client()?;
 
-    let result = perform_install(
-        &client,
+    let result = perform_install(InstallRequest {
+        client: &client,
         engine,
-        &installer,
-        &temp_root,
-        &install_dir,
+        installer: &installer,
+        temp_root: &temp_root,
+        install_dir: &install_dir,
         ignore_checksum_security,
         on_start,
         on_progress,
-    );
+    });
 
     match result {
         Ok(()) => {
@@ -108,20 +108,37 @@ where
     }
 }
 
-fn perform_install<FStart, FProgress>(
-    client: &reqwest::blocking::Client,
-    engine: crate::engines::EngineKind,
-    installer: &crate::models::CatalogInstaller,
-    temp_root: &std::path::Path,
-    install_dir: &std::path::Path,
-    ignore_checksum_security: bool,
-    on_start: FStart,
-    on_progress: FProgress,
-) -> Result<()>
+struct InstallRequest<'a, FStart, FProgress>
 where
     FStart: FnOnce(Option<u64>),
     FProgress: FnMut(u64),
 {
+    client: &'a reqwest::blocking::Client,
+    engine: crate::engines::EngineKind,
+    installer: &'a crate::models::CatalogInstaller,
+    temp_root: &'a std::path::Path,
+    install_dir: &'a std::path::Path,
+    ignore_checksum_security: bool,
+    on_start: FStart,
+    on_progress: FProgress,
+}
+
+fn perform_install<FStart, FProgress>(request: InstallRequest<'_, FStart, FProgress>) -> Result<()>
+where
+    FStart: FnOnce(Option<u64>),
+    FProgress: FnMut(u64),
+{
+    let InstallRequest {
+        client,
+        engine,
+        installer,
+        temp_root,
+        install_dir,
+        ignore_checksum_security,
+        on_start,
+        on_progress,
+    } = request;
+
     let download_path = temp_root.join(installer_filename(&installer.url));
     download::download_installer(
         client,

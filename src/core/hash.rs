@@ -83,18 +83,14 @@ pub fn hash_algorithm(value: &str) -> Option<HashAlgorithm> {
         }
     }
 
-    for algorithm in [
+    [
         HashAlgorithm::Sha512,
         HashAlgorithm::Sha256,
         HashAlgorithm::Sha1,
         HashAlgorithm::Md5,
-    ] {
-        if normalized.len() == algorithm.expected_len() {
-            return Some(algorithm);
-        }
-    }
-
-    None
+    ]
+    .into_iter()
+    .find(|algorithm| normalized.len() == algorithm.expected_len())
 }
 
 pub fn verify_hash(expected_hash: &str, actual_hash: impl AsRef<[u8]>) -> Result<()> {
