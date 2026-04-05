@@ -1,12 +1,12 @@
 use anyhow::Result;
 
-use crate::{services::doctor, ui::Ui};
+use crate::{AppContext, services::doctor, ui::Ui};
 
-pub fn run() -> Result<()> {
-    let mut ui = Ui::new();
+pub fn run(ctx: &AppContext) -> Result<()> {
+    let mut ui = Ui::new(ctx.ui);
     ui.page_title("System Health Check");
     ui.info("Inspecting environment...");
-    let report = doctor::health_report()?;
+    let report = doctor::health_report(ctx)?;
     ui.display_key_values(&report.to_kv());
     ui.info("");
 

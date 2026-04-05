@@ -6,6 +6,7 @@ use indicatif::ProgressBar;
 use rayon::prelude::*;
 use std::path::Path;
 
+use crate::AppContext;
 use crate::services::report::{HealthReport, health_report as report_health_report};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,8 +69,8 @@ pub fn scan_packages_with_progress(packages: &[Package], progress: &ProgressBar)
     diagnoses
 }
 
-pub fn health_report() -> Result<HealthReport> {
-    report_health_report()
+pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
+    report_health_report(ctx)
 }
 
 pub fn installed_packages() -> Result<Vec<Package>> {

@@ -26,7 +26,10 @@ fn sample_package(name: &str, status: PackageStatus) -> Package {
 fn package_crud_round_trip() -> Result<()> {
     let _guard = env_lock();
     let temp_root = tempdir()?;
-    let _root_env = TestEnvVar::set("WINBREW_ROOT", temp_root.path().to_string_lossy().as_ref());
+    let _root_env = TestEnvVar::set(
+        "WINBREW_PATHS_ROOT",
+        temp_root.path().to_string_lossy().as_ref(),
+    );
 
     let conn = database::get_conn()?;
     let package = sample_package("Contoso.RoundTrip", PackageStatus::Installing);

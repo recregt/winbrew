@@ -1,9 +1,9 @@
 use anyhow::Result;
 
-use crate::{services::list, ui::Ui};
+use crate::{AppContext, services::list, ui::Ui};
 
-pub fn run(query: &[String]) -> Result<()> {
-    let mut ui = Ui::new();
+pub fn run(ctx: &AppContext, query: &[String]) -> Result<()> {
+    let mut ui = Ui::new(ctx.ui);
     ui.page_title("Installed Packages");
 
     let query_text = (!query.is_empty()).then(|| query.join(" "));

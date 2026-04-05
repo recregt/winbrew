@@ -6,7 +6,9 @@ mod test_env;
 use common::env_lock;
 use std::path::PathBuf;
 use test_env::TestEnvVar;
+use winbrew::AppContext;
 use winbrew::database::{Config, ConfigEnv};
+use winbrew::services::config::ConfigSection;
 use winbrew::services::report::{health_report, runtime_report};
 
 struct UnsetEnvVar {
@@ -40,7 +42,7 @@ impl Drop for UnsetEnvVar {
 #[test]
 fn get_value_returns_current_values() {
     let _guard = env_lock();
-    let _root = UnsetEnvVar::new("WINBREW_ROOT");
+    let _root = UnsetEnvVar::new("WINBREW_PATHS_ROOT");
     let config = Config {
         env: ConfigEnv::capture(),
         ..Config::default()
@@ -59,7 +61,7 @@ fn get_value_returns_current_values() {
 #[test]
 fn removed_network_config_keys_are_rejected() {
     let _guard = env_lock();
-    let _root = UnsetEnvVar::new("WINBREW_ROOT");
+    let _root = UnsetEnvVar::new("WINBREW_PATHS_ROOT");
     let mut config = Config {
         env: ConfigEnv::capture(),
         ..Config::default()
@@ -82,8 +84,9 @@ fn removed_network_config_keys_are_rejected() {
 #[test]
 fn runtime_report_builds_expected_sections() {
     let _guard = env_lock();
-    let _root = UnsetEnvVar::new("WINBREW_ROOT");
-    let report = runtime_report().expect("report should build");
+    let _root = UnsetEnvVar::new("WINBREW_PATHS_ROOT");
+    let ctx = app_context(false);
+    let report = runtime_report(&ctx).expect("report should build");
 
     assert_eq!(report.sections.len(), 2);
     assert_eq!(report.sections[0].title, "Paths");
@@ -112,8 +115,9 @@ fn runtime_report_builds_expected_sections() {
 #[test]
 fn health_report_marks_env_root_source() {
     let _guard = env_lock();
-    let _env = TestEnvVar::set("WINBREW_ROOT", r"C:\temp\winbrew");
-    let report = health_report().expect("health report should build");
+    let _env = TestEnvVar::set("WINBREW_PATHS_ROOT", r"C:\temp\winbrew");
+    let ctx = app_context(true);
+    let report = health_report(&ctx).expect("health report should build");
 
     assert_eq!(report.install_root_source, "env override");
     assert_eq!(report.install_root, r"C:\temp\winbrew");
@@ -124,4 +128,26 @@ fn expected_default_root() -> String {
         .join("winbrew")
         .to_string_lossy()
         .to_string()
+}
+
+fn app_context(root_from_env: bool) -> AppContext {
+    let config = Config::load_current().expect("config should load");
+    let paths = config.resolved_paths();
+    let sections = winbrew::database::config_sections()
+        .expect("config sections should load")
+        .into_iter()
+        .map(|section| ConfigSection {
+            title: section.title,
+            entries: section.entries,
+        })
+        .collect();
+
+    AppContext {
+        ui: winbrew::ui::UiSettings::default(),
+        paths,
+        sections,
+        root_from_env,
+        log_level: config.core.log_level.into(),
+        file_log_level: config.core.file_log_level.into(),
+    }
 }

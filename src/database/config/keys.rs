@@ -1,12 +1,8 @@
 use std::env;
 
-use super::registry;
-
 pub(crate) fn env_override(key: &str) -> Option<String> {
-    // Prefer canonical names first so explicit config-specific overrides win over legacy aliases.
-    env_override_names(key)
-        .into_iter()
-        .find_map(|name| env::var(&name).ok())
+    env::var(env_override_name(key))
+        .ok()
         .filter(|value| !value.trim().is_empty())
 }
 
@@ -19,21 +15,13 @@ pub(crate) fn section_key(section_title: &str, key: &str) -> String {
     }
 }
 
-fn env_override_names(key: &str) -> Vec<String> {
-    let canonical = format!("WINBREW_{}", key.replace('.', "_").to_uppercase());
-
-    let aliases = registry::find(key)
-        .map(|def| def.env_aliases)
-        .unwrap_or(&[]);
-
-    std::iter::once(canonical)
-        .chain(aliases.iter().copied().map(str::to_string))
-        .collect()
+fn env_override_name(key: &str) -> String {
+    format!("WINBREW_{}", key.replace('.', "_").to_uppercase())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{env_override_names, section_key};
+    use super::{env_override_name, section_key};
 
     #[test]
     fn section_key_uses_section_prefix_for_known_sections() {
@@ -47,10 +35,10 @@ mod tests {
     }
 
     #[test]
-    fn env_override_names_returns_canonical_name() {
+    fn env_override_name_returns_canonical_name() {
         assert_eq!(
-            env_override_names("paths.packages"),
-            vec!["WINBREW_PATHS_PACKAGES".to_string()]
+            env_override_name("paths.packages"),
+            "WINBREW_PATHS_PACKAGES"
         );
     }
 }

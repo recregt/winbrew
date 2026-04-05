@@ -23,7 +23,7 @@ pub fn shared_test_root() -> &'static Path {
             fs::create_dir_all(&root).expect("failed to create shared test root");
 
             unsafe {
-                std::env::set_var("WINBREW_ROOT", &root);
+                std::env::set_var("WINBREW_PATHS_ROOT", &root);
             }
 
             root

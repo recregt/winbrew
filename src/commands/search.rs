@@ -1,9 +1,9 @@
 use anyhow::Result;
 
-use crate::{services::search, ui::Ui};
+use crate::{AppContext, services::search, ui::Ui};
 
-pub fn run(query: &[String]) -> Result<()> {
-    let mut ui = Ui::new();
+pub fn run(ctx: &AppContext, query: &[String]) -> Result<()> {
+    let mut ui = Ui::new(ctx.ui);
     ui.page_title("Package Catalog");
 
     let query_text = query.join(" ");

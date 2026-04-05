@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use r2d2::{Pool, PooledConnection};
 use std::sync::{Mutex, OnceLock};
 
+use crate::core::paths::ResolvedPaths;
+
 mod catalog;
 mod config;
 mod connection;
@@ -14,7 +16,6 @@ use self::connection::SqliteConnectionManager;
 pub use errors::CatalogNotFoundError;
 
 pub use catalog::{get_installers, search};
-pub(crate) use config::section_key;
 pub use config::{
     Config, ConfigEnv, ConfigError, ConfigSection, ConfigSource, CoreConfig, PathsConfig,
     config_sections, config_set, get_effective_value,
@@ -27,11 +28,35 @@ static DB_POOL: OnceLock<Pool<SqliteConnectionManager>> = OnceLock::new();
 static DB_POOL_INIT: Mutex<()> = Mutex::new(());
 static CATALOG_DB_POOL: OnceLock<Pool<SqliteConnectionManager>> = OnceLock::new();
 static CATALOG_DB_POOL_INIT: Mutex<()> = Mutex::new(());
+static DB_PATHS: OnceLock<ResolvedPaths> = OnceLock::new();
+static DB_PATHS_INIT: Mutex<()> = Mutex::new(());
 
-pub fn init() -> Result<()> {
+pub fn init(paths: &ResolvedPaths) -> Result<()> {
+    let _ = DB_PATHS.set(paths.clone());
     let _ = get_pool()?;
 
     Ok(())
+}
+
+fn resolved_paths() -> Result<&'static ResolvedPaths> {
+    if let Some(paths) = DB_PATHS.get() {
+        return Ok(paths);
+    }
+
+    let _guard = DB_PATHS_INIT
+        .lock()
+        .map_err(|_| anyhow::anyhow!("database paths init lock poisoned"))?;
+
+    if let Some(paths) = DB_PATHS.get() {
+        return Ok(paths);
+    }
+
+    let paths = Config::load_current()?.resolved_paths();
+
+    let _ = DB_PATHS.set(paths);
+    DB_PATHS
+        .get()
+        .context("failed to initialize database resolved paths")
 }
 
 pub fn get_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
@@ -48,7 +73,7 @@ pub fn get_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
     }
 
     let pool = connection::build_pool(
-        Config::current().resolved_paths().db,
+        resolved_paths()?.db.clone(),
         false,
         10,
         Some(migration::migrate),
@@ -70,9 +95,7 @@ pub fn get_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
 }
 
 pub fn get_catalog_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
-    let catalog_db = Config::current().resolved_paths().catalog_db;
-
-    if !catalog_db.exists() {
+    if !resolved_paths()?.catalog_db.exists() {
         return Err(CatalogNotFoundError.into());
     }
 
@@ -94,8 +117,7 @@ pub fn get_catalog_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
         return Ok(pool);
     }
 
-    let catalog_db = Config::current().resolved_paths().catalog_db;
-    let pool = connection::build_pool(catalog_db, true, 4, None)?;
+    let pool = connection::build_pool(resolved_paths()?.catalog_db.clone(), true, 4, None)?;
 
     CATALOG_DB_POOL
         .set(pool)

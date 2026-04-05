@@ -1,10 +1,7 @@
 use anyhow::Result;
-use std::collections::HashMap;
-use std::path::Path;
 
-use crate::core::paths;
-use crate::database::ConfigSource;
-use crate::database::{Config, ConfigSection};
+use crate::AppContext;
+use crate::services::config::ConfigSection;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HealthReport {
@@ -45,25 +42,18 @@ impl HealthReport {
     }
 }
 
-pub fn health_report() -> Result<HealthReport> {
-    let config = Config::current();
-    let (root, source) = config.effective_value("paths.root")?;
-    let resolved_paths = paths::resolved_paths(
-        Path::new(&root),
-        &config.paths.packages,
-        &config.paths.data,
-        &config.paths.logs,
-        &config.paths.cache,
-    );
+pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
+    let resolved_paths = &ctx.paths;
 
     Ok(HealthReport {
         database_path: resolved_paths.db.to_string_lossy().to_string(),
         database_exists: resolved_paths.db.exists(),
         catalog_database_path: resolved_paths.catalog_db.to_string_lossy().to_string(),
         catalog_database_exists: resolved_paths.catalog_db.exists(),
-        install_root_source: match source {
-            ConfigSource::Env => "env override".to_string(),
-            ConfigSource::File => "config:paths.root".to_string(),
+        install_root_source: if ctx.root_from_env {
+            "env override".to_string()
+        } else {
+            "config:paths.root".to_string()
         },
         install_root: resolved_paths.root.to_string_lossy().to_string(),
         install_root_exists: resolved_paths.root.exists(),
@@ -96,23 +86,10 @@ impl RuntimeReport {
     }
 }
 
-pub fn runtime_report() -> Result<RuntimeReport> {
-    build_runtime_report(&Config::current())
-}
-
-fn build_runtime_report(config: &Config) -> Result<RuntimeReport> {
-    let sections = config.sections();
-    let paths_section = section(&sections, "Paths")?;
-    let core_section = section(&sections, "Core")?;
-
-    let path_values = effective_values(config, paths_section)?;
-    let resolved_paths = paths::resolved_paths(
-        std::path::Path::new(&path_values["root"]),
-        &path_values["packages"],
-        &path_values["data"],
-        &path_values["logs"],
-        &path_values["cache"],
-    );
+pub fn runtime_report(ctx: &AppContext) -> Result<RuntimeReport> {
+    let sections = &ctx.sections;
+    let core_section = section(sections, "Core")?;
+    let resolved_paths = &ctx.paths;
 
     let sections = vec![
         ReportSection {
@@ -148,7 +125,7 @@ fn build_runtime_report(config: &Config) -> Result<RuntimeReport> {
                 ),
             ],
         },
-        render_section(config, core_section)?,
+        render_section(core_section),
     ];
 
     Ok(RuntimeReport::new(sections))
@@ -161,35 +138,17 @@ fn section<'a>(sections: &'a [ConfigSection], title: &str) -> Result<&'a ConfigS
         .ok_or_else(|| anyhow::anyhow!("missing config section: {title}"))
 }
 
-fn effective_values(config: &Config, section: &ConfigSection) -> Result<HashMap<String, String>> {
-    let mut values = HashMap::with_capacity(section.entries.len());
-
-    for (key, _) in &section.entries {
-        let full_key = crate::database::section_key(&section.title, key);
-        let (value, _) = config.effective_value(&full_key)?;
-        values.insert(key.clone(), value);
-    }
-
-    Ok(values)
-}
-
-fn render_section(config: &Config, section: &ConfigSection) -> Result<ReportSection> {
+fn render_section(section: &ConfigSection) -> ReportSection {
     let mut entries = Vec::with_capacity(section.entries.len());
 
     for (key, file_value) in &section.entries {
-        let full_key = crate::database::section_key(&section.title, key);
-        let value = config
-            .effective_value(&full_key)
-            .map(|(value, _)| value)
-            .unwrap_or_else(|_| file_value.clone());
-
-        entries.push((key.clone(), value));
+        entries.push((key.clone(), file_value.clone()));
     }
 
-    Ok(ReportSection {
+    ReportSection {
         title: section.title.clone(),
         entries,
-    })
+    }
 }
 
 #[cfg(test)]

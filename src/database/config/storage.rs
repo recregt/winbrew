@@ -35,9 +35,9 @@ pub fn config_set(key: &str, value: &str) -> Result<()> {
 }
 
 pub fn config_sections() -> Result<Vec<ConfigSection>> {
-    Config::current().effective_sections()
+    Config::load_current()?.effective_sections()
 }
 
 pub fn get_effective_value(key: &str) -> Result<(String, super::types::ConfigSource)> {
-    Ok(Config::current().effective_value(key)?)
+    Ok(Config::load_current()?.effective_value(key)?)
 }

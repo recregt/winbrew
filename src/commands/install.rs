@@ -2,10 +2,10 @@ use anyhow::Result;
 
 use crate::models::CatalogPackage;
 use crate::services::install;
-use crate::ui::Ui;
+use crate::{AppContext, ui::Ui};
 
-pub fn run(query: &[String]) -> Result<()> {
-    let mut ui = Ui::new();
+pub fn run(ctx: &AppContext, query: &[String]) -> Result<()> {
+    let mut ui = Ui::new(ctx.ui);
     ui.page_title("Install Package");
 
     let query_text = query.join(" ");
@@ -14,6 +14,7 @@ pub fn run(query: &[String]) -> Result<()> {
     let progress = ui.progress_bar();
 
     let result = install::run(
+        ctx,
         query,
         |query, matches| {
             let choices = matches

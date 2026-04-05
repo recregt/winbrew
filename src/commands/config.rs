@@ -1,22 +1,22 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::io::Write;
 
 use crate::cli::ConfigCommand;
-use crate::{services::config, ui::Ui};
+use crate::{AppContext, services::config, ui::Ui};
 
-pub fn run(command: ConfigCommand) -> Result<()> {
-    let mut ui = Ui::new();
+pub fn run(ctx: &AppContext, command: ConfigCommand) -> Result<()> {
+    let mut ui = Ui::new(ctx.ui);
     ui.page_title("Configuration");
 
     match command {
-        ConfigCommand::List => list(&mut ui),
+        ConfigCommand::List => list(ctx, &mut ui),
         ConfigCommand::Get { key } => get(&mut ui, &key),
         ConfigCommand::Set { key, value } => set(&mut ui, &key, value.as_deref()),
     }
 }
 
-fn list<W: Write>(ui: &mut Ui<W>) -> Result<()> {
-    let sections = config::list_sections().context("failed to load configuration")?;
+fn list<W: Write>(ctx: &AppContext, ui: &mut Ui<W>) -> Result<()> {
+    let sections = config::list_sections(ctx);
 
     if sections.is_empty() {
         ui.notice("No configuration values are set.");
@@ -35,7 +35,7 @@ fn get<W: Write>(ui: &mut Ui<W>, key: &str) -> Result<()> {
     let clean_key = key.trim();
     let value = config::get_display_value(clean_key)?;
 
-    if value.overridden_by_env {
+    if value.source == config::ConfigValueSource::Env {
         ui.info(format!(
             "{clean_key} = {} (overridden by environment)",
             value.value

@@ -1,5 +1,4 @@
 use super::Ui;
-use crate::ui::current_settings;
 use crate::ui::theme;
 use std::io::{self, BufWriter, Write};
 use tracing::warn;
@@ -16,34 +15,37 @@ pub struct UiBuilder<W: Write> {
     color_enabled: Option<bool>,
     default_yes: Option<bool>,
     config_overrides: ConfigOverrides,
+    settings: super::UiSettings,
 }
 
 impl UiBuilder<io::Stdout> {
-    pub fn new() -> Self {
+    pub fn new(settings: super::UiSettings) -> Self {
         UiBuilder {
             out: io::stdout(),
             err: Box::new(io::stderr()),
             color_enabled: None,
             default_yes: None,
             config_overrides: ConfigOverrides::default(),
+            settings,
         }
     }
 }
 
 impl Default for UiBuilder<io::Stdout> {
     fn default() -> Self {
-        Self::new()
+        Self::new(super::UiSettings::default())
     }
 }
 
 impl<W: Write> UiBuilder<W> {
-    pub fn with_writer(out: W) -> Self {
+    pub fn with_writer(out: W, settings: super::UiSettings) -> Self {
         UiBuilder {
             out,
             err: Box::new(io::stderr()),
             color_enabled: None,
             default_yes: None,
             config_overrides: ConfigOverrides::default(),
+            settings,
         }
     }
 
@@ -75,12 +77,11 @@ impl<W: Write> UiBuilder<W> {
 
     pub fn build(self) -> Ui<W> {
         let no_color_env = std::env::var_os("NO_COLOR").is_some();
-        let settings = current_settings();
 
         let config_color = self
             .color_enabled
             .or(self.config_overrides.color)
-            .or(Some(settings.color_enabled));
+            .or(Some(self.settings.color_enabled));
 
         let color_enabled = if no_color_env {
             false
@@ -91,7 +92,7 @@ impl<W: Write> UiBuilder<W> {
         let default_yes = self
             .default_yes
             .or(self.config_overrides.default_yes)
-            .or(Some(settings.default_yes))
+            .or(Some(self.settings.default_yes))
             .unwrap_or(false);
 
         let spinner_style = theme::make_spinner_style(color_enabled);

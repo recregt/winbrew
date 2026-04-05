@@ -3,17 +3,21 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
 
-use crate::database::Config;
+use crate::AppContext;
 
 const CATALOG_DIRECT_DOWNLOAD_URL: &str =
     "https://github.com/recregt/winbrew/releases/latest/download/catalog.db";
 
-pub fn refresh_catalog<FStart, FProgress>(on_start: FStart, on_progress: FProgress) -> Result<()>
+pub fn refresh_catalog<FStart, FProgress>(
+    ctx: &AppContext,
+    on_start: FStart,
+    on_progress: FProgress,
+) -> Result<()>
 where
     FStart: FnOnce(Option<u64>),
     FProgress: FnMut(u64),
 {
-    let catalog_path = Config::current().resolved_paths().catalog_db;
+    let catalog_path = ctx.paths.catalog_db.clone();
     let catalog_dir = catalog_path
         .parent()
         .context("failed to resolve catalog database directory")?;

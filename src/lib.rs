@@ -1,11 +1,13 @@
-#[cfg(not(windows))]
-compile_error!("winbrew only builds on Windows");
+#![cfg(windows)]
 
-#[cfg(windows)]
 use anyhow::Result;
-
-#[cfg(windows)]
 use clap::Parser;
+use std::sync::Arc;
+
+use crate::cli::Cli;
+use crate::commands::run;
+use crate::core::paths::ResolvedPaths;
+use crate::services::config::ConfigSection;
 
 pub mod cli;
 pub mod commands;
@@ -17,24 +19,46 @@ pub mod services;
 pub mod ui;
 pub mod windows;
 
-pub use cli::{Cli, Command};
-pub use commands::run;
+#[derive(Debug, Clone)]
+pub struct AppContext {
+    pub ui: ui::UiSettings,
+    pub paths: ResolvedPaths,
+    pub sections: Vec<ConfigSection>,
+    pub root_from_env: bool,
+    pub log_level: Arc<str>,
+    pub file_log_level: Arc<str>,
+}
 
-#[cfg(windows)]
+impl AppContext {
+    pub fn from_config(config: crate::database::Config) -> Result<Self> {
+        let paths = config.resolved_paths();
+        let sections = config
+            .effective_sections()?
+            .into_iter()
+            .map(Into::into)
+            .collect();
+
+        Ok(Self {
+            ui: ui::UiSettings {
+                color_enabled: config.core.color,
+                default_yes: config.core.default_yes,
+            },
+            paths,
+            sections,
+            root_from_env: config.env.root_override().is_some(),
+            log_level: Arc::from(config.core.log_level.as_str()),
+            file_log_level: Arc::from(config.core.file_log_level.as_str()),
+        })
+    }
+}
+
 pub fn run_app() -> Result<()> {
-    let config = database::Config::current();
-    let paths = config.resolved_paths();
+    let config = database::Config::load_current()?;
+    let ctx = AppContext::from_config(config)?;
 
-    ui::init_settings(ui::UiSettings {
-        color_enabled: config.core.color,
-        default_yes: config.core.default_yes,
-    });
-
-    core::logging::init(&paths, &config.core.log_level, &config.core.file_log_level)?;
+    core::logging::init(&ctx)?;
+    database::init(&ctx.paths)?;
 
     let cli = Cli::parse();
-
-    database::init()?;
-
-    run(cli.command)
+    run(cli.command, &ctx)
 }

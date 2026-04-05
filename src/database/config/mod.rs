@@ -2,7 +2,6 @@ use crate::core::paths;
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
-use tracing::warn;
 
 mod errors;
 mod keys;
@@ -13,7 +12,6 @@ mod types;
 mod validation;
 
 pub use errors::ConfigError;
-pub(crate) use keys::section_key;
 pub use storage::{config_sections, config_set, get_effective_value};
 pub use types::*;
 
@@ -61,19 +59,14 @@ impl Config {
         self.save(&paths::config_file_at(Path::new(&root)))
     }
 
-    pub fn current() -> Self {
+    pub fn load_current() -> Result<Self> {
         let env = ConfigEnv::capture();
         let root = env
             .root_override()
             .map(str::to_owned)
             .unwrap_or_else(default_root_path);
 
-        Self::load(&paths::config_file_at(Path::new(&root)))
-            .unwrap_or_else(|err| {
-                warn!(error = %err, "failed to load cached config, using defaults");
-                Self::default()
-            })
-            .with_env(env)
+        Ok(Self::load(&paths::config_file_at(Path::new(&root)))?.with_env(env))
     }
 
     pub fn resolved_paths(&self) -> paths::ResolvedPaths {

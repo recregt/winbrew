@@ -7,6 +7,7 @@ pub mod workspace;
 use anyhow::Result;
 use std::fs;
 
+use crate::AppContext;
 use crate::core::fs::cleanup_path;
 use crate::core::network::installer_filename;
 use crate::database;
@@ -17,6 +18,7 @@ use crate::models::CatalogPackage;
 pub use types::InstallResult;
 
 pub fn run<FChoose, FStart, FProgress>(
+    ctx: &AppContext,
     query: &[String],
     mut choose_package: FChoose,
     on_start: FStart,
@@ -38,10 +40,7 @@ where
         catalog::select_installer(&database::get_installers(&catalog_conn, &package.id)?)?;
     let engine = engines::get_engine(&installer)?;
 
-    let install_dir = database::Config::current()
-        .resolved_paths()
-        .packages
-        .join(&package.name);
+    let install_dir = ctx.paths.packages.join(&package.name);
     let temp_root = workspace::build_temp_root(&package.name, &package.version);
 
     if let Some(parent) = install_dir.parent() {

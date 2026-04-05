@@ -33,10 +33,10 @@ function Invoke-WinbrewCommand {
 
 $ResolvedBinaryPath = Resolve-BinaryPath -Path $BinaryPath
 $ResolvedRootPath = Resolve-BinaryPath -Path $ROOT
-$PreviousWinbrewRoot = $env:WINBREW_ROOT
-$HadPreviousWinbrewRoot = Test-Path env:WINBREW_ROOT
+$PreviousWinbrewRoot = $env:WINBREW_PATHS_ROOT
+$HadPreviousWinbrewRoot = Test-Path env:WINBREW_PATHS_ROOT
 
-$env:WINBREW_ROOT = $ResolvedRootPath
+$env:WINBREW_PATHS_ROOT = $ResolvedRootPath
 
 Push-Location $RepoRoot
 try {
@@ -68,8 +68,8 @@ try {
     Pop-Location
 
     if ($HadPreviousWinbrewRoot) {
-        $env:WINBREW_ROOT = $PreviousWinbrewRoot
+        $env:WINBREW_PATHS_ROOT = $PreviousWinbrewRoot
     } else {
-        Remove-Item Env:WINBREW_ROOT -ErrorAction SilentlyContinue
+        Remove-Item Env:WINBREW_PATHS_ROOT -ErrorAction SilentlyContinue
     }
 }

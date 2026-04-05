@@ -1,9 +1,9 @@
 use anyhow::Result;
 
-use crate::{services::remove, ui::Ui};
+use crate::{AppContext, services::remove, ui::Ui};
 
-pub fn run(name: &str, yes: bool, force: bool) -> Result<()> {
-    let mut ui = Ui::new();
+pub fn run(ctx: &AppContext, name: &str, yes: bool, force: bool) -> Result<()> {
+    let mut ui = Ui::new(ctx.ui);
     ui.page_title("Remove Package");
 
     ui.info(format!("Assessing impact for {name}..."));

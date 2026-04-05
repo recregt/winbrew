@@ -7,8 +7,6 @@ mod theme;
 
 pub use builder::UiBuilder;
 
-use std::sync::OnceLock;
-
 use indicatif::ProgressStyle;
 use std::io::{self, BufWriter, Write};
 use std::sync::Arc;
@@ -23,20 +21,20 @@ pub struct Ui<W: Write> {
 }
 
 impl Ui<io::Stdout> {
-    pub fn new() -> Self {
-        UiBuilder::new().build()
+    pub fn new(settings: UiSettings) -> Self {
+        UiBuilder::new(settings).build()
     }
 }
 
 impl<W: Write> Ui<W> {
-    pub fn with_writer(writer: W) -> Self {
-        UiBuilder::with_writer(writer).build()
+    pub fn with_writer(writer: W, settings: UiSettings) -> Self {
+        UiBuilder::with_writer(writer, settings).build()
     }
 }
 
 impl Default for Ui<io::Stdout> {
     fn default() -> Self {
-        Ui::new()
+        Ui::new(UiSettings::default())
     }
 }
 
@@ -46,15 +44,11 @@ pub struct UiSettings {
     pub default_yes: bool,
 }
 
-static UI_SETTINGS: OnceLock<UiSettings> = OnceLock::new();
-
-pub fn init_settings(settings: UiSettings) {
-    let _ = UI_SETTINGS.set(settings);
-}
-
-pub(crate) fn current_settings() -> UiSettings {
-    *UI_SETTINGS.get_or_init(|| UiSettings {
-        color_enabled: true,
-        default_yes: false,
-    })
+impl Default for UiSettings {
+    fn default() -> Self {
+        Self {
+            color_enabled: true,
+            default_yes: false,
+        }
+    }
 }

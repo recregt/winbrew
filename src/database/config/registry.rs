@@ -3,14 +3,12 @@ use tracing_subscriber::EnvFilter;
 
 pub struct KeyDef {
     pub key: &'static str,
-    pub env_aliases: &'static [&'static str],
     pub validator: Option<fn(&str) -> Result<()>>,
 }
 
 pub static KEYS: &[KeyDef] = &[
     KeyDef {
         key: "core.log_level",
-        env_aliases: &["WINBREW_LOG_LEVEL"],
         validator: Some(|value| {
             let allowed = ["trace", "debug", "info", "warn", "error"];
 
@@ -23,7 +21,6 @@ pub static KEYS: &[KeyDef] = &[
     },
     KeyDef {
         key: "core.file_log_level",
-        env_aliases: &["WINBREW_FILE_LOG_LEVEL"],
         validator: Some(|value| {
             EnvFilter::try_new(value)
                 .map_err(|err| anyhow!("invalid core.file_log_level: {err}"))?;
@@ -32,47 +29,38 @@ pub static KEYS: &[KeyDef] = &[
     },
     KeyDef {
         key: "core.auto_update",
-        env_aliases: &["WINBREW_AUTO_UPDATE"],
         validator: Some(validate_bool),
     },
     KeyDef {
         key: "core.confirm_remove",
-        env_aliases: &["WINBREW_CONFIRM_REMOVE"],
         validator: Some(validate_bool),
     },
     KeyDef {
         key: "core.default_yes",
-        env_aliases: &["WINBREW_DEFAULT_YES"],
         validator: Some(validate_bool),
     },
     KeyDef {
         key: "core.color",
-        env_aliases: &["WINBREW_COLOR"],
         validator: Some(validate_bool),
     },
     KeyDef {
         key: "paths.root",
-        env_aliases: &["WINBREW_ROOT"],
         validator: None,
     },
     KeyDef {
         key: "paths.packages",
-        env_aliases: &[],
         validator: None,
     },
     KeyDef {
         key: "paths.data",
-        env_aliases: &[],
         validator: None,
     },
     KeyDef {
         key: "paths.logs",
-        env_aliases: &[],
         validator: None,
     },
     KeyDef {
         key: "paths.cache",
-        env_aliases: &[],
         validator: None,
     },
 ];
