@@ -30,10 +30,9 @@ fn matching_package_full_names(
     let mut matching_full_names = Vec::new();
 
     if let Ok(package) = package_manager.FindPackageByPackageFullName(&HSTRING::from(package_name))
+        && package_matches(&package, &normalized_name)?
     {
-        if package_matches(&package, &normalized_name)? {
-            matching_full_names.push(package_full_name(&package)?);
-        }
+        matching_full_names.push(package_full_name(&package)?);
     }
 
     for package in package_manager
@@ -46,7 +45,7 @@ fn matching_package_full_names(
     }
 
     matching_full_names.sort_by_key(|value| value.to_string());
-    matching_full_names.dedup_by(|left, right| left.to_string() == right.to_string());
+    matching_full_names.dedup();
 
     Ok(matching_full_names)
 }
