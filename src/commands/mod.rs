@@ -16,7 +16,10 @@ pub mod version;
 pub fn run(command: Command, ctx: &AppContext) -> Result<()> {
     match command {
         Command::List { query } => list::run(ctx, &query),
-        Command::Install { query } => install::run(ctx, &query),
+        Command::Install {
+            query,
+            ignore_checksum_security,
+        } => install::run(ctx, &query, ignore_checksum_security),
         Command::Search { query } => search::run(ctx, &query),
         Command::Info => info::run(ctx),
         Command::Version => version::run(ctx),

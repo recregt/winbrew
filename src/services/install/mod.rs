@@ -19,6 +19,7 @@ pub use types::InstallResult;
 pub fn run<FChoose, FStart, FProgress>(
     ctx: &AppContext,
     query: &[String],
+    ignore_checksum_security: bool,
     mut choose_package: FChoose,
     on_start: FStart,
     on_progress: FProgress,
@@ -65,6 +66,7 @@ where
         &installer,
         &temp_root,
         &install_dir,
+        ignore_checksum_security,
         on_start,
         on_progress,
     );
@@ -112,6 +114,7 @@ fn perform_install<FStart, FProgress>(
     installer: &crate::models::CatalogInstaller,
     temp_root: &std::path::Path,
     install_dir: &std::path::Path,
+    ignore_checksum_security: bool,
     on_start: FStart,
     on_progress: FProgress,
 ) -> Result<()>
@@ -120,7 +123,14 @@ where
     FProgress: FnMut(u64),
 {
     let download_path = temp_root.join(installer_filename(&installer.url));
-    download::download_installer(client, installer, &download_path, on_start, on_progress)?;
+    download::download_installer(
+        client,
+        installer,
+        &download_path,
+        ignore_checksum_security,
+        on_start,
+        on_progress,
+    )?;
 
     engine.install(installer, &download_path, install_dir)?;
 

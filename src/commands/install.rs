@@ -4,7 +4,7 @@ use crate::models::CatalogPackage;
 use crate::services::install;
 use crate::{AppContext, ui::Ui};
 
-pub fn run(ctx: &AppContext, query: &[String]) -> Result<()> {
+pub fn run(ctx: &AppContext, query: &[String], ignore_checksum_security: bool) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);
     ui.page_title("Install Package");
 
@@ -16,6 +16,7 @@ pub fn run(ctx: &AppContext, query: &[String]) -> Result<()> {
     let result = install::run(
         ctx,
         query,
+        ignore_checksum_security,
         |query, matches| {
             let choices = matches
                 .iter()

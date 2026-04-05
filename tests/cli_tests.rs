@@ -61,6 +61,32 @@ fn parse_update() {
 }
 
 #[test]
+fn parse_install_with_ignore_checksum_security() {
+    let cli = Cli::parse_from(["brew", "install", "gzip", "--ignore-checksum-security"]);
+
+    assert_eq!(
+        cli.command,
+        Command::Install {
+            query: vec!["gzip".to_string()],
+            ignore_checksum_security: true,
+        }
+    );
+}
+
+#[test]
+fn parse_install_without_ignore_checksum_security() {
+    let cli = Cli::parse_from(["brew", "install", "gzip"]);
+
+    assert_eq!(
+        cli.command,
+        Command::Install {
+            query: vec!["gzip".to_string()],
+            ignore_checksum_security: false,
+        }
+    );
+}
+
+#[test]
 fn parse_remove_with_yes() {
     let cli = Cli::parse_from(["brew", "remove", "ripgrep", "--yes"]);
 

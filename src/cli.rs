@@ -30,6 +30,9 @@ pub enum Command {
     Install {
         #[arg(value_name = "QUERY", num_args = 1..)]
         query: Vec<String>,
+
+        #[arg(long, help_heading = "Safety")]
+        ignore_checksum_security: bool,
     },
 
     /// Show effective runtime settings and paths

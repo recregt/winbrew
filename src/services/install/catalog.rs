@@ -74,7 +74,6 @@ mod tests {
                 id          TEXT PRIMARY KEY,
                 name        TEXT NOT NULL,
                 version     TEXT NOT NULL,
-                source      TEXT NOT NULL,
                 description TEXT,
                 homepage    TEXT,
                 license     TEXT,
@@ -146,14 +145,13 @@ mod tests {
         conn.execute(
             r#"
             INSERT INTO catalog_packages (
-                id, name, version, source, description, homepage, license, publisher
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                id, name, version, description, homepage, license, publisher
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
             "#,
             params![
-                "Contoso.App",
+                "winget/Contoso.App",
                 "Contoso Terminal",
                 "1.2.3",
-                "winget",
                 Some("Terminal tools for Contoso users"),
                 Option::<String>::None,
                 Option::<String>::None,
@@ -164,7 +162,7 @@ mod tests {
         let matches = search_catalog_packages(&conn, "terminal")?;
 
         assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].id, "Contoso.App");
+        assert_eq!(matches[0].id, "winget/Contoso.App");
         assert_eq!(matches[0].name, "Contoso Terminal");
         assert_eq!(matches[0].source, "winget");
 

@@ -40,6 +40,11 @@ tasks:
     cmds:
       - task: verify
 
+  ci:test:
+    desc: Run CI test suite
+    cmds:
+      - cargo test --locked --all-targets --all-features
+
   rust:build:
     desc: Build the CLI
     cmds:
