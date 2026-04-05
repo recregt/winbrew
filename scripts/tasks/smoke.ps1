@@ -5,7 +5,7 @@ param(
     [string]$BinaryPath = 'target\x86_64-pc-windows-msvc\debug\winbrew.exe'
 )
 
-$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 
 function Resolve-BinaryPath {
     param([string]$Path)

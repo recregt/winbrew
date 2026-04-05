@@ -1,0 +1,23 @@
+commit-msg:
+  jobs:
+    - run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tasks/commit-msg.ps1 '{1}'
+
+pre-commit:
+  parallel: true
+  commands:
+    rust:
+      run: task ci:pre-commit
+    infra:
+      glob: "infra/**/*.go"
+      root: "infra/"
+      run: task infra:pre-commit
+
+pre-push:
+  parallel: true
+  commands:
+    rust:
+      run: task ci:pre-push
+    infra:
+      glob: "infra/**/*.go"
+      root: "infra/"
+      run: task infra:pre-push

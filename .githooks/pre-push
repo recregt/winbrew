@@ -1,7 +1,0 @@
-#!/bin/sh
-set -e
-
-REPO_ROOT="$(git rev-parse --show-toplevel | tr -d '\r')"
-cd "$REPO_ROOT"
-
-task hooks:pre-push

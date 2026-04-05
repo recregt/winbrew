@@ -6,7 +6,6 @@ on:
       - main
     paths-ignore:
       - 'README.md'
-      - '.githooks/**'
       - '.github/dependabot.yml'
       - '.gitignore'
       - '.gitattributes'
@@ -17,49 +16,43 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   ci:
-    name: CI checks and smoke tests
+    name: CI checks
     runs-on: windows-latest
     if: github.event_name != 'schedule'
-    env:
-      ROOT: target\winbrew-ci
-      BINARY: target\x86_64-pc-windows-msvc\debug\winbrew.exe
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
-
-      - name: Cache cargo-nextest binary
-        uses: actions/cache@v4
-        with:
-          path: ~\AppData\Local\winbrew\nextest
-          key: nextest-0.9.132-${{ runner.os }}
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version-file: infra/go.mod
+          cache: true
+          cache-dependency-path: infra/go.sum
 
       - name: Setup Task
         uses: go-task/setup-task@v1
         with:
           version: 3.x
 
+      - name: Install Lefthook
+        uses: taiki-e/install-action@v2
+        with:
+          tool: lefthook
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.122
+
       - name: Verify checks
         run: task ci:verify
-
-      - name: Test suite
-        run: task ci:test
-
-      - name: Smoke tests
-        run: task ci:smoke ROOT="$env:ROOT" BINARY="$env:BINARY"

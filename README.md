@@ -29,21 +29,6 @@ PowerShell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.c
 | `winbrew list` | List all installed packages |
 | `winbrew doctor` | Check system health and configuration |
 
-## Development
-
-`WinBrew` uses `go-task` to manage the development workflow.
-
-1.  **Install Git Hooks:** `task hooks:install`
-2.  **Run Tests:** `task ci:test`  
-    *(This automatically bootstraps a pinned version of `cargo-nextest` for lightning-fast, parallel testing.)*
-3.  **Smoke Test:** `task ci:smoke`
-4.  **Run Locally Without Polluting Your Profile:** `task dev:run -- --help`
-    *(This uses `target\winbrew-dev` via `WINBREW_PATHS_ROOT`, so config, logs, and databases stay inside the repo.)*
-    *For release-mode testing, use `task dev:run-release -- install firefox`.*
-5.  **Clean the Dev Root:** `task dev:clean`
-
-You can pass any WinBrew arguments after `--`, for example `task dev:run -- doctor` or `task dev:run -- list`.
-
 ### File Layout
 
 By default, WinBrew isolates everything within the current user's local app data directory:
@@ -76,6 +61,10 @@ root = "C:\\Users\\<you>\\AppData\\Local\\winbrew"
 ```
 
 *Note: You can override any setting using environment variables with the `WINBREW_` prefix (e.g., `WINBREW_CORE_LOG_LEVEL=debug`).*
+
+## Development
+
+Development setup and contributor tasks are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

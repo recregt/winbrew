@@ -3,66 +3,86 @@
 version: '3'
 
 tasks:
-  default:
-    desc: Run the full local verification suite
+  tools:install-lefthook:
+    desc: Install Lefthook for local or CI use
     cmds:
-      - task: verify
+      - go install github.com/evilmartians/lefthook/v2@v2.1.4
 
-  hooks:install:
-    desc: Configure git to use the repository hook scripts
+  tools:install-nextest:
+    desc: Install cargo-nextest for local development
     cmds:
-      - git config core.hooksPath .githooks
+      - cargo install --locked cargo-nextest --version 0.9.122 --force
 
-  hooks:commit-msg:
-    desc: Validate a commit message against Conventional Commits
+  test:
+    desc: Run Rust tests with cargo test
     cmds:
-      - >
-        powershell -NoProfile -ExecutionPolicy Bypass -File scripts/task-hooks.ps1 -Hook commit-msg -MsgFile '{{.MSG_FILE}}'
+      - cargo test --locked --all-targets --all-features
 
-  hooks:pre-commit:
-    desc: Run pre-commit checks
+  test:nextest:
+    desc: Run Rust tests with cargo-nextest
     cmds:
-      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/task-hooks.ps1 -Hook pre-commit
+      - cargo nextest run --locked --all-targets --all-features
 
-  hooks:pre-push:
-    desc: Run pre-push checks
+  test:pre-commit:
+    desc: Run lefthook pre-commit checks
     cmds:
-      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/task-hooks.ps1 -Hook pre-push
+      - lefthook run pre-commit --all-files
 
-  verify:
-    desc: Run the full local verification suite
+  check:
+    desc: Run cargo fmt
     cmds:
-      - task: hooks:pre-commit
-      - task: hooks:pre-push
+      - cargo fmt --all -- --check
 
-  ci:verify:
-    desc: Run CI verification checks
+  check:clippy:
+    desc: Run cargo clippy
     cmds:
-      - task: verify
+      - cargo clippy --locked --all-targets --all-features -- -D warnings
 
-  ci:test:
-    desc: Run CI test suite
+  infra:pre-commit:
+    desc: Run Go checks and tests for the infra module
     cmds:
-      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/nextest.ps1 -Action run --locked --all-targets --all-features
+      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/infra/pre-commit.ps1
+
+  infra:pre-push:
+    desc: Run Go linters for the infra module
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/infra/pre-push.ps1
+
+  test:infra:
+    desc: Run infra (Go) tests
+    cmds:
+      - task: infra:pre-commit
 
   ci:smoke:
     desc: Build and smoke-test the CLI
     vars:
       ROOT: target\winbrew-ci
-      BINARY: target\x86_64-pc-windows-msvc\debug\winbrew.exe
+      BINARY: target\x86_64-pc-windows-msvc\release\winbrew.exe
     cmds:
-      - task: rust:build
-      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/task-smoke.ps1 -BinaryPath '{{.BINARY}}' -ROOT '{{.ROOT}}'
+      - cargo build --locked --release
+      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tasks/smoke.ps1 -BinaryPath '{{.BINARY}}' -ROOT '{{.ROOT}}'
 
-  tools:install-nextest:
-    desc: Install cargo-nextest for local test runs
+  ci:pre-commit:
+    desc: Run pre-commit checks for CI
     cmds:
-      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/nextest.ps1 -Action install
+      - task: check
+      - cargo check --locked
+      - task: infra:pre-commit
+      - task: test:nextest
 
-  rust:build:
-    desc: Build the CLI
+  ci:pre-push:
+    desc: Run pre-push checks for CI
     cmds:
-      - cargo build --locked
+      - task: test
+      - task: check:clippy
+      - task: infra:pre-push
+      - task: ci:smoke
+
+  ci:verify:
+    desc: Run the full Lefthook verification flow for CI
+    cmds:
+      - lefthook run pre-commit --all-files
+      - lefthook run pre-push --all-files
 
   dev:run:
     desc: Run the CLI with a repo-local development root
