@@ -45,6 +45,15 @@ tasks:
     cmds:
       - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/nextest.ps1 -Action run --locked --all-targets --all-features
 
+  ci:smoke:
+    desc: Build and smoke-test the CLI
+    vars:
+      ROOT: target\winbrew-ci
+      BINARY: target\x86_64-pc-windows-msvc\debug\winbrew.exe
+    cmds:
+      - task: rust:build
+      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/task-smoke.ps1 -BinaryPath '{{.BINARY}}' -ROOT '{{.ROOT}}'
+
   tools:install-nextest:
     desc: Install cargo-nextest for local test runs
     cmds:
@@ -55,11 +64,21 @@ tasks:
     cmds:
       - cargo build --locked
 
-  ci:smoke:
-    desc: Build and smoke-test the CLI
-    vars:
-      ROOT: target\winbrew-ci
-      BINARY: target\x86_64-pc-windows-msvc\debug\winbrew.exe
+  dev:run:
+    desc: Run the CLI with a repo-local development root
+    env:
+      WINBREW_PATHS_ROOT: target\winbrew-dev
     cmds:
-      - task: rust:build
-      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/task-smoke.ps1 -BinaryPath '{{.BINARY}}' -ROOT '{{.ROOT}}'
+      - cargo run --locked -- {{.CLI_ARGS}}
+
+  dev:run-release:
+    desc: Run the CLI in release mode with a repo-local development root
+    env:
+      WINBREW_PATHS_ROOT: target\winbrew-dev
+    cmds:
+      - cargo run --locked --release -- {{.CLI_ARGS}}
+
+  dev:clean:
+    desc: Remove the repo-local development root
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -Command "Remove-Item -LiteralPath 'target\winbrew-dev' -Recurse -Force -ErrorAction SilentlyContinue"

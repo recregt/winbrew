@@ -37,6 +37,12 @@ PowerShell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.c
 2.  **Run Tests:** `task ci:test`  
     *(This automatically bootstraps a pinned version of `cargo-nextest` for lightning-fast, parallel testing.)*
 3.  **Smoke Test:** `task ci:smoke`
+4.  **Run Locally Without Polluting Your Profile:** `task dev:run -- --help`
+    *(This uses `target\winbrew-dev` via `WINBREW_PATHS_ROOT`, so config, logs, and databases stay inside the repo.)*
+    *For release-mode testing, use `task dev:run-release -- install firefox`.*
+5.  **Clean the Dev Root:** `task dev:clean`
+
+You can pass any WinBrew arguments after `--`, for example `task dev:run -- doctor` or `task dev:run -- list`.
 
 ### File Layout
 
