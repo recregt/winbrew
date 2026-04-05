@@ -9,10 +9,7 @@ use crate::models::Package;
 
 #[derive(Debug, Clone)]
 pub struct RemovalPlan {
-    pub name: String,
-    pub kind: String,
-    pub install_dir: String,
-    pub msix_package_full_name: Option<String>,
+    pub package: Package,
     pub dependents: Vec<String>,
 }
 
@@ -60,10 +57,7 @@ pub fn remove(name: &str, force: bool) -> Result<()> {
 
 fn removal_plan(pkg: Package, dependents: Vec<String>) -> RemovalPlan {
     RemovalPlan {
-        name: pkg.name,
-        kind: pkg.kind,
-        install_dir: pkg.install_dir,
-        msix_package_full_name: pkg.msix_package_full_name,
+        package: pkg,
         dependents,
     }
 }
@@ -73,40 +67,39 @@ fn execute_removal_with_conn(
     force: bool,
     conn: &rusqlite::Connection,
 ) -> Result<()> {
-    debug!(package = plan.name.as_str(), force, "starting remove");
+    debug!(
+        package = plan.package.name.as_str(),
+        force, "starting remove"
+    );
 
     if !force && !plan.dependents.is_empty() {
         bail!(
             "cannot remove '{name}' because it is required by: {}",
             plan.dependents.join(", "),
-            name = plan.name
+            name = plan.package.name
         );
     }
 
-    let install_dir = PathBuf::from(&plan.install_dir);
-    let engine_kind = match engines::get_engine_kind(&plan.kind) {
+    let install_dir = PathBuf::from(&plan.package.install_dir);
+    let engine_kind = match engines::get_engine_kind(&plan.package.kind) {
         Ok(engine_kind) => engine_kind,
-        Err(_) => bail!("unsupported package type: {}", plan.kind),
+        Err(_) => bail!("unsupported package type: {}", plan.package.kind),
     };
 
     match engine_kind {
         EngineKind::Msix => {
-            engine_kind.remove(
-                &plan.name,
-                &install_dir,
-                plan.msix_package_full_name.as_deref(),
-            )?;
+            engine_kind.remove(&plan.package)?;
 
             if install_dir.exists()
                 && let Err(err) = std::fs::remove_dir_all(&install_dir)
             {
                 warn!(
                     "failed to remove package directory for {}: {err}",
-                    plan.name
+                    plan.package.name
                 );
             }
 
-            database::delete_package(conn, &plan.name)?;
+            database::delete_package(conn, &plan.package.name)?;
         }
         EngineKind::Zip | EngineKind::Portable => {
             if install_dir.exists() {
@@ -120,25 +113,80 @@ fn execute_removal_with_conn(
                 std::fs::rename(&install_dir, &trash_dir)
                     .context("failed to stage package for removal")?;
 
-                if let Err(err) = database::delete_package(conn, &plan.name) {
+                let trash_package = Package {
+                    install_dir: trash_dir.to_string_lossy().into_owned(),
+                    ..plan.package.clone()
+                };
+
+                if let Err(err) = database::delete_package(conn, &plan.package.name) {
                     let _ = std::fs::rename(&trash_dir, &install_dir);
                     return Err(err).context("failed to remove package from database");
                 }
 
-                if let Err(err) = engine_kind.remove(&plan.name, &trash_dir, None) {
-                    warn!("failed to completely remove trash for {}: {err}", plan.name);
+                if let Err(err) = engine_kind.remove(&trash_package) {
+                    warn!(
+                        "failed to completely remove trash for {}: {err}",
+                        plan.package.name
+                    );
                 }
             } else {
-                database::delete_package(conn, &plan.name)?;
+                database::delete_package(conn, &plan.package.name)?;
             }
         }
     }
 
-    debug!(package = plan.name.as_str(), force, "remove completed");
+    debug!(
+        package = plan.package.name.as_str(),
+        force, "remove completed"
+    );
 
     Ok(())
 }
 
 fn dependency_name(dep: &str) -> &str {
     dep.split_once('@').map(|(name, _)| name).unwrap_or(dep)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::removal_plan;
+    use crate::models::{Package, PackageStatus};
+
+    fn package(
+        name: &str,
+        kind: &str,
+        install_dir: &str,
+        msix_package_full_name: Option<&str>,
+    ) -> Package {
+        Package {
+            name: name.to_string(),
+            version: "1.0.0".to_string(),
+            kind: kind.to_string(),
+            install_dir: install_dir.to_string(),
+            msix_package_full_name: msix_package_full_name.map(ToOwned::to_owned),
+            dependencies: Vec::new(),
+            status: PackageStatus::Ok,
+            installed_at: "2026-04-05T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn removal_plan_preserves_msix_full_name() {
+        let plan = removal_plan(
+            package(
+                "Contoso.App",
+                "msix",
+                r"C:\Packages\Contoso.App",
+                Some("Contoso.App_1.0.0_x64__8wekyb3d8bbwe"),
+            ),
+            vec!["Contoso.Consumer".to_string()],
+        );
+
+        assert_eq!(plan.package.name, "Contoso.App");
+        assert_eq!(
+            plan.package.msix_package_full_name.as_deref(),
+            Some("Contoso.App_1.0.0_x64__8wekyb3d8bbwe")
+        );
+        assert_eq!(plan.dependents, vec!["Contoso.Consumer".to_string()]);
+    }
 }

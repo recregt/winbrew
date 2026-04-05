@@ -23,6 +23,12 @@ fn sample_package(name: &str, status: PackageStatus) -> Package {
     }
 }
 
+fn reset_database(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute("DELETE FROM installed_packages", [])?;
+
+    Ok(())
+}
+
 #[test]
 fn package_crud_round_trip() -> Result<()> {
     let _guard = env_lock();
@@ -33,6 +39,7 @@ fn package_crud_round_trip() -> Result<()> {
     );
 
     let conn = database::get_conn()?;
+    reset_database(&conn)?;
     let package = sample_package("Contoso.RoundTrip", PackageStatus::Installing);
 
     database::insert_package(&conn, &package)?;
@@ -75,6 +82,7 @@ fn update_status_and_msix_package_full_name_round_trip() -> Result<()> {
     );
 
     let conn = database::get_conn()?;
+    reset_database(&conn)?;
     let mut package = sample_package("Contoso.Msix", PackageStatus::Installing);
     package.msix_package_full_name = None;
 

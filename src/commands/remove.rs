@@ -12,7 +12,7 @@ pub fn run(ctx: &AppContext, name: &str, yes: bool, force: bool) -> Result<()> {
     if !plan.dependents.is_empty() {
         ui.warn(format!(
             "Caution: {} is required by: {}",
-            plan.name,
+            plan.package.name,
             plan.dependents.join(", ")
         ));
     }
@@ -22,11 +22,11 @@ pub fn run(ctx: &AppContext, name: &str, yes: bool, force: bool) -> Result<()> {
         return Ok(());
     }
 
-    ui.spinner(format!("Removing {}...", plan.name), || {
+    ui.spinner(format!("Removing {}...", plan.package.name), || {
         remove::execute_removal(&plan, force)
     })?;
 
-    ui.success(format!("Successfully removed {}.", plan.name));
+    ui.success(format!("Successfully removed {}.", plan.package.name));
 
     Ok(())
 }
@@ -42,11 +42,11 @@ fn should_proceed<W: std::io::Write>(
     }
 
     let prompt = if plan.dependents.is_empty() {
-        format!("Are you sure you want to remove {}?", plan.name)
+        format!("Are you sure you want to remove {}?", plan.package.name)
     } else {
         format!(
             "Removal of {} may break other packages. Proceed anyway?",
-            plan.name
+            plan.package.name
         )
     };
 

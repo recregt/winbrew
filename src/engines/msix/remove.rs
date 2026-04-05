@@ -1,17 +1,12 @@
 use anyhow::{Context, Result, bail};
-use std::path::Path;
 use windows::ApplicationModel::Package;
 use windows::Management::Deployment::PackageManager;
 use windows::core::HSTRING;
 
-pub fn remove(
-    package_name: &str,
-    _install_dir: &Path,
-    package_full_name: Option<&str>,
-) -> Result<()> {
+pub fn remove(package: &crate::models::Package) -> Result<()> {
     let package_manager = PackageManager::new().context("failed to create package manager")?;
 
-    if let Some(package_full_name) = package_full_name {
+    if let Some(package_full_name) = package.msix_package_full_name.as_deref() {
         package_manager
             .RemovePackageAsync(&HSTRING::from(package_full_name))
             .with_context(|| format!("failed to start uninstall for {package_full_name}"))?
@@ -21,10 +16,10 @@ pub fn remove(
         return Ok(());
     }
 
-    let matching_full_names = matching_package_full_names(&package_manager, package_name)?;
+    let matching_full_names = matching_package_full_names(&package_manager, &package.name)?;
 
     if matching_full_names.is_empty() {
-        bail!("no installed msix package matched '{package_name}'");
+        bail!("no installed msix package matched '{}'", package.name);
     }
 
     for full_name in matching_full_names {

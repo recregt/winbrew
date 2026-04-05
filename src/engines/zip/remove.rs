@@ -1,14 +1,10 @@
+use crate::models::Package;
 use anyhow::Result;
 use std::fs;
 use std::io::ErrorKind;
-use std::path::Path;
 
-pub fn remove(
-    _package_name: &str,
-    install_dir: &Path,
-    _msix_package_full_name: Option<&str>,
-) -> Result<()> {
-    match fs::remove_dir_all(install_dir) {
+pub fn remove(package: &Package) -> Result<()> {
+    match fs::remove_dir_all(&package.install_dir) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err.into()),
@@ -18,8 +14,22 @@ pub fn remove(
 #[cfg(test)]
 mod tests {
     use super::remove;
+    use crate::models::{Package, PackageStatus};
     use std::fs;
     use tempfile::tempdir;
+
+    fn package(name: &str, install_dir: &std::path::Path) -> Package {
+        Package {
+            name: name.to_string(),
+            version: "1.0.0".to_string(),
+            kind: "zip".to_string(),
+            install_dir: install_dir.to_string_lossy().into_owned(),
+            msix_package_full_name: None,
+            dependencies: Vec::new(),
+            status: PackageStatus::Ok,
+            installed_at: "2026-04-05T00:00:00Z".to_string(),
+        }
+    }
 
     #[test]
     fn remove_deletes_existing_directory() {
@@ -30,7 +40,7 @@ mod tests {
         fs::create_dir_all(install_dir.join("bin")).expect("create bin dir");
         fs::write(install_dir.join("bin").join("tool.exe"), b"binary").expect("write file");
 
-        remove("Contoso.Zip", &install_dir, None).expect("remove directory");
+        remove(&package("Contoso.Zip", &install_dir)).expect("remove directory");
 
         assert!(!install_dir.exists());
     }
@@ -40,6 +50,7 @@ mod tests {
         let temp_root = tempdir().expect("temp root");
         let install_dir = temp_root.path().join("packages").join("Contoso.Missing");
 
-        remove("Contoso.Missing", &install_dir, None).expect("missing directory should be ignored");
+        remove(&package("Contoso.Missing", &install_dir))
+            .expect("missing directory should be ignored");
     }
 }

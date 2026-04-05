@@ -1,21 +1,23 @@
+mod registry;
+
 pub mod msix;
 pub mod portable;
 pub mod zip;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use std::path::Path;
 
-use crate::core::network::is_zip_path;
 use crate::models::CatalogInstaller;
+use crate::models::Package;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EngineKind {
+pub(crate) enum EngineKind {
     Msix,
     Zip,
     Portable,
 }
 
-pub trait PackageEngine {
+pub(crate) trait PackageEngine {
     fn install(
         &self,
         installer: &CatalogInstaller,
@@ -23,35 +25,15 @@ pub trait PackageEngine {
         install_dir: &Path,
     ) -> Result<()>;
 
-    fn remove(
-        &self,
-        package_name: &str,
-        install_dir: &Path,
-        msix_package_full_name: Option<&str>,
-    ) -> Result<()>;
+    fn remove(&self, package: &Package) -> Result<()>;
 }
 
-pub fn get_engine(installer: &CatalogInstaller) -> Result<EngineKind> {
-    let installer_kind = installer.kind.trim().to_ascii_lowercase();
-
-    match installer_kind.as_str() {
-        "msix" => Ok(EngineKind::Msix),
-        "zip" => Ok(EngineKind::Zip),
-        "portable" if is_zip_path(&installer.url) => Ok(EngineKind::Zip),
-        "portable" => Ok(EngineKind::Portable),
-        _ => bail!("unsupported installer type: {}", installer.kind),
-    }
+pub(crate) fn get_engine(installer: &CatalogInstaller) -> Result<EngineKind> {
+    registry::resolve_engine_kind_for_installer(installer)
 }
 
-pub fn get_engine_kind(kind: &str) -> Result<EngineKind> {
-    let installer_kind = kind.trim().to_ascii_lowercase();
-
-    match installer_kind.as_str() {
-        "msix" => Ok(EngineKind::Msix),
-        "zip" => Ok(EngineKind::Zip),
-        "portable" => Ok(EngineKind::Portable),
-        _ => bail!("unsupported installer type: {}", kind),
-    }
+pub(crate) fn get_engine_kind(kind: &str) -> Result<EngineKind> {
+    registry::resolve_engine_kind_for_kind(kind)
 }
 
 impl PackageEngine for EngineKind {
@@ -61,31 +43,10 @@ impl PackageEngine for EngineKind {
         download_path: &Path,
         install_dir: &Path,
     ) -> Result<()> {
-        match self {
-            EngineKind::Msix => msix::install::install(download_path, install_dir),
-            EngineKind::Zip => zip::install::install(download_path, install_dir),
-            EngineKind::Portable => {
-                portable::install::install(download_path, install_dir, &installer.url)
-            }
-        }
+        registry::install(*self, installer, download_path, install_dir)
     }
 
-    fn remove(
-        &self,
-        package_name: &str,
-        install_dir: &Path,
-        msix_package_full_name: Option<&str>,
-    ) -> Result<()> {
-        match self {
-            EngineKind::Msix => {
-                msix::remove::remove(package_name, install_dir, msix_package_full_name)
-            }
-            EngineKind::Zip => {
-                zip::remove::remove(package_name, install_dir, msix_package_full_name)
-            }
-            EngineKind::Portable => {
-                portable::remove::remove(package_name, install_dir, msix_package_full_name)
-            }
-        }
+    fn remove(&self, package: &Package) -> Result<()> {
+        registry::remove(*self, package)
     }
 }
