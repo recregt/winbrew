@@ -1,13 +1,8 @@
 use crate::database;
 use crate::models::Package;
+use crate::models::remove::RemovalPlan;
 
 use super::Result;
-
-#[derive(Debug, Clone)]
-pub struct RemovalPlan {
-    pub package: Package,
-    pub dependents: Vec<String>,
-}
 
 pub fn find_dependents(name: &str, conn: &rusqlite::Connection) -> Result<Vec<String>> {
     let mut dependents = database::list_packages(conn)?

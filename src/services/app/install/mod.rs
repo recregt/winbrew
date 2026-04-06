@@ -13,7 +13,8 @@ use crate::engines::{self, EngineKind};
 use crate::models::CatalogPackage;
 use crate::services::shared::catalog;
 
-pub use types::{InstallError, InstallOutcome, InstallResult};
+pub use crate::models::install::{InstallOutcome, InstallResult};
+pub use types::InstallError;
 pub type Result<T> = types::Result<T>;
 
 pub fn run<FChoose, FStart, FProgress>(

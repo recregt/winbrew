@@ -3,8 +3,9 @@ mod plan;
 
 use thiserror::Error;
 
+pub use crate::models::remove::RemovalPlan;
 pub use execution::execute_removal;
-pub use plan::{RemovalPlan, find_dependents, plan_removal};
+pub use plan::{find_dependents, plan_removal};
 
 #[derive(Debug, Error)]
 pub enum RemovalError {

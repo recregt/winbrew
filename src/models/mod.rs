@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 pub mod config;
+pub mod install;
+pub mod remove;
+pub mod report;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
