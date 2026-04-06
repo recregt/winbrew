@@ -3,7 +3,9 @@ use std::fs;
 use std::io::{BufWriter, Read, Write};
 use std::path::Path;
 
-use crate::core::hash::{HashAlgorithm, Hasher, hash_algorithm, normalize_hash, verify_hash};
+use crate::core::hash::{
+    HashAlgorithm, HashError, Hasher, hash_algorithm, normalize_hash, verify_hash,
+};
 use crate::models::CatalogInstaller;
 
 const CATALOG_USER_AGENT: &str = "winbrew-package-installer";
@@ -22,14 +24,15 @@ pub fn download_installer<FStart, FProgress>(
     ignore_checksum_security: bool,
     on_start: FStart,
     mut on_progress: FProgress,
-) -> Result<()>
+) -> Result<Vec<HashAlgorithm>>
 where
     FStart: FnOnce(Option<u64>),
     FProgress: FnMut(u64),
 {
     let temp_path = download_path.with_extension("part");
-    let result = (|| -> Result<()> {
-        let verification = verify_strategy(&installer.hash, ignore_checksum_security)?;
+    let result = (|| -> Result<Vec<HashAlgorithm>> {
+        let (verification, legacy_checksum_algorithms) =
+            verify_strategy(&installer.hash, ignore_checksum_security)?;
         let mut response = client
             .get(&installer.url)
             .send()
@@ -89,7 +92,7 @@ where
             )
         })?;
 
-        Ok(())
+        Ok(legacy_checksum_algorithms)
     })();
 
     if result.is_err() {
@@ -122,23 +125,40 @@ impl Verification {
     }
 }
 
-fn verify_strategy(expected_hash: &str, ignore_checksum_security: bool) -> Result<Verification> {
+fn verify_strategy(
+    expected_hash: &str,
+    ignore_checksum_security: bool,
+) -> Result<(Verification, Vec<HashAlgorithm>)> {
     let trimmed = expected_hash.trim();
 
     if trimmed.is_empty() {
-        return Ok(Verification::None);
+        return Ok((Verification::None, Vec::new()));
     }
 
     if normalize_hash(trimmed).is_empty() {
-        return Ok(Verification::None);
+        return Ok((Verification::None, Vec::new()));
     }
 
     match hash_algorithm(trimmed) {
-        Some(HashAlgorithm::Md5) if ignore_checksum_security => Ok(Verification::None),
-        Some(HashAlgorithm::Md5) => anyhow::bail!(
-            "MD5 checksums are disabled by default for security. Re-run with --ignore-checksum-security to install this package."
-        ),
-        Some(algorithm) => Ok(Verification::Active(Box::new(Hasher::new(algorithm)))),
+        Some(HashAlgorithm::Md5) if ignore_checksum_security => {
+            Ok((Verification::None, vec![HashAlgorithm::Md5]))
+        }
+        Some(HashAlgorithm::Md5) => Err(HashError::LegacyChecksumAlgorithm {
+            algorithm: HashAlgorithm::Md5,
+        }
+        .into()),
+        Some(HashAlgorithm::Sha1) if ignore_checksum_security => Ok((
+            Verification::Active(Box::new(Hasher::new(HashAlgorithm::Sha1))),
+            vec![HashAlgorithm::Sha1],
+        )),
+        Some(HashAlgorithm::Sha1) => Err(HashError::LegacyChecksumAlgorithm {
+            algorithm: HashAlgorithm::Sha1,
+        }
+        .into()),
+        Some(algorithm) => Ok((
+            Verification::Active(Box::new(Hasher::new(algorithm))),
+            Vec::new(),
+        )),
         None => anyhow::bail!("unsupported checksum format for installer: {expected_hash}"),
     }
 }

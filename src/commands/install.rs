@@ -1,7 +1,9 @@
 use anyhow::Result;
 
+use crate::core::hash::{HashAlgorithm, HashError};
 use crate::models::CatalogPackage;
 use crate::services::install;
+use crate::services::install::state::InstallStateError;
 use crate::{AppContext, ui::Ui};
 
 pub fn run(ctx: &AppContext, query: &[String], ignore_checksum_security: bool) -> Result<()> {
@@ -40,11 +42,61 @@ pub fn run(ctx: &AppContext, query: &[String], ignore_checksum_security: bool) -
 
     progress.finish_and_clear();
 
-    let result = result?;
-    ui.success(format!(
-        "Installed {} {} into {}.",
-        result.name, result.version, result.install_dir
-    ));
+    match result {
+        Ok(outcome) => {
+            for algorithm in outcome.legacy_checksum_algorithms {
+                match algorithm {
+                    HashAlgorithm::Sha1 => ui.warn(
+                        "This package uses SHA1 checksums. Verification succeeded, but SHA1 is a legacy algorithm.",
+                    ),
+                    HashAlgorithm::Md5 => ui.warn(
+                        "This package uses MD5 checksums. Verification succeeded, but MD5 is a legacy algorithm.",
+                    ),
+                    _ => {}
+                }
+            }
+
+            let result = outcome.result;
+            ui.success(format!(
+                "Installed {} {} into {}.",
+                result.name, result.version, result.install_dir
+            ));
+        }
+        Err(err) => {
+            if let Some(state_err) = err.downcast_ref::<InstallStateError>() {
+                match state_err {
+                    InstallStateError::AlreadyInstalled { name } => {
+                        ui.notice(format!("{name} is already installed."));
+                    }
+                    InstallStateError::AlreadyInstalling { name } => {
+                        ui.warn(format!("{name} is currently being installed."));
+                    }
+                    InstallStateError::CurrentlyUpdating { name } => {
+                        ui.warn(format!("{name} is currently updating."));
+                    }
+                    _ => return Err(err),
+                }
+            } else if let Some(hash_err) = err.downcast_ref::<HashError>() {
+                match hash_err {
+                    HashError::ChecksumMismatch { expected, actual } => {
+                        ui.error(format!(
+                            "Installer checksum mismatch: expected {expected}, got {actual}"
+                        ));
+                        return Err(err);
+                    }
+                    HashError::LegacyChecksumAlgorithm { algorithm } => {
+                        ui.error(format!(
+                            "{} checksums are disabled by default for security. Re-run with --ignore-checksum-security to install this package.",
+                            algorithm.display_name()
+                        ));
+                        return Err(err);
+                    }
+                }
+            } else {
+                return Err(err);
+            }
+        }
+    }
 
     Ok(())
 }

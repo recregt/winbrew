@@ -1,8 +1,9 @@
-#[path = "common/shared_root.rs"]
-mod shared_root;
+#[path = "common/mod.rs"]
+mod common;
 
 use anyhow::Result;
-use shared_root::test_root;
+use common::db::{init_database, reset_install_state};
+use common::shared_root::test_root;
 use std::fs;
 use std::path::Path;
 use winbrew::database;
@@ -22,30 +23,12 @@ fn sample_package(name: &str, status: PackageStatus, install_dir: &Path) -> Pack
     }
 }
 
-fn reset_database(root: &Path) -> Result<()> {
-    let conn = database::get_conn()?;
-    conn.execute("DELETE FROM installed_packages", [])?;
-
-    let packages_dir = root.join("packages");
-    if packages_dir.exists() {
-        fs::remove_dir_all(&packages_dir)?;
-    }
-    fs::create_dir_all(&packages_dir)?;
-
-    Ok(())
-}
-
-fn init_database(root: &Path) -> Result<()> {
-    let config = database::Config::load_at(root)?;
-    database::init(&config.resolved_paths())
-}
-
 #[test]
 fn prepare_install_target_removes_orphaned_directory() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
     init_database(root)?;
-    reset_database(root)?;
+    reset_install_state(root)?;
     let conn = database::get_conn()?;
 
     let install_dir = root.join("packages").join("Contoso.Orphan");
@@ -65,7 +48,7 @@ fn prepare_install_target_deletes_failed_package_and_directory() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
     init_database(root)?;
-    reset_database(root)?;
+    reset_install_state(root)?;
     let conn = database::get_conn()?;
 
     let install_dir = root.join("packages").join("Contoso.Failed");
@@ -88,7 +71,7 @@ fn prepare_install_target_rejects_installed_package() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
     init_database(root)?;
-    reset_database(root)?;
+    reset_install_state(root)?;
     let conn = database::get_conn()?;
 
     let install_dir = root.join("packages").join("Contoso.Exists");
@@ -109,7 +92,7 @@ fn mark_installing_and_mark_ok_update_status() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
     init_database(root)?;
-    reset_database(root)?;
+    reset_install_state(root)?;
     let conn = database::get_conn()?;
 
     let install_dir = root.join("packages").join("Contoso.Installing");

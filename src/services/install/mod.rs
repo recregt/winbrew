@@ -9,12 +9,13 @@ use std::fs;
 
 use crate::AppContext;
 use crate::core::fs::cleanup_path;
+use crate::core::hash::HashAlgorithm;
 use crate::core::network::installer_filename;
 use crate::database;
 use crate::engines::{self, EngineKind, PackageEngine};
 use crate::models::CatalogPackage;
 
-pub use types::InstallResult;
+pub use types::{InstallOutcome, InstallResult};
 
 pub fn run<FChoose, FStart, FProgress>(
     ctx: &AppContext,
@@ -23,7 +24,7 @@ pub fn run<FChoose, FStart, FProgress>(
     mut choose_package: FChoose,
     on_start: FStart,
     on_progress: FProgress,
-) -> Result<InstallResult>
+) -> Result<InstallOutcome>
 where
     FChoose: FnMut(&str, &[CatalogPackage]) -> Result<usize>,
     FStart: FnOnce(Option<u64>),
@@ -60,7 +61,7 @@ where
 
     let client = download::build_client()?;
 
-    let result = perform_install(InstallRequest {
+    let legacy_checksum_algorithms = perform_install(InstallRequest {
         client: &client,
         engine,
         installer: &installer,
@@ -69,43 +70,38 @@ where
         ignore_checksum_security,
         on_start,
         on_progress,
-    });
+    })?;
 
-    match result {
-        Ok(()) => {
-            let install_result = InstallResult {
-                name: package.name,
-                version: package.version,
-                install_dir: install_dir.to_string_lossy().to_string(),
-            };
+    let install_result = InstallResult {
+        name: package.name,
+        version: package.version,
+        install_dir: install_dir.to_string_lossy().to_string(),
+    };
 
-            let msix_package_full_name = if engine == EngineKind::Msix {
-                match engines::msix::installed_package_full_name(&install_result.name) {
-                    Ok(full_name) => Some(full_name),
-                    Err(err) => {
-                        let _ = state::mark_failed(&conn, &install_result.name);
-                        let _ = cleanup_path(&temp_root);
-                        return Err(err);
-                    }
-                }
-            } else {
-                None
-            };
-
-            state::mark_ok(
-                &conn,
-                &install_result.name,
-                msix_package_full_name.as_deref(),
-            )?;
-            let _ = cleanup_path(&temp_root);
-            Ok(install_result)
+    let msix_package_full_name = if engine == EngineKind::Msix {
+        match engines::msix::installed_package_full_name(&install_result.name) {
+            Ok(full_name) => Some(full_name),
+            Err(err) => {
+                let _ = state::mark_failed(&conn, &install_result.name);
+                let _ = cleanup_path(&temp_root);
+                return Err(err);
+            }
         }
-        Err(err) => {
-            let _ = state::mark_failed(&conn, &package.name);
-            let _ = cleanup_path(&temp_root);
-            Err(err)
-        }
-    }
+    } else {
+        None
+    };
+
+    state::mark_ok(
+        &conn,
+        &install_result.name,
+        msix_package_full_name.as_deref(),
+    )?;
+    let _ = cleanup_path(&temp_root);
+
+    Ok(InstallOutcome {
+        result: install_result,
+        legacy_checksum_algorithms,
+    })
 }
 
 struct InstallRequest<'a, FStart, FProgress>
@@ -123,7 +119,9 @@ where
     on_progress: FProgress,
 }
 
-fn perform_install<FStart, FProgress>(request: InstallRequest<'_, FStart, FProgress>) -> Result<()>
+fn perform_install<FStart, FProgress>(
+    request: InstallRequest<'_, FStart, FProgress>,
+) -> Result<Vec<HashAlgorithm>>
 where
     FStart: FnOnce(Option<u64>),
     FProgress: FnMut(u64),
@@ -140,7 +138,7 @@ where
     } = request;
 
     let download_path = temp_root.join(installer_filename(&installer.url));
-    download::download_installer(
+    let legacy_checksum_algorithms = download::download_installer(
         client,
         installer,
         &download_path,
@@ -151,7 +149,7 @@ where
 
     engine.install(installer, &download_path, install_dir)?;
 
-    Ok(())
+    Ok(legacy_checksum_algorithms)
 }
 
 fn resolve_catalog_package<FChoose>(

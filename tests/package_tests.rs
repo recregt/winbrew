@@ -1,9 +1,9 @@
-#[path = "common/shared_root.rs"]
-mod shared_root;
+#[path = "common/mod.rs"]
+mod common;
 
 use anyhow::Result;
-use shared_root::test_root;
-use std::path::Path;
+use common::db::{init_database, reset_installed_packages};
+use common::shared_root::test_root;
 use winbrew::database;
 use winbrew::models::{Package, PackageStatus};
 
@@ -20,17 +20,6 @@ fn sample_package(name: &str, status: PackageStatus) -> Package {
     }
 }
 
-fn reset_database(conn: &rusqlite::Connection) -> Result<()> {
-    conn.execute("DELETE FROM installed_packages", [])?;
-
-    Ok(())
-}
-
-fn init_database(root: &Path) -> Result<()> {
-    let config = database::Config::load_at(root)?;
-    database::init(&config.resolved_paths())
-}
-
 #[test]
 fn package_crud_round_trip() -> Result<()> {
     let test_root = test_root();
@@ -38,7 +27,7 @@ fn package_crud_round_trip() -> Result<()> {
     init_database(root)?;
 
     let conn = database::get_conn()?;
-    reset_database(&conn)?;
+    reset_installed_packages(&conn)?;
     let package = sample_package("Contoso.RoundTrip", PackageStatus::Installing);
 
     database::insert_package(&conn, &package)?;
@@ -78,7 +67,7 @@ fn update_status_and_msix_package_full_name_round_trip() -> Result<()> {
     init_database(root)?;
 
     let conn = database::get_conn()?;
-    reset_database(&conn)?;
+    reset_installed_packages(&conn)?;
     let mut package = sample_package("Contoso.Msix", PackageStatus::Installing);
     package.msix_package_full_name = None;
 

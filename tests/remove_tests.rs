@@ -1,8 +1,9 @@
-#[path = "common/shared_root.rs"]
-mod shared_root;
+#[path = "common/mod.rs"]
+mod common;
 
 use anyhow::Result;
-use shared_root::test_root;
+use common::db::{init_database, reset_install_state};
+use common::shared_root::test_root;
 use std::fs;
 use std::path::Path;
 use winbrew::database;
@@ -27,30 +28,12 @@ fn sample_package(
     }
 }
 
-fn reset_database(root: &Path) -> Result<()> {
-    let conn = database::get_conn()?;
-    conn.execute("DELETE FROM installed_packages", [])?;
-
-    let packages_dir = root.join("packages");
-    if packages_dir.exists() {
-        fs::remove_dir_all(&packages_dir)?;
-    }
-    fs::create_dir_all(&packages_dir)?;
-
-    Ok(())
-}
-
-fn init_database(root: &Path) -> Result<()> {
-    let config = database::Config::load_at(root)?;
-    database::init(&config.resolved_paths())
-}
-
 #[test]
 fn remove_deletes_portable_installation_and_database_row() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
     init_database(root)?;
-    reset_database(root)?;
+    reset_install_state(root)?;
     let conn = database::get_conn()?;
 
     let install_dir = root.join("packages").join("Contoso.Remove");
@@ -75,7 +58,7 @@ fn remove_blocks_packages_with_dependents_without_force() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
     init_database(root)?;
-    reset_database(root)?;
+    reset_install_state(root)?;
     let conn = database::get_conn()?;
 
     let target_install_dir = root.join("packages").join("Contoso.Target");
@@ -112,7 +95,7 @@ fn find_dependents_returns_sorted_packages() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
     init_database(root)?;
-    reset_database(root)?;
+    reset_install_state(root)?;
     let conn = database::get_conn()?;
 
     let target_install_dir = root.join("packages").join("Contoso.Base");
@@ -171,7 +154,7 @@ fn remove_rejects_unsupported_package_type() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
     init_database(root)?;
-    reset_database(root)?;
+    reset_install_state(root)?;
     let conn = database::get_conn()?;
 
     let install_dir = root.join("packages").join("Contoso.Unsupported");

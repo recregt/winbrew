@@ -40,6 +40,7 @@ strum_macros = "0.28"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["ansi", "env-filter", "fmt", "registry", "std"] }
 tracing-appender = "0.2"
+tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
 mimalloc = "0.1"
@@ -50,7 +51,7 @@ chrono = { version = "0.4", features = ["clock"] }
 winresource = "0.1"
 
 [dev-dependencies]
-tempfile = "3"
+mockito = "1.7.2"
 
 [profile.release]
 opt-level = "z"
