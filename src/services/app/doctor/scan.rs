@@ -2,83 +2,109 @@ use anyhow::Result;
 
 use crate::database;
 use crate::models::Package;
+use crate::models::diagnostics::{DiagnosisResult, DiagnosisSeverity};
 use indicatif::ProgressBar;
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Diagnosis {
-    pub package_name: String,
-    pub install_dir: String,
-    pub issue: String,
-}
-
-impl Diagnosis {
-    pub fn check_package(pkg: &Package) -> Option<Self> {
-        let install_dir = Path::new(&pkg.install_dir);
-
-        if !install_dir.exists() {
-            return Some(Self {
-                package_name: pkg.name.clone(),
-                install_dir: pkg.install_dir.clone(),
-                issue: "missing install directory".to_string(),
-            });
-        }
-
-        if !install_dir.is_dir() {
-            return Some(Self {
-                package_name: pkg.name.clone(),
-                install_dir: pkg.install_dir.clone(),
-                issue: "not a directory".to_string(),
-            });
-        }
-
-        if std::fs::read_dir(install_dir).is_err() {
-            return Some(Self {
-                package_name: pkg.name.clone(),
-                install_dir: pkg.install_dir.clone(),
-                issue: "unreadable".to_string(),
-            });
-        }
-
-        None
+fn diagnosis_result(
+    error_code: &str,
+    description: String,
+    severity: DiagnosisSeverity,
+) -> DiagnosisResult {
+    DiagnosisResult {
+        error_code: error_code.to_string(),
+        description,
+        severity,
     }
 }
 
-pub fn scan_packages(packages: &[Package]) -> Vec<Diagnosis> {
+fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
+    let install_dir = Path::new(&pkg.install_dir);
+
+    if !install_dir.exists() {
+        return Some(diagnosis_result(
+            "missing_install_directory",
+            format!(
+                "{}: missing install directory ({})",
+                pkg.name, pkg.install_dir
+            ),
+            DiagnosisSeverity::Error,
+        ));
+    }
+
+    if !install_dir.is_dir() {
+        return Some(diagnosis_result(
+            "install_directory_not_a_directory",
+            format!(
+                "{}: install path is not a directory ({})",
+                pkg.name, pkg.install_dir
+            ),
+            DiagnosisSeverity::Error,
+        ));
+    }
+
+    if std::fs::read_dir(install_dir).is_err() {
+        return Some(diagnosis_result(
+            "install_directory_unreadable",
+            format!(
+                "{}: install directory is unreadable ({})",
+                pkg.name, pkg.install_dir
+            ),
+            DiagnosisSeverity::Error,
+        ));
+    }
+
+    None
+}
+
+pub fn scan_packages(packages: &[Package]) -> Vec<DiagnosisResult> {
     scan_packages_with_progress(packages, &ProgressBar::hidden())
 }
 
-pub fn scan_packages_with_progress(packages: &[Package], progress: &ProgressBar) -> Vec<Diagnosis> {
+pub fn scan_packages_with_progress(
+    packages: &[Package],
+    progress: &ProgressBar,
+) -> Vec<DiagnosisResult> {
     progress.set_length(packages.len() as u64);
     progress.set_message("Scanning packages");
 
     let mut diagnoses: Vec<_> = packages
         .par_iter()
         .filter_map(|pkg| {
-            let diagnosis = Diagnosis::check_package(pkg);
+            let diagnosis = check_package(pkg);
             progress.inc(1);
             diagnosis
         })
         .collect();
 
-    diagnoses.sort_by(|left, right| left.package_name.cmp(&right.package_name));
+    diagnoses.sort_by(|left, right| {
+        left.error_code
+            .cmp(&right.error_code)
+            .then_with(|| left.description.cmp(&right.description))
+    });
     diagnoses
 }
 
-pub fn scan_orphaned_install_dirs(packages_root: &Path, packages: &[Package]) -> Vec<Diagnosis> {
+pub fn scan_orphaned_install_dirs(
+    packages_root: &Path,
+    packages: &[Package],
+) -> Vec<DiagnosisResult> {
     let known_packages: HashSet<_> = packages.iter().map(|pkg| pkg.name.as_str()).collect();
 
     let entries = match fs::read_dir(packages_root) {
         Ok(entries) => entries,
         Err(err) => {
-            return vec![Diagnosis {
-                package_name: "packages root".to_string(),
-                install_dir: packages_root.to_string_lossy().to_string(),
-                issue: format!("unreadable packages directory: {err}"),
-            }];
+            return vec![diagnosis_result(
+                "packages_root_unreadable",
+                format!(
+                    "packages root: unreadable packages directory ({}) - {err}",
+                    packages_root.to_string_lossy()
+                ),
+                DiagnosisSeverity::Error,
+            )];
         }
     };
 
@@ -100,14 +126,22 @@ pub fn scan_orphaned_install_dirs(packages_root: &Path, packages: &[Package]) ->
             continue;
         }
 
-        diagnoses.push(Diagnosis {
-            package_name: package_name.to_string(),
-            install_dir: path.to_string_lossy().to_string(),
-            issue: "orphan install directory".to_string(),
-        });
+        diagnoses.push(diagnosis_result(
+            "orphan_install_directory",
+            format!(
+                "{}: orphan install directory ({})",
+                package_name,
+                path.to_string_lossy()
+            ),
+            DiagnosisSeverity::Warning,
+        ));
     }
 
-    diagnoses.sort_by(|left, right| left.package_name.cmp(&right.package_name));
+    diagnoses.sort_by(|left, right| {
+        left.error_code
+            .cmp(&right.error_code)
+            .then_with(|| left.description.cmp(&right.description))
+    });
     diagnoses
 }
 
@@ -137,32 +171,34 @@ mod tests {
     }
 
     #[test]
-    fn diagnosis_check_package_detects_missing_directory() {
+    fn diagnosis_result_check_package_detects_missing_directory() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let missing_dir = temp_dir.path().join("missing");
         let package = sample_package("Contoso.Missing", &missing_dir);
 
-        let diagnosis = Diagnosis::check_package(&package).expect("missing dir should diagnose");
+        let diagnosis = check_package(&package).expect("missing dir should diagnose");
 
-        assert_eq!(diagnosis.package_name, "Contoso.Missing");
-        assert_eq!(diagnosis.issue, "missing install directory");
+        assert_eq!(diagnosis.error_code, "missing_install_directory");
+        assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
+        assert!(diagnosis.description.contains("Contoso.Missing"));
     }
 
     #[test]
-    fn diagnosis_check_package_detects_non_directory_path() {
+    fn diagnosis_result_check_package_detects_non_directory_path() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let file_path = temp_dir.path().join("not-a-dir.txt");
         std::fs::write(&file_path, b"binary").expect("file should be created");
         let package = sample_package("Contoso.File", &file_path);
 
-        let diagnosis = Diagnosis::check_package(&package).expect("file path should diagnose");
+        let diagnosis = check_package(&package).expect("file path should diagnose");
 
-        assert_eq!(diagnosis.package_name, "Contoso.File");
-        assert_eq!(diagnosis.issue, "not a directory");
+        assert_eq!(diagnosis.error_code, "install_directory_not_a_directory");
+        assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
+        assert!(diagnosis.description.contains("Contoso.File"));
     }
 
     #[test]
-    fn scan_packages_with_progress_sorts_diagnoses_by_package_name() {
+    fn scan_packages_with_progress_sorts_diagnoses_by_error_code() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let valid_dir = temp_dir.path().join("valid");
         std::fs::create_dir_all(&valid_dir).expect("valid dir should be created");
@@ -176,8 +212,8 @@ mod tests {
         let diagnoses = scan_packages_with_progress(&packages, &ProgressBar::hidden());
 
         assert_eq!(diagnoses.len(), 2);
-        assert_eq!(diagnoses[0].package_name, "Beta.Missing");
-        assert_eq!(diagnoses[1].package_name, "Zeta.Missing");
+        assert_eq!(diagnoses[0].error_code, "missing_install_directory");
+        assert_eq!(diagnoses[1].error_code, "missing_install_directory");
     }
 
     #[test]
@@ -197,7 +233,8 @@ mod tests {
         let diagnoses = scan_orphaned_install_dirs(&packages_root, &packages);
 
         assert_eq!(diagnoses.len(), 1);
-        assert_eq!(diagnoses[0].package_name, "Contoso.Orphan");
-        assert_eq!(diagnoses[0].issue, "orphan install directory");
+        assert_eq!(diagnoses[0].error_code, "orphan_install_directory");
+        assert_eq!(diagnoses[0].severity, DiagnosisSeverity::Warning);
+        assert!(diagnoses[0].description.contains("Contoso.Orphan"));
     }
 }

@@ -9,7 +9,7 @@ use test_env::TestEnvVar;
 use winbrew::AppContext;
 use winbrew::database::{Config, ConfigEnv};
 use winbrew::models::config::ConfigSection;
-use winbrew::services::shared::report::{health_report, runtime_report};
+use winbrew::services::{app::doctor::health_report, shared::report::runtime_report};
 
 struct UnsetEnvVar {
     key: &'static str,
@@ -115,12 +115,18 @@ fn runtime_report_builds_expected_sections() {
 #[test]
 fn health_report_marks_env_root_source() {
     let _guard = env_lock();
-    let _env = TestEnvVar::set("WINBREW_PATHS_ROOT", r"C:\temp\winbrew");
+    let root = common::shared_root::test_root();
+    let root_path = root.path().to_string_lossy().to_string();
+    let _env = TestEnvVar::set("WINBREW_PATHS_ROOT", &root_path);
+    common::db::init_database(root.path()).expect("database should initialize");
+    std::fs::create_dir_all(root.path().join("packages")).expect("packages dir should exist");
     let ctx = app_context(true);
     let report = health_report(&ctx).expect("health report should build");
 
     assert_eq!(report.install_root_source, "env override");
-    assert_eq!(report.install_root, r"C:\temp\winbrew");
+    assert_eq!(report.install_root, root_path);
+    assert_eq!(report.error_count, 0);
+    assert!(report.diagnostics.is_empty());
 }
 
 fn expected_default_root() -> String {

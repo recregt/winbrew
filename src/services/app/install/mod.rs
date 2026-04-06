@@ -13,6 +13,7 @@ use crate::engines::{self, EngineKind};
 use crate::models::CatalogPackage;
 use crate::services::shared::catalog;
 
+pub use crate::models::install::InstallFailureClass;
 pub use crate::models::install::{InstallOutcome, InstallResult};
 pub use types::InstallError;
 pub type Result<T> = types::Result<T>;
@@ -79,7 +80,7 @@ where
             let install_error: InstallError = err.into();
 
             match install_error.failure_class() {
-                types::InstallFailureClass::Cancelled => {
+                InstallFailureClass::Cancelled => {
                     flow::rollback_cancelled_install(&conn, &package.name, &install_dir);
                 }
                 _ => {

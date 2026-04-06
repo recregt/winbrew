@@ -1,5 +1,14 @@
 use crate::core::hash::HashAlgorithm;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstallFailureClass {
+    Preflight,
+    Verification,
+    StateTransition,
+    Cancelled,
+    Runtime,
+}
+
 #[derive(Debug, Clone)]
 pub struct InstallResult {
     pub name: String,

@@ -1,9 +1,13 @@
 use serde::{Deserialize, Serialize};
 
 pub mod config;
+pub mod diagnostics;
 pub mod install;
 pub mod remove;
 pub mod report;
+
+pub use diagnostics::DiagnosisResult;
+pub use report::{HealthReport, ReportSection, RuntimeReport};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
