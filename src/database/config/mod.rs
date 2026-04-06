@@ -11,7 +11,7 @@ mod storage;
 mod types;
 mod validation;
 
-pub use errors::ConfigError;
+pub use errors::{ConfigError, ConfigValidationError};
 pub use storage::{config_sections, config_set, get_effective_value};
 pub use types::*;
 

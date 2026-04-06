@@ -1,7 +1,15 @@
-use anyhow::{Result, bail};
 use md5::Md5;
 use sha1::Sha1;
 use sha2::{Digest, Sha256, Sha512};
+use thiserror::Error;
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum HashError {
+    #[error("checksum mismatch for installer: expected {expected}, got {actual}")]
+    ChecksumMismatch { expected: String, actual: String },
+}
+
+pub type Result<T> = std::result::Result<T, HashError>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HashAlgorithm {
@@ -109,7 +117,10 @@ pub fn verify_hash(expected_hash: &str, actual_hash: impl AsRef<[u8]>) -> Result
     }
 
     if actual_hash != expected_hash {
-        bail!("checksum mismatch for installer: expected {expected_hash}, got {actual_hash}");
+        return Err(HashError::ChecksumMismatch {
+            expected: expected_hash,
+            actual: actual_hash,
+        });
     }
 
     Ok(())

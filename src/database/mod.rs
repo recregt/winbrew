@@ -20,8 +20,8 @@ pub use errors::CatalogNotFoundError;
 
 pub use catalog::{get_installers, search};
 pub use config::{
-    Config, ConfigEnv, ConfigError, ConfigSection, ConfigSource, CoreConfig, PathsConfig,
-    config_sections, config_set, get_effective_value,
+    Config, ConfigEnv, ConfigError, ConfigSection, ConfigSource, ConfigValidationError, CoreConfig,
+    PathsConfig, config_sections, config_set, get_effective_value,
 };
 pub use installed_packages::{
     PackageNotFoundError, delete_package, get_package, insert_package, list_packages,

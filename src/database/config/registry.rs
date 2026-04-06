@@ -1,9 +1,10 @@
-use anyhow::{Result, anyhow, bail};
 use tracing_subscriber::EnvFilter;
+
+use super::errors::ConfigValidationError;
 
 pub struct KeyDef {
     pub key: &'static str,
-    pub validator: Option<fn(&str) -> Result<()>>,
+    pub validator: Option<fn(&str) -> std::result::Result<(), ConfigValidationError>>,
 }
 
 pub static KEYS: &[KeyDef] = &[
@@ -13,7 +14,10 @@ pub static KEYS: &[KeyDef] = &[
             let allowed = ["trace", "debug", "info", "warn", "error"];
 
             if !allowed.contains(&value.to_ascii_lowercase().as_str()) {
-                bail!("core.log_level must be one of: {}", allowed.join(", "));
+                return Err(ConfigValidationError::InvalidLogLevel {
+                    value: value.to_string(),
+                    allowed: allowed.join(", "),
+                });
             }
 
             Ok(())
@@ -22,8 +26,12 @@ pub static KEYS: &[KeyDef] = &[
     KeyDef {
         key: "core.file_log_level",
         validator: Some(|value| {
-            EnvFilter::try_new(value)
-                .map_err(|err| anyhow!("invalid core.file_log_level: {err}"))?;
+            EnvFilter::try_new(value).map_err(|err| {
+                ConfigValidationError::InvalidFileLogLevel {
+                    value: value.to_string(),
+                    reason: err.to_string(),
+                }
+            })?;
             Ok(())
         }),
     },
@@ -69,9 +77,11 @@ pub fn find(key: &str) -> Option<&'static KeyDef> {
     KEYS.iter().find(|def| def.key == key)
 }
 
-fn validate_bool(value: &str) -> Result<()> {
+fn validate_bool(value: &str) -> std::result::Result<(), ConfigValidationError> {
     match value {
         "true" | "false" | "1" | "0" | "yes" | "no" | "on" | "off" => Ok(()),
-        _ => Err(anyhow!("expected a boolean value (true/false)")),
+        _ => Err(ConfigValidationError::ExpectedBoolean {
+            value: value.to_string(),
+        }),
     }
 }

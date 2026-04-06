@@ -1,8 +1,15 @@
 use anyhow::Result;
 use rusqlite::Connection;
+use thiserror::Error;
 
 use crate::database;
 use crate::models::{CatalogInstaller, CatalogPackage};
+
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+pub enum InstallerSelectionError {
+    #[error("catalog package has no installers")]
+    NoInstallers,
+}
 
 pub fn search_catalog_packages(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
     // Catalog search entry point for the install service.
@@ -11,7 +18,9 @@ pub fn search_catalog_packages(conn: &Connection, query: &str) -> Result<Vec<Cat
     database::search(conn, query)
 }
 
-pub fn select_installer(installers: &[CatalogInstaller]) -> Result<CatalogInstaller> {
+pub fn select_installer(
+    installers: &[CatalogInstaller],
+) -> std::result::Result<CatalogInstaller, InstallerSelectionError> {
     let current_arch = current_arch_name();
 
     installers
@@ -25,7 +34,7 @@ pub fn select_installer(installers: &[CatalogInstaller]) -> Result<CatalogInstal
                 .cloned()
         })
         .or_else(|| installers.first().cloned())
-        .ok_or_else(|| anyhow::anyhow!("catalog package has no installers"))
+        .ok_or(InstallerSelectionError::NoInstallers)
 }
 
 fn current_arch_name() -> &'static str {

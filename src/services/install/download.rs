@@ -115,7 +115,9 @@ impl Verification {
     fn finish(self, expected_hash: &str) -> Result<()> {
         match self {
             Self::None => Ok(()),
-            Self::Active(hasher) => verify_hash(expected_hash, hasher.finalize()),
+            Self::Active(hasher) => {
+                verify_hash(expected_hash, hasher.finalize()).map_err(Into::into)
+            }
         }
     }
 }
