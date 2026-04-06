@@ -2,9 +2,11 @@ use tracing_subscriber::EnvFilter;
 
 use super::errors::ConfigValidationError;
 
+pub type Validator = fn(&str) -> std::result::Result<(), ConfigValidationError>;
+
 pub struct KeyDef {
     pub key: &'static str,
-    pub validator: Option<fn(&str) -> std::result::Result<(), ConfigValidationError>>,
+    pub validator: Option<Validator>,
 }
 
 pub static KEYS: &[KeyDef] = &[
