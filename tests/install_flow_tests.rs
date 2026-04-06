@@ -84,7 +84,7 @@ fn start_file_server(
         }
     });
 
-    Ok((format!("http://{}", addr), handle))
+    Ok((format!("http://{addr}"), handle))
 }
 
 #[test]

@@ -18,7 +18,7 @@ pub fn run(ctx: &AppContext, query: &[String]) -> Result<()> {
     };
 
     if packages.is_empty() {
-        ui.notice(format!("No catalog packages matching '{}'.", query_text));
+        ui.notice(format!("No catalog packages matching '{query_text}'."));
         return Ok(());
     }
 

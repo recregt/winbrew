@@ -12,7 +12,7 @@ pub fn run(ctx: &AppContext, query: &[String]) -> Result<()> {
 
     if packages.is_empty() {
         match query_text {
-            Some(q) => ui.notice(format!("No installed packages matching '{}'.", q)),
+            Some(q) => ui.notice(format!("No installed packages matching '{q}'.")),
             None => ui.notice("No packages are currently installed."),
         }
 
