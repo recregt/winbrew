@@ -10,8 +10,8 @@ pub fn run(ctx: &AppContext, command: ConfigCommand) -> Result<()> {
 
     match command {
         ConfigCommand::List => list(ctx, &mut ui),
-        ConfigCommand::Get { key } => get(&mut ui, &key),
-        ConfigCommand::Set { key, value } => set(&mut ui, &key, value.as_deref()),
+        ConfigCommand::Get { key } => get(&mut ui, key.as_str()),
+        ConfigCommand::Set { key, value } => set(&mut ui, key.as_str(), value.as_deref()),
     }
 }
 
@@ -23,9 +23,9 @@ fn list<W: Write>(ctx: &AppContext, ui: &mut Ui<W>) -> Result<()> {
         return Ok(());
     }
 
-    for section in sections {
-        ui.notice(&section.title);
-        ui.display_key_values(&section.entries);
+    for config::ConfigSection { title, entries } in sections {
+        ui.notice(title);
+        ui.display_key_values(&entries);
     }
 
     Ok(())
@@ -34,15 +34,13 @@ fn list<W: Write>(ctx: &AppContext, ui: &mut Ui<W>) -> Result<()> {
 fn get<W: Write>(ui: &mut Ui<W>, key: &str) -> Result<()> {
     let clean_key = key.trim();
     let value = config::get_display_value(clean_key)?;
-
-    if value.source == config::ConfigValueSource::Env {
-        ui.info(format!(
-            "{clean_key} = {} (overridden by environment)",
-            value.value
-        ));
+    let suffix = if value.source == config::ConfigValueSource::Env {
+        " (overridden by environment)"
     } else {
-        ui.info(format!("{clean_key} = {}", value.value));
-    }
+        ""
+    };
+
+    ui.info(format!("{clean_key} = {}{suffix}", value.value));
     Ok(())
 }
 
@@ -54,7 +52,7 @@ fn set<W: Write>(ui: &mut Ui<W>, key: &str, value: Option<&str>) -> Result<()> {
         None => ui
             .prompt_text(&format!("Enter value for {clean_key}"), None)?
             .trim()
-            .to_string(),
+            .to_owned(),
     };
 
     config::set_value(clean_key, &clean_value)?;
