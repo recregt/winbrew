@@ -22,9 +22,31 @@ pub fn run(ctx: &AppContext, name: &str, yes: bool, force: bool) -> Result<()> {
         return Ok(());
     }
 
-    ui.spinner(format!("Removing {}...", plan.package.name), || {
+    let removal_result = ui.spinner(format!("Removing {}...", plan.package.name), || {
         remove::execute_removal(&plan, force)
-    })?;
+    });
+
+    if let Err(err) = removal_result {
+        match err {
+            remove::RemovalError::DependentPackagesBlocked { name, dependents } => {
+                ui.warn(format!(
+                    "Removal of {name} was blocked because it is required by: {}",
+                    dependents
+                ));
+                return Err(anyhow::Error::msg(format!(
+                    "cannot remove '{name}' because it is required by: {}",
+                    dependents
+                )));
+            }
+            remove::RemovalError::UnsupportedPackageType { kind } => {
+                ui.error(format!("unsupported package type: {kind}"));
+                return Err(anyhow::Error::msg(format!(
+                    "unsupported package type: {kind}"
+                )));
+            }
+            remove::RemovalError::Unexpected(err) => return Err(err),
+        }
+    }
 
     ui.success(format!("Successfully removed {}.", plan.package.name));
 

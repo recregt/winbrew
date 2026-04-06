@@ -12,9 +12,6 @@ pub enum InstallerSelectionError {
 }
 
 pub fn search_catalog_packages(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
-    // Catalog search entry point for the install service.
-    // Currently delegates to the database layer directly; this is where
-    // result ranking, normalization, or exact-match priority will live.
     database::search(conn, query)
 }
 
@@ -35,6 +32,39 @@ pub fn select_installer(
         })
         .or_else(|| installers.first().cloned())
         .ok_or(InstallerSelectionError::NoInstallers)
+}
+
+pub fn resolve_catalog_package<FChoose>(
+    conn: &Connection,
+    query: &str,
+    choose_package: &mut FChoose,
+) -> Result<CatalogPackage>
+where
+    FChoose: FnMut(&str, &[CatalogPackage]) -> Result<usize>,
+{
+    let matches = search_catalog_packages(conn, query)?;
+
+    if matches.is_empty() {
+        anyhow::bail!("no catalog packages matched '{query}'");
+    }
+
+    if matches.len() == 1 {
+        return Ok(matches.into_iter().next().expect("single match exists"));
+    }
+
+    if let Some(exact_index) = matches
+        .iter()
+        .position(|pkg| pkg.name.eq_ignore_ascii_case(query))
+    {
+        return Ok(matches.into_iter().nth(exact_index).unwrap());
+    }
+
+    let selected = choose_package(query, &matches)?;
+
+    matches
+        .into_iter()
+        .nth(selected)
+        .ok_or_else(|| anyhow::anyhow!("selected package index was out of range"))
 }
 
 fn current_arch_name() -> &'static str {

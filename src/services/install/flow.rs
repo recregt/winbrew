@@ -2,7 +2,6 @@ use anyhow::Result;
 use std::path::Path;
 use tracing::warn;
 
-use crate::core::cancel::CancellationError;
 use crate::core::fs::{backup_directory_path, cleanup_path};
 use crate::core::hash::HashAlgorithm;
 use crate::core::network::installer_filename;
@@ -21,28 +20,18 @@ pub(crate) fn cleanup_temp_root(temp_root: &Path) {
     }
 }
 
-pub(crate) fn rollback_failed_install(
-    conn: &rusqlite::Connection,
-    name: &str,
-    install_dir: &Path,
-    temp_root: &Path,
-) {
+pub(crate) fn rollback_failed_install(conn: &rusqlite::Connection, name: &str, install_dir: &Path) {
     let _ = state::mark_failed(conn, name);
-    cleanup_install_artifacts(install_dir, temp_root);
+    cleanup_install_artifacts(install_dir);
 }
 
 pub(crate) fn rollback_cancelled_install(
     conn: &rusqlite::Connection,
     name: &str,
     install_dir: &Path,
-    temp_root: &Path,
 ) {
     let _ = state::mark_failed(conn, name);
-    cleanup_install_artifacts(install_dir, temp_root);
-}
-
-pub(crate) fn is_cancelled_error(err: &anyhow::Error) -> bool {
-    err.downcast_ref::<CancellationError>().is_some()
+    cleanup_install_artifacts(install_dir);
 }
 
 pub(crate) struct InstallRequest<'a, FStart, FProgress>
@@ -93,11 +82,9 @@ where
     Ok(legacy_checksum_algorithms)
 }
 
-fn cleanup_install_artifacts(install_dir: &Path, temp_root: &Path) {
+fn cleanup_install_artifacts(install_dir: &Path) {
     let stage_dir = install_dir.parent().unwrap_or(install_dir).join("staging");
     let backup_dir = backup_directory_path(install_dir);
-
-    cleanup_temp_root(temp_root);
 
     if let Err(err) = cleanup_path(&stage_dir) {
         warn!(path = %stage_dir.display(), error = %err, "failed to clean up staged install directory");

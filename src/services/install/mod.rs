@@ -1,4 +1,3 @@
-pub mod catalog;
 pub mod download;
 pub mod flow;
 pub mod recovery;
@@ -6,7 +5,6 @@ pub mod state;
 pub mod types;
 pub mod workspace;
 
-use anyhow::Result;
 use std::fs;
 
 use crate::AppContext;
@@ -14,8 +12,10 @@ use crate::core::cancel;
 use crate::database;
 use crate::engines::{self, EngineKind};
 use crate::models::CatalogPackage;
+use crate::services::catalog;
 
-pub use types::{InstallOutcome, InstallResult};
+pub use types::{InstallError, InstallOutcome, InstallResult};
+pub type Result<T> = types::Result<T>;
 
 pub fn run<FChoose, FStart, FProgress>(
     ctx: &AppContext,
@@ -26,17 +26,18 @@ pub fn run<FChoose, FStart, FProgress>(
     on_progress: FProgress,
 ) -> Result<InstallOutcome>
 where
-    FChoose: FnMut(&str, &[CatalogPackage]) -> Result<usize>,
+    FChoose: FnMut(&str, &[CatalogPackage]) -> anyhow::Result<usize>,
     FStart: FnOnce(Option<u64>),
     FProgress: FnMut(u64),
 {
     let query_text = query.join(" ").trim().to_owned();
     if query_text.is_empty() {
-        anyhow::bail!("package query cannot be empty");
+        return Err(anyhow::Error::msg("package query cannot be empty").into());
     }
 
     let catalog_conn = database::get_catalog_conn()?;
-    let package = resolve_catalog_package(&catalog_conn, &query_text, &mut choose_package)?;
+    let package =
+        catalog::resolve_catalog_package(&catalog_conn, &query_text, &mut choose_package)?;
     let installer =
         catalog::select_installer(&database::get_installers(&catalog_conn, &package.id)?)?;
     let engine = engines::get_engine(&installer)?;
@@ -49,29 +50,17 @@ where
     }
     fs::create_dir_all(&temp_root)?;
 
-    let conn = match database::get_conn() {
-        Ok(conn) => conn,
-        Err(err) => {
-            flow::cleanup_temp_root(&temp_root);
-            return Err(err);
-        }
-    };
+    let _temp_root_guard = TempRootGuard::new(temp_root.clone());
 
-    if let Err(err) = state::prepare_install_target(&conn, &package.name, &install_dir) {
-        flow::cleanup_temp_root(&temp_root);
-        return Err(err.into());
-    }
-
-    if let Err(err) = state::mark_installing(
+    let conn = database::get_conn()?;
+    state::prepare_install_target(&conn, &package.name, &install_dir)?;
+    state::mark_installing(
         &conn,
         package.name.clone(),
         package.version.clone(),
         installer.kind.clone(),
         &install_dir,
-    ) {
-        flow::cleanup_temp_root(&temp_root);
-        return Err(err.into());
-    }
+    )?;
 
     let client = download::build_client()?;
 
@@ -87,17 +76,17 @@ where
     }) {
         Ok(legacy_checksum_algorithms) => legacy_checksum_algorithms,
         Err(err) => {
-            if flow::is_cancelled_error(&err) {
-                flow::rollback_cancelled_install(&conn, &package.name, &install_dir, &temp_root);
+            if cancel::is_cancelled() {
+                flow::rollback_cancelled_install(&conn, &package.name, &install_dir);
             } else {
-                flow::rollback_failed_install(&conn, &package.name, &install_dir, &temp_root);
+                flow::rollback_failed_install(&conn, &package.name, &install_dir);
             }
-            return Err(err);
+            return Err(err.into());
         }
     };
 
     if cancel::is_cancelled() {
-        flow::rollback_cancelled_install(&conn, &package.name, &install_dir, &temp_root);
+        flow::rollback_cancelled_install(&conn, &package.name, &install_dir);
         return Err(cancel::CancellationError.into());
     }
 
@@ -111,13 +100,8 @@ where
         match engines::msix::installed_package_full_name(&install_result.name) {
             Ok(full_name) => Some(full_name),
             Err(err) => {
-                flow::rollback_failed_install(
-                    &conn,
-                    &install_result.name,
-                    &install_dir,
-                    &temp_root,
-                );
-                return Err(err);
+                flow::rollback_failed_install(&conn, &install_result.name, &install_dir);
+                return Err(err.into());
             }
         }
     } else {
@@ -130,11 +114,8 @@ where
         msix_package_full_name.as_deref(),
     ) {
         let _ = state::mark_failed(&conn, &install_result.name);
-        flow::cleanup_temp_root(&temp_root);
         return Err(err.into());
     }
-
-    flow::cleanup_temp_root(&temp_root);
 
     Ok(InstallOutcome {
         result: install_result,
@@ -142,35 +123,18 @@ where
     })
 }
 
-fn resolve_catalog_package<FChoose>(
-    conn: &rusqlite::Connection,
-    query: &str,
-    choose_package: &mut FChoose,
-) -> Result<CatalogPackage>
-where
-    FChoose: FnMut(&str, &[CatalogPackage]) -> Result<usize>,
-{
-    let matches = catalog::search_catalog_packages(conn, query)?;
+struct TempRootGuard {
+    path: std::path::PathBuf,
+}
 
-    if matches.is_empty() {
-        anyhow::bail!("no catalog packages matched '{query}'");
+impl TempRootGuard {
+    fn new(path: std::path::PathBuf) -> Self {
+        Self { path }
     }
+}
 
-    if matches.len() == 1 {
-        return Ok(matches.into_iter().next().expect("single match exists"));
+impl Drop for TempRootGuard {
+    fn drop(&mut self) {
+        flow::cleanup_temp_root(&self.path);
     }
-
-    if let Some(exact_index) = matches
-        .iter()
-        .position(|pkg| pkg.name.eq_ignore_ascii_case(query))
-    {
-        return Ok(matches.into_iter().nth(exact_index).unwrap());
-    }
-
-    let selected = choose_package(query, &matches)?;
-
-    matches
-        .into_iter()
-        .nth(selected)
-        .ok_or_else(|| anyhow::anyhow!("selected package index was out of range"))
 }

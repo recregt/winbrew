@@ -1,3 +1,4 @@
+pub mod catalog;
 pub mod config;
 pub mod doctor;
 pub mod info;

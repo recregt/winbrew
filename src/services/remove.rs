@@ -1,4 +1,5 @@
-use anyhow::{Context, Result, bail};
+use anyhow::Context;
+use thiserror::Error;
 use tracing::{debug, warn};
 
 use std::path::PathBuf;
@@ -6,6 +7,20 @@ use std::path::PathBuf;
 use crate::database;
 use crate::engines::{self, EngineKind, PackageEngine};
 use crate::models::Package;
+
+#[derive(Debug, Error)]
+pub enum RemovalError {
+    #[error("cannot remove '{name}' because it is required by: {dependents}")]
+    DependentPackagesBlocked { name: String, dependents: String },
+
+    #[error("unsupported package type: {kind}")]
+    UnsupportedPackageType { kind: String },
+
+    #[error(transparent)]
+    Unexpected(#[from] anyhow::Error),
+}
+
+pub type Result<T> = std::result::Result<T, RemovalError>;
 
 #[derive(Debug, Clone)]
 pub struct RemovalPlan {
@@ -34,10 +49,11 @@ pub fn find_dependents(name: &str, conn: &rusqlite::Connection) -> Result<Vec<St
 
 pub fn plan_removal(name: &str) -> Result<RemovalPlan> {
     let conn = database::get_conn()?;
-    let pkg =
-        database::get_package(&conn, name)?.ok_or_else(|| database::PackageNotFoundError {
+    let pkg = database::get_package(&conn, name)?.ok_or_else(|| {
+        anyhow::Error::new(database::PackageNotFoundError {
             name: name.to_string(),
-        })?;
+        })
+    })?;
     let dependents = find_dependents(name, &conn)?;
 
     Ok(removal_plan(pkg, dependents))
@@ -73,17 +89,20 @@ fn execute_removal_with_conn(
     );
 
     if !force && !plan.dependents.is_empty() {
-        bail!(
-            "cannot remove '{name}' because it is required by: {}",
-            plan.dependents.join(", "),
-            name = plan.package.name
-        );
+        return Err(RemovalError::DependentPackagesBlocked {
+            name: plan.package.name.clone(),
+            dependents: plan.dependents.join(", "),
+        });
     }
 
     let install_dir = PathBuf::from(&plan.package.install_dir);
     let engine_kind = match engines::get_engine_kind(&plan.package.kind) {
         Ok(engine_kind) => engine_kind,
-        Err(_) => bail!("unsupported package type: {}", plan.package.kind),
+        Err(_) => {
+            return Err(RemovalError::UnsupportedPackageType {
+                kind: plan.package.kind.clone(),
+            });
+        }
     };
 
     match engine_kind {
@@ -120,7 +139,7 @@ fn execute_removal_with_conn(
 
                 if let Err(err) = database::delete_package(conn, &plan.package.name) {
                     let _ = std::fs::rename(&trash_dir, &install_dir);
-                    return Err(err).context("failed to remove package from database");
+                    return Err(RemovalError::Unexpected(err));
                 }
 
                 if let Err(err) = engine_kind.remove(&trash_package) {
