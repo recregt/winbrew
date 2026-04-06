@@ -8,8 +8,7 @@ pub fn run(ctx: &AppContext, query: &[String], ignore_checksum_security: bool) -
     let mut ui = Ui::new(ctx.ui);
     ui.page_title("Install Package");
 
-    let query_text = query.join(" ");
-    ui.info(format!("Resolving {query_text}..."));
+    ui.info(format!("Resolving {}...", query.join(" ")));
 
     let progress = ui.progress_bar();
 
@@ -59,7 +58,8 @@ fn format_catalog_choice(pkg: &CatalogPackage) -> String {
     if let Some(publisher) = pkg
         .publisher
         .as_deref()
-        .filter(|value| !value.trim().is_empty())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
     {
         label.push_str(" - ");
         label.push_str(publisher);
@@ -68,7 +68,8 @@ fn format_catalog_choice(pkg: &CatalogPackage) -> String {
     if let Some(description) = pkg
         .description
         .as_deref()
-        .filter(|value| !value.trim().is_empty())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
     {
         label.push_str(" (");
         label.push_str(description);
