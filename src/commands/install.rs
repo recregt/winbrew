@@ -1,5 +1,6 @@
 use anyhow::Result;
 
+use crate::core::cancel::CancellationError;
 use crate::core::hash::{HashAlgorithm, HashError};
 use crate::models::CatalogPackage;
 use crate::services::install;
@@ -92,6 +93,9 @@ pub fn run(ctx: &AppContext, query: &[String], ignore_checksum_security: bool) -
                         return Err(err);
                     }
                 }
+            } else if err.downcast_ref::<CancellationError>().is_some() {
+                ui.notice("Aborted.");
+                std::process::exit(130);
             } else {
                 return Err(err);
             }

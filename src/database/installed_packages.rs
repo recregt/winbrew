@@ -102,6 +102,18 @@ pub fn list_packages(conn: &Connection) -> Result<Vec<Package>> {
         .collect()
 }
 
+pub fn list_installing_packages(conn: &Connection) -> Result<Vec<Package>> {
+    let mut stmt = conn.prepare(
+        "SELECT name, version, kind, install_dir, msix_package_full_name, dependencies, status, installed_at
+            FROM installed_packages WHERE status = 'installing'
+         ORDER BY installed_at ASC, name ASC",
+    )?;
+
+    stmt.query_map([], |row| Ok(row_to_package(row)))?
+        .map(|row| row?.context("failed to read row"))
+        .collect()
+}
+
 pub fn delete_package(conn: &Connection, name: &str) -> Result<bool> {
     let affected = conn
         .execute(

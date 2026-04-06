@@ -1,5 +1,7 @@
 pub mod catalog;
 pub mod download;
+pub mod flow;
+pub mod recovery;
 pub mod state;
 pub mod types;
 pub mod workspace;
@@ -8,11 +10,9 @@ use anyhow::Result;
 use std::fs;
 
 use crate::AppContext;
-use crate::core::fs::cleanup_path;
-use crate::core::hash::HashAlgorithm;
-use crate::core::network::installer_filename;
+use crate::core::cancel;
 use crate::database;
-use crate::engines::{self, EngineKind, PackageEngine};
+use crate::engines::{self, EngineKind};
 use crate::models::CatalogPackage;
 
 pub use types::{InstallOutcome, InstallResult};
@@ -49,19 +49,33 @@ where
     }
     fs::create_dir_all(&temp_root)?;
 
-    let conn = database::get_conn()?;
-    state::prepare_install_target(&conn, &package.name, &install_dir)?;
-    state::mark_installing(
+    let conn = match database::get_conn() {
+        Ok(conn) => conn,
+        Err(err) => {
+            flow::cleanup_temp_root(&temp_root);
+            return Err(err);
+        }
+    };
+
+    if let Err(err) = state::prepare_install_target(&conn, &package.name, &install_dir) {
+        flow::cleanup_temp_root(&temp_root);
+        return Err(err.into());
+    }
+
+    if let Err(err) = state::mark_installing(
         &conn,
         package.name.clone(),
         package.version.clone(),
         installer.kind.clone(),
         &install_dir,
-    )?;
+    ) {
+        flow::cleanup_temp_root(&temp_root);
+        return Err(err.into());
+    }
 
     let client = download::build_client()?;
 
-    let legacy_checksum_algorithms = perform_install(InstallRequest {
+    let legacy_checksum_algorithms = match flow::perform_install(flow::InstallRequest {
         client: &client,
         engine,
         installer: &installer,
@@ -70,7 +84,22 @@ where
         ignore_checksum_security,
         on_start,
         on_progress,
-    })?;
+    }) {
+        Ok(legacy_checksum_algorithms) => legacy_checksum_algorithms,
+        Err(err) => {
+            if flow::is_cancelled_error(&err) {
+                flow::rollback_cancelled_install(&conn, &package.name, &install_dir, &temp_root);
+            } else {
+                flow::rollback_failed_install(&conn, &package.name, &install_dir, &temp_root);
+            }
+            return Err(err);
+        }
+    };
+
+    if cancel::is_cancelled() {
+        flow::rollback_cancelled_install(&conn, &package.name, &install_dir, &temp_root);
+        return Err(cancel::CancellationError.into());
+    }
 
     let install_result = InstallResult {
         name: package.name,
@@ -82,8 +111,12 @@ where
         match engines::msix::installed_package_full_name(&install_result.name) {
             Ok(full_name) => Some(full_name),
             Err(err) => {
-                let _ = state::mark_failed(&conn, &install_result.name);
-                let _ = cleanup_path(&temp_root);
+                flow::rollback_failed_install(
+                    &conn,
+                    &install_result.name,
+                    &install_dir,
+                    &temp_root,
+                );
                 return Err(err);
             }
         }
@@ -91,65 +124,22 @@ where
         None
     };
 
-    state::mark_ok(
+    if let Err(err) = state::mark_ok(
         &conn,
         &install_result.name,
         msix_package_full_name.as_deref(),
-    )?;
-    let _ = cleanup_path(&temp_root);
+    ) {
+        let _ = state::mark_failed(&conn, &install_result.name);
+        flow::cleanup_temp_root(&temp_root);
+        return Err(err.into());
+    }
+
+    flow::cleanup_temp_root(&temp_root);
 
     Ok(InstallOutcome {
         result: install_result,
         legacy_checksum_algorithms,
     })
-}
-
-struct InstallRequest<'a, FStart, FProgress>
-where
-    FStart: FnOnce(Option<u64>),
-    FProgress: FnMut(u64),
-{
-    client: &'a reqwest::blocking::Client,
-    engine: crate::engines::EngineKind,
-    installer: &'a crate::models::CatalogInstaller,
-    temp_root: &'a std::path::Path,
-    install_dir: &'a std::path::Path,
-    ignore_checksum_security: bool,
-    on_start: FStart,
-    on_progress: FProgress,
-}
-
-fn perform_install<FStart, FProgress>(
-    request: InstallRequest<'_, FStart, FProgress>,
-) -> Result<Vec<HashAlgorithm>>
-where
-    FStart: FnOnce(Option<u64>),
-    FProgress: FnMut(u64),
-{
-    let InstallRequest {
-        client,
-        engine,
-        installer,
-        temp_root,
-        install_dir,
-        ignore_checksum_security,
-        on_start,
-        on_progress,
-    } = request;
-
-    let download_path = temp_root.join(installer_filename(&installer.url));
-    let legacy_checksum_algorithms = download::download_installer(
-        client,
-        installer,
-        &download_path,
-        ignore_checksum_security,
-        on_start,
-        on_progress,
-    )?;
-
-    engine.install(installer, &download_path, install_dir)?;
-
-    Ok(legacy_checksum_algorithms)
 }
 
 fn resolve_catalog_package<FChoose>(

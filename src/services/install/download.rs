@@ -3,6 +3,7 @@ use std::fs;
 use std::io::{BufWriter, Read, Write};
 use std::path::Path;
 
+use crate::core::cancel::check;
 use crate::core::hash::{
     HashAlgorithm, HashError, Hasher, hash_algorithm, normalize_hash, verify_hash,
 };
@@ -31,6 +32,8 @@ where
 {
     let temp_path = download_path.with_extension("part");
     let result = (|| -> Result<Vec<HashAlgorithm>> {
+        check()?;
+
         let (verification, legacy_checksum_algorithms) =
             verify_strategy(&installer.hash, ignore_checksum_security)?;
         let mut response = client
@@ -39,6 +42,8 @@ where
             .with_context(|| format!("failed to request installer {}", installer.url))?
             .error_for_status()
             .context("installer request failed")?;
+
+        check()?;
 
         on_start(response.content_length());
 
@@ -54,6 +59,8 @@ where
         let mut verification = verification;
 
         loop {
+            check()?;
+
             let read = response
                 .read(&mut buffer)
                 .context("failed to read installer response")?;
@@ -72,6 +79,8 @@ where
         writer
             .flush()
             .context("failed to flush installer download file")?;
+
+        check()?;
 
         verification.finish(&installer.hash)?;
 

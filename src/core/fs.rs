@@ -94,7 +94,7 @@ pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()
     Ok(())
 }
 
-fn backup_directory_path(target_dir: &Path) -> PathBuf {
+pub(crate) fn backup_directory_path(target_dir: &Path) -> PathBuf {
     let parent = target_dir.parent().unwrap_or(target_dir);
     let name = target_dir
         .file_name()
