@@ -18,25 +18,25 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     let broken = doctor::scan_packages_with_progress(&packages, &progress);
     progress.finish_and_clear();
 
-    render_results(&mut ui, broken);
+    render_results(&mut ui, &broken);
 
     Ok(())
 }
 
-fn render_results<W: std::io::Write>(ui: &mut Ui<W>, broken: Vec<doctor::Diagnosis>) {
-    ui.notice(format!("Broken installs: {}", broken.len()));
-
+fn render_results<W: std::io::Write>(ui: &mut Ui<W>, broken: &[doctor::Diagnosis]) {
     if broken.is_empty() {
         ui.success("Your Winbrew installation is healthy!");
-    } else {
-        ui.warn("Found the following issues:");
-        for entry in broken {
-            ui.notice(format!(
-                "  - {} -> {} ({})",
-                entry.package_name, entry.install_dir, entry.issue
-            ));
-        }
-        ui.info("");
-        ui.info("Suggestion: Try running 'winbrew repair' or reinstalling the affected packages.");
+        return;
     }
+
+    ui.notice(format!("Broken installs: {}", broken.len()));
+    ui.warn("Found the following issues:");
+    for entry in broken {
+        ui.notice(format!(
+            "  - {} -> {} ({})",
+            entry.package_name, entry.install_dir, entry.issue
+        ));
+    }
+    ui.info("");
+    ui.info("Suggestion: Try running 'winbrew repair' or reinstalling the affected packages.");
 }
