@@ -13,7 +13,7 @@ use std::io::{Cursor, Write};
 use std::path::Path;
 use winbrew::AppContext;
 use winbrew::database;
-use winbrew::services::install;
+use winbrew::services::app::install;
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;
 

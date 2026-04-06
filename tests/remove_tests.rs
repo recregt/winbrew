@@ -8,7 +8,7 @@ use std::fs;
 use std::path::Path;
 use winbrew::database;
 use winbrew::models::{Package, PackageStatus};
-use winbrew::services::remove;
+use winbrew::services::app::remove;
 
 fn sample_package(
     name: &str,

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use super::keys::env_override;
 use super::registry;
+pub use crate::models::config::{ConfigSection, ConfigValueSource as ConfigSource};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -80,18 +81,6 @@ pub struct PathsConfig {
 
     #[serde(default = "default_cache_path")]
     pub cache: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConfigSection {
-    pub title: String,
-    pub entries: Vec<(String, String)>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConfigSource {
-    Env,
-    File,
 }
 
 impl Default for CoreConfig {

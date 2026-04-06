@@ -8,7 +8,7 @@ use std::fs;
 use std::path::Path;
 use winbrew::database;
 use winbrew::models::{Package, PackageStatus};
-use winbrew::services::install::state;
+use winbrew::services::app::install::state;
 
 fn sample_package(name: &str, status: PackageStatus, install_dir: &Path) -> Package {
     Package {

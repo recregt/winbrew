@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use test_env::TestEnvVar;
 use winbrew::AppContext;
 use winbrew::database::{Config, ConfigEnv};
-use winbrew::services::config::ConfigSection;
-use winbrew::services::report::{health_report, runtime_report};
+use winbrew::models::config::ConfigSection;
+use winbrew::services::shared::report::{health_report, runtime_report};
 
 struct UnsetEnvVar {
     key: &'static str,

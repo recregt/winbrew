@@ -3,19 +3,45 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static DEFERRED_DELETE_SUFFIX: AtomicUsize = AtomicUsize::new(0);
 
 pub fn cleanup_path(path: &Path) -> Result<()> {
     if !path.exists() {
         return Ok(());
     }
 
-    if path.is_dir() {
-        fs::remove_dir_all(path).with_context(|| format!("failed to remove {}", path.display()))?;
+    let removal_result = if path.is_dir() {
+        fs::remove_dir_all(path)
     } else {
-        fs::remove_file(path).with_context(|| format!("failed to remove {}", path.display()))?;
-    }
+        fs::remove_file(path)
+    };
 
-    Ok(())
+    match removal_result {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            if let Some(deferred_path) = deferred_delete_path(path) {
+                if deferred_path.exists() {
+                    let _ = cleanup_path(&deferred_path);
+                }
+
+                if fs::rename(path, &deferred_path).is_ok() {
+                    return Ok(());
+                }
+
+                return Err(err).with_context(|| {
+                    format!(
+                        "failed to remove {} and defer deletion to {}",
+                        path.display(),
+                        deferred_path.display()
+                    )
+                });
+            }
+
+            Err(err).with_context(|| format!("failed to remove {}", path.display()))
+        }
+    }
 }
 
 pub fn atomic_write(path: &Path, temp_path: &Path, contents: &[u8]) -> Result<()> {
@@ -152,6 +178,13 @@ pub(crate) fn backup_directory_path(target_dir: &Path) -> PathBuf {
         .unwrap_or_default();
 
     parent.join(format!("{name}.old"))
+}
+
+fn deferred_delete_path(path: &Path) -> Option<PathBuf> {
+    let file_name = path.file_name()?.to_string_lossy();
+    let suffix = DEFERRED_DELETE_SUFFIX.fetch_add(1, Ordering::Relaxed);
+
+    Some(path.with_file_name(format!("{file_name}.deleted.{}.{}", process::id(), suffix)))
 }
 
 #[cfg(test)]

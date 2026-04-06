@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 static TEMP_ROOT_SUFFIX: AtomicUsize = AtomicUsize::new(0);
 
 pub fn build_temp_root(name: &str, version: &str) -> PathBuf {
-    std::env::temp_dir().join(temp_root_name(name, version))
+    temp_root_base().join(temp_root_name(name, version))
 }
 
 pub(crate) fn temp_root_prefix(name: &str, version: &str) -> String {
@@ -13,6 +13,10 @@ pub(crate) fn temp_root_prefix(name: &str, version: &str) -> String {
         sanitize_component(name),
         sanitize_component(version)
     )
+}
+
+pub(crate) fn temp_root_base() -> PathBuf {
+    std::env::temp_dir().join("winbrew")
 }
 
 fn temp_root_name(name: &str, version: &str) -> String {

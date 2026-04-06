@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::{
     AppContext,
-    services::{info as info_service, version},
+    services::{app::version, shared::report},
     ui::Ui,
 };
 
@@ -11,7 +11,7 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     ui.page_title("System Information");
     ui.notice(format!("Version: {}", version::version_string()));
 
-    let report = info_service::runtime_report(ctx)?;
+    let report = report::runtime_report(ctx)?;
 
     for section in report.sections {
         ui.notice(&section.title);

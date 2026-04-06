@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub mod config;
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum PackageStatus {

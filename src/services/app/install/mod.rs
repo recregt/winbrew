@@ -1,6 +1,5 @@
 pub mod download;
 pub mod flow;
-pub mod recovery;
 pub mod state;
 pub mod types;
 pub mod workspace;
@@ -12,7 +11,7 @@ use crate::core::cancel;
 use crate::database;
 use crate::engines::{self, EngineKind};
 use crate::models::CatalogPackage;
-use crate::services::catalog;
+use crate::services::shared::catalog;
 
 pub use types::{InstallError, InstallOutcome, InstallResult};
 pub type Result<T> = types::Result<T>;

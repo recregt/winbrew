@@ -5,7 +5,7 @@ use thiserror::Error;
 use super::state::InstallStateError;
 use crate::core::cancel::CancellationError;
 use crate::core::hash::{HashAlgorithm, HashError};
-use crate::services::catalog::InstallerSelectionError;
+use crate::services::shared::catalog::InstallerSelectionError;
 
 #[derive(Debug, Clone)]
 pub struct InstallResult {
@@ -18,12 +18,6 @@ pub struct InstallResult {
 pub struct InstallOutcome {
     pub result: InstallResult,
     pub legacy_checksum_algorithms: Vec<HashAlgorithm>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InstallRollbackKind {
-    Failed,
-    Cancelled,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,14 +66,6 @@ impl InstallError {
             }
             Self::Cancelled => InstallFailureClass::Cancelled,
             Self::Unexpected(_) => InstallFailureClass::Runtime,
-        }
-    }
-
-    pub fn rollback_kind(&self) -> InstallRollbackKind {
-        if matches!(self.failure_class(), InstallFailureClass::Cancelled) {
-            InstallRollbackKind::Cancelled
-        } else {
-            InstallRollbackKind::Failed
         }
     }
 }
@@ -146,7 +132,7 @@ impl From<Error> for InstallError {
 
 #[cfg(test)]
 mod tests {
-    use super::{InstallError, InstallFailureClass, InstallRollbackKind, InstallStateError};
+    use super::{InstallError, InstallFailureClass, InstallStateError};
     use crate::core::cancel::CancellationError;
     use crate::core::hash::{HashAlgorithm, HashError};
 
@@ -173,21 +159,6 @@ mod tests {
         let err = InstallError::from(CancellationError);
 
         assert!(matches!(err, InstallError::Cancelled));
-    }
-
-    #[test]
-    fn rollback_kind_is_cancelled_only_for_cancelled_errors() {
-        assert_eq!(
-            InstallError::Cancelled.rollback_kind(),
-            InstallRollbackKind::Cancelled
-        );
-        assert_eq!(
-            InstallError::from(InstallStateError::AlreadyInstalled {
-                name: "Contoso.App".to_string(),
-            })
-            .rollback_kind(),
-            InstallRollbackKind::Failed
-        );
     }
 
     #[test]

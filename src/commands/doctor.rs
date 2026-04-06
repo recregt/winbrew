@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{AppContext, services::doctor, ui::Ui};
+use crate::{AppContext, services::app::doctor, ui::Ui};
 
 pub fn run(ctx: &AppContext) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);
@@ -15,8 +15,18 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     ui.info(format!("Found {} package(s). Scanning...", packages.len()));
 
     let progress = ui.progress_bar();
-    let broken = doctor::scan_packages_with_progress(&packages, &progress);
+    let mut broken = doctor::scan_packages_with_progress(&packages, &progress);
     progress.finish_and_clear();
+
+    broken.extend(doctor::scan_orphaned_install_dirs(
+        &ctx.paths.packages,
+        &packages,
+    ));
+    broken.sort_by(|left, right| {
+        left.package_name
+            .cmp(&right.package_name)
+            .then_with(|| left.issue.cmp(&right.issue))
+    });
 
     render_results(&mut ui, &broken);
 

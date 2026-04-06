@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::io::Write;
 
 use crate::cli::ConfigCommand;
-use crate::{AppContext, services::config, ui::Ui};
+use crate::{AppContext, services::app::config, ui::Ui};
 
 pub fn run(ctx: &AppContext, command: ConfigCommand) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);

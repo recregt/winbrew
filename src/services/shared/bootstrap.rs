@@ -2,11 +2,11 @@ use anyhow::Result;
 
 use crate::core::cancel;
 
-use super::install::recovery;
+use super::stale_cleanup;
 
 pub fn init_runtime() -> Result<()> {
     cancel::init_handler()?;
-    recovery::recover_stale_installations()?;
+    stale_cleanup::cleanup_stale_installations()?;
 
     Ok(())
 }

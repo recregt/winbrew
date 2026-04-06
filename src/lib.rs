@@ -7,8 +7,8 @@ use std::sync::Arc;
 use crate::cli::Cli;
 use crate::commands::run;
 use crate::core::paths::ResolvedPaths;
-use crate::services::bootstrap;
-use crate::services::config::ConfigSection;
+use crate::models::config::ConfigSection;
+use crate::services::shared::bootstrap;
 
 pub mod cli;
 pub mod commands;

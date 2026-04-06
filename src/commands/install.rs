@@ -2,8 +2,8 @@ use anyhow::Result;
 
 use crate::commands::command_errors::{cancelled, reported_with_hint};
 use crate::models::CatalogPackage;
-use crate::services::install;
-use crate::services::install::InstallError;
+use crate::services::app::install;
+use crate::services::app::install::InstallError;
 use crate::{AppContext, ui::Ui};
 
 pub fn run(ctx: &AppContext, query: &[String], ignore_checksum_security: bool) -> Result<()> {

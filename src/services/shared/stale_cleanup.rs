@@ -7,21 +7,20 @@ use crate::core::fs::cleanup_path;
 use crate::database;
 use crate::models::Package;
 
-use super::state;
-use super::workspace;
+use crate::services::app::install::{state, workspace};
 
-pub fn recover_stale_installations() -> Result<()> {
+pub fn cleanup_stale_installations() -> Result<()> {
     let conn = database::get_conn()?;
     let stale_packages = database::list_installing_packages(&conn)?;
 
     for package in stale_packages {
-        recover_stale_installation(&conn, &package);
+        cleanup_stale_installation(&conn, &package);
     }
 
     Ok(())
 }
 
-fn recover_stale_installation(conn: &rusqlite::Connection, package: &Package) {
+fn cleanup_stale_installation(conn: &rusqlite::Connection, package: &Package) {
     if let Err(err) = state::mark_failed(conn, &package.name) {
         warn!(package = %package.name, error = %err, "failed to mark stale install as failed");
     }
@@ -38,8 +37,13 @@ fn cleanup_install_dir(install_dir: &Path, package_name: &str) {
 
 fn cleanup_temp_roots(name: &str, version: &str) {
     let prefix = workspace::temp_root_prefix(name, version);
+    let temp_root_base = workspace::temp_root_base();
 
-    let entries = match fs::read_dir(std::env::temp_dir()) {
+    if !temp_root_base.exists() {
+        return;
+    }
+
+    let entries = match fs::read_dir(&temp_root_base) {
         Ok(entries) => entries,
         Err(err) => {
             warn!(package = name, error = %err, "failed to enumerate temp directory for stale install cleanup");
@@ -64,7 +68,7 @@ fn cleanup_temp_roots(name: &str, version: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::recover_stale_installations;
+    use super::cleanup_stale_installations;
     use crate::database;
     use crate::models::{Package, PackageStatus};
     use std::fs;
@@ -84,7 +88,7 @@ mod tests {
     }
 
     #[test]
-    fn recover_stale_installations_marks_installing_packages_failed_and_cleans_artifacts() {
+    fn cleanup_stale_installations_marks_installing_packages_failed_and_cleans_artifacts() {
         let temp_root = tempdir().expect("temp root");
         let root = temp_root.path();
 
@@ -102,9 +106,14 @@ mod tests {
             "{}test",
             super::workspace::temp_root_prefix(&package.name, &package.version)
         ));
+        let temp_root_path = super::workspace::temp_root_base().join(
+            temp_root_path
+                .file_name()
+                .expect("temp root should have a file name"),
+        );
         fs::create_dir_all(&temp_root_path).expect("stale temp root");
 
-        recover_stale_installations().expect("recovery should succeed");
+        cleanup_stale_installations().expect("cleanup should succeed");
 
         let stored = database::get_package(&conn, &package.name)
             .expect("query package")
