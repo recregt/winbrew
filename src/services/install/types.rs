@@ -26,6 +26,15 @@ pub enum InstallRollbackKind {
     Cancelled,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstallFailureClass {
+    Preflight,
+    Verification,
+    StateTransition,
+    Cancelled,
+    Runtime,
+}
+
 #[derive(Debug, Error)]
 pub enum InstallError {
     #[error("package '{name}' is already installed")]
@@ -53,8 +62,21 @@ pub enum InstallError {
 pub type Result<T> = std::result::Result<T, InstallError>;
 
 impl InstallError {
+    pub fn failure_class(&self) -> InstallFailureClass {
+        match self {
+            Self::AlreadyInstalled { .. }
+            | Self::AlreadyInstalling { .. }
+            | Self::CurrentlyUpdating { .. } => InstallFailureClass::Preflight,
+            Self::ChecksumMismatch { .. } | Self::LegacyChecksumAlgorithm { .. } => {
+                InstallFailureClass::Verification
+            }
+            Self::Cancelled => InstallFailureClass::Cancelled,
+            Self::Unexpected(_) => InstallFailureClass::Runtime,
+        }
+    }
+
     pub fn rollback_kind(&self) -> InstallRollbackKind {
-        if matches!(self, Self::Cancelled) {
+        if matches!(self.failure_class(), InstallFailureClass::Cancelled) {
             InstallRollbackKind::Cancelled
         } else {
             InstallRollbackKind::Failed
@@ -124,7 +146,7 @@ impl From<Error> for InstallError {
 
 #[cfg(test)]
 mod tests {
-    use super::{InstallError, InstallRollbackKind, InstallStateError};
+    use super::{InstallError, InstallFailureClass, InstallRollbackKind, InstallStateError};
     use crate::core::cancel::CancellationError;
     use crate::core::hash::{HashAlgorithm, HashError};
 
@@ -165,6 +187,29 @@ mod tests {
             })
             .rollback_kind(),
             InstallRollbackKind::Failed
+        );
+    }
+
+    #[test]
+    fn failure_class_groups_expected_variants() {
+        assert_eq!(
+            InstallError::from(InstallStateError::AlreadyInstalling {
+                name: "Contoso.App".to_string(),
+            })
+            .failure_class(),
+            InstallFailureClass::Preflight
+        );
+        assert_eq!(
+            InstallError::from(HashError::ChecksumMismatch {
+                expected: "a".to_string(),
+                actual: "b".to_string(),
+            })
+            .failure_class(),
+            InstallFailureClass::Verification
+        );
+        assert_eq!(
+            InstallError::Cancelled.failure_class(),
+            InstallFailureClass::Cancelled
         );
     }
 }

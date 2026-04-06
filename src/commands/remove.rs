@@ -1,5 +1,6 @@
 use anyhow::Result;
 
+use crate::commands::command_errors::reported_with_hint;
 use crate::{AppContext, services::remove, ui::Ui};
 
 pub fn run(ctx: &AppContext, name: &str, yes: bool, force: bool) -> Result<()> {
@@ -33,16 +34,24 @@ pub fn run(ctx: &AppContext, name: &str, yes: bool, force: bool) -> Result<()> {
                     "Removal of {name} was blocked because it is required by: {}",
                     dependents
                 ));
-                return Err(anyhow::Error::msg(format!(
+                let message = format!(
                     "cannot remove '{name}' because it is required by: {}",
                     dependents
-                )));
+                );
+                ui.notice("Hint: re-run with --force if you intend to remove the package anyway.");
+                return Err(reported_with_hint(
+                    message,
+                    "Re-run with --force if you intend to remove the package anyway.",
+                ));
             }
             remove::RemovalError::UnsupportedPackageType { kind } => {
                 ui.error(format!("unsupported package type: {kind}"));
-                return Err(anyhow::Error::msg(format!(
-                    "unsupported package type: {kind}"
-                )));
+                let message = format!("unsupported package type: {kind}");
+                ui.notice("Hint: check the package metadata or choose a supported installer type.");
+                return Err(reported_with_hint(
+                    message,
+                    "Check the package metadata or choose a supported installer type.",
+                ));
             }
             remove::RemovalError::Unexpected(err) => return Err(err),
         }

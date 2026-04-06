@@ -1,5 +1,6 @@
 use anyhow::Result;
 
+use crate::commands::command_errors::{cancelled, reported_with_hint};
 use crate::models::CatalogPackage;
 use crate::services::install;
 use crate::services::install::InstallError;
@@ -71,7 +72,13 @@ pub fn run(ctx: &AppContext, query: &[String], ignore_checksum_security: bool) -
                 let message =
                     format!("Installer checksum mismatch: expected {expected}, got {actual}");
                 ui.error(&message);
-                return Err(anyhow::Error::msg(message));
+                ui.notice(
+                    "Hint: re-download the installer or refresh the catalog before retrying.",
+                );
+                return Err(reported_with_hint(
+                    message,
+                    "Re-download the installer or refresh the catalog before retrying.",
+                ));
             }
             InstallError::LegacyChecksumAlgorithm { algorithm } => {
                 let message = format!(
@@ -79,11 +86,15 @@ pub fn run(ctx: &AppContext, query: &[String], ignore_checksum_security: bool) -
                     algorithm.display_name()
                 );
                 ui.error(&message);
-                return Err(anyhow::Error::msg(message));
+                ui.notice("Hint: re-run with --ignore-checksum-security only if you trust the package source.");
+                return Err(reported_with_hint(
+                    message,
+                    "Re-run with --ignore-checksum-security only if you trust the package source.",
+                ));
             }
             InstallError::Cancelled => {
-                ui.notice("Aborted.");
-                std::process::exit(130);
+                ui.notice("Cancelling and cleaning up...");
+                return Err(cancelled());
             }
             InstallError::Unexpected(err) => {
                 return Err(err);

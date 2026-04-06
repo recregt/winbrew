@@ -78,11 +78,11 @@ where
         Err(err) => {
             let install_error: InstallError = err.into();
 
-            match install_error.rollback_kind() {
-                types::InstallRollbackKind::Cancelled => {
+            match install_error.failure_class() {
+                types::InstallFailureClass::Cancelled => {
                     flow::rollback_cancelled_install(&conn, &package.name, &install_dir);
                 }
-                types::InstallRollbackKind::Failed => {
+                _ => {
                     flow::rollback_failed_install(&conn, &package.name, &install_dir);
                 }
             }

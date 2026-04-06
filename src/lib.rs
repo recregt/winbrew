@@ -6,10 +6,9 @@ use std::sync::Arc;
 
 use crate::cli::Cli;
 use crate::commands::run;
-use crate::core::cancel;
 use crate::core::paths::ResolvedPaths;
+use crate::services::bootstrap;
 use crate::services::config::ConfigSection;
-use crate::services::install::recovery;
 
 pub mod cli;
 pub mod commands;
@@ -60,8 +59,7 @@ pub fn run_app() -> Result<()> {
 
     core::logging::init(&ctx)?;
     database::init(&ctx.paths)?;
-    cancel::init_handler()?;
-    recovery::recover_stale_installations()?;
+    bootstrap::init_runtime()?;
 
     let cli = Cli::parse();
     run(cli.command, &ctx)

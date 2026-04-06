@@ -1,3 +1,4 @@
+pub mod bootstrap;
 pub mod catalog;
 pub mod config;
 pub mod doctor;
