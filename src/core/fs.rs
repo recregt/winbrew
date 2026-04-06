@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process;
 
 pub fn cleanup_path(path: &Path) -> Result<()> {
     if !path.exists() {
@@ -14,6 +16,54 @@ pub fn cleanup_path(path: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+pub fn atomic_write(path: &Path, temp_path: &Path, contents: &[u8]) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create directory for {}", path.display()))?;
+    }
+
+    {
+        let mut file = fs::File::create(temp_path)
+            .with_context(|| format!("failed to create temp file at {}", temp_path.display()))?;
+        file.write_all(contents)
+            .with_context(|| format!("failed to write temp file at {}", temp_path.display()))?;
+        file.flush()
+            .with_context(|| format!("failed to flush temp file at {}", temp_path.display()))?;
+    }
+
+    if let Err(err) = fs::rename(temp_path, path) {
+        let _ = fs::remove_file(temp_path);
+        return Err(err).with_context(|| {
+            format!(
+                "failed to finalize atomic write: {} -> {}",
+                temp_path.display(),
+                path.display()
+            )
+        });
+    }
+
+    Ok(())
+}
+
+pub fn atomic_write_with_pid_suffix(path: &Path, contents: &str) -> Result<()> {
+    let temp_path = path.with_extension(format!("toml.{}.tmp", process::id()));
+    atomic_write(path, &temp_path, contents.as_bytes())
+}
+
+pub fn finalize_temp_file(temp_path: &Path, final_path: &Path) -> Result<()> {
+    if final_path.exists() {
+        cleanup_path(final_path)?;
+    }
+
+    fs::rename(temp_path, final_path).with_context(|| {
+        format!(
+            "failed to finalize file: {} -> {}",
+            temp_path.display(),
+            final_path.display()
+        )
+    })
 }
 
 pub fn replace_directory(source_dir: &Path, target_dir: &Path) -> Result<()> {

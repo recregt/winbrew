@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use std::fs;
-use std::io::{Read, Write};
 use std::path::Path;
 
 use crate::AppContext;
+use crate::core::fs::finalize_temp_file;
+use crate::core::network::{build_client, download_url_to_temp_file};
 
 const CATALOG_DIRECT_DOWNLOAD_URL: &str =
     "https://github.com/recregt/winbrew/releases/latest/download/catalog.db";
@@ -31,13 +32,7 @@ where
 
     download_catalog_release(&temp_path, on_start, on_progress)?;
 
-    fs::rename(&temp_path, &catalog_path).with_context(|| {
-        format!(
-            "failed to move downloaded catalog into place: {} -> {}",
-            temp_path.display(),
-            catalog_path.display()
-        )
-    })?;
+    finalize_temp_file(&temp_path, &catalog_path)?;
 
     Ok(())
 }
@@ -45,43 +40,21 @@ where
 fn download_catalog_release<FStart, FProgress>(
     temp_path: &Path,
     on_start: FStart,
-    mut on_progress: FProgress,
+    on_progress: FProgress,
 ) -> Result<()>
 where
     FStart: FnOnce(Option<u64>),
     FProgress: FnMut(u64),
 {
-    let client = reqwest::blocking::Client::builder()
-        .user_agent("winbrew-catalog-downloader")
-        .build()
-        .context("failed to build HTTP client")?;
+    let client = build_client("winbrew-catalog-downloader")?;
 
-    let mut response = client
-        .get(CATALOG_DIRECT_DOWNLOAD_URL)
-        .send()
-        .context("failed to request catalog asset")?
-        .error_for_status()
-        .context("catalog asset request failed")?;
-
-    let total_bytes = response.content_length();
-    on_start(total_bytes);
-
-    let mut file = fs::File::create(temp_path)
-        .with_context(|| format!("failed to create download file at {}", temp_path.display()))?;
-
-    let mut buffer = [0u8; 16 * 1024];
-    loop {
-        let read = response
-            .read(&mut buffer)
-            .context("failed to read catalog asset")?;
-        if read == 0 {
-            break;
-        }
-
-        file.write_all(&buffer[..read])
-            .context("failed to write catalog asset to disk")?;
-        on_progress(read as u64);
-    }
-
-    Ok(())
+    download_url_to_temp_file(
+        &client,
+        CATALOG_DIRECT_DOWNLOAD_URL,
+        temp_path,
+        "catalog asset",
+        on_start,
+        on_progress,
+        |_| Ok(()),
+    )
 }

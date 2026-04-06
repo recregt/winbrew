@@ -1,3 +1,7 @@
+pub mod download;
+
+pub use download::{build_client, download_url_to_temp_file};
+
 pub fn installer_filename(url: &str) -> String {
     url_path(url)
         .rsplit('/')

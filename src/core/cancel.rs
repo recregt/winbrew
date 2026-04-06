@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
 
@@ -11,16 +12,18 @@ pub struct CancellationError;
 
 pub fn init_handler() -> Result<()> {
     if HANDLER_INSTALLED
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
         .is_err()
     {
         return Ok(());
     }
 
     if let Err(err) = ctrlc::set_handler(|| {
-        CANCELLED.store(true, Ordering::SeqCst);
+        if CANCELLED.swap(true, Ordering::Relaxed) {
+            process::exit(130);
+        }
     }) {
-        HANDLER_INSTALLED.store(false, Ordering::SeqCst);
+        HANDLER_INSTALLED.store(false, Ordering::Relaxed);
         return Err(err).context("failed to install Ctrl+C handler");
     }
 
@@ -28,7 +31,7 @@ pub fn init_handler() -> Result<()> {
 }
 
 pub fn is_cancelled() -> bool {
-    CANCELLED.load(Ordering::SeqCst)
+    CANCELLED.load(Ordering::Relaxed)
 }
 
 pub fn check() -> std::result::Result<(), CancellationError> {

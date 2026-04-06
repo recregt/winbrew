@@ -76,12 +76,18 @@ where
     }) {
         Ok(legacy_checksum_algorithms) => legacy_checksum_algorithms,
         Err(err) => {
-            if cancel::is_cancelled() {
-                flow::rollback_cancelled_install(&conn, &package.name, &install_dir);
-            } else {
-                flow::rollback_failed_install(&conn, &package.name, &install_dir);
+            let install_error: InstallError = err.into();
+
+            match install_error.rollback_kind() {
+                types::InstallRollbackKind::Cancelled => {
+                    flow::rollback_cancelled_install(&conn, &package.name, &install_dir);
+                }
+                types::InstallRollbackKind::Failed => {
+                    flow::rollback_failed_install(&conn, &package.name, &install_dir);
+                }
             }
-            return Err(err.into());
+
+            return Err(install_error);
         }
     };
 

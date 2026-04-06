@@ -20,6 +20,12 @@ pub struct InstallOutcome {
     pub legacy_checksum_algorithms: Vec<HashAlgorithm>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstallRollbackKind {
+    Failed,
+    Cancelled,
+}
+
 #[derive(Debug, Error)]
 pub enum InstallError {
     #[error("package '{name}' is already installed")]
@@ -45,6 +51,16 @@ pub enum InstallError {
 }
 
 pub type Result<T> = std::result::Result<T, InstallError>;
+
+impl InstallError {
+    pub fn rollback_kind(&self) -> InstallRollbackKind {
+        if matches!(self, Self::Cancelled) {
+            InstallRollbackKind::Cancelled
+        } else {
+            InstallRollbackKind::Failed
+        }
+    }
+}
 
 impl From<InstallStateError> for InstallError {
     fn from(value: InstallStateError) -> Self {
@@ -108,7 +124,7 @@ impl From<Error> for InstallError {
 
 #[cfg(test)]
 mod tests {
-    use super::{InstallError, InstallStateError};
+    use super::{InstallError, InstallRollbackKind, InstallStateError};
     use crate::core::cancel::CancellationError;
     use crate::core::hash::{HashAlgorithm, HashError};
 
@@ -135,5 +151,20 @@ mod tests {
         let err = InstallError::from(CancellationError);
 
         assert!(matches!(err, InstallError::Cancelled));
+    }
+
+    #[test]
+    fn rollback_kind_is_cancelled_only_for_cancelled_errors() {
+        assert_eq!(
+            InstallError::Cancelled.rollback_kind(),
+            InstallRollbackKind::Cancelled
+        );
+        assert_eq!(
+            InstallError::from(InstallStateError::AlreadyInstalled {
+                name: "Contoso.App".to_string(),
+            })
+            .rollback_kind(),
+            InstallRollbackKind::Failed
+        );
     }
 }

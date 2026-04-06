@@ -10,11 +10,11 @@ pub fn run(ctx: &AppContext, query: &[String]) -> Result<()> {
 
     let packages = match search::search_packages(&query_text) {
         Ok(packages) => packages,
-        Err(err) if search::is_catalog_unavailable(&err) => {
+        Err(search::SearchError::CatalogUnavailable) => {
             ui.notice("Package catalog not available. Run `winbrew update` first.");
             return Ok(());
         }
-        Err(err) => return Err(err),
+        Err(search::SearchError::Unexpected(err)) => return Err(err),
     };
 
     if packages.is_empty() {

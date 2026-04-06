@@ -116,14 +116,14 @@ impl InstallTestFixture {
     }
 
     fn run_install(&self, ignore_checksum_security: bool) -> Result<install::InstallOutcome> {
-        install::run(
+        Ok(install::run(
             &self.ctx,
             std::slice::from_ref(&self.package_name),
             ignore_checksum_security,
             |_query, _matches| unreachable!("install should not prompt for an exact match"),
             |_| {},
             |_| {},
-        )
+        )?)
     }
 }
 
@@ -232,6 +232,40 @@ fn install_allows_md5_with_override() -> Result<()> {
     assert_eq!(result.name, "Winbrew Test Zip");
     assert!(install_dir.join("bin").join("tool.exe").exists());
     fixture.assert_downloaded();
+    Ok(())
+}
+
+#[test]
+fn install_rolls_back_on_download_failure() -> Result<()> {
+    let test_root = test_root();
+    let root = test_root.path();
+
+    let mut server = Server::new();
+    let installer_url = format!("{}/test.zip", server.url());
+    let download_mock = server
+        .mock("GET", "/test.zip")
+        .with_status(500)
+        .with_body("boom")
+        .expect(1)
+        .create();
+
+    let fixture = InstallTestFixture::from_catalog(root, &installer_url, "")?;
+
+    let err = fixture
+        .run_install(false)
+        .expect_err("download failures should bubble up");
+
+    download_mock.assert();
+    assert!(err.to_string().contains("installer request failed"));
+
+    let install_dir = fixture.ctx.paths.packages.join(&fixture.package_name);
+    assert!(!install_dir.exists());
+
+    let conn = database::get_conn()?;
+    let stored = database::get_package(&conn, &fixture.package_name)?
+        .expect("package should remain tracked after rollback");
+    assert_eq!(stored.status, winbrew::models::PackageStatus::Failed);
+
     Ok(())
 }
 
