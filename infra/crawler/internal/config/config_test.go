@@ -120,12 +120,29 @@ retry:
 		"invalid log level",
 		"timeout.fetch cannot be negative",
 		"retry.max cannot be negative",
-		"retry.backoff cannot be negative",
+		"retry.backoff must be positive",
 	}
 	for _, fragment := range wantFragments {
 		if !strings.Contains(err.Error(), fragment) {
 			t.Fatalf("Parse() error = %q, want fragment %q", err.Error(), fragment)
 		}
+	}
+}
+
+func TestParseRejectsZeroRetryBackoff(t *testing.T) {
+	t.Parallel()
+
+	_, err := Parse(strings.NewReader(`
+sources:
+  - winget
+retry:
+  backoff: 0s
+`))
+	if err == nil {
+		t.Fatal("Parse() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "retry.backoff must be positive") {
+		t.Fatalf("Parse() error = %q, want backoff validation", err.Error())
 	}
 }
 

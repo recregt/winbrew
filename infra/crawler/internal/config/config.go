@@ -156,8 +156,8 @@ func (c *Config) validate() error {
 	if c.Retry.Max < 0 {
 		errs = append(errs, fmt.Errorf("retry.max cannot be negative: %d", c.Retry.Max))
 	}
-	if c.Retry.Backoff < 0 {
-		errs = append(errs, fmt.Errorf("retry.backoff cannot be negative: %v", c.Retry.Backoff))
+	if c.Retry.Backoff <= 0 {
+		errs = append(errs, fmt.Errorf("retry.backoff must be positive: %v", c.Retry.Backoff))
 	}
 
 	if len(errs) == 0 {
