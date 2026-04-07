@@ -33,11 +33,11 @@ fn execute_removal_with_conn(
     }
 
     let install_dir = PathBuf::from(&plan.package.install_dir);
-    let engine_kind = match engines::get_engine_kind(plan.package.kind.as_str()) {
+    let engine_kind = match engines::get_engine_kind(plan.package.kind) {
         Ok(engine_kind) => engine_kind,
         Err(_) => {
             return Err(RemovalError::UnsupportedPackageType {
-                kind: plan.package.kind.to_string(),
+                kind: plan.package.kind,
             });
         }
     };

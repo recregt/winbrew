@@ -3,6 +3,7 @@ mod plan;
 
 use thiserror::Error;
 
+pub use crate::models::InstallerType;
 pub use crate::models::remove::RemovalPlan;
 pub use execution::execute_removal;
 pub use plan::{find_dependents, plan_removal};
@@ -13,7 +14,7 @@ pub enum RemovalError {
     DependentPackagesBlocked { name: String, dependents: String },
 
     #[error("unsupported package type: {kind}")]
-    UnsupportedPackageType { kind: String },
+    UnsupportedPackageType { kind: InstallerType },
 
     #[error(transparent)]
     Unexpected(#[from] anyhow::Error),
