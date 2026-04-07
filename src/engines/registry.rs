@@ -9,22 +9,16 @@ use super::{EngineKind, msix, portable, zip};
 type InstallFn = fn(&CatalogInstaller, &Path, &Path) -> Result<()>;
 type RemoveFn = fn(&Package) -> Result<()>;
 type MatchesInstallerFn = fn(&CatalogInstaller) -> bool;
-type MatchesKindFn = fn(&str) -> bool;
 
 struct EngineDescriptor {
     kind: EngineKind,
     install: InstallFn,
     remove: RemoveFn,
     matches_installer: MatchesInstallerFn,
-    matches_kind: MatchesKindFn,
 }
 
 fn matches_msix_installer(installer: &CatalogInstaller) -> bool {
     installer.kind == InstallerType::Msix
-}
-
-fn matches_msix_kind(kind: &str) -> bool {
-    kind.trim().eq_ignore_ascii_case("msix")
 }
 
 fn matches_zip_installer(installer: &CatalogInstaller) -> bool {
@@ -32,16 +26,8 @@ fn matches_zip_installer(installer: &CatalogInstaller) -> bool {
         || (installer.kind == InstallerType::Portable && is_zip_path(&installer.url))
 }
 
-fn matches_zip_kind(kind: &str) -> bool {
-    kind.trim().eq_ignore_ascii_case("zip")
-}
-
 fn matches_portable_installer(installer: &CatalogInstaller) -> bool {
     installer.kind == InstallerType::Portable
-}
-
-fn matches_portable_kind(kind: &str) -> bool {
-    kind.trim().eq_ignore_ascii_case("portable")
 }
 
 fn msix_install(
@@ -86,21 +72,18 @@ const ENGINE_DESCRIPTORS: &[EngineDescriptor] = &[
         install: msix_install,
         remove: msix_remove,
         matches_installer: matches_msix_installer,
-        matches_kind: matches_msix_kind,
     },
     EngineDescriptor {
         kind: EngineKind::Zip,
         install: zip_install,
         remove: zip_remove,
         matches_installer: matches_zip_installer,
-        matches_kind: matches_zip_kind,
     },
     EngineDescriptor {
         kind: EngineKind::Portable,
         install: portable_install,
         remove: portable_remove,
         matches_installer: matches_portable_installer,
-        matches_kind: matches_portable_kind,
     },
 ];
 
@@ -112,15 +95,6 @@ pub(crate) fn resolve_engine_kind_for_installer(
         .find(|descriptor| (descriptor.matches_installer)(installer))
         .map(|descriptor| descriptor.kind)
         .ok_or_else(|| anyhow!("unsupported installer type '{}'", installer.kind.as_str()))
-}
-
-#[allow(dead_code)]
-pub(crate) fn resolve_engine_kind_for_kind(kind: &str) -> Result<EngineKind> {
-    ENGINE_DESCRIPTORS
-        .iter()
-        .find(|descriptor| (descriptor.matches_kind)(kind))
-        .map(|descriptor| descriptor.kind)
-        .ok_or_else(|| anyhow!("unsupported installer type '{}'", kind.trim()))
 }
 
 pub(crate) fn install(
@@ -149,24 +123,24 @@ fn resolve_engine_descriptor(kind: EngineKind) -> Result<&'static EngineDescript
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_engine_kind_for_installer, resolve_engine_kind_for_kind};
+    use super::resolve_engine_kind_for_installer;
     use crate::engines::EngineKind;
-    use crate::models::CatalogInstaller;
+    use crate::models::{CatalogInstaller, InstallerType};
 
-    fn installer(kind: &str, url: &str) -> CatalogInstaller {
+    fn installer(kind: InstallerType, url: &str) -> CatalogInstaller {
         CatalogInstaller {
             package_id: "Contoso.App".to_string(),
             url: url.to_string(),
             hash: "hash".to_string(),
             arch: "x64".parse().expect("arch should parse"),
-            kind: kind.parse().expect("kind should parse"),
+            kind,
         }
     }
 
     #[test]
     fn resolve_installer_treats_portable_zip_as_zip() {
         let engine = resolve_engine_kind_for_installer(&installer(
-            "portable",
+            InstallerType::Portable,
             "https://example.invalid/tool.zip",
         ))
         .expect("engine should resolve");
@@ -175,23 +149,9 @@ mod tests {
     }
 
     #[test]
-    fn resolve_kind_returns_portable() {
-        let engine = resolve_engine_kind_for_kind("portable").expect("engine kind should resolve");
-
-        assert_eq!(engine, EngineKind::Portable);
-    }
-
-    #[test]
-    fn resolve_kind_rejects_unknown_type() {
-        let err = resolve_engine_kind_for_kind("exe").expect_err("unknown type should fail");
-
-        assert!(err.to_string().contains("unsupported installer type 'exe'"));
-    }
-
-    #[test]
     fn resolve_installer_prefers_msix_for_msix_kind() {
         let engine = resolve_engine_kind_for_installer(&installer(
-            "  msix  ",
+            InstallerType::Msix,
             "https://example.invalid/package.msix",
         ))
         .expect("engine should resolve");
