@@ -18,13 +18,14 @@ type Metadata struct {
 }
 
 func LoadMetadata(path string) (Metadata, error) {
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return Metadata{}, fmt.Errorf("failed to read metadata file: %w", err)
 	}
+	defer file.Close()
 
 	var metadata Metadata
-	if err := json.Unmarshal(data, &metadata); err != nil {
+	if err := json.NewDecoder(file).Decode(&metadata); err != nil {
 		return Metadata{}, fmt.Errorf("failed to decode metadata file: %w", err)
 	}
 
