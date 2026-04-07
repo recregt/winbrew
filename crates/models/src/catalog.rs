@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::ModelError;
+use crate::installer::{Architecture, InstallerType};
 use crate::package::PackageSource;
 use crate::validation::{Validate, ensure_non_empty};
 use crate::version::Version;
@@ -22,8 +23,8 @@ pub struct CatalogInstaller {
     pub package_id: String,
     pub url: String,
     pub hash: String,
-    pub arch: String,
-    pub kind: String,
+    pub arch: Architecture,
+    pub kind: InstallerType,
 }
 
 impl CatalogPackage {

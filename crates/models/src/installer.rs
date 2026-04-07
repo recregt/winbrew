@@ -1,3 +1,4 @@
+use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ModelError;
@@ -52,6 +53,29 @@ impl Architecture {
             Self::Any => "",
         }
     }
+
+    pub fn current() -> Self {
+        match std::env::consts::ARCH {
+            "x86_64" => Self::X64,
+            "x86" => Self::X86,
+            "aarch64" => Self::Arm64,
+            _ => Self::Any,
+        }
+    }
+}
+
+impl FromStr for Architecture {
+    type Err = ModelError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "x64" => Ok(Self::X64),
+            "x86" => Ok(Self::X86),
+            "arm64" => Ok(Self::Arm64),
+            "" => Ok(Self::Any),
+            other => Err(ModelError::invalid_enum_value("installer.arch", other)),
+        }
+    }
 }
 
 impl InstallerType {
@@ -62,6 +86,21 @@ impl InstallerType {
             Self::Exe => "exe",
             Self::Portable => "portable",
             Self::Zip => "zip",
+        }
+    }
+}
+
+impl FromStr for InstallerType {
+    type Err = ModelError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "msi" => Ok(Self::Msi),
+            "msix" => Ok(Self::Msix),
+            "exe" => Ok(Self::Exe),
+            "portable" => Ok(Self::Portable),
+            "zip" => Ok(Self::Zip),
+            other => Err(ModelError::invalid_enum_value("installer.kind", other)),
         }
     }
 }

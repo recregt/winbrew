@@ -55,7 +55,7 @@ where
         &conn,
         package.name.clone(),
         package_version.clone(),
-        installer.kind.clone(),
+        installer.kind.to_string(),
         &install_dir,
     )?;
 
