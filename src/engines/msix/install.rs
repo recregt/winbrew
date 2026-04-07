@@ -12,7 +12,7 @@ pub fn install(download_path: &Path, install_dir: &Path) -> Result<()> {
     package_manager
         .AddPackageByUriAsync(&package_uri, &options)
         .context("failed to start msix installation")?
-        .get()
+        .join()
         .context("msix install failed")?;
 
     fs::create_dir_all(install_dir)
