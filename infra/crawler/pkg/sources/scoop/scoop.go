@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"winbrew/infra/internal/retry"
 	"winbrew/infra/pkg/normalize"
 )
@@ -61,6 +63,10 @@ func (s *Source) Name() string {
 }
 
 func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, backoff time.Duration) error {
+	if err := s.syncBuckets(ctx, maxAttempts, backoff); err != nil {
+		return err
+	}
+
 	enc := json.NewEncoder(w)
 
 	for _, bucket := range s.buckets {
@@ -69,18 +75,32 @@ func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, b
 		}
 
 		bucketDir := filepath.Join(s.cacheDir, bucket.Name)
-		if err := retry.Do(ctx, maxAttempts, backoff, func() error {
-			return syncRepo(ctx, bucket.URL, bucketDir)
-		}); err != nil {
-			return fmt.Errorf("bucket %s: %w", bucket.Name, err)
-		}
-
 		if err := writeBucketJSONL(ctx, enc, bucket.Name, bucketDir); err != nil {
 			return fmt.Errorf("bucket %s: %w", bucket.Name, err)
 		}
 	}
 
 	return nil
+}
+
+func (s *Source) syncBuckets(ctx context.Context, maxAttempts int, backoff time.Duration) error {
+	group, groupCtx := errgroup.WithContext(ctx)
+
+	for _, bucket := range s.buckets {
+		bucket := bucket
+		group.Go(func() error {
+			bucketDir := filepath.Join(s.cacheDir, bucket.Name)
+			if err := retry.Do(groupCtx, maxAttempts, backoff, func() error {
+				return syncRepo(groupCtx, bucket.URL, bucketDir)
+			}); err != nil {
+				return fmt.Errorf("bucket %s: %w", bucket.Name, err)
+			}
+
+			return nil
+		})
+	}
+
+	return group.Wait()
 }
 
 type packageSnapshot struct {

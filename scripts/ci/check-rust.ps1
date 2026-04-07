@@ -21,13 +21,6 @@ try {
         exit $global:LASTEXITCODE
     }
 
-    Write-Host 'Running cargo check'
-    $global:LASTEXITCODE = 0
-    & cargo check --locked
-    if ($global:LASTEXITCODE -ne 0) {
-        exit $global:LASTEXITCODE
-    }
-
     Write-Host 'Running cargo nextest'
     $global:LASTEXITCODE = 0
     & cargo nextest run --locked --all-targets --all-features
