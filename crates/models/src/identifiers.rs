@@ -7,55 +7,125 @@ use crate::error::ModelError;
 use crate::package_ref::PackageId;
 use crate::validation::{Validate, ensure_non_empty};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct CatalogId(String);
+macro_rules! define_string_newtype {
+    (
+        $(#[$meta:meta])*
+        $vis:vis struct $name:ident;
+        field = $field:literal;
+        parse = $parse:expr;
+        validate = $validate:expr;
+    ) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        #[serde(transparent)]
+        $vis struct $name(String);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct PackageName(String);
+        impl $name {
+            pub fn parse(input: &str) -> Result<Self, ModelError> {
+                let trimmed = input.trim();
+                let value = ($parse)(trimmed)?;
+                Ok(Self(value))
+            }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct BucketName(String);
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
 
-impl CatalogId {
-    pub fn parse(input: &str) -> Result<Self, ModelError> {
-        let trimmed = input.trim();
+        impl Validate for $name {
+            fn validate(&self) -> Result<(), ModelError> {
+                ($validate)(&self.0)
+            }
+        }
 
+        impl Deref for $name {
+            type Target = str;
+
+            fn deref(&self) -> &Self::Target {
+                self.as_str()
+            }
+        }
+
+        impl core::fmt::Display for $name {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                self.as_str()
+            }
+        }
+
+        impl FromStr for $name {
+            type Err = ModelError;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                Self::parse(s)
+            }
+        }
+
+        impl From<String> for $name {
+            fn from(value: String) -> Self {
+                Self(value)
+            }
+        }
+
+        impl From<&str> for $name {
+            fn from(value: &str) -> Self {
+                Self(value.to_string())
+            }
+        }
+
+        impl PartialEq<&str> for $name {
+            fn eq(&self, other: &&str) -> bool {
+                self.0 == *other
+            }
+        }
+
+        impl PartialEq<String> for $name {
+            fn eq(&self, other: &String) -> bool {
+                &self.0 == other
+            }
+        }
+    };
+}
+
+define_string_newtype! {
+    pub struct CatalogId;
+    field = "catalog_id";
+    parse = |trimmed: &str| {
         if trimmed.is_empty() {
             return Err(ModelError::empty("catalog_id"));
         }
 
         PackageId::parse(trimmed)?;
-        Ok(Self(trimmed.to_string()))
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+        Ok(trimmed.to_string())
+    };
+    validate = |value: &str| {
+        ensure_non_empty("catalog_id", value)?;
+        PackageId::parse(value).map(|_| ())
+    };
 }
 
-impl PackageName {
-    pub fn parse(input: &str) -> Result<Self, ModelError> {
-        let trimmed = input.trim();
-
+define_string_newtype! {
+    pub struct PackageName;
+    field = "package_ref.name";
+    parse = |trimmed: &str| {
         if trimmed.is_empty() {
             return Err(ModelError::empty("package_ref.name"));
         }
 
-        Ok(Self(trimmed.to_string()))
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+        Ok(trimmed.to_string())
+    };
+    validate = |value: &str| ensure_non_empty("package_ref.name", value);
 }
 
-impl BucketName {
-    pub fn parse(input: &str) -> Result<Self, ModelError> {
-        let trimmed = input.trim();
-
+define_string_newtype! {
+    pub struct BucketName;
+    field = "package_id.bucket";
+    parse = |trimmed: &str| {
         if trimmed.is_empty() {
             return Err(ModelError::empty("package_id.bucket"));
         }
@@ -67,208 +137,20 @@ impl BucketName {
             ));
         }
 
-        Ok(Self(trimmed.to_string()))
-    }
+        Ok(trimmed.to_string())
+    };
+    validate = |value: &str| {
+        ensure_non_empty("package_id.bucket", value)?;
 
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Validate for CatalogId {
-    fn validate(&self) -> Result<(), ModelError> {
-        ensure_non_empty("catalog_id", &self.0)?;
-        PackageId::parse(&self.0).map(|_| ())
-    }
-}
-
-impl Validate for PackageName {
-    fn validate(&self) -> Result<(), ModelError> {
-        ensure_non_empty("package_ref.name", &self.0)
-    }
-}
-
-impl Validate for BucketName {
-    fn validate(&self) -> Result<(), ModelError> {
-        ensure_non_empty("package_id.bucket", &self.0)?;
-
-        if self.0.contains('/') {
+        if value.contains('/') {
             return Err(ModelError::invalid_package_id(
-                &self.0,
+                value,
                 "bucket names cannot contain '/'",
             ));
         }
 
         Ok(())
-    }
-}
-
-impl Deref for CatalogId {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.as_str()
-    }
-}
-
-impl Deref for PackageName {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.as_str()
-    }
-}
-
-impl Deref for BucketName {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.as_str()
-    }
-}
-
-impl core::fmt::Display for CatalogId {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl core::fmt::Display for PackageName {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl core::fmt::Display for BucketName {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl AsRef<str> for CatalogId {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
-
-impl AsRef<str> for PackageName {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
-
-impl AsRef<str> for BucketName {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
-
-impl FromStr for CatalogId {
-    type Err = ModelError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
-    }
-}
-
-impl FromStr for PackageName {
-    type Err = ModelError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
-    }
-}
-
-impl FromStr for BucketName {
-    type Err = ModelError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
-    }
-}
-
-impl From<String> for CatalogId {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for CatalogId {
-    fn from(value: &str) -> Self {
-        Self(value.to_string())
-    }
-}
-
-impl From<PackageId> for CatalogId {
-    fn from(value: PackageId) -> Self {
-        Self(value.catalog_id())
-    }
-}
-
-impl From<&PackageId> for CatalogId {
-    fn from(value: &PackageId) -> Self {
-        Self(value.catalog_id())
-    }
-}
-
-impl From<String> for PackageName {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for PackageName {
-    fn from(value: &str) -> Self {
-        Self(value.to_string())
-    }
-}
-
-impl From<String> for BucketName {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for BucketName {
-    fn from(value: &str) -> Self {
-        Self(value.to_string())
-    }
-}
-
-impl PartialEq<&str> for CatalogId {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
-    }
-}
-
-impl PartialEq<String> for CatalogId {
-    fn eq(&self, other: &String) -> bool {
-        &self.0 == other
-    }
-}
-
-impl PartialEq<&str> for PackageName {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
-    }
-}
-
-impl PartialEq<String> for PackageName {
-    fn eq(&self, other: &String) -> bool {
-        &self.0 == other
-    }
-}
-
-impl PartialEq<&str> for BucketName {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
-    }
-}
-
-impl PartialEq<String> for BucketName {
-    fn eq(&self, other: &String) -> bool {
-        &self.0 == other
-    }
+    };
 }
 
 #[cfg(test)]
