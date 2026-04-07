@@ -17,7 +17,7 @@ winbrew-models = { path = "crates/models" }
 winreg = "0.56"
 reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-sha2 = "0.10"
+sha2 = "0.11"
 sha1 = "0.10"
 md-5 = "0.10"
 zip = "2"
