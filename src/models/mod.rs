@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 pub use winbrew_models::{
     Architecture, CatalogInstaller, CatalogPackage, Dependency, Installer, InstallerType,
-    ModelError, PackageId, PackageKind, PackageRef, PackageSource, RawCatalogInstaller,
-    RawCatalogPackage, Validate, Version,
+    ModelError, PackageId, PackageKind, PackageName, PackageRef, PackageSource,
+    RawCatalogInstaller, RawCatalogPackage, Validate, Version,
 };
 
 pub mod config;

@@ -61,7 +61,7 @@ impl<W: Write> Ui<W> {
             row.add_cell(Cell::new(&pkg.name));
             row.add_cell(Cell::new(pkg.version.to_string()));
             row.add_cell(source_cell(pkg.source, color));
-            row.add_cell(Cell::new(&pkg.id));
+            row.add_cell(Cell::new(pkg.id.as_str()));
             row.max_height(1);
             table.add_row(row);
         }
@@ -159,7 +159,7 @@ mod tests {
 
     fn catalog_package(description: Option<&str>) -> CatalogPackage {
         CatalogPackage {
-            id: "scoop/main/Contoso.App".to_string(),
+            id: "scoop/main/Contoso.App".into(),
             name: "Contoso App".to_string(),
             version: Version::parse("1.2.3").expect("version should parse"),
             source: PackageSource::Scoop,
@@ -201,7 +201,7 @@ mod tests {
         ui.display_catalog_packages(&[
             catalog_package(Some("Short description")),
             CatalogPackage {
-                id: "winget/main/Fabrikam.Tool".to_string(),
+                id: "winget/main/Fabrikam.Tool".into(),
                 name: "Fabrikam Tool".to_string(),
                 version: Version::parse("2.0.0").expect("version should parse"),
                 source: PackageSource::Winget,

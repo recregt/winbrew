@@ -3,6 +3,7 @@ pub mod catalog_metadata;
 pub mod conversion;
 pub mod dependency;
 pub mod error;
+pub mod identifiers;
 pub mod installer;
 pub mod package;
 pub mod package_ref;
@@ -14,6 +15,7 @@ pub use catalog::{CatalogInstaller, CatalogPackage, RawCatalogInstaller, RawCata
 pub use catalog_metadata::CatalogMetadata;
 pub use dependency::Dependency;
 pub use error::ModelError;
+pub use identifiers::{BucketName, CatalogId, PackageName};
 pub use installer::{Architecture, Installer, InstallerType};
 pub use package::{Package, PackageKind, PackageSource};
 pub use package_ref::{PackageId, PackageRef};

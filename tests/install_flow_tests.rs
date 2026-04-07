@@ -13,7 +13,7 @@ use std::io::{Cursor, Write};
 use std::path::Path;
 use winbrew::AppContext;
 use winbrew::database;
-use winbrew::models::{PackageId, PackageRef};
+use winbrew::models::{PackageId, PackageName, PackageRef};
 use winbrew::services::app::install;
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;
@@ -119,7 +119,7 @@ impl InstallTestFixture {
     fn run_install(&self, ignore_checksum_security: bool) -> Result<install::InstallOutcome> {
         Ok(install::run(
             &self.ctx,
-            PackageRef::ByName(self.package_name.clone()),
+            PackageRef::ByName(PackageName::parse(self.package_name.as_str())?),
             ignore_checksum_security,
             |_query, _matches| unreachable!("install should not prompt for an exact match"),
             |_| {},

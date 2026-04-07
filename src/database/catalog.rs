@@ -49,7 +49,7 @@ pub fn get_package_by_id(conn: &Connection, package_id: &str) -> Result<Option<C
 
 fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
     let raw = RawCatalogPackage {
-        id: row.get("id")?,
+        id: row.get::<_, String>("id")?,
         name: row.get("name")?,
         version: row.get("version")?,
         source: None,
@@ -66,7 +66,7 @@ fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
 
 fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
     let raw = RawCatalogInstaller {
-        package_id: row.get("package_id")?,
+        package_id: row.get::<_, String>("package_id")?,
         url: row.get("url")?,
         hash: row.get("hash")?,
         arch: row.get("arch")?,

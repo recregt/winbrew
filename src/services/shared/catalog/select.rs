@@ -37,7 +37,7 @@ mod tests {
         kind: crate::models::InstallerType,
     ) -> CatalogInstaller {
         CatalogInstaller {
-            package_id: "Contoso.App".to_string(),
+            package_id: "Contoso.App".into(),
             url: "https://example.test/app.exe".to_string(),
             hash: "sha256:deadbeef".to_string(),
             arch,
