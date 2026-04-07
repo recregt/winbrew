@@ -63,41 +63,48 @@ func (s *Source) Name() string {
 }
 
 func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, backoff time.Duration) error {
-	if err := s.syncBuckets(ctx, maxAttempts, backoff); err != nil {
-		return err
-	}
-
 	enc := json.NewEncoder(w)
-
-	for _, bucket := range s.buckets {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		bucketDir := filepath.Join(s.cacheDir, bucket.Name)
-		if err := writeBucketJSONL(ctx, enc, bucket.Name, bucketDir); err != nil {
-			return fmt.Errorf("bucket %s: %w", bucket.Name, err)
-		}
+	type bucketState struct {
+		bucket Bucket
+		dir    string
+		ready  chan error
 	}
 
-	return nil
-}
-
-func (s *Source) syncBuckets(ctx context.Context, maxAttempts int, backoff time.Duration) error {
+	states := make([]bucketState, 0, len(s.buckets))
 	group, groupCtx := errgroup.WithContext(ctx)
 
 	for _, bucket := range s.buckets {
 		bucket := bucket
+		state := bucketState{
+			bucket: bucket,
+			dir:    filepath.Join(s.cacheDir, bucket.Name),
+			ready:  make(chan error, 1),
+		}
+		states = append(states, state)
+
 		group.Go(func() error {
-			bucketDir := filepath.Join(s.cacheDir, bucket.Name)
-			if err := retry.Do(groupCtx, maxAttempts, backoff, func() error {
-				return syncRepo(groupCtx, bucket.URL, bucketDir)
-			}); err != nil {
-				return fmt.Errorf("bucket %s: %w", bucket.Name, err)
+			err := retry.Do(groupCtx, maxAttempts, backoff, func() error {
+				return syncRepo(groupCtx, bucket.URL, state.dir)
+			})
+			if err != nil {
+				err = fmt.Errorf("bucket %s: %w", bucket.Name, err)
 			}
 
-			return nil
+			state.ready <- err
+			close(state.ready)
+			return err
 		})
+	}
+
+	for _, state := range states {
+		err := <-state.ready
+		if err != nil {
+			return err
+		}
+
+		if err := writeBucketJSONL(ctx, enc, state.bucket.Name, state.dir); err != nil {
+			return fmt.Errorf("bucket %s: %w", state.bucket.Name, err)
+		}
 	}
 
 	return group.Wait()
