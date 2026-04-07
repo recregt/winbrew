@@ -112,9 +112,9 @@ where
             }
         };
 
-        if let Err(message) = envelope.validate() {
+        if let Err(err) = envelope.validate() {
             return Err(ParserError::Contract(format!(
-                "failed to decode scoop envelope on line {line_number}: {message}"
+                "failed to decode scoop envelope on line {line_number}: {err}"
             )));
         }
 

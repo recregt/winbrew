@@ -5,6 +5,7 @@ pub mod error;
 pub mod installer;
 pub mod package;
 pub mod package_ref;
+pub mod raw;
 pub mod validation;
 pub mod version;
 
@@ -14,5 +15,6 @@ pub use error::ModelError;
 pub use installer::{Architecture, Installer, InstallerType};
 pub use package::{Package, PackageKind, PackageSource};
 pub use package_ref::{PackageId, PackageRef};
+pub use raw::{RawFetchedInstaller, RawFetchedPackage, ScoopStreamEnvelope};
 pub use validation::Validate;
 pub use version::Version;
