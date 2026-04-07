@@ -43,7 +43,8 @@ func extractFile(f *zip.File, dst string) error {
 	}
 	tempPath := out.Name()
 
-	if _, err := io.Copy(out, rc); err != nil {
+	buf := make([]byte, 32*1024)
+	if _, err := io.CopyBuffer(out, rc, buf); err != nil {
 		_ = out.Close()
 		_ = os.Remove(tempPath)
 		return fmt.Errorf("failed to extract file: %w", err)
