@@ -26,18 +26,28 @@ jobs:
         with:
           fetch-depth: 1
 
-      - uses: semgrep/semgrep-action@v1
+      - uses: actions/setup-python@v5
         with:
-          config: p/default
-          generateSarif: true
-          auditOn: push pull_request schedule
+          python-version: '3.11'
+
+      - name: Install Semgrep
+        run: python -m pip install --upgrade pip semgrep
+
+      - name: Run Semgrep Scan
+        id: semgrep
+        continue-on-error: true
+        run: semgrep scan --config p/default --sarif --output semgrep.sarif .
         env:
           SEMGREP_SEND_METRICS: 0
 
-      - uses: github/codeql-action/upload-sarif@v3
-        if: failure() || success()
+      - uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('semgrep.sarif') != ''
         with:
           sarif_file: semgrep.sarif
+
+      - name: Fail on Semgrep errors
+        if: steps.semgrep.outcome == 'failure'
+        run: exit 1
 
   cargo-audit:
     name: Rust Audit
@@ -71,7 +81,7 @@ jobs:
           GITLEAKS_REPORT_FORMAT: sarif
           GITLEAKS_REPORT_PATH: gitleaks.sarif
 
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: gitleaks.sarif
@@ -99,7 +109,7 @@ jobs:
           output-format: sarif
           output-file: govulncheck.sarif
 
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: infra/${{ matrix.module }}/govulncheck.sarif
