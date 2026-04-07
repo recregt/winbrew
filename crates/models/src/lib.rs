@@ -1,4 +1,5 @@
 pub mod catalog;
+pub mod catalog_metadata;
 pub mod conversion;
 pub mod dependency;
 pub mod error;
@@ -10,6 +11,7 @@ pub mod validation;
 pub mod version;
 
 pub use catalog::{CatalogInstaller, CatalogPackage, RawCatalogInstaller, RawCatalogPackage};
+pub use catalog_metadata::CatalogMetadata;
 pub use dependency::Dependency;
 pub use error::ModelError;
 pub use installer::{Architecture, Installer, InstallerType};

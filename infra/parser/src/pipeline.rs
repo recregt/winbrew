@@ -5,11 +5,11 @@ use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
+use winbrew_models::ScoopStreamEnvelope;
 
 use crate::error::ParserError;
 use crate::metadata::{CatalogMetadata, write_metadata};
 use crate::parser::{ParsedPackage, parse_package};
-use crate::raw::ScoopStreamEnvelope;
 use crate::sqlite::CatalogWriter;
 use crate::winget::read_winget_packages;
 
