@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::models::{CatalogInstaller, CatalogPackage};
+use crate::models::{CatalogInstaller, CatalogPackage, PackageSource, Version};
 
 pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
     let query = query.trim();
@@ -49,12 +49,15 @@ pub fn get_package_by_id(conn: &Connection, package_id: &str) -> Result<Option<C
 
 fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
     let id: String = row.get("id")?;
+    let version: String = row.get("version")?;
 
     Ok(CatalogPackage {
         source: package_source_from_id(&id),
         id,
         name: row.get("name")?,
-        version: row.get("version")?,
+        version: Version::parse(&version).map_err(|err| {
+            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
+        })?,
         description: row.get("description")?,
         homepage: row.get("homepage")?,
         license: row.get("license")?,
@@ -62,10 +65,13 @@ fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
     })
 }
 
-fn package_source_from_id(id: &str) -> String {
+fn package_source_from_id(id: &str) -> PackageSource {
     id.split_once('/')
-        .map(|(source, _)| source.to_string())
-        .unwrap_or_else(|| id.to_string())
+        .map(|(source, _)| match source {
+            "scoop" => PackageSource::Scoop,
+            _ => PackageSource::Winget,
+        })
+        .unwrap_or(PackageSource::Winget)
 }
 
 fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {

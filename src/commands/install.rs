@@ -117,7 +117,7 @@ fn format_catalog_choice(pkg: &CatalogPackage) -> String {
     let mut label = String::with_capacity(128);
     label.push_str(&pkg.name);
     label.push(' ');
-    label.push_str(&pkg.version);
+    label.push_str(&pkg.version.to_string());
 
     if let Some(publisher) = pkg
         .publisher

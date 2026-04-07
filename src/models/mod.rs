@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+pub use winbrew_models::{
+    Architecture, CatalogInstaller, CatalogPackage, Dependency, Installer, InstallerType,
+    ModelError, PackageId, PackageKind, PackageRef, PackageSource, Validate, Version,
+};
+
 pub mod config;
 pub mod diagnostics;
 pub mod info;
@@ -10,7 +15,6 @@ pub mod report;
 
 pub use diagnostics::DiagnosisResult;
 pub use info::InfoReport;
-pub use package_ref::{PackageId, PackageRef};
 pub use report::{HealthReport, ReportSection, RuntimeReport};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
@@ -70,25 +74,4 @@ impl PackageQuery {
     pub fn text(&self) -> String {
         self.terms.join(" ")
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct CatalogPackage {
-    pub id: String,
-    pub name: String,
-    pub version: String,
-    pub source: String,
-    pub description: Option<String>,
-    pub homepage: Option<String>,
-    pub license: Option<String>,
-    pub publisher: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct CatalogInstaller {
-    pub package_id: String,
-    pub url: String,
-    pub hash: String,
-    pub arch: String,
-    pub kind: String,
 }

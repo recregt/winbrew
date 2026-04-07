@@ -37,9 +37,10 @@ where
     let installer =
         catalog::select_installer(&database::get_installers(&catalog_conn, &package.id)?)?;
     let engine = engines::get_engine(&installer)?;
+    let package_version = package.version.to_string();
 
     let install_dir = ctx.paths.packages.join(&package.name);
-    let temp_root = temp_workspace::build_temp_root(&package.name, &package.version);
+    let temp_root = temp_workspace::build_temp_root(&package.name, &package_version);
 
     if let Some(parent) = install_dir.parent() {
         fs::create_dir_all(parent)?;
@@ -53,7 +54,7 @@ where
     state::mark_installing(
         &conn,
         package.name.clone(),
-        package.version.clone(),
+        package_version.clone(),
         installer.kind.clone(),
         &install_dir,
     )?;
@@ -94,7 +95,7 @@ where
 
     let install_result = InstallResult {
         name: package.name,
-        version: package.version,
+        version: package_version,
         install_dir: install_dir.to_string_lossy().to_string(),
     };
 
