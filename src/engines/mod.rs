@@ -59,3 +59,32 @@ impl PackageEngine for EngineKind {
         registry::remove(*self, package)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{EngineKind, get_engine_kind};
+    use crate::models::InstallerType;
+
+    #[test]
+    fn get_engine_kind_maps_supported_types() {
+        assert_eq!(
+            get_engine_kind(InstallerType::Msix).unwrap(),
+            EngineKind::Msix
+        );
+        assert_eq!(
+            get_engine_kind(InstallerType::Zip).unwrap(),
+            EngineKind::Zip
+        );
+        assert_eq!(
+            get_engine_kind(InstallerType::Portable).unwrap(),
+            EngineKind::Portable
+        );
+    }
+
+    #[test]
+    fn get_engine_kind_rejects_exe() {
+        let err = get_engine_kind(InstallerType::Exe).expect_err("exe should not map to an engine");
+
+        assert!(err.to_string().contains("unsupported installer type 'exe'"));
+    }
+}

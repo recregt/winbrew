@@ -3,7 +3,8 @@ mod plan;
 
 use thiserror::Error;
 
-pub use crate::models::InstallerType;
+use crate::models::InstallerType;
+
 pub use crate::models::remove::RemovalPlan;
 pub use execution::execute_removal;
 pub use plan::{find_dependents, plan_removal};
