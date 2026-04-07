@@ -8,8 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"winbrew/infra/pkg/normalize"
 )
 
 var sourceURL = "https://cdn.winget.microsoft.com/cache/source.msix"
@@ -43,19 +41,6 @@ func New(httpClient *http.Client, cacheDir string) (*Source, error) {
 
 func (s *Source) Name() string {
 	return sourceName
-}
-
-func (s *Source) Fetch(ctx context.Context) ([]normalize.Package, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	dbPath := filepath.Join(s.cacheDir, "winget-index.db")
-	if err := s.DownloadSourceDB(ctx, dbPath); err != nil {
-		return nil, fmt.Errorf("failed to download winget source: %w", err)
-	}
-
-	return readPackages(ctx, dbPath)
 }
 
 func (s *Source) DownloadSourceDB(ctx context.Context, dst string) error {
