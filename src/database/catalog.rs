@@ -75,11 +75,18 @@ fn package_source_from_id(id: &str) -> PackageSource {
 }
 
 fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
+    let arch_raw: String = row.get("arch")?;
+    let kind_raw: String = row.get("type")?;
+
     Ok(CatalogInstaller {
         package_id: row.get("package_id")?,
         url: row.get("url")?,
         hash: row.get("hash")?,
-        arch: row.get("arch")?,
-        kind: row.get("type")?,
+        arch: arch_raw.parse().map_err(|err: crate::models::ModelError| {
+            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
+        })?,
+        kind: kind_raw.parse().map_err(|err: crate::models::ModelError| {
+            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
+        })?,
     })
 }

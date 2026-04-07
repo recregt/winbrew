@@ -12,6 +12,8 @@ pub enum ModelError {
     InvalidVersion { value: String, reason: String },
     #[error("invalid package id {value}: {reason}")]
     InvalidPackageId { value: String, reason: String },
+    #[error("invalid {field}: {value}")]
+    InvalidEnumValue { field: &'static str, value: String },
 }
 
 impl ModelError {
@@ -44,6 +46,13 @@ impl ModelError {
         Self::InvalidPackageId {
             value: value.into(),
             reason: reason.into(),
+        }
+    }
+
+    pub fn invalid_enum_value(field: &'static str, value: impl Into<String>) -> Self {
+        Self::InvalidEnumValue {
+            field,
+            value: value.into(),
         }
     }
 }

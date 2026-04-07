@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow};
 use std::path::Path;
 
 use crate::core::network::is_zip_path;
-use crate::models::{CatalogInstaller, Package};
+use crate::models::{CatalogInstaller, InstallerType, Package};
 
 use super::{EngineKind, msix, portable, zip};
 
@@ -19,33 +19,29 @@ struct EngineDescriptor {
     matches_kind: MatchesKindFn,
 }
 
-fn normalize_eq(value: &str, expected: &str) -> bool {
-    value.trim().eq_ignore_ascii_case(expected)
-}
-
 fn matches_msix_installer(installer: &CatalogInstaller) -> bool {
-    normalize_eq(&installer.kind, "msix")
+    installer.kind == InstallerType::Msix
 }
 
 fn matches_msix_kind(kind: &str) -> bool {
-    normalize_eq(kind, "msix")
+    kind.trim().eq_ignore_ascii_case("msix")
 }
 
 fn matches_zip_installer(installer: &CatalogInstaller) -> bool {
-    normalize_eq(&installer.kind, "zip")
-        || (normalize_eq(&installer.kind, "portable") && is_zip_path(&installer.url))
+    installer.kind == InstallerType::Zip
+        || (installer.kind == InstallerType::Portable && is_zip_path(&installer.url))
 }
 
 fn matches_zip_kind(kind: &str) -> bool {
-    normalize_eq(kind, "zip")
+    kind.trim().eq_ignore_ascii_case("zip")
 }
 
 fn matches_portable_installer(installer: &CatalogInstaller) -> bool {
-    normalize_eq(&installer.kind, "portable")
+    installer.kind == InstallerType::Portable
 }
 
 fn matches_portable_kind(kind: &str) -> bool {
-    normalize_eq(kind, "portable")
+    kind.trim().eq_ignore_ascii_case("portable")
 }
 
 fn msix_install(
@@ -115,7 +111,7 @@ pub(crate) fn resolve_engine_kind_for_installer(
         .iter()
         .find(|descriptor| (descriptor.matches_installer)(installer))
         .map(|descriptor| descriptor.kind)
-        .ok_or_else(|| anyhow!("unsupported installer type '{}'", installer.kind.trim()))
+        .ok_or_else(|| anyhow!("unsupported installer type '{}'", installer.kind.as_str()))
 }
 
 pub(crate) fn resolve_engine_kind_for_kind(kind: &str) -> Result<EngineKind> {
@@ -161,8 +157,8 @@ mod tests {
             package_id: "Contoso.App".to_string(),
             url: url.to_string(),
             hash: "hash".to_string(),
-            arch: "x64".to_string(),
-            kind: kind.to_string(),
+            arch: "x64".parse().expect("arch should parse"),
+            kind: kind.parse().expect("kind should parse"),
         }
     }
 
