@@ -51,8 +51,8 @@ fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
     let id: String = row.get("id")?;
     let version: String = row.get("version")?;
 
-    Ok(CatalogPackage {
-        source: package_source_from_id(&id),
+    let package = CatalogPackage {
+        source: PackageSource::from_catalog_id(&id),
         id,
         name: row.get("name")?,
         version: Version::parse(&version).map_err(|err| {
@@ -62,23 +62,20 @@ fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
         homepage: row.get("homepage")?,
         license: row.get("license")?,
         publisher: row.get("publisher")?,
-    })
-}
+    };
 
-fn package_source_from_id(id: &str) -> PackageSource {
-    id.split_once('/')
-        .map(|(source, _)| match source {
-            "scoop" => PackageSource::Scoop,
-            _ => PackageSource::Winget,
-        })
-        .unwrap_or(PackageSource::Winget)
+    package.validate().map_err(|err| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
+    })?;
+
+    Ok(package)
 }
 
 fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
     let arch_raw: String = row.get("arch")?;
     let kind_raw: String = row.get("type")?;
 
-    Ok(CatalogInstaller {
+    let installer = CatalogInstaller {
         package_id: row.get("package_id")?,
         url: row.get("url")?,
         hash: row.get("hash")?,
@@ -88,5 +85,11 @@ fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
         kind: kind_raw.parse().map_err(|err: crate::models::ModelError| {
             rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
         })?,
-    })
+    };
+
+    installer.validate().map_err(|err| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
+    })?;
+
+    Ok(installer)
 }

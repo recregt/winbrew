@@ -14,6 +14,12 @@ pub enum ModelError {
     InvalidPackageId { value: String, reason: String },
     #[error("invalid {field}: {value}")]
     InvalidEnumValue { field: &'static str, value: String },
+    #[error("source mismatch for {field}: expected {expected}, got {actual}")]
+    SourceMismatch {
+        field: &'static str,
+        expected: String,
+        actual: String,
+    },
 }
 
 impl ModelError {
@@ -53,6 +59,18 @@ impl ModelError {
         Self::InvalidEnumValue {
             field,
             value: value.into(),
+        }
+    }
+
+    pub fn source_mismatch(
+        field: &'static str,
+        expected: impl Into<String>,
+        actual: impl Into<String>,
+    ) -> Self {
+        Self::SourceMismatch {
+            field,
+            expected: expected.into(),
+            actual: actual.into(),
         }
     }
 }

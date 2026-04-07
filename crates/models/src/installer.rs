@@ -111,8 +111,20 @@ impl core::fmt::Display for Architecture {
     }
 }
 
+impl From<Architecture> for String {
+    fn from(value: Architecture) -> Self {
+        value.to_string()
+    }
+}
+
 impl core::fmt::Display for InstallerType {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+impl From<InstallerType> for String {
+    fn from(value: InstallerType) -> Self {
+        value.to_string()
     }
 }
