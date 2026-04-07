@@ -130,3 +130,111 @@ fn hash_file(path: &Path) -> Result<String, ParserError> {
 
     Ok(format!("sha256:{digest_hex}"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::RunConfig;
+    use super::run;
+    use rusqlite::Connection;
+    use serde_json::Value;
+    use std::fs;
+    use std::io::Cursor;
+    use std::path::PathBuf;
+    use std::process;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_dir(name: &str) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        std::env::temp_dir().join(format!("winbrew-{name}-{}-{stamp}", process::id()))
+    }
+
+    fn create_winget_db(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+        let connection = Connection::open(path)?;
+        connection.execute_batch(
+            r#"
+            CREATE TABLE ids (id TEXT NOT NULL);
+            CREATE TABLE names (name TEXT NOT NULL);
+            CREATE TABLE versions (version TEXT NOT NULL);
+            CREATE TABLE manifest (id INTEGER NOT NULL, name INTEGER NOT NULL, version INTEGER NOT NULL);
+            CREATE TABLE norm_publishers (norm_publisher TEXT NOT NULL);
+            CREATE TABLE norm_publishers_map (manifest INTEGER NOT NULL, norm_publisher INTEGER NOT NULL);
+            "#,
+        )?;
+
+        connection.execute("INSERT INTO ids(id) VALUES (?1)", ["Contoso.App"])?;
+        let id_rowid = connection.last_insert_rowid();
+        connection.execute("INSERT INTO names(name) VALUES (?1)", ["Contoso App"])?;
+        let name_rowid = connection.last_insert_rowid();
+        connection.execute("INSERT INTO versions(version) VALUES (?1)", ["2.0.0"])?;
+        let version_rowid = connection.last_insert_rowid();
+        connection.execute(
+            "INSERT INTO manifest(id, name, version) VALUES (?1, ?2, ?3)",
+            [id_rowid, name_rowid, version_rowid],
+        )?;
+        let manifest_rowid = connection.last_insert_rowid();
+        connection.execute(
+            "INSERT INTO norm_publishers(norm_publisher) VALUES (?1)",
+            ["Contoso Ltd."],
+        )?;
+        let publisher_rowid = connection.last_insert_rowid();
+        connection.execute(
+            "INSERT INTO norm_publishers_map(manifest, norm_publisher) VALUES (?1, ?2)",
+            [manifest_rowid, publisher_rowid],
+        )?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn run_builds_catalog_metadata_from_streamed_and_staged_inputs()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = unique_temp_dir("parser-e2e");
+        fs::create_dir_all(&root)?;
+
+        let winget_db_path = root.join("winget.db");
+        create_winget_db(&winget_db_path)?;
+
+        let output_db_path = root.join("catalog.db");
+        let metadata_path = root.join("metadata.json");
+
+        let scoop_jsonl = r#"
+{"id":"scoop/main/example","name":"Example Tool","version":"1.2.3","description":"Example package","homepage":"https://example.invalid","license":"MIT","publisher":"Example Corp","installers":[{"url":"https://example.invalid/example.zip","hash":"abcd","arch":"x64","type":"portable"}]}
+"#;
+
+        let metadata = run(
+            Cursor::new(scoop_jsonl.as_bytes().to_vec()),
+            RunConfig::new(winget_db_path.clone(), output_db_path.clone())
+                .with_metadata_path(metadata_path.clone()),
+        )?;
+
+        assert_eq!(metadata.schema_version, 1);
+        assert_eq!(metadata.package_count, 2);
+        assert_eq!(metadata.source_counts.get("scoop"), Some(&1));
+        assert_eq!(metadata.source_counts.get("winget"), Some(&1));
+        assert!(metadata.current_hash.starts_with("sha256:"));
+        assert!(metadata.previous_hash.is_empty());
+
+        let metadata_text = fs::read_to_string(&metadata_path)?;
+        let decoded: Value = serde_json::from_str(&metadata_text)?;
+        assert_eq!(decoded["package_count"], 2);
+        assert_eq!(decoded["source_counts"]["scoop"], 1);
+        assert_eq!(decoded["source_counts"]["winget"], 1);
+
+        let connection = Connection::open(&output_db_path)?;
+        let package_count: i64 =
+            connection.query_row("SELECT COUNT(*) FROM catalog_packages", [], |row| {
+                row.get(0)
+            })?;
+        let installer_count: i64 =
+            connection.query_row("SELECT COUNT(*) FROM catalog_installers", [], |row| {
+                row.get(0)
+            })?;
+        assert_eq!(package_count, 2);
+        assert_eq!(installer_count, 1);
+
+        Ok(())
+    }
+}
