@@ -1,6 +1,7 @@
 package scoop
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -63,7 +64,8 @@ func (s *Source) Name() string {
 }
 
 func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, backoff time.Duration) error {
-	enc := json.NewEncoder(w)
+	bufferedWriter := bufio.NewWriterSize(w, 64*1024)
+	enc := json.NewEncoder(bufferedWriter)
 	type bucketState struct {
 		bucket Bucket
 		dir    string
@@ -105,6 +107,10 @@ func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, b
 		if err := writeBucketJSONL(ctx, enc, state.bucket.Name, state.dir); err != nil {
 			return fmt.Errorf("bucket %s: %w", state.bucket.Name, err)
 		}
+	}
+
+	if err := bufferedWriter.Flush(); err != nil {
+		return fmt.Errorf("failed to flush JSONL output: %w", err)
 	}
 
 	return group.Wait()
