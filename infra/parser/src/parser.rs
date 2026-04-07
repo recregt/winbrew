@@ -71,7 +71,9 @@ fn parse_installer(
 }
 
 fn validate_envelope(envelope: ScoopStreamEnvelope) -> Result<RawFetchedPackage, ParserError> {
-    envelope.validate().map_err(ParserError::Contract)?;
+    envelope
+        .validate()
+        .map_err(|err| ParserError::Contract(err.to_string()))?;
     Ok(envelope.payload)
 }
 

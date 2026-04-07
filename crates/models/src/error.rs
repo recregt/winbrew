@@ -20,6 +20,8 @@ pub enum ModelError {
         expected: String,
         actual: String,
     },
+    #[error("invalid contract for {field}: {reason}")]
+    InvalidContract { field: &'static str, reason: String },
 }
 
 impl ModelError {
@@ -71,6 +73,13 @@ impl ModelError {
             field,
             expected: expected.into(),
             actual: actual.into(),
+        }
+    }
+
+    pub fn invalid_contract(field: &'static str, reason: impl Into<String>) -> Self {
+        Self::InvalidContract {
+            field,
+            reason: reason.into(),
         }
     }
 }
