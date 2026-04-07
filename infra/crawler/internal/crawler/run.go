@@ -44,7 +44,7 @@ func (s crawlerSources) Close() error {
 }
 
 func Run(ctx context.Context, configPath, wingetOutPath string) error {
-	cfg, err := config.Load(configPath)
+	cfg, err := config.LoadContext(ctx, configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
