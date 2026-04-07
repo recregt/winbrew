@@ -165,7 +165,7 @@ fn install_runs_end_to_end_in_an_isolated_root() -> Result<()> {
     let stored = database::get_package(&conn, "Winbrew Test Zip")?
         .expect("package should be marked as installed");
     assert_eq!(stored.status, winbrew::models::PackageStatus::Ok);
-    assert_eq!(stored.kind, "zip");
+    assert_eq!(stored.kind, winbrew::models::InstallerType::Zip);
     fixture.assert_downloaded();
 
     Ok(())

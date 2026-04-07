@@ -5,13 +5,13 @@ use anyhow::Result;
 use common::db::{init_database, reset_installed_packages};
 use common::shared_root::test_root;
 use winbrew::database;
-use winbrew::models::{Package, PackageStatus};
+use winbrew::models::{InstallerType, Package, PackageStatus};
 
 fn sample_package(name: &str, status: PackageStatus) -> Package {
     Package {
         name: name.to_string(),
         version: "1.0.0".to_string(),
-        kind: "portable".to_string(),
+        kind: InstallerType::Portable,
         install_dir: format!(r"C:\\winbrew\\packages\\{name}"),
         msix_package_full_name: Some(format!("{name}_1.0.0_x64__8wekyb3d8bbwe")),
         dependencies: vec!["dep-a".to_string(), "dep-b".to_string()],

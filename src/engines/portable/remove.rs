@@ -14,7 +14,7 @@ pub fn remove(package: &Package) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::remove;
-    use crate::models::{Package, PackageStatus};
+    use crate::models::{InstallerType, Package, PackageStatus};
     use std::fs;
     use tempfile::tempdir;
 
@@ -22,7 +22,7 @@ mod tests {
         Package {
             name: name.to_string(),
             version: "1.0.0".to_string(),
-            kind: "portable".to_string(),
+            kind: InstallerType::Portable,
             install_dir: install_dir.to_string_lossy().into_owned(),
             msix_package_full_name: None,
             dependencies: Vec::new(),

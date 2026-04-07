@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use rusqlite::{Connection, Error as SqlError, OptionalExtension, params, types::Type};
 use thiserror::Error;
 
-use crate::models::{Package, PackageStatus};
+use crate::models::{InstallerType, Package, PackageStatus};
 
 #[derive(Debug, Error)]
 #[error("package '{name}' not found")]
@@ -21,7 +21,7 @@ pub fn insert_package(conn: &Connection, pkg: &Package) -> Result<()> {
         params![
             pkg.name,
             pkg.version,
-            pkg.kind,
+            pkg.kind.to_string(),
             pkg.install_dir,
             pkg.msix_package_full_name,
             deps,
@@ -126,19 +126,24 @@ pub fn delete_package(conn: &Connection, name: &str) -> Result<bool> {
 }
 
 fn row_to_package(row: &rusqlite::Row) -> std::result::Result<Package, SqlError> {
+    const COL_KIND: usize = 2;
     const COL_DEPENDENCIES: usize = 4;
 
     let dependencies_raw: String = row.get("dependencies")?;
     let status_raw: String = row.get("status")?;
+    let kind_raw: String = row.get("kind")?;
 
     let dependencies: Vec<String> = serde_json::from_str(&dependencies_raw).map_err(|err| {
         SqlError::FromSqlConversionFailure(COL_DEPENDENCIES, Type::Text, Box::new(err))
     })?;
+    let kind = kind_raw
+        .parse::<InstallerType>()
+        .map_err(|err| SqlError::FromSqlConversionFailure(COL_KIND, Type::Text, Box::new(err)))?;
 
     Ok(Package {
         name: row.get("name")?,
         version: row.get("version")?,
-        kind: row.get("kind")?,
+        kind,
         install_dir: row.get("install_dir")?,
         msix_package_full_name: row.get("msix_package_full_name")?,
         dependencies,

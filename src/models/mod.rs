@@ -57,7 +57,7 @@ impl std::fmt::Display for PackageStatus {
 pub struct Package {
     pub name: String,
     pub version: String,
-    pub kind: String,
+    pub kind: InstallerType,
     pub install_dir: String,
     pub msix_package_full_name: Option<String>,
     pub dependencies: Vec<String>,
