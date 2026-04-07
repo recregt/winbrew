@@ -1,0 +1,231 @@
+package publisher
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+)
+
+const defaultObjectKey = "catalog.db"
+
+type Config struct {
+	Endpoint        string
+	BucketName      string
+	AccessKeyID     string
+	SecretAccessKey string
+	Region          string
+}
+
+func Run(ctx context.Context, inputPath, metadataPath, objectKey string) error {
+	if strings.TrimSpace(inputPath) == "" {
+		inputPath = strings.TrimSpace(os.Getenv("WINBREW_DB_PATH"))
+	}
+	if inputPath == "" {
+		return fmt.Errorf("input path cannot be empty")
+	}
+	if strings.TrimSpace(metadataPath) == "" {
+		metadataPath = defaultMetadataPath(inputPath)
+	}
+
+	if strings.TrimSpace(objectKey) == "" {
+		objectKey = defaultObjectKey
+	}
+
+	cfg, err := LoadConfigFromEnv()
+	if err != nil {
+		return err
+	}
+
+	client, err := newClient(cfg)
+	if err != nil {
+		return err
+	}
+
+	localMetadata, err := LoadMetadata(metadataPath)
+	if err != nil {
+		return err
+	}
+
+	inputHash, err := hashFile(inputPath)
+	if err != nil {
+		return err
+	}
+	if localMetadata.CurrentHash != inputHash {
+		return fmt.Errorf("metadata current hash mismatch: expected %s, got %s", localMetadata.CurrentHash, inputHash)
+	}
+
+	metadataKey := metadataKeyForObjectKey(objectKey)
+	remoteMetadata, err := loadRemoteMetadata(ctx, client, cfg.BucketName, metadataKey)
+	if err != nil {
+		return err
+	}
+	if remoteMetadata != nil && remoteMetadata.CurrentHash == localMetadata.CurrentHash {
+		return nil
+	}
+	if remoteMetadata != nil && remoteMetadata.CurrentHash != "" {
+		localMetadata.PreviousHash = remoteMetadata.CurrentHash
+	}
+
+	if err := SaveMetadata(metadataPath, localMetadata); err != nil {
+		return err
+	}
+
+	if _, err := client.FPutObject(ctx, cfg.BucketName, objectKey, inputPath, minio.PutObjectOptions{
+		ContentType: "application/octet-stream",
+	}); err != nil {
+		return fmt.Errorf("failed to upload %s to bucket %s: %w", filepath.Base(inputPath), cfg.BucketName, err)
+	}
+
+	if _, err := client.FPutObject(ctx, cfg.BucketName, metadataKey, metadataPath, minio.PutObjectOptions{
+		ContentType: "application/json",
+	}); err != nil {
+		return fmt.Errorf("failed to upload metadata to bucket %s: %w", cfg.BucketName, err)
+	}
+
+	return nil
+}
+
+func LoadConfigFromEnv() (Config, error) {
+	cfg := Config{
+		Endpoint:        strings.TrimSpace(os.Getenv("R2_ENDPOINT")),
+		BucketName:      strings.TrimSpace(os.Getenv("R2_BUCKET_NAME")),
+		AccessKeyID:     firstNonEmpty(os.Getenv("R2_ACCESS_KEY_ID"), os.Getenv("AWS_ACCESS_KEY_ID")),
+		SecretAccessKey: firstNonEmpty(os.Getenv("R2_SECRET_ACCESS_KEY"), os.Getenv("AWS_SECRET_ACCESS_KEY")),
+		Region:          firstNonEmpty(os.Getenv("R2_REGION"), "auto"),
+	}
+
+	if cfg.Endpoint == "" {
+		return Config{}, fmt.Errorf("R2_ENDPOINT cannot be empty")
+	}
+	if cfg.BucketName == "" {
+		return Config{}, fmt.Errorf("R2_BUCKET_NAME cannot be empty")
+	}
+	if cfg.AccessKeyID == "" {
+		return Config{}, fmt.Errorf("access key id cannot be empty")
+	}
+	if cfg.SecretAccessKey == "" {
+		return Config{}, fmt.Errorf("secret access key cannot be empty")
+	}
+
+	return cfg, nil
+}
+
+func newClient(cfg Config) (*minio.Client, error) {
+	host, secure, err := normalizeEndpoint(cfg.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := minio.New(host, &minio.Options{
+		Creds:        credentials.NewStaticV4(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
+		Secure:       secure,
+		Region:       cfg.Region,
+		BucketLookup: minio.BucketLookupPath,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create R2 client: %w", err)
+	}
+
+	return client, nil
+}
+
+func normalizeEndpoint(raw string) (string, bool, error) {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", false, fmt.Errorf("invalid R2_ENDPOINT: %w", err)
+	}
+
+	if parsed.Scheme == "" {
+		return raw, true, nil
+	}
+	if parsed.Host == "" {
+		return "", false, fmt.Errorf("invalid R2_ENDPOINT: %q", raw)
+	}
+
+	switch parsed.Scheme {
+	case "http":
+		return parsed.Host, false, nil
+	case "https":
+		return parsed.Host, true, nil
+	default:
+		return "", false, fmt.Errorf("unsupported R2_ENDPOINT scheme: %s", parsed.Scheme)
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func defaultMetadataPath(inputPath string) string {
+	return filepath.Join(filepath.Dir(inputPath), "metadata.json")
+}
+
+func hashFile(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to open file for hashing: %w", err)
+	}
+	defer file.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return "", fmt.Errorf("failed to hash file: %w", err)
+	}
+
+	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+func loadRemoteMetadata(ctx context.Context, client *minio.Client, bucketName, metadataKey string) (*Metadata, error) {
+	object, err := client.GetObject(ctx, bucketName, metadataKey, minio.GetObjectOptions{})
+	if err != nil {
+		if isMissingObject(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to open remote metadata: %w", err)
+	}
+	defer object.Close()
+
+	if _, err := object.Stat(); err != nil {
+		if isMissingObject(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to stat remote metadata: %w", err)
+	}
+
+	data, err := io.ReadAll(object)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read remote metadata: %w", err)
+	}
+
+	var metadata Metadata
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return nil, fmt.Errorf("failed to decode remote metadata: %w", err)
+	}
+
+	return &metadata, nil
+}
+
+func isMissingObject(err error) bool {
+	response := minio.ToErrorResponse(err)
+	switch response.Code {
+	case "NoSuchKey", "NoSuchObject", "NotFound":
+		return true
+	default:
+		return false
+	}
+}

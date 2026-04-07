@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func extractDB(msixPath, dstDir string) (string, error) {
+func extractDB(msixPath, dstPath string) (string, error) {
 	r, err := zip.OpenReader(msixPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open msix: %w", err)
@@ -21,11 +21,10 @@ func extractDB(msixPath, dstDir string) (string, error) {
 			continue
 		}
 
-		dbPath := filepath.Join(dstDir, "winget-index.db")
-		if err := extractFile(f, dbPath); err != nil {
+		if err := extractFile(f, dstPath); err != nil {
 			return "", err
 		}
-		return dbPath, nil
+		return dstPath, nil
 	}
 
 	return "", fmt.Errorf("index.db not found in msix")

@@ -12,8 +12,9 @@ import (
 	"winbrew/infra/pkg/normalize"
 )
 
+var sourceURL = "https://cdn.winget.microsoft.com/cache/source.msix"
+
 const (
-	sourceURL       = "https://cdn.winget.microsoft.com/cache/source.msix"
 	sourceName      = "winget"
 	maxDownloadSize = 2 << 30
 )
@@ -49,18 +50,37 @@ func (s *Source) Fetch(ctx context.Context) ([]normalize.Package, error) {
 		return nil, err
 	}
 
-	msixPath := filepath.Join(s.cacheDir, "winget-source.msix")
-
-	if err := s.download(ctx, sourceURL, msixPath); err != nil {
+	dbPath := filepath.Join(s.cacheDir, "winget-index.db")
+	if err := s.DownloadSourceDB(ctx, dbPath); err != nil {
 		return nil, fmt.Errorf("failed to download winget source: %w", err)
 	}
 
-	dbPath, err := extractDB(msixPath, s.cacheDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract winget db: %w", err)
+	return readPackages(ctx, dbPath)
+}
+
+func (s *Source) DownloadSourceDB(ctx context.Context, dst string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(dst) == "" {
+		return fmt.Errorf("destination path cannot be empty")
 	}
 
-	return readPackages(ctx, dbPath)
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("failed to create destination dir: %w", err)
+	}
+
+	msixPath := filepath.Join(s.cacheDir, "winget-source.msix")
+
+	if err := s.download(ctx, sourceURL, msixPath); err != nil {
+		return fmt.Errorf("failed to download winget source: %w", err)
+	}
+
+	if _, err := extractDB(msixPath, dst); err != nil {
+		return fmt.Errorf("failed to extract winget db: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Source) download(ctx context.Context, url, dst string) error {

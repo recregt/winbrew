@@ -1,0 +1,123 @@
+use winbrew_models::{
+    Architecture, CatalogInstaller, CatalogPackage, InstallerType, PackageSource, Version,
+};
+
+use crate::error::ParserError;
+use crate::raw::{RawFetchedInstaller, RawFetchedPackage};
+
+#[derive(Debug, Clone)]
+pub struct ParsedPackage {
+    pub package: CatalogPackage,
+    pub installers: Vec<CatalogInstaller>,
+    pub raw_json: String,
+}
+
+pub fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, ParserError> {
+    let raw_json = serde_json::to_string(&raw)?;
+
+    let package = CatalogPackage {
+        id: raw.id.clone(),
+        name: raw.name,
+        version: Version::parse(&raw.version)?,
+        source: PackageSource::from_catalog_id(&raw.id),
+        description: raw.description,
+        homepage: raw.homepage,
+        license: raw.license,
+        publisher: raw.publisher,
+    };
+    package.validate()?;
+
+    let installers = raw
+        .installers
+        .into_iter()
+        .map(|installer| parse_installer(&raw.id, installer))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(ParsedPackage {
+        package,
+        installers,
+        raw_json,
+    })
+}
+
+pub fn parse_packages(
+    raw_packages: Vec<RawFetchedPackage>,
+) -> Result<Vec<ParsedPackage>, ParserError> {
+    raw_packages.into_iter().map(parse_package).collect()
+}
+
+pub fn parse_packages_json(input: &str) -> Result<Vec<ParsedPackage>, ParserError> {
+    let raw_packages: Vec<RawFetchedPackage> = serde_json::from_str(input)?;
+    parse_packages(raw_packages)
+}
+
+fn parse_installer(
+    package_id: &str,
+    raw: RawFetchedInstaller,
+) -> Result<CatalogInstaller, ParserError> {
+    let installer = CatalogInstaller {
+        package_id: package_id.to_string(),
+        url: raw.url,
+        hash: raw.hash,
+        arch: raw.arch.parse::<Architecture>()?,
+        kind: raw.kind.parse::<InstallerType>()?,
+    };
+    installer.validate()?;
+    Ok(installer)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_package, parse_packages_json};
+    use crate::raw::{RawFetchedInstaller, RawFetchedPackage};
+    use winbrew_models::{Architecture, InstallerType, PackageSource};
+
+    #[test]
+    fn parses_fetched_package_into_shared_models() {
+        let parsed = parse_package(RawFetchedPackage {
+            id: "winget/Contoso.App".to_string(),
+            name: "Contoso App".to_string(),
+            version: "1.2.3".to_string(),
+            description: Some("Example".to_string()),
+            homepage: None,
+            license: None,
+            publisher: Some("Contoso Ltd.".to_string()),
+            installers: vec![RawFetchedInstaller {
+                url: "https://example.invalid/app.exe".to_string(),
+                hash: "".to_string(),
+                arch: "x64".to_string(),
+                kind: "portable".to_string(),
+            }],
+        })
+        .expect("package should parse");
+
+        assert_eq!(parsed.package.source, PackageSource::Winget);
+        assert_eq!(parsed.installers[0].arch, Architecture::X64);
+        assert_eq!(parsed.installers[0].kind, InstallerType::Portable);
+        assert!(parsed.raw_json.contains("Contoso.App"));
+    }
+
+    #[test]
+    fn parses_package_list_from_json() {
+        let json = r#"
+        [
+            {
+                "id": "scoop/main/Contoso.Tool",
+                "name": "Contoso Tool",
+                "version": "2.0.0",
+                "description": null,
+                "homepage": null,
+                "license": null,
+                "publisher": null,
+                "installers": []
+            }
+        ]
+        "#;
+
+        let parsed = parse_packages_json(json).expect("json should parse");
+
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].package.source, PackageSource::Scoop);
+        assert_eq!(parsed[0].package.version.to_string(), "2.0.0");
+    }
+}

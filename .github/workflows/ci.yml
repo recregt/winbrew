@@ -35,9 +35,11 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: infra/go.mod
+          go-version-file: infra/crawler/go.mod
           cache: true
-          cache-dependency-path: infra/go.sum
+          cache-dependency-path: |
+            infra/crawler/go.sum
+            infra/publisher/go.sum
 
       - name: Setup Task
         uses: go-task/setup-task@v2

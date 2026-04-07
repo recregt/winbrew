@@ -1,7 +1,10 @@
 package winget
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -94,5 +97,51 @@ func TestDownloadUsesETagCache(t *testing.T) {
 	}
 	if got, want := gotHeaders[1], etagValue; got != want {
 		t.Fatalf("second request If-None-Match = %q, want %q", got, want)
+	}
+}
+
+func TestDownloadSourceDBExtractsWingetDatabase(t *testing.T) {
+	var payload bytes.Buffer
+	zipWriter := zip.NewWriter(&payload)
+	entry, err := zipWriter.Create("Public/index.db")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := io.WriteString(entry, "winget-index-bytes"); err != nil {
+		t.Fatalf("WriteString() error = %v", err)
+	}
+	if err := zipWriter.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload.Bytes())
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	src, err := New(server.Client(), dir)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	originalSourceURL := sourceURL
+	sourceURL = server.URL
+	defer func() {
+		sourceURL = originalSourceURL
+	}()
+
+	outPath := filepath.Join(dir, "staging", "winget_source.db")
+	if err := src.DownloadSourceDB(context.Background(), outPath); err != nil {
+		t.Fatalf("DownloadSourceDB() error = %v", err)
+	}
+
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if got, want := string(data), "winget-index-bytes"; got != want {
+		t.Fatalf("extracted db = %q, want %q", got, want)
 	}
 }
