@@ -49,18 +49,18 @@ fn dependency_name(dep: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::removal_plan;
-    use crate::models::{Package, PackageStatus};
+    use crate::models::{InstallerType, Package, PackageStatus};
 
     fn package(
         name: &str,
-        kind: &str,
+        kind: InstallerType,
         install_dir: &str,
         msix_package_full_name: Option<&str>,
     ) -> Package {
         Package {
             name: name.to_string(),
             version: "1.0.0".to_string(),
-            kind: kind.to_string(),
+            kind,
             install_dir: install_dir.to_string(),
             msix_package_full_name: msix_package_full_name.map(ToOwned::to_owned),
             dependencies: Vec::new(),
@@ -74,7 +74,7 @@ mod tests {
         let plan = removal_plan(
             package(
                 "Contoso.App",
-                "msix",
+                InstallerType::Msix,
                 r"C:\Packages\Contoso.App",
                 Some("Contoso.App_1.0.0_x64__8wekyb3d8bbwe"),
             ),

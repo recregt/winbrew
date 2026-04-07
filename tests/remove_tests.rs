@@ -7,19 +7,19 @@ use common::shared_root::test_root;
 use std::fs;
 use std::path::Path;
 use winbrew::database;
-use winbrew::models::{Package, PackageStatus};
+use winbrew::models::{InstallerType, Package, PackageStatus};
 use winbrew::services::app::remove;
 
 fn sample_package(
     name: &str,
-    kind: &str,
+    kind: InstallerType,
     install_dir: &Path,
     dependencies: Vec<String>,
 ) -> Package {
     Package {
         name: name.to_string(),
         version: "1.0.0".to_string(),
-        kind: kind.to_string(),
+        kind,
         install_dir: install_dir.to_string_lossy().into_owned(),
         msix_package_full_name: None,
         dependencies,
@@ -40,7 +40,12 @@ fn remove_deletes_portable_installation_and_database_row() -> Result<()> {
     fs::create_dir_all(&install_dir)?;
     fs::write(install_dir.join("tool.exe"), b"binary")?;
 
-    let package = sample_package("Contoso.Remove", "portable", &install_dir, Vec::new());
+    let package = sample_package(
+        "Contoso.Remove",
+        InstallerType::Portable,
+        &install_dir,
+        Vec::new(),
+    );
 
     database::insert_package(&conn, &package)?;
 
@@ -66,13 +71,13 @@ fn remove_blocks_packages_with_dependents_without_force() -> Result<()> {
 
     let target = sample_package(
         "Contoso.Target",
-        "portable",
+        InstallerType::Portable,
         &target_install_dir,
         Vec::new(),
     );
     let dependent = sample_package(
         "Contoso.Dependent",
-        "portable",
+        InstallerType::Portable,
         &dependent_install_dir,
         vec!["Contoso.Target@1.0.0".to_string()],
     );
@@ -105,13 +110,18 @@ fn find_dependents_returns_sorted_packages() -> Result<()> {
 
     database::insert_package(
         &conn,
-        &sample_package("Contoso.Base", "portable", &target_install_dir, Vec::new()),
+        &sample_package(
+            "Contoso.Base",
+            InstallerType::Portable,
+            &target_install_dir,
+            Vec::new(),
+        ),
     )?;
     database::insert_package(
         &conn,
         &sample_package(
             "Gamma.Consumer",
-            "portable",
+            InstallerType::Portable,
             &gamma_install_dir,
             vec!["Contoso.Base@1.0.0".to_string()],
         ),
@@ -120,7 +130,7 @@ fn find_dependents_returns_sorted_packages() -> Result<()> {
         &conn,
         &sample_package(
             "Alpha.Consumer",
-            "portable",
+            InstallerType::Portable,
             &alpha_install_dir,
             vec!["Contoso.Base@1.0.0".to_string()],
         ),
@@ -129,7 +139,7 @@ fn find_dependents_returns_sorted_packages() -> Result<()> {
         &conn,
         &sample_package(
             "Beta.Consumer",
-            "portable",
+            InstallerType::Portable,
             &beta_install_dir,
             vec!["Contoso.Base@1.0.0".to_string()],
         ),
@@ -158,7 +168,12 @@ fn remove_rejects_unsupported_package_type() -> Result<()> {
     let conn = database::get_conn()?;
 
     let install_dir = root.join("packages").join("Contoso.Unsupported");
-    let package = sample_package("Contoso.Unsupported", "exe", &install_dir, Vec::new());
+    let package = sample_package(
+        "Contoso.Unsupported",
+        InstallerType::Exe,
+        &install_dir,
+        Vec::new(),
+    );
 
     database::insert_package(&conn, &package)?;
 

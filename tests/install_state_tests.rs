@@ -7,14 +7,14 @@ use common::shared_root::test_root;
 use std::fs;
 use std::path::Path;
 use winbrew::database;
-use winbrew::models::{Package, PackageStatus};
+use winbrew::models::{InstallerType, Package, PackageStatus};
 use winbrew::services::app::install::state;
 
 fn sample_package(name: &str, status: PackageStatus, install_dir: &Path) -> Package {
     Package {
         name: name.to_string(),
         version: "1.0.0".to_string(),
-        kind: "portable".to_string(),
+        kind: InstallerType::Portable,
         install_dir: install_dir.to_string_lossy().into_owned(),
         msix_package_full_name: None,
         dependencies: Vec::new(),
@@ -101,7 +101,7 @@ fn mark_installing_and_mark_ok_update_status() -> Result<()> {
         &conn,
         "Contoso.Installing",
         "2.4.6",
-        "portable",
+        InstallerType::Portable,
         &install_dir,
     )?;
 

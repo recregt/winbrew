@@ -153,7 +153,7 @@ pub fn installed_packages() -> Result<Vec<Package>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::PackageStatus;
+    use crate::models::{InstallerType, PackageStatus};
     use indicatif::ProgressBar;
     use tempfile::tempdir;
 
@@ -161,7 +161,7 @@ mod tests {
         Package {
             name: name.to_string(),
             version: "1.0.0".to_string(),
-            kind: "portable".to_string(),
+            kind: InstallerType::Portable,
             install_dir: install_dir.to_string_lossy().into_owned(),
             msix_package_full_name: None,
             dependencies: Vec::new(),

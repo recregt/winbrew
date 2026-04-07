@@ -128,7 +128,9 @@ fn source_cell(source: impl AsRef<str>, color_enabled: bool) -> Cell {
 
 #[cfg(test)]
 mod tests {
-    use crate::models::{CatalogPackage, Package, PackageSource, PackageStatus, Version};
+    use crate::models::{
+        CatalogPackage, InstallerType, Package, PackageSource, PackageStatus, Version,
+    };
     use crate::ui::{Ui, UiSettings};
     use std::io::{Result as IoResult, Write};
     use std::sync::{Arc, Mutex};
@@ -172,7 +174,7 @@ mod tests {
         Package {
             name: "Contoso App".to_string(),
             version: "1.2.3".to_string(),
-            kind: "portable".to_string(),
+            kind: InstallerType::Portable,
             install_dir: "C:\\Apps\\Contoso".to_string(),
             msix_package_full_name: None,
             dependencies: Vec::new(),

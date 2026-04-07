@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::core::fs::cleanup_path;
 use crate::database;
-use crate::models::{Package, PackageStatus};
+use crate::models::{InstallerType, Package, PackageStatus};
 
 #[derive(Debug, Error)]
 pub enum InstallStateError {
@@ -102,7 +102,7 @@ pub fn mark_installing(
     conn: &rusqlite::Connection,
     name: impl Into<String>,
     version: impl Into<String>,
-    kind: impl Into<String>,
+    kind: InstallerType,
     install_dir: &Path,
 ) -> Result<()> {
     let package = installing_package(name, version, kind, install_dir);
@@ -143,13 +143,13 @@ pub fn mark_failed(conn: &rusqlite::Connection, name: &str) -> Result<()> {
 fn installing_package(
     name: impl Into<String>,
     version: impl Into<String>,
-    kind: impl Into<String>,
+    kind: InstallerType,
     install_dir: &Path,
 ) -> Package {
     Package {
         name: name.into(),
         version: version.into(),
-        kind: kind.into(),
+        kind,
         install_dir: install_dir.to_string_lossy().into_owned(),
         msix_package_full_name: None,
         dependencies: Vec::new(),

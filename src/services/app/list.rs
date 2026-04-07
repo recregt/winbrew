@@ -30,11 +30,16 @@ fn filter_packages(packages: Vec<Package>, query: &str) -> Vec<Package> {
 }
 
 fn package_matches(pkg: &Package, query: &str) -> bool {
-    let haystack = [&pkg.name, &pkg.version, &pkg.kind, &pkg.install_dir]
-        .into_iter()
-        .map(|value| normalize(value))
-        .collect::<Vec<_>>()
-        .join(" ");
+    let haystack = [
+        pkg.name.as_str(),
+        pkg.version.as_str(),
+        pkg.kind.as_str(),
+        pkg.install_dir.as_str(),
+    ]
+    .into_iter()
+    .map(|value| normalize(value))
+    .collect::<Vec<_>>()
+    .join(" ");
 
     query.split_whitespace().all(|term| haystack.contains(term))
 }
@@ -58,13 +63,13 @@ fn normalize(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{filter_packages, normalize};
-    use crate::models::{Package, PackageStatus};
+    use crate::models::{InstallerType, Package, PackageStatus};
 
-    fn package(name: &str, version: &str, kind: &str, install_dir: &str) -> Package {
+    fn package(name: &str, version: &str, kind: InstallerType, install_dir: &str) -> Package {
         Package {
             name: name.to_string(),
             version: version.to_string(),
-            kind: kind.to_string(),
+            kind,
             install_dir: install_dir.to_string(),
             msix_package_full_name: None,
             dependencies: Vec::new(),
@@ -84,8 +89,18 @@ mod tests {
     #[test]
     fn filter_packages_matches_terms_across_display_fields() {
         let packages = vec![
-            package("Contoso App", "1.2.3", "msix", r"C:\Packages\Contoso.App"),
-            package("Other Tool", "2.0.0", "portable", r"C:\Tools\Other"),
+            package(
+                "Contoso App",
+                "1.2.3",
+                InstallerType::Msix,
+                r"C:\Packages\Contoso.App",
+            ),
+            package(
+                "Other Tool",
+                "2.0.0",
+                InstallerType::Portable,
+                r"C:\Tools\Other",
+            ),
         ];
 
         let matches = filter_packages(packages, "contoso 1.2 msix");
