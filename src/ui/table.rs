@@ -1,8 +1,8 @@
 use super::Ui;
 use super::theme::{header_cell, terminal_width};
 use crate::models::CatalogPackage;
-use crate::models::Package;
-use comfy_table::{Cell, Color, Table, presets::UTF8_FULL_CONDENSED};
+use crate::models::{Package, PackageStatus};
+use comfy_table::{Cell, Color, ContentArrangement, Row, Table, presets::UTF8_FULL_CONDENSED};
 use std::io::Write;
 
 impl<W: Write> Ui<W> {
@@ -17,6 +17,8 @@ impl<W: Write> Ui<W> {
             return;
         }
 
+        self.render_section_label("installed packages");
+
         let color = self.color_enabled;
         let mut table = self.build_table([
             header_cell("Name", color, Color::Green),
@@ -29,8 +31,8 @@ impl<W: Write> Ui<W> {
             table.add_row([
                 Cell::new(&pkg.name),
                 Cell::new(&pkg.version),
-                Cell::new(pkg.status.as_str()),
-                Cell::new(&pkg.installed_at),
+                status_badge(pkg.status, color),
+                Cell::new(&pkg.installed_at).fg(Color::DarkGrey),
             ]);
         }
 
@@ -43,21 +45,23 @@ impl<W: Write> Ui<W> {
             return;
         }
 
+        self.render_section_label("catalog packages");
+
         let color = self.color_enabled;
         let mut table = self.build_table([
             header_cell("Name", color, Color::Green),
             header_cell("Version", color, Color::Cyan),
-            header_cell("Source", color, Color::DarkGrey),
-            header_cell("Description", color, Color::DarkGrey),
+            header_cell("Source", color, Color::Magenta),
         ]);
+        table.set_content_arrangement(ContentArrangement::Dynamic);
 
         for pkg in packages {
-            table.add_row([
-                Cell::new(&pkg.name),
-                Cell::new(&pkg.version),
-                Cell::new(&pkg.source),
-                Cell::new(pkg.description.as_deref().unwrap_or("")),
-            ]);
+            let mut row = Row::new();
+            row.add_cell(Cell::new(&pkg.name));
+            row.add_cell(Cell::new(&pkg.version));
+            row.add_cell(source_cell(&pkg.source, color));
+            row.max_height(1);
+            table.add_row(row);
         }
 
         self.render_table(table);
@@ -81,8 +85,174 @@ impl<W: Write> Ui<W> {
         let mut table = Table::new();
         table
             .load_preset(UTF8_FULL_CONDENSED)
+            .set_truncation_indicator("…")
             .set_header(headers)
             .set_width(terminal_width());
         table
+    }
+
+    fn render_section_label(&mut self, label: &str) {
+        if self.color_enabled {
+            let _ = writeln!(self.out, "\x1b[2;37m{label}\x1b[0m");
+        } else {
+            let _ = writeln!(self.out, "{label}");
+        }
+    }
+}
+
+fn status_badge(status: PackageStatus, color_enabled: bool) -> Cell {
+    let (label, color) = match status {
+        PackageStatus::Installing => ("[installing]", Color::DarkGrey),
+        PackageStatus::Ok => ("[installed]", Color::Green),
+        PackageStatus::Updating => ("[update available]", Color::Yellow),
+        PackageStatus::Failed => ("[broken]", Color::Red),
+    };
+
+    let cell = Cell::new(label);
+    if color_enabled { cell.fg(color) } else { cell }
+}
+
+fn source_cell(source: &str, color_enabled: bool) -> Cell {
+    let color = match source.to_ascii_lowercase().as_str() {
+        "winget" => Color::Blue,
+        "scoop" => Color::Yellow,
+        _ => Color::DarkGrey,
+    };
+
+    let cell = Cell::new(source);
+    if color_enabled { cell.fg(color) } else { cell }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::models::{CatalogPackage, Package, PackageStatus};
+    use crate::ui::{Ui, UiSettings};
+    use std::io::{Result as IoResult, Write};
+    use std::sync::{Arc, Mutex};
+
+    struct SharedBuffer {
+        bytes: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl SharedBuffer {
+        fn new(bytes: Arc<Mutex<Vec<u8>>>) -> Self {
+            Self { bytes }
+        }
+    }
+
+    impl Write for SharedBuffer {
+        fn write(&mut self, buffer: &[u8]) -> IoResult<usize> {
+            let mut bytes = self.bytes.lock().expect("buffer lock should be available");
+            bytes.extend_from_slice(buffer);
+            Ok(buffer.len())
+        }
+
+        fn flush(&mut self) -> IoResult<()> {
+            Ok(())
+        }
+    }
+
+    fn catalog_package(description: Option<&str>) -> CatalogPackage {
+        CatalogPackage {
+            id: "scoop/main/Contoso.App".to_string(),
+            name: "Contoso App".to_string(),
+            version: "1.2.3".to_string(),
+            source: "scoop".to_string(),
+            description: description.map(ToOwned::to_owned),
+            homepage: None,
+            license: None,
+            publisher: None,
+        }
+    }
+
+    fn installed_package(status: PackageStatus) -> Package {
+        Package {
+            name: "Contoso App".to_string(),
+            version: "1.2.3".to_string(),
+            kind: "portable".to_string(),
+            install_dir: "C:\\Apps\\Contoso".to_string(),
+            msix_package_full_name: None,
+            dependencies: Vec::new(),
+            status,
+            installed_at: "2026-04-07T12:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn display_catalog_packages_hides_descriptions() {
+        let shared_bytes = Arc::new(Mutex::new(Vec::new()));
+        let writer = SharedBuffer::new(Arc::clone(&shared_bytes));
+        let mut ui = Ui::with_writer(
+            writer,
+            UiSettings {
+                color_enabled: false,
+                default_yes: false,
+            },
+        );
+
+        let long_description = "This is a very long Scoop description that should be truncated so that it does not dominate the search table layout or wrap the row unexpectedly.";
+
+        ui.display_catalog_packages(&[catalog_package(Some(long_description))]);
+        ui.display_catalog_packages(&[
+            catalog_package(Some("Short description")),
+            CatalogPackage {
+                id: "winget/main/Fabrikam.Tool".to_string(),
+                name: "Fabrikam Tool".to_string(),
+                version: "2.0.0".to_string(),
+                source: "winget".to_string(),
+                description: None,
+                homepage: None,
+                license: None,
+                publisher: None,
+            },
+        ]);
+        ui.display_catalog_packages(&[catalog_package(None)]);
+
+        let output = String::from_utf8(
+            shared_bytes
+                .lock()
+                .expect("buffer lock should be available")
+                .clone(),
+        )
+        .expect("rendered output should be valid UTF-8");
+
+        assert!(!output.contains(long_description));
+        assert!(!output.contains("No description available"));
+        assert!(output.contains("Contoso App"));
+        assert!(output.contains("catalog packages"));
+    }
+
+    #[test]
+    fn display_packages_renders_status_badges_and_section_label() {
+        let shared_bytes = Arc::new(Mutex::new(Vec::new()));
+        let writer = SharedBuffer::new(Arc::clone(&shared_bytes));
+        let mut ui = Ui::with_writer(
+            writer,
+            UiSettings {
+                color_enabled: false,
+                default_yes: false,
+            },
+        );
+
+        ui.display_packages(&[
+            installed_package(PackageStatus::Ok),
+            installed_package(PackageStatus::Updating),
+            installed_package(PackageStatus::Failed),
+            installed_package(PackageStatus::Installing),
+        ]);
+
+        let output = String::from_utf8(
+            shared_bytes
+                .lock()
+                .expect("buffer lock should be available")
+                .clone(),
+        )
+        .expect("rendered output should be valid UTF-8");
+
+        assert!(output.contains("installed packages"));
+        assert!(output.contains("[installed]"));
+        assert!(output.contains("[update available]"));
+        assert!(output.contains("[broken]"));
+        assert!(output.contains("[installing]"));
     }
 }

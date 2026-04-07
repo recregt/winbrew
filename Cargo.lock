@@ -2575,6 +2575,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "unicode-width",
  "windows",
  "winreg",
  "winresource",

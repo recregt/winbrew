@@ -23,6 +23,7 @@ indicatif = { version = "0.18", default-features = false, features = ["unicode-w
 comfy-table = "7.2"
 console = { version = "0.16", default-features = false, features = ["std"] }
 terminal_size = "0.4"
+unicode-width = "0.2"
 
 rusqlite = { version = "0.39", default-features = false, features = ["bundled", "unlock_notify"] }
 chrono = { version = "0.4", features = ["serde"] }

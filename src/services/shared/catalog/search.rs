@@ -23,7 +23,17 @@ pub fn search_catalog_packages(conn: &Connection, query: &str) -> Result<Vec<Cat
 }
 
 pub fn search_packages(query: &str) -> SearchResult<Vec<CatalogPackage>> {
-    let conn = database::get_catalog_conn().map_err(SearchError::from)?;
+    let conn = match database::get_catalog_conn() {
+        Ok(conn) => conn,
+        Err(err)
+            if err
+                .downcast_ref::<database::CatalogNotFoundError>()
+                .is_some() =>
+        {
+            return Err(SearchError::CatalogUnavailable);
+        }
+        Err(err) => return Err(SearchError::Unexpected(err)),
+    };
 
     match database::search(&conn, query) {
         Ok(packages) => Ok(packages),
@@ -76,7 +86,10 @@ mod tests {
     use super::*;
     use anyhow::Result;
     use rusqlite::{Connection, params};
+    use std::sync::Mutex;
     use tempfile::tempdir;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn create_catalog_db() -> Result<(tempfile::TempDir, Connection)> {
         let temp_dir = tempdir()?;
@@ -141,5 +154,27 @@ mod tests {
         assert_eq!(matches[0].source, "winget");
 
         Ok(())
+    }
+
+    #[test]
+    fn search_packages_returns_catalog_unavailable_when_catalog_db_is_missing() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let previous_root = std::env::var("WINBREW_PATHS_ROOT").ok();
+
+        unsafe {
+            std::env::set_var("WINBREW_PATHS_ROOT", temp_dir.path());
+        }
+
+        let result = search_packages("winbrew");
+
+        unsafe {
+            match previous_root {
+                Some(value) => std::env::set_var("WINBREW_PATHS_ROOT", value),
+                None => std::env::remove_var("WINBREW_PATHS_ROOT"),
+            }
+        }
+
+        assert!(matches!(result, Err(SearchError::CatalogUnavailable)));
     }
 }
