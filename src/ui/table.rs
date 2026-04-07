@@ -60,7 +60,7 @@ impl<W: Write> Ui<W> {
             let mut row = Row::new();
             row.add_cell(Cell::new(&pkg.name));
             row.add_cell(Cell::new(pkg.version.to_string()));
-            row.add_cell(source_cell(&pkg.source, color));
+            row.add_cell(source_cell(pkg.source, color));
             row.add_cell(Cell::new(&pkg.id));
             row.max_height(1);
             table.add_row(row);

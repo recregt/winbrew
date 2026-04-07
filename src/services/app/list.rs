@@ -37,7 +37,7 @@ fn package_matches(pkg: &Package, query: &str) -> bool {
         pkg.install_dir.as_str(),
     ]
     .into_iter()
-    .map(|value| normalize(value))
+    .map(normalize)
     .collect::<Vec<_>>()
     .join(" ");
 
