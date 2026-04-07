@@ -13,6 +13,11 @@ tasks:
     cmds:
       - cargo install --locked cargo-nextest --version 0.9.132 --force
 
+  tools:install-golangci-lint:
+    desc: Install golangci-lint for local development
+    cmds:
+      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
+
   test:
     desc: Run Rust tests with cargo test
     cmds:
@@ -38,55 +43,32 @@ tasks:
     cmds:
       - cargo clippy --locked --all-targets --all-features -- -D warnings
 
-  infra:pre-commit:
-    desc: Run Go checks and tests for the infra module
-    cmds:
-      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/infra/pre-commit.ps1
-
-  infra:pre-push:
-    desc: Run Go linters for the infra module
-    cmds:
-      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/infra/pre-push.ps1
-
-  test:infra:
-    desc: Run infra (Go) tests
-    cmds:
-      - task: infra:pre-commit
-
   ci:smoke:
     desc: Build and smoke-test the CLI
-    vars:
-      ROOT: target\winbrew-ci
-      BINARY: target\x86_64-pc-windows-msvc\release\winbrew.exe
     cmds:
-      - cargo build --locked --release
-      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tasks/smoke.ps1 -BinaryPath '{{.BINARY}}' -ROOT '{{.ROOT}}'
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/smoke.ps1
 
-  ci:pre-commit:
-    desc: Run pre-commit checks for CI
+  ci:go:crawler:
+    desc: Run Go CI checks for the crawler module
     cmds:
-      - task: check
-      - cargo check --locked
-      - task: infra:pre-commit
-      - task: test:nextest
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-go.ps1 -Module crawler
 
-  ci:pre-push:
-    desc: Run pre-push checks for CI
+  ci:go:publisher:
+    desc: Run Go CI checks for the publisher module
     cmds:
-      - task: test
-      - task: check:clippy
-      - task: infra:pre-push
-      - task: ci:smoke
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-go.ps1 -Module publisher
+
+  ci:rust:
+    desc: Run Rust CI checks
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-rust.ps1
 
   ci:verify:
     desc: Run the CI verification task set directly
     cmds:
-      - task: infra:pre-commit
-      - task: infra:pre-push
-      - task: check
-      - cargo check --locked
-      - task: check:clippy
-      - task: test:nextest
+      - task: ci:go:crawler
+      - task: ci:go:publisher
+      - task: ci:rust
       - task: ci:smoke
 
   dev:run:

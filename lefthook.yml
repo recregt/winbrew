@@ -6,18 +6,26 @@ pre-commit:
   parallel: true
   commands:
     rust:
-      run: task ci:pre-commit
-    infra:
-      glob: "infra/**/*.go"
+      run: task ci:rust
+    go-crawler:
+      glob: "infra/crawler/**/*.go"
       root: "infra/"
-      run: task infra:pre-commit
+      run: task ci:go:crawler
+    go-publisher:
+      glob: "infra/publisher/**/*.go"
+      root: "infra/"
+      run: task ci:go:publisher
 
 pre-push:
   parallel: true
   commands:
     rust:
-      run: task ci:pre-push
-    infra:
-      glob: "infra/**/*.go"
+      run: task ci:rust
+    go-crawler:
+      glob: "infra/crawler/**/*.go"
       root: "infra/"
-      run: task infra:pre-push
+      run: task ci:go:crawler
+    go-publisher:
+      glob: "infra/publisher/**/*.go"
+      root: "infra/"
+      run: task ci:go:publisher
