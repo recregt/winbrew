@@ -69,11 +69,15 @@ func Parse(r io.Reader) (*Config, error) {
 
 	cfg.normalize()
 
-	if err := cfg.validate(); err != nil {
+	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
 	return cfg, nil
+}
+
+func (c *Config) Validate() error {
+	return c.validate()
 }
 
 func (c *Config) validate() error {

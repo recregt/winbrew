@@ -1,7 +1,6 @@
 package scoop
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -39,6 +38,10 @@ type Source struct {
 	cacheDir string
 }
 
+func (s *Source) Close() error {
+	return nil
+}
+
 func New(cacheDir string, extra ...Bucket) (*Source, error) {
 	if cacheDir == "" {
 		return nil, fmt.Errorf("cache dir cannot be empty")
@@ -64,56 +67,54 @@ func (s *Source) Name() string {
 }
 
 func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, backoff time.Duration) error {
-	bufferedWriter := bufio.NewWriterSize(w, 64*1024)
-	enc := json.NewEncoder(bufferedWriter)
-	type bucketState struct {
+	enc := json.NewEncoder(w)
+	type bucketResult struct {
 		bucket Bucket
 		dir    string
-		ready  chan error
+		err    error
 	}
 
-	states := make([]bucketState, 0, len(s.buckets))
+	results := make(chan bucketResult, len(s.buckets))
 	group, groupCtx := errgroup.WithContext(ctx)
 
 	for _, bucket := range s.buckets {
 		bucket := bucket
-		state := bucketState{
-			bucket: bucket,
-			dir:    filepath.Join(s.cacheDir, bucket.Name),
-			ready:  make(chan error, 1),
-		}
-		states = append(states, state)
+		dir := filepath.Join(s.cacheDir, bucket.Name)
 
 		group.Go(func() error {
 			err := retry.Do(groupCtx, maxAttempts, backoff, func() error {
-				return syncRepo(groupCtx, bucket.URL, state.dir)
+				return syncRepo(groupCtx, bucket.URL, dir)
 			})
 			if err != nil {
 				err = fmt.Errorf("bucket %s: %w", bucket.Name, err)
 			}
 
-			state.ready <- err
-			close(state.ready)
+			results <- bucketResult{bucket: bucket, dir: dir, err: err}
 			return err
 		})
 	}
 
-	for _, state := range states {
-		err := <-state.ready
-		if err != nil {
-			return err
+	waitErrCh := make(chan error, 1)
+	go func() {
+		waitErrCh <- group.Wait()
+		close(results)
+	}()
+
+	for result := range results {
+		if result.err != nil {
+			return result.err
 		}
 
-		if err := writeBucketJSONL(ctx, enc, state.bucket.Name, state.dir); err != nil {
-			return fmt.Errorf("bucket %s: %w", state.bucket.Name, err)
+		if err := writeBucketJSONL(ctx, enc, result.bucket.Name, result.dir); err != nil {
+			return fmt.Errorf("bucket %s: %w", result.bucket.Name, err)
 		}
 	}
 
-	if err := bufferedWriter.Flush(); err != nil {
-		return fmt.Errorf("failed to flush JSONL output: %w", err)
+	if err := <-waitErrCh; err != nil {
+		return err
 	}
 
-	return group.Wait()
+	return nil
 }
 
 type packageSnapshot struct {

@@ -22,6 +22,13 @@ type Source struct {
 	cacheDir   string
 }
 
+func (s *Source) Close() error {
+	if s.httpClient != nil {
+		s.httpClient.CloseIdleConnections()
+	}
+	return nil
+}
+
 func New(httpClient *http.Client, cacheDir string) (*Source, error) {
 	if httpClient == nil {
 		return nil, fmt.Errorf("http client cannot be nil")
@@ -103,7 +110,8 @@ func (s *Source) download(ctx context.Context, url, dst string) error {
 	}
 	tempPath := tempFile.Name()
 
-	n, err := io.Copy(tempFile, io.LimitReader(resp.Body, maxDownloadSize+1))
+	buf := make([]byte, 32*1024)
+	n, err := io.CopyBuffer(tempFile, io.LimitReader(resp.Body, maxDownloadSize+1), buf)
 	if err != nil {
 		_ = tempFile.Close()
 		_ = os.Remove(tempPath)
