@@ -51,7 +51,7 @@ tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
 mimalloc = "0.1"
-windows = { version = "0.61", features = ["ApplicationModel", "Foundation", "Management_Deployment"] }
+windows = { version = "0.62", features = ["ApplicationModel", "Foundation", "Management_Deployment"] }
 
 [build-dependencies]
 chrono = { version = "0.4", features = ["clock"] }
