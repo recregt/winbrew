@@ -1,3 +1,8 @@
+//! Bootstrap-only cleanup for incomplete installs.
+//!
+//! This module mutates install state during startup to recover from interrupted
+//! installs. It is not a general-purpose service and should remain bootstrap-only.
+
 use anyhow::Result;
 use std::fs;
 use std::path::Path;
@@ -6,8 +11,8 @@ use tracing::warn;
 use crate::core::fs::cleanup_path;
 use crate::database;
 use crate::models::Package;
-
-use crate::services::app::install::{state, workspace};
+use crate::models::PackageStatus;
+use crate::services::shared::temp_workspace;
 
 pub fn cleanup_stale_installations() -> Result<()> {
     let conn = database::get_conn()?;
@@ -21,7 +26,7 @@ pub fn cleanup_stale_installations() -> Result<()> {
 }
 
 fn cleanup_stale_installation(conn: &rusqlite::Connection, package: &Package) {
-    if let Err(err) = state::mark_failed(conn, &package.name) {
+    if let Err(err) = database::update_status(conn, &package.name, PackageStatus::Failed) {
         warn!(package = %package.name, error = %err, "failed to mark stale install as failed");
     }
 
@@ -36,8 +41,8 @@ fn cleanup_install_dir(install_dir: &Path, package_name: &str) {
 }
 
 fn cleanup_temp_roots(name: &str, version: &str) {
-    let prefix = workspace::temp_root_prefix(name, version);
-    let temp_root_base = workspace::temp_root_base();
+    let prefix = temp_workspace::temp_root_prefix(name, version);
+    let temp_root_base = temp_workspace::temp_root_base();
 
     if !temp_root_base.exists() {
         return;
@@ -71,6 +76,7 @@ mod tests {
     use super::cleanup_stale_installations;
     use crate::database;
     use crate::models::{Package, PackageStatus};
+    use crate::services::shared::temp_workspace;
     use std::fs;
     use tempfile::tempdir;
 
@@ -102,15 +108,10 @@ mod tests {
         let package = sample_package("Contoso.Stale", "1.0.0", &install_dir);
         database::insert_package(&conn, &package).expect("insert package");
 
-        let temp_root_path = std::env::temp_dir().join(format!(
+        let temp_root_path = temp_workspace::temp_root_base().join(format!(
             "{}test",
-            super::workspace::temp_root_prefix(&package.name, &package.version)
+            temp_workspace::temp_root_prefix(&package.name, &package.version)
         ));
-        let temp_root_path = super::workspace::temp_root_base().join(
-            temp_root_path
-                .file_name()
-                .expect("temp root should have a file name"),
-        );
         fs::create_dir_all(&temp_root_path).expect("stale temp root");
 
         cleanup_stale_installations().expect("cleanup should succeed");

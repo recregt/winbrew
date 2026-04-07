@@ -1,32 +1,13 @@
-use crate::database;
+//! App-facing search facade over shared catalog search.
+//!
+//! This module keeps the command boundary stable while the shared catalog layer
+//! owns the actual search error semantics.
+
 use crate::models::CatalogPackage;
+use crate::services::shared::catalog;
 
-#[derive(Debug)]
-pub enum SearchError {
-    CatalogUnavailable,
-    Unexpected(anyhow::Error),
-}
-
-pub type SearchResult<T> = std::result::Result<T, SearchError>;
-
-impl From<anyhow::Error> for SearchError {
-    fn from(value: anyhow::Error) -> Self {
-        Self::Unexpected(value)
-    }
-}
+pub use catalog::{SearchError, SearchResult};
 
 pub fn search_packages(query: &str) -> SearchResult<Vec<CatalogPackage>> {
-    let conn = database::get_catalog_conn().map_err(SearchError::from)?;
-
-    match database::search(&conn, query) {
-        Ok(packages) => Ok(packages),
-        Err(err)
-            if err
-                .downcast_ref::<database::CatalogNotFoundError>()
-                .is_some() =>
-        {
-            Err(SearchError::CatalogUnavailable)
-        }
-        Err(err) => Err(SearchError::Unexpected(err)),
-    }
+    catalog::search_packages(query)
 }

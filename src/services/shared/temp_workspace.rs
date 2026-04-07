@@ -1,3 +1,8 @@
+//! Shared helper for installation temp workspace paths.
+//!
+//! This module is intentionally low-level utility code used by both app install
+//! flows and bootstrap cleanup. It should not grow into a use-case service.
+
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 

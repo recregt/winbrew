@@ -8,7 +8,7 @@ use crate::cli::Cli;
 use crate::commands::run;
 use crate::core::paths::ResolvedPaths;
 use crate::models::config::ConfigSection;
-use crate::services::shared::bootstrap;
+use crate::services::bootstrap;
 
 pub mod cli;
 pub mod commands;
@@ -33,11 +33,7 @@ pub struct AppContext {
 impl AppContext {
     pub fn from_config(config: crate::database::Config) -> Result<Self> {
         let paths = config.resolved_paths();
-        let sections = config
-            .effective_sections()?
-            .into_iter()
-            .map(Into::into)
-            .collect();
+        let sections = config.effective_sections()?.into_iter().collect();
 
         Ok(Self {
             ui: ui::UiSettings {

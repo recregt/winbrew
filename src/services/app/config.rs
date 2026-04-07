@@ -11,10 +11,7 @@ pub fn list_sections(ctx: &AppContext) -> Vec<ConfigSection> {
 pub fn get_display_value(key: &str) -> Result<ConfigValue> {
     let (value, source) = database::get_effective_value(key)?;
 
-    Ok(ConfigValue {
-        value,
-        source: source.into(),
-    })
+    Ok(ConfigValue { value, source })
 }
 
 pub fn set_value(key: &str, value: &str) -> Result<()> {

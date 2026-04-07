@@ -86,7 +86,7 @@ fn runtime_report_builds_expected_sections() {
     let _guard = env_lock();
     let _root = UnsetEnvVar::new("WINBREW_PATHS_ROOT");
     let ctx = app_context(false);
-    let report = runtime_report(&ctx).expect("report should build");
+    let report = runtime_report(&ctx.sections, &ctx.paths).expect("report should build");
 
     assert_eq!(report.sections.len(), 2);
     assert_eq!(report.sections[0].title, "Paths");

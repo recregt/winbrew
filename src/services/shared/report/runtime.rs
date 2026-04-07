@@ -1,13 +1,14 @@
 use anyhow::Result;
 
-use crate::AppContext;
+use crate::core::paths::ResolvedPaths;
 use crate::models::config::ConfigSection;
 use crate::models::report::{ReportSection, RuntimeReport};
 
-pub fn runtime_report(ctx: &AppContext) -> Result<RuntimeReport> {
-    let sections = &ctx.sections;
+pub fn runtime_report(
+    sections: &[ConfigSection],
+    resolved_paths: &ResolvedPaths,
+) -> Result<RuntimeReport> {
     let core_section = section(sections, "Core")?;
-    let resolved_paths = &ctx.paths;
 
     let sections = vec![
         ReportSection {

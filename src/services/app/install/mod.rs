@@ -2,7 +2,6 @@ pub mod download;
 pub mod flow;
 pub mod state;
 pub mod types;
-pub mod workspace;
 
 use std::fs;
 
@@ -12,6 +11,7 @@ use crate::database;
 use crate::engines::{self, EngineKind};
 use crate::models::CatalogPackage;
 use crate::services::shared::catalog;
+use crate::services::shared::temp_workspace;
 
 pub use crate::models::install::InstallFailureClass;
 pub use crate::models::install::{InstallOutcome, InstallResult};
@@ -44,7 +44,7 @@ where
     let engine = engines::get_engine(&installer)?;
 
     let install_dir = ctx.paths.packages.join(&package.name);
-    let temp_root = workspace::build_temp_root(&package.name, &package.version);
+    let temp_root = temp_workspace::build_temp_root(&package.name, &package.version);
 
     if let Some(parent) = install_dir.parent() {
         fs::create_dir_all(parent)?;
