@@ -138,6 +138,7 @@ mod tests {
     use super::{Package, PackageKind, PackageSource};
     use crate::installer::{Architecture, Installer, InstallerType};
     use crate::version::Version;
+    use core::str::FromStr;
 
     #[test]
     fn validates_package() {
@@ -161,5 +162,25 @@ mod tests {
         };
 
         assert!(package.validate().is_ok());
+    }
+
+    #[test]
+    fn parses_package_source_and_kind() {
+        assert_eq!(
+            PackageSource::from_str("winget").unwrap(),
+            PackageSource::Winget
+        );
+        assert_eq!(
+            PackageSource::from_str("scoop").unwrap(),
+            PackageSource::Scoop
+        );
+        assert_eq!(
+            PackageKind::from_str("catalog").unwrap(),
+            PackageKind::Catalog
+        );
+        assert_eq!(
+            PackageKind::from_str("installed").unwrap(),
+            PackageKind::Installed
+        );
     }
 }
