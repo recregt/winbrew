@@ -77,13 +77,22 @@ impl CatalogStats {
     }
 }
 
-fn stream_scoop_packages<R, F>(reader: R, mut on_package: F) -> Result<(), ParserError>
+fn stream_scoop_packages<R, F>(mut reader: R, mut on_package: F) -> Result<(), ParserError>
 where
     R: BufRead,
     F: FnMut(ParsedPackage) -> Result<(), ParserError>,
 {
-    for (line_number, line_result) in reader.lines().enumerate() {
-        let line = line_result?;
+    let mut line = String::new();
+    let mut line_number = 0;
+
+    loop {
+        line.clear();
+        let bytes_read = reader.read_line(&mut line)?;
+        if bytes_read == 0 {
+            break;
+        }
+
+        line_number += 1;
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
@@ -93,7 +102,7 @@ where
             Ok(raw) => raw,
             Err(source) => {
                 return Err(ParserError::LineDecode {
-                    line: line_number + 1,
+                    line: line_number,
                     source,
                 });
             }
@@ -101,7 +110,7 @@ where
 
         match parse_package(raw) {
             Ok(parsed) => on_package(parsed)?,
-            Err(err) => eprintln!("skipping scoop package on line {}: {err}", line_number + 1),
+            Err(err) => eprintln!("skipping scoop package on line {}: {err}", line_number),
         }
     }
 

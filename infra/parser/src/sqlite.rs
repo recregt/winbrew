@@ -172,7 +172,6 @@ impl CatalogWriter {
     pub fn finish(mut self) -> Result<(), ParserError> {
         self.connection.execute_batch("COMMIT;")?;
         self.committed = true;
-        self.connection.execute_batch("VACUUM;")?;
         Ok(())
     }
 }
