@@ -10,7 +10,7 @@ pub fn remove(package: &crate::models::Package) -> Result<()> {
         package_manager
             .RemovePackageAsync(&HSTRING::from(package_full_name))
             .with_context(|| format!("failed to start uninstall for {package_full_name}"))?
-            .get()
+            .join()
             .with_context(|| format!("msix uninstall failed for {package_full_name}"))?;
 
         return Ok(());
@@ -26,7 +26,7 @@ pub fn remove(package: &crate::models::Package) -> Result<()> {
         package_manager
             .RemovePackageAsync(&full_name)
             .with_context(|| format!("failed to start uninstall for {full_name}"))?
-            .get()
+            .join()
             .with_context(|| format!("msix uninstall failed for {full_name}"))?;
     }
 
