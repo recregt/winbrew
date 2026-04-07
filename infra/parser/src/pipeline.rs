@@ -1,5 +1,6 @@
+use std::collections::BTreeMap;
 use std::fs;
-use std::io::BufRead;
+use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
@@ -8,7 +9,7 @@ use crate::error::ParserError;
 use crate::metadata::{CatalogMetadata, write_metadata};
 use crate::parser::{ParsedPackage, parse_package};
 use crate::raw::RawFetchedPackage;
-use crate::sqlite::write_catalog;
+use crate::sqlite::CatalogWriter;
 use crate::winget::read_winget_packages;
 
 pub struct RunConfig {
@@ -38,22 +39,48 @@ impl RunConfig {
 }
 
 pub fn run<R: BufRead>(reader: R, config: RunConfig) -> Result<CatalogMetadata, ParserError> {
-    let mut packages = read_scoop_packages(reader)?;
-    let mut winget_packages = read_winget_packages(&config.winget_db_path)?;
-    packages.append(&mut winget_packages);
-    packages.sort_by(|left, right| left.package.id.cmp(&right.package.id));
+    let mut writer = CatalogWriter::open(&config.output_db_path)?;
+    let mut stats = CatalogStats::default();
 
-    write_catalog(&config.output_db_path, &packages)?;
+    stream_scoop_packages(reader, |package| {
+        stats.record(&package);
+        writer.write_package(&package)
+    })?;
+
+    read_winget_packages(&config.winget_db_path, |package| {
+        stats.record(&package);
+        writer.write_package(&package)
+    })?;
+
+    writer.finish()?;
+
     let current_hash = hash_file(&config.output_db_path)?;
-    let metadata = CatalogMetadata::build(&packages, current_hash);
+    let metadata =
+        CatalogMetadata::build_from_counts(stats.package_count, stats.source_counts, current_hash);
     write_metadata(&config.metadata_path, &metadata)?;
 
     Ok(metadata)
 }
 
-fn read_scoop_packages<R: BufRead>(reader: R) -> Result<Vec<ParsedPackage>, ParserError> {
-    let mut packages = Vec::new();
+#[derive(Default)]
+struct CatalogStats {
+    package_count: usize,
+    source_counts: BTreeMap<String, usize>,
+}
 
+impl CatalogStats {
+    fn record(&mut self, package: &ParsedPackage) {
+        self.package_count += 1;
+        let key = package.package.source.as_str().to_string();
+        *self.source_counts.entry(key).or_insert(0) += 1;
+    }
+}
+
+fn stream_scoop_packages<R, F>(reader: R, mut on_package: F) -> Result<(), ParserError>
+where
+    R: BufRead,
+    F: FnMut(ParsedPackage) -> Result<(), ParserError>,
+{
     for (line_number, line_result) in reader.lines().enumerate() {
         let line = line_result?;
         let trimmed = line.trim();
@@ -72,18 +99,27 @@ fn read_scoop_packages<R: BufRead>(reader: R) -> Result<Vec<ParsedPackage>, Pars
         };
 
         match parse_package(raw) {
-            Ok(parsed) => packages.push(parsed),
+            Ok(parsed) => on_package(parsed)?,
             Err(err) => eprintln!("skipping scoop package on line {}: {err}", line_number + 1),
         }
     }
 
-    Ok(packages)
+    Ok(())
 }
 
 fn hash_file(path: &Path) -> Result<String, ParserError> {
-    let bytes = fs::read(path)?;
+    let mut file = fs::File::open(path)?;
     let mut hasher = Sha256::new();
-    hasher.update(bytes);
+    let mut buffer = [0u8; 8192];
+
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+
     let digest = hasher.finalize();
 
     Ok(format!("sha256:{digest:x}"))

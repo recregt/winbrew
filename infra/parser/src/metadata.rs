@@ -41,6 +41,24 @@ impl CatalogMetadata {
             source_counts,
         }
     }
+
+    pub fn build_from_counts(
+        package_count: usize,
+        source_counts: BTreeMap<String, usize>,
+        current_hash: String,
+    ) -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION,
+            generated_at_unix: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            current_hash,
+            previous_hash: String::new(),
+            package_count,
+            source_counts,
+        }
+    }
 }
 
 pub fn write_metadata(path: &Path, metadata: &CatalogMetadata) -> Result<(), ParserError> {

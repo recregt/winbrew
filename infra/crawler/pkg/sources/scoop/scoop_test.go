@@ -3,6 +3,7 @@ package scoop
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -68,15 +69,12 @@ func TestReadManifestUsesArchitectureBlocks(t *testing.T) {
 	}
 }
 
-func TestReadBucketMissingManifestDir(t *testing.T) {
+func TestWriteBucketJSONLMissingManifestDir(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pkgs, err := readBucket(context.Background(), "main", filepath.Join(dir, "missing-bucket"))
+	err := writeBucketJSONL(context.Background(), json.NewEncoder(io.Discard), "main", filepath.Join(dir, "missing-bucket"))
 	if err != nil {
-		t.Fatalf("readBucket() error = %v", err)
-	}
-	if pkgs != nil {
-		t.Fatalf("readBucket() pkgs = %#v, want nil", pkgs)
+		t.Fatalf("writeBucketJSONL() error = %v", err)
 	}
 }
