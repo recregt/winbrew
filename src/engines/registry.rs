@@ -114,6 +114,7 @@ pub(crate) fn resolve_engine_kind_for_installer(
         .ok_or_else(|| anyhow!("unsupported installer type '{}'", installer.kind.as_str()))
 }
 
+#[allow(dead_code)]
 pub(crate) fn resolve_engine_kind_for_kind(kind: &str) -> Result<EngineKind> {
     ENGINE_DESCRIPTORS
         .iter()

@@ -8,6 +8,7 @@ use anyhow::Result;
 use std::path::Path;
 
 use crate::models::CatalogInstaller;
+use crate::models::InstallerType;
 use crate::models::Package;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,8 +33,16 @@ pub(crate) fn get_engine(installer: &CatalogInstaller) -> Result<EngineKind> {
     registry::resolve_engine_kind_for_installer(installer)
 }
 
-pub(crate) fn get_engine_kind(kind: &str) -> Result<EngineKind> {
-    registry::resolve_engine_kind_for_kind(kind)
+pub(crate) fn get_engine_kind(kind: InstallerType) -> Result<EngineKind> {
+    match kind {
+        InstallerType::Msix => Ok(EngineKind::Msix),
+        InstallerType::Zip => Ok(EngineKind::Zip),
+        InstallerType::Portable => Ok(EngineKind::Portable),
+        other => Err(anyhow::anyhow!(
+            "unsupported installer type '{}'",
+            other.as_str()
+        )),
+    }
 }
 
 impl PackageEngine for EngineKind {
