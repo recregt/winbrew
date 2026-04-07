@@ -14,7 +14,7 @@ reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-fea
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 sha2 = "0.10"
 sha1 = "0.10"
-md-5 = "0.10"
+md-5 = "0.11"
 zip = "2"
 
 clap = { version = "4", default-features = false, features = ["color", "derive", "error-context", "help", "std", "suggestions", "usage"] }
