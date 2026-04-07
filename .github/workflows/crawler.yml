@@ -26,21 +26,21 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: infra/go.mod
+          go-version-file: infra/crawler/go.mod
 
       - name: Build catalog
-        env:
-          WINBREW_DB_PATH: ${{ github.workspace }}/catalog.db
         run: |
-          cd infra
-          go run ./cmd/crawler
+          mkdir -p "$GITHUB_WORKSPACE/staging"
+          cd infra/crawler
+          go run ./cmd/crawler --winget-out "$GITHUB_WORKSPACE/staging/winget_source.db" | cargo run --release -p winbrew-infra-parser -- --winget-db "$GITHUB_WORKSPACE/staging/winget_source.db" --out "$GITHUB_WORKSPACE/staging/catalog.db"
 
-      - name: Publish catalog release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: Catalog Database
-          target_commitish: main
-          files: catalog.db
-          make_latest: false
-          body: Latest generated catalog database.
+      - name: Publish catalog to R2
+        env:
+          WINBREW_DB_PATH: ${{ github.workspace }}/staging/catalog.db
+          R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
+          R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          cd infra/publisher
+          go run ./cmd/publisher --input "$GITHUB_WORKSPACE/staging/catalog.db" --metadata "$GITHUB_WORKSPACE/staging/metadata.json"
