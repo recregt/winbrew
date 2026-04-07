@@ -1,3 +1,4 @@
+use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::dependency::Dependency;
@@ -69,9 +70,27 @@ impl PackageSource {
     }
 }
 
+impl FromStr for PackageSource {
+    type Err = ModelError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "winget" => Ok(Self::Winget),
+            "scoop" => Ok(Self::Scoop),
+            other => Err(ModelError::invalid_enum_value("package.source", other)),
+        }
+    }
+}
+
 impl core::fmt::Display for PackageSource {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+impl From<PackageSource> for String {
+    fn from(value: PackageSource) -> Self {
+        value.to_string()
     }
 }
 
@@ -90,9 +109,27 @@ impl PackageKind {
     }
 }
 
+impl FromStr for PackageKind {
+    type Err = ModelError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "catalog" => Ok(Self::Catalog),
+            "installed" => Ok(Self::Installed),
+            other => Err(ModelError::invalid_enum_value("package.kind", other)),
+        }
+    }
+}
+
 impl core::fmt::Display for PackageKind {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+impl From<PackageKind> for String {
+    fn from(value: PackageKind) -> Self {
+        value.to_string()
     }
 }
 
