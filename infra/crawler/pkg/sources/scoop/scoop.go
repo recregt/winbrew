@@ -68,19 +68,15 @@ func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, b
 			return err
 		}
 
-		var pkgs []normalize.Package
+		bucketDir := filepath.Join(s.cacheDir, bucket.Name)
 		if err := retry.Do(ctx, maxAttempts, backoff, func() error {
-			var err error
-			pkgs, err = s.fetchBucket(ctx, bucket)
-			return err
+			return syncRepo(ctx, bucket.URL, bucketDir)
 		}); err != nil {
 			return fmt.Errorf("bucket %s: %w", bucket.Name, err)
 		}
 
-		for _, pkg := range pkgs {
-			if err := enc.Encode(packageSnapshotFromPackage(pkg)); err != nil {
-				return fmt.Errorf("failed to encode package %s: %w", pkg.ID, err)
-			}
+		if err := writeBucketJSONL(ctx, enc, bucket.Name, bucketDir); err != nil {
+			return fmt.Errorf("bucket %s: %w", bucket.Name, err)
 		}
 	}
 
@@ -128,14 +124,41 @@ func packageSnapshotFromPackage(pkg normalize.Package) packageSnapshot {
 	}
 }
 
-func (s *Source) fetchBucket(ctx context.Context, bucket Bucket) ([]normalize.Package, error) {
-	bucketDir := filepath.Join(s.cacheDir, bucket.Name)
+func writeBucketJSONL(ctx context.Context, enc *json.Encoder, bucketName, bucketDir string) error {
+	manifestDir := filepath.Join(bucketDir, "bucket")
 
-	if err := syncRepo(ctx, bucket.URL, bucketDir); err != nil {
-		return nil, fmt.Errorf("failed to sync repo: %w", err)
+	if _, err := os.Stat(manifestDir); os.IsNotExist(err) {
+		slog.Warn("bucket has no manifest dir", "bucket", bucketName)
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to stat bucket dir: %w", err)
 	}
 
-	return readBucket(ctx, bucket.Name, bucketDir)
+	entries, err := os.ReadDir(manifestDir)
+	if err != nil {
+		return fmt.Errorf("failed to read bucket dir: %w", err)
+	}
+
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+
+		pkg, err := readManifest(bucketName, manifestDir, entry.Name())
+		if err != nil {
+			slog.Warn("skipping manifest", "bucket", bucketName, "manifest", entry.Name(), "err", err)
+			continue
+		}
+		if err := enc.Encode(packageSnapshotFromPackage(pkg)); err != nil {
+			return fmt.Errorf("failed to encode package %s: %w", pkg.ID, err)
+		}
+	}
+
+	return nil
 }
 
 // manifest JSON structure
@@ -153,43 +176,6 @@ type scoopManifest struct {
 type archBlock struct {
 	URL  any `json:"url"`
 	Hash any `json:"hash"`
-}
-
-func readBucket(ctx context.Context, bucketName, bucketDir string) ([]normalize.Package, error) {
-	manifestDir := filepath.Join(bucketDir, "bucket")
-
-	if _, err := os.Stat(manifestDir); os.IsNotExist(err) {
-		slog.Warn("bucket has no manifest dir", "bucket", bucketName)
-		return nil, nil
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to stat bucket dir: %w", err)
-	}
-
-	entries, err := os.ReadDir(manifestDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read bucket dir: %w", err)
-	}
-
-	var pkgs []normalize.Package
-
-	for _, entry := range entries {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-
-		pkg, err := readManifest(bucketName, manifestDir, entry.Name())
-		if err != nil {
-			slog.Warn("skipping manifest", "bucket", bucketName, "manifest", entry.Name(), "err", err)
-			continue
-		}
-		pkgs = append(pkgs, pkg)
-	}
-
-	return pkgs, nil
 }
 
 func readManifest(bucketName, dir, filename string) (normalize.Package, error) {
