@@ -4,26 +4,27 @@ param()
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$ParserManifest = Join-Path $RepoRoot 'infra\parser\Cargo.toml'
 
 Push-Location $RepoRoot
 try {
-    Write-Host 'Running cargo fmt'
+    Write-Host 'Running parser cargo fmt'
     $global:LASTEXITCODE = 0
-    & cargo fmt --all -- --check
+    & cargo fmt --manifest-path $ParserManifest -- --check
     if ($global:LASTEXITCODE -ne 0) {
         exit $global:LASTEXITCODE
     }
 
-    Write-Host 'Running cargo clippy'
+    Write-Host 'Running parser cargo clippy'
     $global:LASTEXITCODE = 0
-    & cargo clippy --locked --all-targets --all-features -p winbrew -- -D warnings
+    & cargo clippy --manifest-path $ParserManifest --locked --all-targets --all-features -- -D warnings
     if ($global:LASTEXITCODE -ne 0) {
         exit $global:LASTEXITCODE
     }
 
-    Write-Host 'Running cargo nextest'
+    Write-Host 'Running parser cargo test'
     $global:LASTEXITCODE = 0
-    & cargo nextest run --locked --all-targets --all-features -p winbrew
+    & cargo test --manifest-path $ParserManifest --locked --all-targets --all-features
     if ($global:LASTEXITCODE -ne 0) {
         exit $global:LASTEXITCODE
     }
