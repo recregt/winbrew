@@ -8,7 +8,7 @@ pub mod package_ref;
 pub mod validation;
 pub mod version;
 
-pub use catalog::{CatalogInstaller, CatalogPackage};
+pub use catalog::{CatalogInstaller, CatalogPackage, RawCatalogInstaller, RawCatalogPackage};
 pub use dependency::Dependency;
 pub use error::ModelError;
 pub use installer::{Architecture, Installer, InstallerType};

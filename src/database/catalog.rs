@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::models::{CatalogInstaller, CatalogPackage, PackageSource, Version};
+use crate::models::{CatalogInstaller, CatalogPackage, RawCatalogInstaller, RawCatalogPackage};
 
 pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
     let query = query.trim();
@@ -48,48 +48,32 @@ pub fn get_package_by_id(conn: &Connection, package_id: &str) -> Result<Option<C
 }
 
 fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
-    let id: String = row.get("id")?;
-    let version: String = row.get("version")?;
-
-    let package = CatalogPackage {
-        source: PackageSource::from_catalog_id(&id),
-        id,
+    let raw = RawCatalogPackage {
+        id: row.get("id")?,
         name: row.get("name")?,
-        version: Version::parse(&version).map_err(|err| {
-            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
-        })?,
+        version: row.get("version")?,
+        source: None,
         description: row.get("description")?,
         homepage: row.get("homepage")?,
         license: row.get("license")?,
         publisher: row.get("publisher")?,
     };
 
-    package.validate().map_err(|err| {
+    CatalogPackage::try_from(raw).map_err(|err| {
         rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
-    })?;
-
-    Ok(package)
+    })
 }
 
 fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
-    let arch_raw: String = row.get("arch")?;
-    let kind_raw: String = row.get("type")?;
-
-    let installer = CatalogInstaller {
+    let raw = RawCatalogInstaller {
         package_id: row.get("package_id")?,
         url: row.get("url")?,
         hash: row.get("hash")?,
-        arch: arch_raw.parse().map_err(|err: crate::models::ModelError| {
-            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
-        })?,
-        kind: kind_raw.parse().map_err(|err: crate::models::ModelError| {
-            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
-        })?,
+        arch: row.get("arch")?,
+        kind: row.get("type")?,
     };
 
-    installer.validate().map_err(|err| {
+    CatalogInstaller::try_from(raw).map_err(|err| {
         rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
-    })?;
-
-    Ok(installer)
+    })
 }
