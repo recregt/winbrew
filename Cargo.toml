@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "crates/models"]
+resolver = "2"
+
 [package]
 name = "winbrew"
 version = "0.1.0"
@@ -9,6 +13,7 @@ name = "winbrew"
 path = "src/main.rs"
 
 [dependencies]
+winbrew-models = { path = "crates/models" }
 winreg = "0.56"
 reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

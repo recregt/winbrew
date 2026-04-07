@@ -108,7 +108,7 @@ pub fn resolve_catalog_package_by_id(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{PackageId, PackageRef};
+    use crate::models::{PackageId, PackageRef, PackageSource};
     use anyhow::Result;
     use rusqlite::{Connection, params};
     use std::sync::Mutex;
@@ -176,7 +176,7 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].id, "winget/Contoso.App");
         assert_eq!(matches[0].name, "Contoso Terminal");
-        assert_eq!(matches[0].source, "winget");
+        assert_eq!(matches[0].source, PackageSource::Winget);
 
         Ok(())
     }
@@ -234,7 +234,7 @@ mod tests {
 
         assert_eq!(package.id, "winget/Contoso.App");
         assert_eq!(package.name, "Contoso Terminal");
-        assert_eq!(package.source, "winget");
+        assert_eq!(package.source, PackageSource::Winget);
 
         Ok(())
     }

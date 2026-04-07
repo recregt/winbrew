@@ -59,7 +59,7 @@ impl<W: Write> Ui<W> {
         for pkg in packages {
             let mut row = Row::new();
             row.add_cell(Cell::new(&pkg.name));
-            row.add_cell(Cell::new(&pkg.version));
+            row.add_cell(Cell::new(pkg.version.to_string()));
             row.add_cell(source_cell(&pkg.source, color));
             row.add_cell(Cell::new(&pkg.id));
             row.max_height(1);
@@ -114,7 +114,8 @@ fn status_badge(status: PackageStatus, color_enabled: bool) -> Cell {
     if color_enabled { cell.fg(color) } else { cell }
 }
 
-fn source_cell(source: &str, color_enabled: bool) -> Cell {
+fn source_cell(source: impl AsRef<str>, color_enabled: bool) -> Cell {
+    let source = source.as_ref();
     let color = match source.to_ascii_lowercase().as_str() {
         "winget" => Color::Blue,
         "scoop" => Color::Yellow,
@@ -127,7 +128,7 @@ fn source_cell(source: &str, color_enabled: bool) -> Cell {
 
 #[cfg(test)]
 mod tests {
-    use crate::models::{CatalogPackage, Package, PackageStatus};
+    use crate::models::{CatalogPackage, Package, PackageSource, PackageStatus, Version};
     use crate::ui::{Ui, UiSettings};
     use std::io::{Result as IoResult, Write};
     use std::sync::{Arc, Mutex};
@@ -158,8 +159,8 @@ mod tests {
         CatalogPackage {
             id: "scoop/main/Contoso.App".to_string(),
             name: "Contoso App".to_string(),
-            version: "1.2.3".to_string(),
-            source: "scoop".to_string(),
+            version: Version::parse("1.2.3").expect("version should parse"),
+            source: PackageSource::Scoop,
             description: description.map(ToOwned::to_owned),
             homepage: None,
             license: None,
@@ -200,8 +201,8 @@ mod tests {
             CatalogPackage {
                 id: "winget/main/Fabrikam.Tool".to_string(),
                 name: "Fabrikam Tool".to_string(),
-                version: "2.0.0".to_string(),
-                source: "winget".to_string(),
+                version: Version::parse("2.0.0").expect("version should parse"),
+                source: PackageSource::Winget,
                 description: None,
                 homepage: None,
                 license: None,
