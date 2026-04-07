@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 use crate::error::ParserError;
 use crate::metadata::{CatalogMetadata, write_metadata};
 use crate::parser::{ParsedPackage, parse_package};
-use crate::raw::RawFetchedPackage;
+use crate::raw::ScoopStreamEnvelope;
 use crate::sqlite::CatalogWriter;
 use crate::winget::read_winget_packages;
 
@@ -102,7 +102,7 @@ where
             continue;
         }
 
-        let raw: RawFetchedPackage = match serde_json::from_slice(&line) {
+        let envelope: ScoopStreamEnvelope = match serde_json::from_slice(&line) {
             Ok(raw) => raw,
             Err(source) => {
                 return Err(ParserError::LineDecode {
@@ -112,7 +112,13 @@ where
             }
         };
 
-        match parse_package(raw) {
+        if let Err(message) = envelope.validate() {
+            return Err(ParserError::Contract(format!(
+                "failed to decode scoop envelope on line {line_number}: {message}"
+            )));
+        }
+
+        match parse_package(envelope.payload) {
             Ok(parsed) => on_package(parsed)?,
             Err(err) => eprintln!("skipping scoop package on line {}: {err}", line_number),
         }
@@ -214,8 +220,8 @@ mod tests {
         let metadata_path = root.join("metadata.json");
 
         let scoop_jsonl = r#"
-{"id":"scoop/main/example","name":"Example Tool","version":"1.2.3","description":"Example package","homepage":"https://example.invalid","license":"MIT","publisher":"Example Corp","installers":[{"url":"https://example.invalid/example.zip","hash":"abcd","arch":"x64","type":"portable"}]}
-"#;
+    {"schema_version":1,"source":"scoop","kind":"package","payload":{"id":"scoop/main/example","name":"Example Tool","version":"1.2.3","description":"Example package","homepage":"https://example.invalid","license":"MIT","publisher":"Example Corp","installers":[{"url":"https://example.invalid/example.zip","hash":"abcd","arch":"x64","type":"portable"}]}}
+    "#;
 
         let metadata = run(
             Cursor::new(scoop_jsonl.as_bytes().to_vec()),

@@ -3,7 +3,7 @@ use winbrew_models::{
 };
 
 use crate::error::ParserError;
-use crate::raw::{RawFetchedInstaller, RawFetchedPackage};
+use crate::raw::{RawFetchedInstaller, RawFetchedPackage, ScoopStreamEnvelope};
 
 #[derive(Debug, Clone)]
 pub struct ParsedPackage {
@@ -47,7 +47,11 @@ pub fn parse_packages(
 }
 
 pub fn parse_packages_json(input: &str) -> Result<Vec<ParsedPackage>, ParserError> {
-    let raw_packages: Vec<RawFetchedPackage> = serde_json::from_str(input)?;
+    let envelopes: Vec<ScoopStreamEnvelope> = serde_json::from_str(input)?;
+    let raw_packages = envelopes
+        .into_iter()
+        .map(validate_envelope)
+        .collect::<Result<Vec<_>, _>>()?;
     parse_packages(raw_packages)
 }
 
@@ -66,9 +70,15 @@ fn parse_installer(
     Ok(installer)
 }
 
+fn validate_envelope(envelope: ScoopStreamEnvelope) -> Result<RawFetchedPackage, ParserError> {
+    envelope.validate().map_err(ParserError::Contract)?;
+    Ok(envelope.payload)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parse_package, parse_packages_json};
+    use crate::error::ParserError;
     use crate::raw::{RawFetchedInstaller, RawFetchedPackage};
     use winbrew_models::{Architecture, InstallerType, PackageSource};
 
@@ -102,14 +112,19 @@ mod tests {
         let json = r#"
         [
             {
-                "id": "scoop/main/Contoso.Tool",
-                "name": "Contoso Tool",
-                "version": "2.0.0",
-                "description": null,
-                "homepage": null,
-                "license": null,
-                "publisher": null,
-                "installers": []
+                "schema_version": 1,
+                "source": "scoop",
+                "kind": "package",
+                "payload": {
+                    "id": "scoop/main/Contoso.Tool",
+                    "name": "Contoso Tool",
+                    "version": "2.0.0",
+                    "description": null,
+                    "homepage": null,
+                    "license": null,
+                    "publisher": null,
+                    "installers": []
+                }
             }
         ]
         "#;
@@ -119,5 +134,61 @@ mod tests {
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].package.source, PackageSource::Scoop);
         assert_eq!(parsed[0].package.version.to_string(), "2.0.0");
+    }
+
+    #[test]
+    fn rejects_unknown_envelope_version() {
+        let json = r#"
+        [
+            {
+                "schema_version": 2,
+                "source": "scoop",
+                "kind": "package",
+                "payload": {
+                    "id": "scoop/main/Contoso.Tool",
+                    "name": "Contoso Tool",
+                    "version": "2.0.0",
+                    "description": null,
+                    "homepage": null,
+                    "license": null,
+                    "publisher": null,
+                    "installers": []
+                }
+            }
+        ]
+        "#;
+
+        let err = parse_packages_json(json).expect_err("version mismatch should fail");
+        assert!(
+            err.to_string()
+                .contains("unsupported scoop stream schema version")
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_envelope_field() {
+        let json = r#"
+        [
+            {
+                "schema_version": 1,
+                "source": "scoop",
+                "kind": "package",
+                "unexpected": true,
+                "payload": {
+                    "id": "scoop/main/Contoso.Tool",
+                    "name": "Contoso Tool",
+                    "version": "2.0.0",
+                    "description": null,
+                    "homepage": null,
+                    "license": null,
+                    "publisher": null,
+                    "installers": []
+                }
+            }
+        ]
+        "#;
+
+        let err = parse_packages_json(json).expect_err("unknown field should fail");
+        assert!(matches!(err, ParserError::Decode(_)));
     }
 }

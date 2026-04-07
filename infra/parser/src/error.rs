@@ -10,6 +10,9 @@ pub enum ParserError {
     #[error("failed to decode fetched package payload")]
     Decode(#[from] serde_json::Error),
 
+    #[error("invalid scoop stream contract: {0}")]
+    Contract(String),
+
     #[error("failed to decode fetched package payload on line {line}")]
     LineDecode {
         line: usize,

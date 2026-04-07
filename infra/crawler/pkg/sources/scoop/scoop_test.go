@@ -124,6 +124,29 @@ func TestResolveInstallersUsesArchitectureOrder(t *testing.T) {
 	}
 }
 
+func TestScoopEnvelopeFromPackage(t *testing.T) {
+	t.Parallel()
+
+	envelope := scoopEnvelopeFromPackage(normalize.Package{
+		ID:      "scoop/main/example",
+		Name:    "example",
+		Version: "1.2.3",
+	})
+
+	if got, want := envelope.SchemaVersion, scoopEnvelopeSchemaVersion; got != want {
+		t.Fatalf("SchemaVersion = %d, want %d", got, want)
+	}
+	if got, want := envelope.Source, sourceName; got != want {
+		t.Fatalf("Source = %q, want %q", got, want)
+	}
+	if got, want := envelope.Kind, scoopEnvelopeKind; got != want {
+		t.Fatalf("Kind = %q, want %q", got, want)
+	}
+	if got, want := envelope.Payload.ID, "scoop/main/example"; got != want {
+		t.Fatalf("Payload.ID = %q, want %q", got, want)
+	}
+}
+
 func TestWriteBucketJSONLMissingManifestDir(t *testing.T) {
 	t.Parallel()
 
