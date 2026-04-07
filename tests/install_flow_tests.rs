@@ -13,6 +13,7 @@ use std::io::{Cursor, Write};
 use std::path::Path;
 use winbrew::AppContext;
 use winbrew::database;
+use winbrew::models::{PackageId, PackageRef};
 use winbrew::services::app::install;
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;
@@ -118,7 +119,22 @@ impl InstallTestFixture {
     fn run_install(&self, ignore_checksum_security: bool) -> Result<install::InstallOutcome> {
         Ok(install::run(
             &self.ctx,
-            std::slice::from_ref(&self.package_name),
+            PackageRef::ByName(self.package_name.clone()),
+            ignore_checksum_security,
+            |_query, _matches| unreachable!("install should not prompt for an exact match"),
+            |_| {},
+            |_| {},
+        )?)
+    }
+
+    fn run_install_ref(
+        &self,
+        package_ref: PackageRef,
+        ignore_checksum_security: bool,
+    ) -> Result<install::InstallOutcome> {
+        Ok(install::run(
+            &self.ctx,
+            package_ref,
             ignore_checksum_security,
             |_query, _matches| unreachable!("install should not prompt for an exact match"),
             |_| {},
@@ -150,6 +166,30 @@ fn install_runs_end_to_end_in_an_isolated_root() -> Result<()> {
         .expect("package should be marked as installed");
     assert_eq!(stored.status, winbrew::models::PackageStatus::Ok);
     assert_eq!(stored.kind, "zip");
+    fixture.assert_downloaded();
+
+    Ok(())
+}
+
+#[test]
+fn install_supports_explicit_winget_ids() -> Result<()> {
+    let test_root = test_root();
+    let root = test_root.path();
+
+    let zip_bytes = create_dummy_zip_bytes()?;
+    let sha512_hash = sha512_hex(&zip_bytes);
+    let fixture = InstallTestFixture::from_zip(root, zip_bytes, &sha512_hash)?;
+
+    let outcome = fixture.run_install_ref(
+        PackageRef::ById(PackageId::Winget {
+            id: "Winbrew.TestZip".to_string(),
+        }),
+        false,
+    )?;
+
+    let result = outcome.result;
+    assert_eq!(result.name, "Winbrew Test Zip");
+    assert_eq!(result.version, "1.0.0");
     fixture.assert_downloaded();
 
     Ok(())

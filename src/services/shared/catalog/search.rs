@@ -2,7 +2,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 use crate::database;
-use crate::models::CatalogPackage;
+use crate::models::{CatalogPackage, PackageRef};
 
 #[derive(Debug)]
 pub enum SearchError {
@@ -81,9 +81,34 @@ where
         .ok_or_else(|| anyhow::anyhow!("selected package index was out of range"))
 }
 
+pub fn resolve_catalog_package_ref<FChoose>(
+    conn: &Connection,
+    package_ref: &PackageRef,
+    choose_package: &mut FChoose,
+) -> Result<CatalogPackage>
+where
+    FChoose: FnMut(&str, &[CatalogPackage]) -> Result<usize>,
+{
+    match package_ref {
+        PackageRef::ByName(name) => resolve_catalog_package(conn, name, choose_package),
+        PackageRef::ById(package_id) => {
+            resolve_catalog_package_by_id(conn, &package_id.catalog_id())
+        }
+    }
+}
+
+pub fn resolve_catalog_package_by_id(
+    conn: &Connection,
+    package_id: &str,
+) -> Result<CatalogPackage> {
+    database::get_package_by_id(conn, package_id)?
+        .ok_or_else(|| anyhow::anyhow!("no catalog package matched '{package_id}'"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{PackageId, PackageRef};
     use anyhow::Result;
     use rusqlite::{Connection, params};
     use std::sync::Mutex;
@@ -176,5 +201,41 @@ mod tests {
         }
 
         assert!(matches!(result, Err(SearchError::CatalogUnavailable)));
+    }
+
+    #[test]
+    fn resolve_catalog_package_ref_returns_package_by_id() -> Result<()> {
+        let (_temp_dir, conn) = create_catalog_db()?;
+
+        conn.execute(
+            r#"
+            INSERT INTO catalog_packages (
+                id, name, version, description, homepage, license, publisher
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "#,
+            params![
+                "winget/Contoso.App",
+                "Contoso Terminal",
+                "1.2.3",
+                Some("Terminal tools for Contoso users"),
+                Option::<String>::None,
+                Option::<String>::None,
+                Some("Contoso Ltd."),
+            ],
+        )?;
+
+        let package_ref = PackageRef::ById(PackageId::Winget {
+            id: "Contoso.App".to_string(),
+        });
+
+        let package = resolve_catalog_package_ref(&conn, &package_ref, &mut |_query, _matches| {
+            unreachable!("direct package ids should not prompt for selection")
+        })?;
+
+        assert_eq!(package.id, "winget/Contoso.App");
+        assert_eq!(package.name, "Contoso Terminal");
+        assert_eq!(package.source, "winget");
+
+        Ok(())
     }
 }

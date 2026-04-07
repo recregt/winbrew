@@ -52,6 +52,7 @@ impl<W: Write> Ui<W> {
             header_cell("Name", color, Color::Green),
             header_cell("Version", color, Color::Cyan),
             header_cell("Source", color, Color::Magenta),
+            header_cell("Package ID", color, Color::DarkGrey),
         ]);
         table.set_content_arrangement(ContentArrangement::Dynamic);
 
@@ -60,6 +61,7 @@ impl<W: Write> Ui<W> {
             row.add_cell(Cell::new(&pkg.name));
             row.add_cell(Cell::new(&pkg.version));
             row.add_cell(source_cell(&pkg.source, color));
+            row.add_cell(Cell::new(&pkg.id));
             row.max_height(1);
             table.add_row(row);
         }
@@ -219,6 +221,8 @@ mod tests {
         assert!(!output.contains(long_description));
         assert!(!output.contains("No description available"));
         assert!(output.contains("Contoso App"));
+        assert!(output.contains("winget/main/Fabrikam.Tool"));
+        assert!(output.contains("scoop/main/Contoso.App"));
         assert!(output.contains("catalog packages"));
     }
 

@@ -4,11 +4,13 @@ pub mod config;
 pub mod diagnostics;
 pub mod info;
 pub mod install;
+pub mod package_ref;
 pub mod remove;
 pub mod report;
 
 pub use diagnostics::DiagnosisResult;
 pub use info::InfoReport;
+pub use package_ref::{PackageId, PackageRef};
 pub use report::{HealthReport, ReportSection, RuntimeReport};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]

@@ -18,7 +18,7 @@ use self::connection::SqliteConnectionManager;
 
 pub use errors::CatalogNotFoundError;
 
-pub use catalog::{get_installers, search};
+pub use catalog::{get_installers, get_package_by_id, search};
 pub use config::{
     Config, ConfigEnv, ConfigError, ConfigSection, ConfigSource, ConfigValidationError, CoreConfig,
     PathsConfig, config_sections, config_set, get_effective_value,

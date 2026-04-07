@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::models::{CatalogInstaller, CatalogPackage};
 
@@ -33,6 +33,18 @@ pub fn get_installers(conn: &Connection, package_id: &str) -> Result<Vec<Catalog
     stmt.query_map(params![package_id], row_to_installer)?
         .collect::<std::result::Result<Vec<_>, _>>()
         .context("failed to read catalog installer")
+}
+
+pub fn get_package_by_id(conn: &Connection, package_id: &str) -> Result<Option<CatalogPackage>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, version, description, homepage, license, publisher
+         FROM catalog_packages
+         WHERE id = ?1",
+    )?;
+
+    stmt.query_row(params![package_id], row_to_package)
+        .optional()
+        .context("failed to read catalog package")
 }
 
 fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {

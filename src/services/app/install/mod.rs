@@ -9,7 +9,7 @@ use crate::AppContext;
 use crate::core::cancel;
 use crate::database;
 use crate::engines::{self, EngineKind};
-use crate::models::CatalogPackage;
+use crate::models::{CatalogPackage, PackageRef};
 use crate::services::shared::catalog;
 use crate::services::shared::temp_workspace;
 
@@ -20,7 +20,7 @@ pub type Result<T> = types::Result<T>;
 
 pub fn run<FChoose, FStart, FProgress>(
     ctx: &AppContext,
-    query: &[String],
+    package_ref: PackageRef,
     ignore_checksum_security: bool,
     mut choose_package: FChoose,
     on_start: FStart,
@@ -31,14 +31,9 @@ where
     FStart: FnOnce(Option<u64>),
     FProgress: FnMut(u64),
 {
-    let query_text = query.join(" ").trim().to_owned();
-    if query_text.is_empty() {
-        return Err(anyhow::Error::msg("package query cannot be empty").into());
-    }
-
     let catalog_conn = database::get_catalog_conn()?;
     let package =
-        catalog::resolve_catalog_package(&catalog_conn, &query_text, &mut choose_package)?;
+        catalog::resolve_catalog_package_ref(&catalog_conn, &package_ref, &mut choose_package)?;
     let installer =
         catalog::select_installer(&database::get_installers(&catalog_conn, &package.id)?)?;
     let engine = engines::get_engine(&installer)?;

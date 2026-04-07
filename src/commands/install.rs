@@ -2,6 +2,7 @@ use anyhow::Result;
 
 use crate::commands::command_errors::{cancelled, reported_with_hint};
 use crate::models::CatalogPackage;
+use crate::models::PackageRef;
 use crate::services::app::install;
 use crate::services::app::install::InstallError;
 use crate::{AppContext, ui::Ui};
@@ -10,13 +11,20 @@ pub fn run(ctx: &AppContext, query: &[String], ignore_checksum_security: bool) -
     let mut ui = Ui::new(ctx.ui);
     ui.page_title("Install Package");
 
-    ui.info(format!("Resolving {}...", query.join(" ")));
+    let query_text = query.join(" ").trim().to_owned();
+    if query_text.is_empty() {
+        return Err(anyhow::Error::msg("package query cannot be empty"));
+    }
+
+    let package_ref = PackageRef::parse(&query_text).map_err(anyhow::Error::msg)?;
+
+    ui.info(format!("Resolving {query_text}..."));
 
     let progress = ui.progress_bar();
 
     let result = install::run(
         ctx,
-        query,
+        package_ref,
         ignore_checksum_security,
         |query, matches| {
             let choices = matches
