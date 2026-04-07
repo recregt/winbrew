@@ -1,44 +1,9 @@
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use serde::{Deserialize, Serialize};
 
 use crate::error::ParserError;
 
-const SCHEMA_VERSION: u32 = 1;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CatalogMetadata {
-    pub schema_version: u32,
-    pub generated_at_unix: u64,
-    pub current_hash: String,
-    #[serde(default)]
-    pub previous_hash: String,
-    pub package_count: usize,
-    pub source_counts: BTreeMap<String, usize>,
-}
-
-impl CatalogMetadata {
-    pub fn build_from_counts(
-        package_count: usize,
-        source_counts: BTreeMap<String, usize>,
-        current_hash: String,
-    ) -> Self {
-        Self {
-            schema_version: SCHEMA_VERSION,
-            generated_at_unix: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-            current_hash,
-            previous_hash: String::new(),
-            package_count,
-            source_counts,
-        }
-    }
-}
+pub use winbrew_models::CatalogMetadata;
 
 pub fn write_metadata(path: &Path, metadata: &CatalogMetadata) -> Result<(), ParserError> {
     if let Some(parent) = path.parent() {
