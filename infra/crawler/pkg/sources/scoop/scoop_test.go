@@ -6,10 +6,34 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
-	"winbrew/infra/pkg/normalize"
+	"infra/crawler/pkg/normalize"
 )
+
+func TestNewDeduplicatesBuckets(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	source, err := New(dir,
+		Bucket{Name: "extras", URL: "https://example.invalid/override"},
+		Bucket{Name: "custom", URL: "https://example.invalid/custom"},
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	got := make([]string, 0, len(source.buckets))
+	for _, bucket := range source.buckets {
+		got = append(got, bucket.Name)
+	}
+
+	want := []string{"main", "extras", "versions", "games", "custom"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("bucket names = %#v, want %#v", got, want)
+	}
+}
 
 func TestReadManifestUsesArchitectureBlocks(t *testing.T) {
 	t.Parallel()
@@ -43,7 +67,7 @@ func TestReadManifestUsesArchitectureBlocks(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	pkg, err := readManifest("main", manifestDir, "example.json")
+	pkg, err := readManifest(context.Background(), "main", manifestDir, "example.json")
 	if err != nil {
 		t.Fatalf("readManifest() error = %v", err)
 	}
@@ -66,6 +90,37 @@ func TestReadManifestUsesArchitectureBlocks(t *testing.T) {
 		if pkg.Installers[i] != want[i] {
 			t.Fatalf("Installers[%d] = %#v, want %#v", i, pkg.Installers[i], want[i])
 		}
+	}
+}
+
+func TestResolveLicenseUsesIdentifierOrURL(t *testing.T) {
+	t.Parallel()
+
+	if got := resolveLicense(map[string]any{"identifier": "MIT"}); got != "MIT" {
+		t.Fatalf("resolveLicense(identifier) = %q, want %q", got, "MIT")
+	}
+	if got := resolveLicense(map[string]any{"url": "https://example.invalid/license"}); got != "https://example.invalid/license" {
+		t.Fatalf("resolveLicense(url) = %q, want %q", got, "https://example.invalid/license")
+	}
+	if got := resolveLicense(nil); got != "" {
+		t.Fatalf("resolveLicense(nil) = %q, want empty", got)
+	}
+}
+
+func TestResolveInstallersUsesArchitectureOrder(t *testing.T) {
+	t.Parallel()
+
+	installers := resolveInstallers(scoopManifest{
+		Architecture: map[string]archBlock{
+			"amd64": {URL: []any{"https://example.invalid/amd64.zip"}, Hash: []any{"hash-amd64"}},
+			"any":   {URL: []any{"https://example.invalid/any.zip"}, Hash: []any{"hash-any"}},
+			"x64":   {URL: []any{"https://example.invalid/x64.zip"}, Hash: []any{"hash-x64"}},
+		},
+	})
+
+	want := []normalize.Installer{{URL: "https://example.invalid/x64.zip", Hash: "hash-x64", Arch: "x64", Type: "portable"}, {URL: "https://example.invalid/amd64.zip", Hash: "hash-amd64", Arch: "amd64", Type: "portable"}, {URL: "https://example.invalid/any.zip", Hash: "hash-any", Arch: "any", Type: "portable"}}
+	if !reflect.DeepEqual(installers, want) {
+		t.Fatalf("installers = %#v, want %#v", installers, want)
 	}
 }
 

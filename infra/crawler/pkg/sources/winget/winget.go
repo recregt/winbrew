@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,7 +15,7 @@ var sourceURL = "https://cdn.winget.microsoft.com/cache/source.msix"
 
 const (
 	sourceName      = "winget"
-	maxDownloadSize = 2 << 30
+	maxDownloadSize = 1 << 30 // 1 GiB
 )
 
 type Source struct {
@@ -76,6 +77,8 @@ func (s *Source) DownloadSourceDB(ctx context.Context, dst string) error {
 }
 
 func (s *Source) download(ctx context.Context, url, dst string) error {
+	slog.Debug("starting winget download", "url", url, "dst", dst)
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -109,27 +112,30 @@ func (s *Source) download(ctx context.Context, url, dst string) error {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
 	tempPath := tempFile.Name()
-
-	buf := make([]byte, 32*1024)
-	n, err := io.CopyBuffer(tempFile, io.LimitReader(resp.Body, maxDownloadSize+1), buf)
-	if err != nil {
+	defer func() {
 		_ = tempFile.Close()
 		_ = os.Remove(tempPath)
+	}()
+
+	buf := make([]byte, 32*1024)
+	body := io.Reader(resp.Body)
+	if resp.ContentLength > 0 {
+		body = &progressReader{url: url, total: resp.ContentLength, reader: resp.Body}
+	}
+
+	n, err := io.CopyBuffer(tempFile, io.LimitReader(body, maxDownloadSize+1), buf)
+	if err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 	if n > maxDownloadSize {
-		_ = tempFile.Close()
-		_ = os.Remove(tempPath)
 		return fmt.Errorf("download exceeds %d bytes", maxDownloadSize)
 	}
 
 	if err := tempFile.Close(); err != nil {
-		_ = os.Remove(tempPath)
 		return fmt.Errorf("failed to close temp file: %w", err)
 	}
 
 	if err := os.Rename(tempPath, dst); err != nil {
-		_ = os.Remove(tempPath)
 		return fmt.Errorf("failed to move downloaded file into place: %w", err)
 	}
 
@@ -137,5 +143,39 @@ func (s *Source) download(ctx context.Context, url, dst string) error {
 		_ = os.WriteFile(dst+".etag", []byte(etag), 0o644)
 	}
 
+	slog.Debug("completed winget download", "url", url, "dst", dst, "bytes", n)
+
 	return nil
+}
+
+type progressReader struct {
+	url     string
+	total   int64
+	read    int64
+	reader  io.Reader
+	nextLog int64
+}
+
+func (pr *progressReader) Read(p []byte) (int, error) {
+	n, err := pr.reader.Read(p)
+	if n <= 0 {
+		return n, err
+	}
+
+	pr.read += int64(n)
+	if pr.nextLog == 0 {
+		pr.nextLog = 16 << 20
+	}
+	if pr.read >= pr.nextLog || err == io.EOF {
+		if pr.total > 0 {
+			slog.Debug("winget download progress", "url", pr.url, "downloaded", pr.read, "total", pr.total)
+		} else {
+			slog.Debug("winget download progress", "url", pr.url, "downloaded", pr.read)
+		}
+		for pr.read >= pr.nextLog {
+			pr.nextLog += 16 << 20
+		}
+	}
+
+	return n, err
 }
