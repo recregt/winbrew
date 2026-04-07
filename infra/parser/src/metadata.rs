@@ -25,8 +25,12 @@ impl CatalogMetadata {
     pub fn build(records: &[ParsedPackage], current_hash: String) -> Self {
         let mut source_counts = BTreeMap::new();
         for record in records {
-            let key = record.package.source.as_str().to_string();
-            *source_counts.entry(key).or_insert(0) += 1;
+            let source = record.package.source.as_str();
+            if let Some(count) = source_counts.get_mut(source) {
+                *count += 1;
+            } else {
+                source_counts.insert(source.to_string(), 1);
+            }
         }
 
         Self {

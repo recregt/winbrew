@@ -207,13 +207,8 @@ func loadRemoteMetadata(ctx context.Context, client *minio.Client, bucketName, m
 		return nil, fmt.Errorf("failed to stat remote metadata: %w", err)
 	}
 
-	data, err := io.ReadAll(object)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read remote metadata: %w", err)
-	}
-
 	var metadata Metadata
-	if err := json.Unmarshal(data, &metadata); err != nil {
+	if err := json.NewDecoder(object).Decode(&metadata); err != nil {
 		return nil, fmt.Errorf("failed to decode remote metadata: %w", err)
 	}
 

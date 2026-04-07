@@ -72,8 +72,13 @@ struct CatalogStats {
 impl CatalogStats {
     fn record(&mut self, package: &ParsedPackage) {
         self.package_count += 1;
-        let key = package.package.source.as_str().to_string();
-        *self.source_counts.entry(key).or_insert(0) += 1;
+        let source = package.package.source.as_str();
+
+        if let Some(count) = self.source_counts.get_mut(source) {
+            *count += 1;
+        } else {
+            self.source_counts.insert(source.to_string(), 1);
+        }
     }
 }
 
@@ -82,23 +87,22 @@ where
     R: BufRead,
     F: FnMut(ParsedPackage) -> Result<(), ParserError>,
 {
-    let mut line = String::new();
+    let mut line = Vec::new();
     let mut line_number = 0;
 
     loop {
         line.clear();
-        let bytes_read = reader.read_line(&mut line)?;
+        let bytes_read = reader.read_until(b'\n', &mut line)?;
         if bytes_read == 0 {
             break;
         }
 
         line_number += 1;
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
+        if line.iter().all(|byte| byte.is_ascii_whitespace()) {
             continue;
         }
 
-        let raw: RawFetchedPackage = match serde_json::from_str(trimmed) {
+        let raw: RawFetchedPackage = match serde_json::from_slice(&line) {
             Ok(raw) => raw,
             Err(source) => {
                 return Err(ParserError::LineDecode {
@@ -120,7 +124,7 @@ where
 fn hash_file(path: &Path) -> Result<String, ParserError> {
     let mut file = fs::File::open(path)?;
     let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 8192];
+    let mut buffer = [0u8; 65536];
 
     loop {
         let read = file.read(&mut buffer)?;
