@@ -45,10 +45,6 @@ type RetryConfig struct {
 	Backoff time.Duration `yaml:"backoff"`
 }
 
-func Load(path string) (*Config, error) {
-	return LoadContext(context.Background(), path)
-}
-
 // LoadContext loads and validates a config file with cancellation support.
 func LoadContext(ctx context.Context, path string) (*Config, error) {
 	if err := ctx.Err(); err != nil {
@@ -112,14 +108,6 @@ func Parse(r io.Reader) (*Config, error) {
 func (c *Config) Validate() error {
 	c.normalize()
 	return c.validate()
-}
-
-func (c *Config) IsDebug() bool {
-	return c.LogLevel == "debug"
-}
-
-func (c *Config) GetSources() []string {
-	return append([]string(nil), c.Sources...)
 }
 
 func (c *Config) validate() error {

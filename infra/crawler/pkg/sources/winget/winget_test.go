@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -103,7 +104,7 @@ func TestDownloadUsesETagCache(t *testing.T) {
 func TestDownloadSourceDBExtractsWingetDatabase(t *testing.T) {
 	var payload bytes.Buffer
 	zipWriter := zip.NewWriter(&payload)
-	entry, err := zipWriter.Create("Public/index.db")
+	entry, err := zipWriter.Create("public/Index.db")
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -143,5 +144,73 @@ func TestDownloadSourceDBExtractsWingetDatabase(t *testing.T) {
 	}
 	if got, want := string(data), "winget-index-bytes"; got != want {
 		t.Fatalf("extracted db = %q, want %q", got, want)
+	}
+}
+
+func TestExtractDBRejectsPathTraversalEntry(t *testing.T) {
+	t.Parallel()
+
+	var payload bytes.Buffer
+	zipWriter := zip.NewWriter(&payload)
+	entry, err := zipWriter.Create("../Public/index.db")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := io.WriteString(entry, "evil"); err != nil {
+		t.Fatalf("WriteString() error = %v", err)
+	}
+	if err := zipWriter.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	msixPath := filepath.Join(t.TempDir(), "winget.msix")
+	if err := os.WriteFile(msixPath, payload.Bytes(), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	r, err := zip.OpenReader(msixPath)
+	if err != nil {
+		t.Fatalf("OpenReader() error = %v", err)
+	}
+	defer r.Close()
+
+	err = extractFile(r.File[0], filepath.Join(t.TempDir(), "out.db"))
+	if err == nil {
+		t.Fatal("extractFile() error = nil, want path traversal error")
+	}
+	if !strings.Contains(err.Error(), "path traversal") {
+		t.Fatalf("extractFile() error = %v, want path traversal rejection", err)
+	}
+}
+
+func TestExtractDBRejectsDuplicateEntries(t *testing.T) {
+	t.Parallel()
+
+	var payload bytes.Buffer
+	zipWriter := zip.NewWriter(&payload)
+	for _, name := range []string{"Public/index.db", "public/Index.db"} {
+		entry, err := zipWriter.Create(name)
+		if err != nil {
+			t.Fatalf("Create(%q) error = %v", name, err)
+		}
+		if _, err := io.WriteString(entry, "winget-index-bytes"); err != nil {
+			t.Fatalf("WriteString(%q) error = %v", name, err)
+		}
+	}
+	if err := zipWriter.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	msixPath := filepath.Join(t.TempDir(), "winget.msix")
+	if err := os.WriteFile(msixPath, payload.Bytes(), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	_, err := extractDB(msixPath, filepath.Join(t.TempDir(), "out.db"))
+	if err == nil {
+		t.Fatal("extractDB() error = nil, want duplicate entry error")
+	}
+	if !strings.Contains(err.Error(), "multiple index.db entries") {
+		t.Fatalf("extractDB() error = %v, want duplicate entry rejection", err)
 	}
 }

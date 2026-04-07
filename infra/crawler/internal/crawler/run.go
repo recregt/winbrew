@@ -15,10 +15,10 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"winbrew/infra/internal/config"
-	"winbrew/infra/internal/retry"
-	"winbrew/infra/pkg/sources/scoop"
-	"winbrew/infra/pkg/sources/winget"
+	"infra/crawler/internal/config"
+	"infra/crawler/internal/retry"
+	"infra/crawler/pkg/sources/scoop"
+	"infra/crawler/pkg/sources/winget"
 )
 
 type crawlerSources struct {

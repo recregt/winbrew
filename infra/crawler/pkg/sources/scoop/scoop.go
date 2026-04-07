@@ -1,6 +1,8 @@
 package scoop
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,12 +12,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 
-	"winbrew/infra/internal/retry"
-	"winbrew/infra/pkg/normalize"
+	"infra/crawler/internal/retry"
+	"infra/crawler/pkg/normalize"
 )
 
 const sourceName = "scoop"
@@ -38,6 +41,10 @@ type Source struct {
 	cacheDir string
 }
 
+const maxManifestSize = 1 << 20
+
+var manifestReadSemaphore = make(chan struct{}, 16)
+
 func (s *Source) Close() error {
 	return nil
 }
@@ -53,8 +60,15 @@ func New(cacheDir string, extra ...Bucket) (*Source, error) {
 		return nil, fmt.Errorf("failed to create cache dir: %w", err)
 	}
 
-	buckets := append([]Bucket{}, defaultBuckets...)
-	buckets = append(buckets, extra...)
+	buckets := make([]Bucket, 0, len(defaultBuckets)+len(extra))
+	seen := make(map[string]struct{}, len(defaultBuckets)+len(extra))
+	for _, bucket := range append(append([]Bucket(nil), defaultBuckets...), extra...) {
+		if _, ok := seen[bucket.Name]; ok {
+			continue
+		}
+		seen[bucket.Name] = struct{}{}
+		buckets = append(buckets, bucket)
+	}
 
 	return &Source{
 		buckets:  buckets,
@@ -66,19 +80,26 @@ func (s *Source) Name() string {
 	return sourceName
 }
 
-func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, backoff time.Duration) error {
-	enc := json.NewEncoder(w)
+func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, backoff time.Duration) (err error) {
+	writer, flush := bufferJSONLWriter(w)
+	defer func() {
+		if flushErr := flush(); err == nil && flushErr != nil {
+			err = fmt.Errorf("failed to flush JSONL writer: %w", flushErr)
+		}
+	}()
+
+	enc := json.NewEncoder(writer)
 	type bucketResult struct {
 		bucket Bucket
 		dir    string
 		err    error
 	}
 
-	results := make(chan bucketResult, len(s.buckets))
+	results := make([]bucketResult, len(s.buckets))
 	group, groupCtx := errgroup.WithContext(ctx)
 
-	for _, bucket := range s.buckets {
-		bucket := bucket
+	for i, bucket := range s.buckets {
+		i, bucket := i, bucket
 		dir := filepath.Join(s.cacheDir, bucket.Name)
 
 		group.Go(func() error {
@@ -89,29 +110,43 @@ func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, b
 				err = fmt.Errorf("bucket %s: %w", bucket.Name, err)
 			}
 
-			results <- bucketResult{bucket: bucket, dir: dir, err: err}
+			results[i] = bucketResult{bucket: bucket, dir: dir, err: err}
 			return err
 		})
 	}
 
-	waitErrCh := make(chan error, 1)
-	go func() {
-		waitErrCh <- group.Wait()
-		close(results)
-	}()
+	if err := group.Wait(); err != nil {
+		return err
+	}
 
-	for result := range results {
+	succeeded := 0
+	failed := 0
+	var lastErr error
+
+	for _, result := range results {
 		if result.err != nil {
-			return result.err
+			failed++
+			lastErr = result.err
+			slog.Error("bucket sync failed", "bucket", result.bucket.Name, "err", result.err)
+			continue
 		}
 
 		if err := writeBucketJSONL(ctx, enc, result.bucket.Name, result.dir); err != nil {
-			return fmt.Errorf("bucket %s: %w", result.bucket.Name, err)
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
+
+			failed++
+			lastErr = err
+			slog.Error("bucket write failed", "bucket", result.bucket.Name, "err", err)
+			continue
 		}
+
+		succeeded++
 	}
 
-	if err := <-waitErrCh; err != nil {
-		return err
+	if failed > 0 {
+		return fmt.Errorf("partial failure: %d succeeded, %d failed, last error: %w", succeeded, failed, lastErr)
 	}
 
 	return nil
@@ -173,22 +208,82 @@ func writeBucketJSONL(ctx context.Context, enc *json.Encoder, bucketName, bucket
 		return fmt.Errorf("failed to read bucket dir: %w", err)
 	}
 
+	manifestNames := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
 		}
 
-		pkg, err := readManifest(bucketName, manifestDir, entry.Name())
-		if err != nil {
-			slog.Warn("skipping manifest", "bucket", bucketName, "manifest", entry.Name(), "err", err)
+		manifestNames = append(manifestNames, entry.Name())
+	}
+
+	if len(manifestNames) == 0 {
+		return nil
+	}
+
+	type manifestResult struct {
+		manifest string
+		pkg      packageSnapshot
+		err      error
+	}
+
+	results := make([]manifestResult, len(manifestNames))
+	jobs := make(chan int)
+	workerCount := 4
+	if len(manifestNames) < workerCount {
+		workerCount = len(manifestNames)
+	}
+	slog.Debug("starting manifest workers", "bucket", bucketName, "manifests", len(manifestNames), "workers", workerCount)
+
+	var wg sync.WaitGroup
+	wg.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		workerID := i
+		go func() {
+			defer wg.Done()
+			slog.Debug("manifest worker started", "bucket", bucketName, "worker", workerID)
+			for idx := range jobs {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				manifest := manifestNames[idx]
+				pkg, err := readManifest(ctx, bucketName, manifestDir, manifest)
+				if err != nil {
+					results[idx] = manifestResult{manifest: manifest, err: err}
+					continue
+				}
+
+				results[idx] = manifestResult{manifest: manifest, pkg: packageSnapshotFromPackage(pkg)}
+			}
+		}()
+	}
+
+	for idx := range manifestNames {
+		select {
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			return ctx.Err()
+		case jobs <- idx:
+		}
+	}
+	close(jobs)
+	wg.Wait()
+
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	for _, result := range results {
+		if result.err != nil {
+			slog.Warn("skipping manifest", "bucket", bucketName, "manifest", result.manifest, "err", result.err)
 			continue
 		}
-		if err := enc.Encode(packageSnapshotFromPackage(pkg)); err != nil {
-			return fmt.Errorf("failed to encode package %s: %w", pkg.ID, err)
+		if err := enc.Encode(result.pkg); err != nil {
+			return fmt.Errorf("failed to encode package %s: %w", result.pkg.ID, err)
 		}
 	}
 
@@ -212,16 +307,34 @@ type archBlock struct {
 	Hash any `json:"hash"`
 }
 
-func readManifest(bucketName, dir, filename string) (normalize.Package, error) {
-	path := filepath.Join(dir, filename)
+func readManifest(ctx context.Context, bucketName, dir, filename string) (normalize.Package, error) {
+	select {
+	case manifestReadSemaphore <- struct{}{}:
+	case <-ctx.Done():
+		return normalize.Package{}, ctx.Err()
+	}
+	defer func() {
+		<-manifestReadSemaphore
+	}()
 
-	data, err := os.ReadFile(path)
+	path := filepath.Join(dir, filename)
+	info, err := os.Stat(path)
 	if err != nil {
-		return normalize.Package{}, fmt.Errorf("failed to read %s: %w", filename, err)
+		return normalize.Package{}, fmt.Errorf("failed to stat %s: %w", filename, err)
+	}
+	if info.Size() > maxManifestSize {
+		return normalize.Package{}, fmt.Errorf("manifest too large: %d bytes", info.Size())
 	}
 
+	file, err := os.Open(path)
+	if err != nil {
+		return normalize.Package{}, fmt.Errorf("failed to open %s: %w", filename, err)
+	}
+	defer file.Close()
+
+	var raw bytes.Buffer
 	var m scoopManifest
-	if err := json.Unmarshal(data, &m); err != nil {
+	if err := json.NewDecoder(io.TeeReader(file, &raw)).Decode(&m); err != nil {
 		return normalize.Package{}, fmt.Errorf("failed to parse %s: %w", filename, err)
 	}
 
@@ -236,8 +349,17 @@ func readManifest(bucketName, dir, filename string) (normalize.Package, error) {
 		Homepage:    m.Homepage,
 		License:     resolveLicense(m.License),
 		Installers:  resolveInstallers(m),
-		Raw:         data,
+		Raw:         append(json.RawMessage(nil), raw.Bytes()...),
 	}, nil
+}
+
+func bufferJSONLWriter(w io.Writer) (io.Writer, func() error) {
+	if bw, ok := w.(*bufio.Writer); ok {
+		return bw, bw.Flush
+	}
+
+	bw := bufio.NewWriterSize(w, 64*1024)
+	return bw, bw.Flush
 }
 
 func resolveLicense(v any) string {
@@ -248,6 +370,9 @@ func resolveLicense(v any) string {
 		if id, ok := val["identifier"].(string); ok {
 			return id
 		}
+		if url, ok := val["url"].(string); ok {
+			return url
+		}
 	}
 	return ""
 }
@@ -255,7 +380,7 @@ func resolveLicense(v any) string {
 func resolveInstallers(m scoopManifest) []normalize.Installer {
 	if len(m.Architecture) > 0 {
 		var installers []normalize.Installer
-		for _, arch := range []string{"x64", "x86", "arm64"} {
+		for _, arch := range []string{"x64", "amd64", "x86", "386", "arm64", "aarch64", "any", "neutral"} {
 			block, ok := m.Architecture[arch]
 			if !ok {
 				continue

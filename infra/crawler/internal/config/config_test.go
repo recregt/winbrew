@@ -176,9 +176,9 @@ func TestLoadReadsConfigFile(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	cfg, err := Load(path)
+	cfg, err := LoadContext(context.Background(), path)
 	if err != nil {
-		t.Fatalf("Load() error = %v, want nil", err)
+		t.Fatalf("LoadContext() error = %v, want nil", err)
 	}
 	if got, want := cfg.Sources, []string{"winget"}; len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("Sources = %#v, want %#v", got, want)
