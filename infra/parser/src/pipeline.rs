@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::fs;
 use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
@@ -121,6 +122,11 @@ fn hash_file(path: &Path) -> Result<String, ParserError> {
     }
 
     let digest = hasher.finalize();
+    let mut digest_hex = String::with_capacity(digest.len() * 2);
 
-    Ok(format!("sha256:{digest:x}"))
+    for byte in digest {
+        write!(&mut digest_hex, "{byte:02x}").expect("write digest hex");
+    }
+
+    Ok(format!("sha256:{digest_hex}"))
 }
