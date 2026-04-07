@@ -60,24 +60,6 @@ func (s *Source) Name() string {
 	return sourceName
 }
 
-func (s *Source) Fetch(ctx context.Context) ([]normalize.Package, error) {
-	var all []normalize.Package
-
-	for _, bucket := range s.buckets {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-
-		pkgs, err := s.fetchBucket(ctx, bucket)
-		if err != nil {
-			return nil, fmt.Errorf("bucket %s: %w", bucket.Name, err)
-		}
-		all = append(all, pkgs...)
-	}
-
-	return all, nil
-}
-
 func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, backoff time.Duration) error {
 	enc := json.NewEncoder(w)
 
