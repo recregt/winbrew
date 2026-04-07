@@ -96,3 +96,17 @@ func TestHashFileAndMetadataRoundTrip(t *testing.T) {
 		t.Fatalf("PackageCount = %d, want %d", got, want)
 	}
 }
+
+func TestLoadMetadataRejectsUnsupportedSchemaVersion(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "metadata.json")
+	if err := os.WriteFile(path, []byte(`{"schema_version":2,"generated_at_unix":1,"current_hash":"sha256:abc","package_count":1,"source_counts":{}}`), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if _, err := LoadMetadata(path); err == nil {
+		t.Fatal("LoadMetadata() error = nil, want unsupported schema version")
+	}
+}

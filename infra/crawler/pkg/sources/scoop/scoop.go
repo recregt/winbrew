@@ -23,6 +23,9 @@ import (
 
 const sourceName = "scoop"
 
+const scoopEnvelopeSchemaVersion = 1
+const scoopEnvelopeKind = "package"
+
 // Official Scoop buckets
 var defaultBuckets = []Bucket{
 	{Name: "main", URL: "https://github.com/ScoopInstaller/Main"},
@@ -193,6 +196,22 @@ func packageSnapshotFromPackage(pkg normalize.Package) packageSnapshot {
 	}
 }
 
+type scoopEnvelope struct {
+	SchemaVersion int             `json:"schema_version"`
+	Source        string          `json:"source"`
+	Kind          string          `json:"kind"`
+	Payload       packageSnapshot `json:"payload"`
+}
+
+func scoopEnvelopeFromPackage(pkg normalize.Package) scoopEnvelope {
+	return scoopEnvelope{
+		SchemaVersion: scoopEnvelopeSchemaVersion,
+		Source:        sourceName,
+		Kind:          scoopEnvelopeKind,
+		Payload:       packageSnapshotFromPackage(pkg),
+	}
+}
+
 func writeBucketJSONL(ctx context.Context, enc *json.Encoder, bucketName, bucketDir string) error {
 	manifestDir := filepath.Join(bucketDir, "bucket")
 
@@ -223,7 +242,7 @@ func writeBucketJSONL(ctx context.Context, enc *json.Encoder, bucketName, bucket
 
 	type manifestResult struct {
 		manifest string
-		pkg      packageSnapshot
+		pkg      normalize.Package
 		err      error
 	}
 
@@ -256,7 +275,7 @@ func writeBucketJSONL(ctx context.Context, enc *json.Encoder, bucketName, bucket
 					continue
 				}
 
-				results[idx] = manifestResult{manifest: manifest, pkg: packageSnapshotFromPackage(pkg)}
+				results[idx] = manifestResult{manifest: manifest, pkg: pkg}
 			}
 		}()
 	}
@@ -282,7 +301,7 @@ func writeBucketJSONL(ctx context.Context, enc *json.Encoder, bucketName, bucket
 			slog.Warn("skipping manifest", "bucket", bucketName, "manifest", result.manifest, "err", result.err)
 			continue
 		}
-		if err := enc.Encode(result.pkg); err != nil {
+		if err := enc.Encode(scoopEnvelopeFromPackage(result.pkg)); err != nil {
 			return fmt.Errorf("failed to encode package %s: %w", result.pkg.ID, err)
 		}
 	}

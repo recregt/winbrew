@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 )
 
+const metadataSchemaVersion = 1
+
 type Metadata struct {
 	SchemaVersion   uint32         `json:"schema_version"`
 	GeneratedAtUnix uint64         `json:"generated_at_unix"`
@@ -28,18 +30,29 @@ func LoadMetadata(path string) (Metadata, error) {
 	if err := json.NewDecoder(file).Decode(&metadata); err != nil {
 		return Metadata{}, fmt.Errorf("failed to decode metadata file: %w", err)
 	}
+	if err := metadata.validate(); err != nil {
+		return Metadata{}, err
+	}
+
+	if metadata.SchemaVersion != metadataSchemaVersion {
+		return Metadata{}, fmt.Errorf("unsupported metadata schema version: %d", metadata.SchemaVersion)
+	}
 
 	if metadata.CurrentHash == "" {
 		return Metadata{}, fmt.Errorf("metadata.current_hash cannot be empty")
-	}
-	if metadata.SourceCounts == nil {
-		metadata.SourceCounts = map[string]int{}
 	}
 
 	return metadata, nil
 }
 
 func SaveMetadata(path string, metadata Metadata) error {
+	if err := metadata.validate(); err != nil {
+		return err
+	}
+	if metadata.SchemaVersion != metadataSchemaVersion {
+		return fmt.Errorf("unsupported metadata schema version: %d", metadata.SchemaVersion)
+	}
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("failed to create metadata directory: %w", err)
 	}
@@ -59,4 +72,17 @@ func SaveMetadata(path string, metadata Metadata) error {
 
 func metadataKeyForObjectKey(objectKey string) string {
 	return path.Join(path.Dir(objectKey), "metadata.json")
+}
+
+func (m *Metadata) validate() error {
+	if m == nil {
+		return fmt.Errorf("metadata cannot be nil")
+	}
+	if m.CurrentHash == "" {
+		return fmt.Errorf("metadata.current_hash cannot be empty")
+	}
+	if m.SourceCounts == nil {
+		m.SourceCounts = map[string]int{}
+	}
+	return nil
 }
