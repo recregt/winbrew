@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use core::convert::TryFrom;
 
 use crate::error::ModelError;
+use crate::identifiers::CatalogId;
 use crate::installer::{Architecture, InstallerType};
 use crate::package::PackageSource;
 use crate::validation::{Validate, ensure_hash, ensure_http_url, ensure_non_empty};
@@ -10,7 +11,7 @@ use crate::version::Version;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogPackage {
-    pub id: String,
+    pub id: CatalogId,
     pub name: String,
     pub version: Version,
     pub source: PackageSource,
@@ -22,7 +23,7 @@ pub struct CatalogPackage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogInstaller {
-    pub package_id: String,
+    pub package_id: CatalogId,
     pub url: String,
     pub hash: String,
     pub arch: Architecture,
@@ -52,11 +53,11 @@ pub struct RawCatalogInstaller {
 
 impl CatalogPackage {
     pub fn validate(&self) -> Result<(), ModelError> {
-        ensure_non_empty("catalog_package.id", &self.id)?;
+        self.id.validate()?;
         ensure_non_empty("catalog_package.name", &self.name)?;
         self.version.validate()?;
 
-        let expected_source = PackageSource::from_catalog_id(&self.id);
+        let expected_source = PackageSource::from_catalog_id(self.id.as_ref());
         if self.source != expected_source {
             return Err(ModelError::source_mismatch(
                 "catalog_package.source",
@@ -77,7 +78,7 @@ impl Validate for CatalogPackage {
 
 impl CatalogInstaller {
     pub fn validate(&self) -> Result<(), ModelError> {
-        ensure_non_empty("catalog_installer.package_id", &self.package_id)?;
+        self.package_id.validate()?;
         ensure_http_url("catalog_installer.url", &self.url)?;
 
         if !self.hash.trim().is_empty() {
@@ -106,7 +107,7 @@ impl TryFrom<RawCatalogPackage> for CatalogPackage {
             .unwrap_or_else(|| PackageSource::from_catalog_id(&raw.id));
 
         let package = Self {
-            id: raw.id,
+            id: raw.id.into(),
             name: raw.name,
             version: raw.version.parse()?,
             source,
@@ -126,7 +127,7 @@ impl TryFrom<RawCatalogInstaller> for CatalogInstaller {
 
     fn try_from(raw: RawCatalogInstaller) -> Result<Self, Self::Error> {
         let installer = Self {
-            package_id: raw.package_id,
+            package_id: raw.package_id.into(),
             url: raw.url,
             hash: raw.hash,
             arch: raw.arch.parse()?,
@@ -148,7 +149,7 @@ mod tests {
     #[test]
     fn rejects_source_mismatch() {
         let package = CatalogPackage {
-            id: "winget/Contoso.App".to_string(),
+            id: "winget/Contoso.App".into(),
             name: "Contoso App".to_string(),
             version: Version::parse("1.2.3").expect("version should parse"),
             source: PackageSource::Scoop,
@@ -166,7 +167,7 @@ mod tests {
     #[test]
     fn validates_checksumless_catalog_installer() {
         let installer = CatalogInstaller {
-            package_id: "winget/Contoso.App".to_string(),
+            package_id: "winget/Contoso.App".into(),
             url: "https://example.test/app.exe".to_string(),
             hash: String::new(),
             arch: Architecture::Any,
@@ -179,7 +180,7 @@ mod tests {
     #[test]
     fn catalog_package_round_trips_through_serde() {
         let package = CatalogPackage {
-            id: "scoop/main/Contoso.App".to_string(),
+            id: "scoop/main/Contoso.App".into(),
             name: "Contoso App".to_string(),
             version: Version::parse("1.2.3").expect("version should parse"),
             source: PackageSource::Scoop,

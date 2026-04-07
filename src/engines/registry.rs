@@ -129,7 +129,7 @@ mod tests {
 
     fn installer(kind: InstallerType, url: &str) -> CatalogInstaller {
         CatalogInstaller {
-            package_id: "Contoso.App".to_string(),
+            package_id: "Contoso.App".into(),
             url: url.to_string(),
             hash: "hash".to_string(),
             arch: "x64".parse().expect("arch should parse"),

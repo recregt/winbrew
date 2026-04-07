@@ -4,18 +4,19 @@ use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ModelError;
+use crate::identifiers::{BucketName, PackageName};
 use crate::validation::{Validate, ensure_non_empty};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PackageRef {
-    ByName(String),
+    ByName(PackageName),
     ById(PackageId),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PackageId {
     Winget { id: String },
-    Scoop { bucket: String, id: String },
+    Scoop { bucket: BucketName, id: String },
 }
 
 impl PackageRef {
@@ -27,7 +28,7 @@ impl PackageRef {
         } else if trimmed.is_empty() {
             Err(ModelError::empty("package_ref"))
         } else {
-            Ok(Self::ByName(trimmed.to_string()))
+            Ok(Self::ByName(PackageName::parse(trimmed)?))
         }
     }
 }
@@ -35,7 +36,7 @@ impl PackageRef {
 impl Validate for PackageRef {
     fn validate(&self) -> Result<(), ModelError> {
         match self {
-            Self::ByName(name) => ensure_non_empty("package_ref.name", name),
+            Self::ByName(name) => name.validate(),
             Self::ById(package_id) => package_id.validate(),
         }
     }
@@ -65,10 +66,12 @@ impl PackageId {
                 Self::Winget { id: id.to_string() }
             }
             "scoop" => {
-                let bucket = parts
-                    .next()
-                    .filter(|value| !value.is_empty())
-                    .ok_or_else(|| invalid_package_id(trimmed))?;
+                let bucket = BucketName::parse(
+                    parts
+                        .next()
+                        .filter(|value| !value.is_empty())
+                        .ok_or_else(|| invalid_package_id(trimmed))?,
+                )?;
                 let id = parts
                     .next()
                     .filter(|value| !value.is_empty())
@@ -79,7 +82,7 @@ impl PackageId {
                 }
 
                 Self::Scoop {
-                    bucket: bucket.to_string(),
+                    bucket,
                     id: id.to_string(),
                 }
             }
@@ -92,7 +95,7 @@ impl PackageId {
     pub fn catalog_id(&self) -> String {
         match self {
             Self::Winget { id } => format!("winget/{id}"),
-            Self::Scoop { bucket, id } => format!("scoop/{bucket}/{id}"),
+            Self::Scoop { bucket, id } => format!("scoop/{}/{id}", bucket.as_str()),
         }
     }
 }
@@ -102,7 +105,7 @@ impl Validate for PackageId {
         match self {
             Self::Winget { id } => ensure_non_empty("package_id.id", id),
             Self::Scoop { bucket, id } => {
-                ensure_non_empty("package_id.bucket", bucket)?;
+                bucket.validate()?;
                 ensure_non_empty("package_id.id", id)
             }
         }
@@ -137,13 +140,14 @@ fn invalid_package_id(input: &str) -> ModelError {
 
 #[cfg(test)]
 mod tests {
-    use super::{PackageId, PackageRef};
+    use super::{BucketName, PackageId, PackageRef};
+    use crate::identifiers::PackageName;
 
     #[test]
     fn parses_package_name() {
         assert_eq!(
             PackageRef::parse("git").unwrap(),
-            PackageRef::ByName("git".to_string())
+            PackageRef::ByName(PackageName::parse("git").unwrap())
         );
     }
 
@@ -162,10 +166,17 @@ mod tests {
         assert_eq!(
             PackageRef::parse("@scoop/main/7zip").unwrap(),
             PackageRef::ById(PackageId::Scoop {
-                bucket: "main".to_string(),
+                bucket: BucketName::parse("main").unwrap(),
                 id: "7zip".to_string(),
             })
         );
+    }
+
+    #[test]
+    fn rejects_bucket_names_with_slashes() {
+        let err = BucketName::parse("main/tools").unwrap_err();
+
+        assert!(err.to_string().contains("bucket names cannot contain '/'"));
     }
 
     #[test]

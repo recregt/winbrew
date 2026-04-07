@@ -16,7 +16,7 @@ pub fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, ParserErro
     let raw_json = serde_json::to_string(&raw)?;
 
     let package = CatalogPackage {
-        id: raw.id.clone(),
+        id: raw.id.clone().into(),
         name: raw.name,
         version: Version::parse(&raw.version)?,
         source: PackageSource::from_catalog_id(&raw.id),
@@ -60,7 +60,7 @@ fn parse_installer(
     raw: RawFetchedInstaller,
 ) -> Result<CatalogInstaller, ParserError> {
     let installer = CatalogInstaller {
-        package_id: package_id.to_string(),
+        package_id: package_id.into(),
         url: raw.url,
         hash: raw.hash,
         arch: raw.arch.parse::<Architecture>()?,
