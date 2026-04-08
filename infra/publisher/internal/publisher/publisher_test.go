@@ -6,31 +6,65 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/minio/minio-go/v7"
 )
 
 func TestNormalizeEndpoint(t *testing.T) {
 	t.Parallel()
 
-	host, secure, err := normalizeEndpoint("https://123.r2.cloudflarestorage.com")
-	if err != nil {
-		t.Fatalf("normalizeEndpoint() error = %v", err)
-	}
-	if got, want := host, "123.r2.cloudflarestorage.com"; got != want {
-		t.Fatalf("host = %q, want %q", got, want)
-	}
-	if !secure {
-		t.Fatal("secure = false, want true")
+	tests := []struct {
+		name       string
+		input      string
+		wantHost   string
+		wantSecure bool
+		wantErr    bool
+	}{
+		{name: "https", input: "https://123.r2.cloudflarestorage.com", wantHost: "123.r2.cloudflarestorage.com", wantSecure: true},
+		{name: "http", input: "http://localhost:9000", wantHost: "localhost:9000", wantSecure: false},
+		{name: "bare host port", input: "localhost:9000", wantHost: "localhost:9000", wantSecure: true},
+		{name: "path not allowed", input: "https://123.r2.cloudflarestorage.com/path", wantErr: true},
 	}
 
-	host, secure, err = normalizeEndpoint("http://localhost:9000")
-	if err != nil {
-		t.Fatalf("normalizeEndpoint() error = %v", err)
+	for _, testCase := range tests {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			host, secure, err := normalizeEndpoint(testCase.input)
+			if testCase.wantErr {
+				if err == nil {
+					t.Fatal("normalizeEndpoint() error = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("normalizeEndpoint() error = %v", err)
+			}
+			if got, want := host, testCase.wantHost; got != want {
+				t.Fatalf("host = %q, want %q", got, want)
+			}
+			if secure != testCase.wantSecure {
+				t.Fatalf("secure = %v, want %v", secure, testCase.wantSecure)
+			}
+		})
 	}
-	if got, want := host, "localhost:9000"; got != want {
-		t.Fatalf("host = %q, want %q", got, want)
+}
+
+func TestIsMissingObject(t *testing.T) {
+	t.Parallel()
+
+	if !isMissingObject(minio.ErrorResponse{Code: "NoSuchKey", StatusCode: 404}) {
+		t.Fatal("isMissingObject(NoSuchKey) = false, want true")
 	}
-	if secure {
-		t.Fatal("secure = true, want false")
+	if !isMissingObject(minio.ErrorResponse{Code: "NoSuchObject", StatusCode: 404}) {
+		t.Fatal("isMissingObject(NoSuchObject) = false, want true")
+	}
+	if !isMissingObject(minio.ErrorResponse{StatusCode: 404}) {
+		t.Fatal("isMissingObject(404) = false, want true")
+	}
+	if isMissingObject(minio.ErrorResponse{Code: "AccessDenied", StatusCode: 403}) {
+		t.Fatal("isMissingObject(AccessDenied) = true, want false")
 	}
 }
 

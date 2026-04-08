@@ -51,6 +51,10 @@ func Run(ctx context.Context, inputPath, metadataPath, objectKey string) error {
 }
 
 func resolveRunInputs(inputPath, metadataPath, objectKey string) (string, string, string, error) {
+	inputPath = strings.TrimSpace(inputPath)
+	metadataPath = strings.TrimSpace(metadataPath)
+	objectKey = strings.TrimSpace(objectKey)
+
 	if strings.TrimSpace(inputPath) == "" {
 		inputPath = strings.TrimSpace(os.Getenv("WINBREW_DB_PATH"))
 	}
@@ -85,7 +89,6 @@ func loadVerifiedMetadata(inputPath, metadataPath string) (Metadata, error) {
 }
 
 func publish(ctx context.Context, client *minio.Client, bucketName, inputPath, metadataPath, objectKey string, localMetadata Metadata) error {
-
 	metadataKey := metadataKeyForObjectKey(objectKey)
 	remoteMetadata, err := loadRemoteMetadata(ctx, client, bucketName, metadataKey)
 	if err != nil {
@@ -102,19 +105,7 @@ func publish(ctx context.Context, client *minio.Client, bucketName, inputPath, m
 		return err
 	}
 
-	if _, err := client.FPutObject(ctx, bucketName, objectKey, inputPath, minio.PutObjectOptions{
-		ContentType: "application/octet-stream",
-	}); err != nil {
-		return fmt.Errorf("failed to upload %s to bucket %s: %w", filepath.Base(inputPath), bucketName, err)
-	}
-
-	if _, err := client.FPutObject(ctx, bucketName, metadataKey, metadataPath, minio.PutObjectOptions{
-		ContentType: "application/json",
-	}); err != nil {
-		return fmt.Errorf("failed to upload metadata to bucket %s: %w", bucketName, err)
-	}
-
-	return nil
+	return uploadObjects(ctx, client, bucketName, inputPath, metadataPath, objectKey, metadataKey)
 }
 
 func LoadConfigFromEnv() (Config, error) {
@@ -162,26 +153,38 @@ func newClient(cfg Config) (*minio.Client, error) {
 }
 
 func normalizeEndpoint(raw string) (string, bool, error) {
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return "", false, fmt.Errorf("invalid R2_ENDPOINT: %w", err)
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", false, fmt.Errorf("invalid R2_ENDPOINT: empty")
 	}
 
-	if parsed.Scheme == "" {
-		return raw, true, nil
-	}
-	if parsed.Host == "" {
-		return "", false, fmt.Errorf("invalid R2_ENDPOINT: %q", raw)
+	if strings.Contains(raw, "://") {
+		parsed, err := url.Parse(raw)
+		if err != nil {
+			return "", false, fmt.Errorf("invalid R2_ENDPOINT: %w", err)
+		}
+		if parsed.Host == "" {
+			return "", false, fmt.Errorf("invalid R2_ENDPOINT: %q", raw)
+		}
+		if parsed.Path != "" && parsed.Path != "/" {
+			return "", false, fmt.Errorf("invalid R2_ENDPOINT: path not allowed: %q", raw)
+		}
+
+		switch parsed.Scheme {
+		case "http":
+			return parsed.Host, false, nil
+		case "https":
+			return parsed.Host, true, nil
+		default:
+			return "", false, fmt.Errorf("unsupported R2_ENDPOINT scheme: %s", parsed.Scheme)
+		}
 	}
 
-	switch parsed.Scheme {
-	case "http":
-		return parsed.Host, false, nil
-	case "https":
-		return parsed.Host, true, nil
-	default:
-		return "", false, fmt.Errorf("unsupported R2_ENDPOINT scheme: %s", parsed.Scheme)
+	if strings.ContainsAny(raw, " /?#") {
+		return "", false, fmt.Errorf("invalid R2_ENDPOINT: path not allowed without scheme: %q", raw)
 	}
+
+	return raw, true, nil
 }
 
 func firstNonEmpty(values ...string) string {
@@ -222,15 +225,11 @@ func loadRemoteMetadata(ctx context.Context, client *minio.Client, bucketName, m
 	}
 	defer object.Close()
 
-	if _, err := object.Stat(); err != nil {
+	var metadata Metadata
+	if err := json.NewDecoder(object).Decode(&metadata); err != nil {
 		if isMissingObject(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to stat remote metadata: %w", err)
-	}
-
-	var metadata Metadata
-	if err := json.NewDecoder(object).Decode(&metadata); err != nil {
 		return nil, fmt.Errorf("failed to decode remote metadata: %w", err)
 	}
 
@@ -240,9 +239,30 @@ func loadRemoteMetadata(ctx context.Context, client *minio.Client, bucketName, m
 func isMissingObject(err error) bool {
 	response := minio.ToErrorResponse(err)
 	switch response.Code {
-	case "NoSuchKey", "NoSuchObject", "NotFound":
+	case "NoSuchKey", "NoSuchObject":
 		return true
 	default:
-		return false
+		return response.StatusCode == 404
 	}
+}
+
+func uploadObjects(ctx context.Context, client *minio.Client, bucketName, inputPath, metadataPath, objectKey, metadataKey string) error {
+	uploads := []struct {
+		key         string
+		path        string
+		contentType string
+	}{
+		{key: objectKey, path: inputPath, contentType: "application/octet-stream"},
+		{key: metadataKey, path: metadataPath, contentType: "application/json"},
+	}
+
+	for _, upload := range uploads {
+		if _, err := client.FPutObject(ctx, bucketName, upload.key, upload.path, minio.PutObjectOptions{
+			ContentType: upload.contentType,
+		}); err != nil {
+			return fmt.Errorf("failed to upload %s to bucket %s: %w", filepath.Base(upload.path), bucketName, err)
+		}
+	}
+
+	return nil
 }
