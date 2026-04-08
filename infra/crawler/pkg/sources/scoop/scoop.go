@@ -59,7 +59,7 @@ func New(cacheDir string, extra ...Bucket) (*Source, error) {
 	if _, err := exec.LookPath("git"); err != nil {
 		return nil, fmt.Errorf("git executable not found in PATH: %w", err)
 	}
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create cache dir: %w", err)
 	}
 

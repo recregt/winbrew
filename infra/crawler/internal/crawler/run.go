@@ -67,7 +67,7 @@ func Run(ctx context.Context, configPath, wingetOutPath string) error {
 		return fmt.Errorf("failed to resolve cache dir: %w", err)
 	}
 	cacheDir := filepath.Join(cacheBase, "winbrew")
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o750); err != nil {
 		return fmt.Errorf("failed to create cache dir: %w", err)
 	}
 
@@ -150,7 +150,7 @@ func runPipeline(ctx context.Context, cfg *config.Config, srcs crawlerSources, w
 	if srcs.winget != nil {
 		configuredSources++
 		group.Go(func() error {
-			if err := os.MkdirAll(filepath.Dir(wingetOutPath), 0o755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(wingetOutPath), 0o750); err != nil {
 				return fmt.Errorf("failed to create winget staging dir: %w", err)
 			}
 

@@ -37,7 +37,7 @@ func New(httpClient *http.Client, cacheDir string) (*Source, error) {
 	if cacheDir == "" {
 		return nil, fmt.Errorf("cache dir cannot be empty")
 	}
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create cache dir: %w", err)
 	}
 
@@ -59,7 +59,7 @@ func (s *Source) DownloadSourceDB(ctx context.Context, dst string) error {
 		return fmt.Errorf("destination path cannot be empty")
 	}
 
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
 		return fmt.Errorf("failed to create destination dir: %w", err)
 	}
 

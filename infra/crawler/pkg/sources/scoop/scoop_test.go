@@ -40,7 +40,7 @@ func TestReadManifestUsesArchitectureBlocks(t *testing.T) {
 
 	dir := t.TempDir()
 	manifestDir := filepath.Join(dir, "bucket")
-	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+	if err := os.MkdirAll(manifestDir, 0o750); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
 
