@@ -17,3 +17,6 @@ zip = "8"
 
 [dev-dependencies]
 tempfile = "3"
+
+[target.'cfg(windows)'.dependencies]
+winbrew-windows = { path = "../windows" }
