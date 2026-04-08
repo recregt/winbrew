@@ -1,0 +1,2 @@
+pub const LOCALAPPDATA: &str = "LOCALAPPDATA";
+pub const WINBREW_PATHS_ROOT: &str = "WINBREW_PATHS_ROOT";
