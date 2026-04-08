@@ -86,7 +86,7 @@ where
         };
     }
 
-    let backup_dir = backup_directory_path(target_dir);
+    let backup_dir = backup_path_for(target_dir);
     cleanup_path(&backup_dir)?;
 
     rename(target_dir, &backup_dir).with_context(|| {
@@ -258,7 +258,7 @@ pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()
     Ok(())
 }
 
-pub(crate) fn backup_directory_path(target_dir: &Path) -> PathBuf {
+pub(crate) fn backup_path_for(target_dir: &Path) -> PathBuf {
     let parent = target_dir.parent().unwrap_or(target_dir);
     let name = target_dir
         .file_name()

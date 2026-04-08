@@ -26,8 +26,8 @@ pub mod time;
 
 pub use env::{LOCALAPPDATA, WINBREW_PATHS_ROOT};
 pub use fs::{
-    atomic_write, atomic_write_with_pid_suffix, backup_directory_path, cleanup_path,
-    extract_zip_archive, finalize_temp_file, replace_directory,
+    atomic_write, atomic_write_temp, backup_path_for, cleanup_path, extract_zip_archive,
+    finalize_temp_file, replace_directory,
 };
 pub use hash::{
     HashAlgorithm, HashError, Hasher, Result as HashResult, hash_algorithm, normalize_hash,
