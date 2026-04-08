@@ -2617,6 +2617,7 @@ dependencies = [
  "sha1 0.11.0",
  "sha2 0.11.0",
  "thiserror",
+ "url",
  "zip",
 ]
 
@@ -2628,6 +2629,7 @@ dependencies = [
  "regex",
  "strum_macros",
  "tempfile",
+ "url",
  "winbrew-models",
  "windows",
  "zip",
