@@ -1,3 +1,22 @@
+//! Core utilities shared by Winbrew.
+//!
+//! ## Environment Configuration
+//!
+//! The core crate exposes the Windows environment variable names that higher-level
+//! code uses while resolving paths.
+//!
+//! ```no_run
+//! use winbrew_core::env;
+//!
+//! if let Ok(custom_root) = std::env::var(env::WINBREW_PATHS_ROOT) {
+//!     println!("Using custom root: {custom_root}");
+//! }
+//! ```
+//!
+//! When `WINBREW_PATHS_ROOT` is not set, the application root is typically derived
+//! from [`env::LOCALAPPDATA`] and expanded into the resolved path set in
+//! [`crate::paths::ResolvedPaths`].
+
 pub mod env;
 pub mod fs;
 pub mod hash;
