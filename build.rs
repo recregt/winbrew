@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use std::process::Command;
 
+const SOURCE_DATE_EPOCH: &str = "SOURCE_DATE_EPOCH";
+
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
 
@@ -52,7 +54,7 @@ fn main() {
 }
 
 fn build_date() -> String {
-    std::env::var("SOURCE_DATE_EPOCH")
+    std::env::var(SOURCE_DATE_EPOCH)
         .ok()
         .and_then(|ts| ts.parse::<i64>().ok())
         .and_then(|ts| DateTime::<Utc>::from_timestamp(ts, 0))
