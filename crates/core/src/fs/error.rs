@@ -4,8 +4,6 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-pub type BoxError = Box<dyn StdError + Send + Sync + 'static>;
-
 #[derive(Debug, Error)]
 pub enum FsError {
     #[error("failed to inspect {path}")]
@@ -22,6 +20,7 @@ pub enum FsError {
         source: io::Error,
     },
 
+    /// Raised when immediate deletion fails and the path cannot be renamed for deferred cleanup.
     #[error("failed to remove {path} and defer deletion to {deferred_path}")]
     RemoveAndDefer {
         path: PathBuf,
@@ -37,9 +36,8 @@ pub enum FsError {
         source: io::Error,
     },
 
-    #[error("{action} {path}")]
-    Io {
-        action: &'static str,
+    #[error("failed to create extracted file {path}")]
+    CreateExtractedFile {
         path: PathBuf,
         #[source]
         source: io::Error,
@@ -78,14 +76,14 @@ pub enum FsError {
     OpenZipArchive {
         zip_path: PathBuf,
         #[source]
-        source: BoxError,
+        source: Box<dyn StdError + Send + Sync + 'static>,
     },
 
     #[error("failed to read zip entry for {path}")]
     ReadZipEntry {
         path: PathBuf,
         #[source]
-        source: BoxError,
+        source: Box<dyn StdError + Send + Sync + 'static>,
     },
 
     #[error("failed to read {path}")]
@@ -98,6 +96,28 @@ pub enum FsError {
     #[error("failed to write {path}")]
     WriteEntry {
         path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    #[error("failed to read directory {path}")]
+    ReadDirectory {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    #[error("failed to read directory entry in {path}")]
+    ReadDirectoryEntry {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    #[error("failed to copy file {source_path} -> {target_path}")]
+    CopyFile {
+        source_path: PathBuf,
+        target_path: PathBuf,
         #[source]
         source: io::Error,
     },
@@ -122,7 +142,7 @@ pub enum FsError {
         source_dir: PathBuf,
         target_dir: PathBuf,
         #[source]
-        source: BoxError,
+        source: Box<dyn StdError + Send + Sync + 'static>,
     },
 
     #[error("failed to move staged installation into place: {source_dir} -> {target_dir}")]
@@ -141,17 +161,17 @@ pub enum FsError {
         source: io::Error,
     },
 
+    /// Raised when staged replacement fails and restoring the backup also fails.
     #[error(
-        "{action}: {source_dir} -> {target_dir} (original error: {source_error}; rollback also failed: {rollback_error})"
+        "{action}: {source_dir} -> {target_dir} (original error: {source}; rollback also failed: {rollback_error})"
     )]
     RollbackFailed {
         action: &'static str,
         source_dir: PathBuf,
         target_dir: PathBuf,
-        source_error: String,
-        rollback_error: String,
         #[source]
-        source: BoxError,
+        source: Box<dyn StdError + Send + Sync + 'static>,
+        rollback_error: Box<dyn StdError + Send + Sync + 'static>,
     },
 
     #[error("refusing to copy symlink {source_path}")]
@@ -193,9 +213,8 @@ impl FsError {
         }
     }
 
-    pub(crate) fn io(action: &'static str, path: &Path, source: io::Error) -> Self {
-        Self::Io {
-            action,
+    pub(crate) fn create_extracted_file(path: &Path, source: io::Error) -> Self {
+        Self::CreateExtractedFile {
             path: path.to_path_buf(),
             source,
         }
@@ -264,6 +283,28 @@ impl FsError {
         }
     }
 
+    pub(crate) fn read_directory(path: &Path, source: io::Error) -> Self {
+        Self::ReadDirectory {
+            path: path.to_path_buf(),
+            source,
+        }
+    }
+
+    pub(crate) fn read_directory_entry(path: &Path, source: io::Error) -> Self {
+        Self::ReadDirectoryEntry {
+            path: path.to_path_buf(),
+            source,
+        }
+    }
+
+    pub(crate) fn copy_file(source_path: &Path, target_path: &Path, source: io::Error) -> Self {
+        Self::CopyFile {
+            source_path: source_path.to_path_buf(),
+            target_path: target_path.to_path_buf(),
+            source,
+        }
+    }
+
     pub(crate) fn invalid_zip_entry_path() -> Self {
         Self::InvalidZipEntryPath
     }
@@ -324,17 +365,15 @@ impl FsError {
         action: &'static str,
         source_dir: &Path,
         target_dir: &Path,
-        source_error: impl Into<String>,
-        rollback_error: impl Into<String>,
         source: impl StdError + Send + Sync + 'static,
+        rollback_error: impl StdError + Send + Sync + 'static,
     ) -> Self {
         Self::RollbackFailed {
             action,
             source_dir: source_dir.to_path_buf(),
             target_dir: target_dir.to_path_buf(),
-            source_error: source_error.into(),
-            rollback_error: rollback_error.into(),
             source: Box::new(source),
+            rollback_error: Box::new(rollback_error),
         }
     }
 

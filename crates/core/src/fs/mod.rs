@@ -43,6 +43,6 @@ mod write;
 
 pub use archive::extract_zip_archive;
 pub use cleanup::cleanup_path;
-pub use error::{BoxError, FsError, Result};
+pub use error::{FsError, Result};
 pub use move_or_copy::{backup_path_for, replace_directory};
 pub use write::{atomic_write, atomic_write_temp, finalize_temp_file};

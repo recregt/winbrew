@@ -214,8 +214,8 @@ fn extract_entry<R: Read>(
         extraction.ensure_directory_tree(parent)?;
     }
 
-    let mut outfile = fs::File::create(&outpath)
-        .map_err(|err| FsError::io("failed to create extracted file", &outpath, err))?;
+    let mut outfile =
+        fs::File::create(&outpath).map_err(|err| FsError::create_extracted_file(&outpath, err))?;
     extraction.record_file(&outpath);
 
     loop {
