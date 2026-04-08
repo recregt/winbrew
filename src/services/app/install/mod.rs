@@ -8,14 +8,14 @@ use std::fs;
 
 use crate::AppContext;
 use crate::engines::{self, EngineKind};
-use crate::models::{CatalogPackage, PackageRef};
 use crate::runtime::cancel;
 use crate::services::shared::catalog;
 use crate::services::shared::storage;
 use crate::services::shared::temp_workspace;
+pub use winbrew_models::{
+    CatalogPackage, InstallFailureClass, InstallOutcome, InstallResult, PackageRef,
+};
 
-pub use crate::models::install::InstallFailureClass;
-pub use crate::models::install::{InstallOutcome, InstallResult};
 pub use types::InstallError;
 pub type Result<T> = types::Result<T>;
 

@@ -3,8 +3,9 @@ use rusqlite::Connection;
 
 use crate::core::paths::ResolvedPaths;
 use crate::database;
-use crate::models::config::ConfigSection;
-use crate::models::{CatalogInstaller, CatalogPackage, Package, PackageStatus};
+use winbrew_models::{
+    CatalogInstaller, CatalogPackage, ConfigSection, ConfigValueSource, Package, PackageStatus,
+};
 
 pub use crate::database::{CatalogNotFoundError, PackageNotFoundError};
 
@@ -65,9 +66,7 @@ pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
     database::search(conn, query)
 }
 
-pub fn get_effective_value(
-    key: &str,
-) -> Result<(String, crate::models::config::ConfigValueSource)> {
+pub fn get_effective_value(key: &str) -> Result<(String, ConfigValueSource)> {
     database::get_effective_value(key)
 }
 

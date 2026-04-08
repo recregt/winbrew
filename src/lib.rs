@@ -7,9 +7,9 @@ use std::sync::Arc;
 use crate::cli::Cli;
 use crate::commands::run;
 use crate::core::paths::ResolvedPaths;
-use crate::models::config::ConfigSection;
 use crate::services::bootstrap;
 use crate::services::shared::config as shared_config;
+use winbrew_models::ConfigSection;
 
 pub mod cli;
 pub mod commands;
@@ -18,7 +18,6 @@ pub mod services;
 
 pub use winbrew_core as core;
 pub use winbrew_engines as engines;
-pub use winbrew_models as models;
 pub use winbrew_runtime as runtime;
 pub use winbrew_ui::{Ui, UiBuilder, UiSettings};
 pub use winbrew_windows as windows;

@@ -23,7 +23,7 @@ pub use catalog::{CatalogInstaller, CatalogPackage, RawCatalogInstaller, RawCata
 pub use catalog_metadata::CatalogMetadata;
 pub use config::{ConfigSection, ConfigValue, ConfigValueSource};
 pub use dependency::Dependency;
-pub use diagnostics::DiagnosisResult;
+pub use diagnostics::{DiagnosisResult, DiagnosisSeverity};
 pub use error::ModelError;
 pub use identifiers::{BucketName, CatalogId, PackageName};
 pub use info::InfoReport;

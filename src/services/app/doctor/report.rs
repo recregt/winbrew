@@ -2,12 +2,10 @@ use anyhow::Result;
 use indicatif::ProgressBar;
 use std::time::Instant;
 
-use crate::{
-    AppContext,
-    models::{HealthReport, diagnostics::DiagnosisSeverity},
-};
+use crate::AppContext;
 
 use super::scan;
+use winbrew_models::{DiagnosisSeverity, HealthReport};
 
 pub struct Reporter<'a> {
     ctx: &'a AppContext,

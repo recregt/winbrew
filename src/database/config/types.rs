@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use super::keys::env_override;
 use super::registry;
 use crate::core::env::LOCALAPPDATA;
-pub use crate::models::config::{ConfigSection, ConfigValueSource as ConfigSource};
 use serde::{Deserialize, Serialize};
+pub use winbrew_models::{ConfigSection, ConfigValueSource as ConfigSource};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Config {

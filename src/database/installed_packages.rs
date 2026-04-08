@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use rusqlite::{Connection, Error as SqlError, OptionalExtension, params, types::Type};
 use thiserror::Error;
 
-use crate::models::{InstallerType, Package, PackageStatus};
+use winbrew_models::{InstallerType, Package, PackageStatus};
 
 #[derive(Debug, Error)]
 #[error("package '{name}' not found")]

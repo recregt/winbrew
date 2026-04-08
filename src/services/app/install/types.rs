@@ -4,9 +4,9 @@ use thiserror::Error;
 
 use super::state::InstallStateError;
 use crate::core::hash::{HashAlgorithm, HashError};
-use crate::models::install::InstallFailureClass;
 use crate::runtime::cancel::CancellationError;
 use crate::services::shared::catalog::InstallerSelectionError;
+use winbrew_models::InstallFailureClass;
 
 #[derive(Debug, Error)]
 pub enum InstallError {
@@ -113,8 +113,8 @@ impl From<Error> for InstallError {
 mod tests {
     use super::{InstallError, InstallStateError};
     use crate::core::hash::{HashAlgorithm, HashError};
-    use crate::models::install::InstallFailureClass;
     use crate::runtime::cancel::CancellationError;
+    use winbrew_models::InstallFailureClass;
 
     #[test]
     fn maps_state_conflicts_to_user_facing_errors() {

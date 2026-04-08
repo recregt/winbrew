@@ -7,8 +7,8 @@ use crate::core::hash::{
     HashAlgorithm, HashError, Hasher, hash_algorithm, normalize_hash, verify_hash,
 };
 use crate::core::network::{build_client as network_build_client, download_url_to_temp_file};
-use crate::models::CatalogInstaller;
 use crate::runtime::cancel::check;
+use winbrew_models::CatalogInstaller;
 
 const CATALOG_USER_AGENT: &str = "winbrew-package-installer";
 

@@ -1,8 +1,8 @@
 use anyhow::Result;
 use rusqlite::Connection;
 
-use crate::models::{CatalogPackage, PackageRef};
 use crate::services::shared::storage;
+use winbrew_models::{CatalogPackage, PackageRef};
 
 #[derive(Debug)]
 pub enum SearchError {
@@ -109,11 +109,11 @@ pub fn resolve_catalog_package_by_id(
 mod tests {
     use super::*;
     use crate::core::env::WINBREW_PATHS_ROOT;
-    use crate::models::{PackageId, PackageRef, PackageSource};
     use anyhow::Result;
     use rusqlite::{Connection, params};
     use std::sync::Mutex;
     use tempfile::tempdir;
+    use winbrew_models::{PackageId, PackageRef, PackageSource};
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
