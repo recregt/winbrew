@@ -9,6 +9,7 @@ semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 url = "2"
+winbrew-core = { path = "../core" }
 
 [dev-dependencies]
 serde_json = "1"
