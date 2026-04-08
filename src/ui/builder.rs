@@ -33,7 +33,14 @@ impl UiBuilder<io::Stdout> {
 
 impl Default for UiBuilder<io::Stdout> {
     fn default() -> Self {
-        Self::new(super::UiSettings::default())
+        UiBuilder {
+            out: io::stdout(),
+            err: Box::new(io::stderr()),
+            color_enabled: None,
+            default_yes: None,
+            config_overrides: ConfigOverrides::default(),
+            settings: super::UiSettings::default(),
+        }
     }
 }
 

@@ -34,7 +34,18 @@ impl<W: Write> Ui<W> {
 
 impl Default for Ui<io::Stdout> {
     fn default() -> Self {
-        Ui::new(UiSettings::default())
+        let settings = UiSettings::default();
+        let spinner_style = crate::ui::theme::make_spinner_style(settings.color_enabled);
+        let progress_style = crate::ui::theme::make_progress_style(settings.color_enabled);
+
+        Ui {
+            out: BufWriter::new(io::stdout()),
+            err: Box::new(io::stderr()),
+            color_enabled: settings.color_enabled,
+            default_yes: settings.default_yes,
+            spinner_style,
+            progress_style,
+        }
     }
 }
 
