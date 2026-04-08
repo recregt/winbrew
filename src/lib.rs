@@ -18,6 +18,7 @@ pub mod services;
 
 pub use winbrew_core as core;
 pub use winbrew_engines as engines;
+pub use winbrew_runtime as runtime;
 pub use winbrew_ui::{Ui, UiBuilder, UiSettings};
 pub use winbrew_windows as windows;
 
@@ -54,7 +55,7 @@ pub fn run_app() -> Result<()> {
     let config = database::Config::load_current()?;
     let ctx = AppContext::from_config(config)?;
 
-    core::logging::init(&ctx.paths.logs, &ctx.log_level, &ctx.file_log_level)?;
+    runtime::logging::init(&ctx.paths.logs, &ctx.log_level, &ctx.file_log_level)?;
     database::init(&ctx.paths)?;
     bootstrap::init_runtime()?;
 

@@ -7,13 +7,9 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 anyhow = "1"
 chrono = { version = "0.4", features = ["clock"] }
-ctrlc = "3"
 md-5 = "0.11"
 reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-features = false }
 sha1 = "0.11"
 sha2 = "0.11"
 thiserror = "2.0"
-tracing = "0.1"
-tracing-appender = "0.2"
-tracing-subscriber = { version = "0.3", default-features = false, features = ["ansi", "env-filter", "fmt", "registry", "std"] }
 zip = "8"

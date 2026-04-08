@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/core", "crates/engines", "crates/models", "crates/ui", "crates/windows", "infra/parser"]
+members = [".", "crates/core", "crates/engines", "crates/models", "crates/runtime", "crates/ui", "crates/windows", "infra/parser"]
 resolver = "2"
 
 [package]
@@ -16,6 +16,7 @@ path = "src/main.rs"
 winbrew-core = { path = "crates/core" }
 winbrew-engines = { path = "crates/engines" }
 winbrew-models = { path = "crates/models" }
+winbrew-runtime = { path = "crates/runtime" }
 winbrew-ui = { path = "crates/ui" }
 winbrew-windows = { path = "crates/windows" }
 
