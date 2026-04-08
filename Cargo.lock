@@ -2623,10 +2623,24 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "unicode-width",
+ "winbrew-engines",
  "winbrew-models",
  "windows",
  "winreg",
  "winresource",
+ "zip",
+]
+
+[[package]]
+name = "winbrew-engines"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "regex",
+ "strum_macros",
+ "tempfile",
+ "winbrew-models",
+ "windows",
  "zip",
 ]
 

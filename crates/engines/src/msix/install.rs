@@ -1,26 +1,39 @@
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
+
+#[cfg(windows)]
 use windows::Management::Deployment::{AddPackageOptions, PackageManager};
+#[cfg(windows)]
 use windows::core::HSTRING;
 
 pub fn install(download_path: &Path, install_dir: &Path) -> Result<()> {
-    let package_manager = PackageManager::new().context("failed to create package manager")?;
-    let package_uri = file_uri_for_path(download_path)?;
-    let options = AddPackageOptions::new().context("failed to create add package options")?;
+    #[cfg(not(windows))]
+    {
+        let _ = (download_path, install_dir);
+        anyhow::bail!("MSIX installation is only supported on Windows")
+    }
 
-    package_manager
-        .AddPackageByUriAsync(&package_uri, &options)
-        .context("failed to start msix installation")?
-        .join()
-        .context("msix install failed")?;
+    #[cfg(windows)]
+    {
+        let package_manager = PackageManager::new().context("failed to create package manager")?;
+        let package_uri = file_uri_for_path(download_path)?;
+        let options = AddPackageOptions::new().context("failed to create add package options")?;
 
-    fs::create_dir_all(install_dir)
-        .with_context(|| format!("failed to create {}", install_dir.display()))?;
+        package_manager
+            .AddPackageByUriAsync(&package_uri, &options)
+            .context("failed to start msix installation")?
+            .join()
+            .context("msix install failed")?;
 
-    Ok(())
+        fs::create_dir_all(install_dir)
+            .with_context(|| format!("failed to create {}", install_dir.display()))?;
+
+        Ok(())
+    }
 }
 
+#[cfg(windows)]
 fn file_uri_for_path(path: &Path) -> Result<windows::Foundation::Uri> {
     let absolute_path =
         fs::canonicalize(path).with_context(|| format!("failed to resolve {}", path.display()))?;
@@ -31,6 +44,7 @@ fn file_uri_for_path(path: &Path) -> Result<windows::Foundation::Uri> {
         .context("failed to create file URI for msix installer")
 }
 
+#[cfg(windows)]
 fn encode_file_uri_path(path: &Path) -> String {
     let path = path.to_string_lossy().replace('\\', "/");
     let mut encoded = String::with_capacity(path.len() * 3);
@@ -50,16 +64,20 @@ fn encode_file_uri_path(path: &Path) -> String {
     encoded
 }
 
+#[cfg(windows)]
 fn is_uri_path_char(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || matches!(ch, '/' | '-' | '.' | '_' | '~' | ':')
 }
 
 #[cfg(test)]
 mod tests {
+    #[cfg(windows)]
     use super::encode_file_uri_path;
+    #[cfg(windows)]
     use std::path::Path;
 
     #[test]
+    #[cfg(windows)]
     fn encode_file_uri_path_escapes_special_characters() {
         let encoded = encode_file_uri_path(Path::new(r"C:\pkg\o'ne tool\app#.msix"));
 
@@ -67,6 +85,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(windows)]
     fn encode_file_uri_path_keeps_safe_segments() {
         let encoded = encode_file_uri_path(Path::new(r"C:\Packages\Contoso.App\tool-1.0.msix"));
 

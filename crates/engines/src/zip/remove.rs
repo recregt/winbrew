@@ -1,9 +1,10 @@
-use crate::models::Package;
 use anyhow::Result;
 use std::fs;
 use std::io::ErrorKind;
 
-pub fn remove(package: &Package) -> Result<()> {
+use winbrew_models::InstalledPackage;
+
+pub fn remove(package: &InstalledPackage) -> Result<()> {
     match fs::remove_dir_all(&package.install_dir) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == ErrorKind::NotFound => Ok(()),
@@ -14,15 +15,15 @@ pub fn remove(package: &Package) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::remove;
-    use crate::models::{InstallerType, Package, PackageStatus};
     use std::fs;
     use tempfile::tempdir;
+    use winbrew_models::{InstalledPackage, InstallerType, PackageStatus};
 
-    fn package(name: &str, install_dir: &std::path::Path) -> Package {
-        Package {
+    fn package(name: &str, install_dir: &std::path::Path) -> InstalledPackage {
+        InstalledPackage {
             name: name.to_string(),
             version: "1.0.0".to_string(),
-            kind: InstallerType::Portable,
+            kind: InstallerType::Zip,
             install_dir: install_dir.to_string_lossy().into_owned(),
             msix_package_full_name: None,
             dependencies: Vec::new(),
@@ -34,12 +35,13 @@ mod tests {
     #[test]
     fn remove_deletes_existing_directory() {
         let temp_root = tempdir().expect("temp root");
-        let install_dir = temp_root.path().join("packages").join("Contoso.Portable");
+        let install_dir = temp_root.path().join("packages").join("Contoso.Zip");
 
         fs::create_dir_all(&install_dir).expect("create install dir");
-        fs::write(install_dir.join("tool.exe"), b"binary").expect("write file");
+        fs::create_dir_all(install_dir.join("bin")).expect("create bin dir");
+        fs::write(install_dir.join("bin").join("tool.exe"), b"binary").expect("write file");
 
-        remove(&package("Contoso.Portable", &install_dir)).expect("remove directory");
+        remove(&package("Contoso.Zip", &install_dir)).expect("remove directory");
 
         assert!(!install_dir.exists());
     }
