@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   go:
-    name: Go Checks (${{ matrix.module }})
+    name: Go › ${{ matrix.module == 'crawler' && 'Crawler' || 'Publisher' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -52,7 +52,7 @@ jobs:
         run: ./scripts/ci/check-go.ps1 -Module ${{ matrix.module }}
 
   rust-parser:
-    name: Rust Parser Checks
+    name: Rust › Parser
     runs-on: ubuntu-latest
 
     steps:
@@ -69,7 +69,7 @@ jobs:
         run: ./scripts/ci/check-rust-parser.ps1
 
   rust:
-    name: Rust Checks
+    name: Rust
     runs-on: windows-latest
 
     steps:
