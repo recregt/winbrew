@@ -5,6 +5,7 @@ const SOURCE_DATE_EPOCH: &str = "SOURCE_DATE_EPOCH";
 
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
+    println!("cargo::rerun-if-env-changed={SOURCE_DATE_EPOCH}");
 
     if let Some(git_dir) = git_dir() {
         println!("cargo::rerun-if-changed={git_dir}/HEAD");
@@ -58,7 +59,10 @@ fn build_date() -> String {
         .ok()
         .and_then(|ts| ts.parse::<i64>().ok())
         .and_then(|ts| DateTime::<Utc>::from_timestamp(ts, 0))
-        .unwrap_or_else(Utc::now)
+        .or_else(|| git_commit_timestamp().and_then(|ts| DateTime::<Utc>::from_timestamp(ts, 0)))
+        .unwrap_or_else(|| {
+            DateTime::<Utc>::from_timestamp(0, 0).expect("unix epoch should be valid")
+        })
         .to_rfc3339()
 }
 
@@ -90,4 +94,19 @@ fn git_hash() -> String {
         .filter(|output| output.status.success())
         .and_then(|output| String::from_utf8(output.stdout).ok())
         .map_or_else(|| "unknown".to_owned(), |hash| hash.trim().to_owned())
+}
+
+fn git_commit_timestamp() -> Option<i64> {
+    let output = Command::new("git")
+        .args(["show", "-s", "--format=%ct", "HEAD"])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    String::from_utf8(output.stdout)
+        .ok()
+        .and_then(|value| value.trim().parse::<i64>().ok())
 }
