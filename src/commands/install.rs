@@ -5,7 +5,7 @@ use crate::models::CatalogPackage;
 use crate::models::PackageRef;
 use crate::services::app::install;
 use crate::services::app::install::InstallError;
-use crate::{AppContext, ui::Ui};
+use crate::{AppContext, Ui};
 
 pub fn run(ctx: &AppContext, query: &[String], ignore_checksum_security: bool) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);

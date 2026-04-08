@@ -150,7 +150,7 @@ fn app_context(root_from_env: bool) -> AppContext {
         .collect();
 
     AppContext {
-        ui: winbrew::ui::UiSettings::default(),
+        ui: winbrew::UiSettings::default(),
         paths,
         sections,
         root_from_env,

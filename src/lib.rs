@@ -16,14 +16,14 @@ pub mod core;
 pub mod database;
 pub mod models;
 pub mod services;
-pub mod ui;
-pub mod windows;
 
 pub use winbrew_engines as engines;
+pub use winbrew_ui::{Ui, UiBuilder, UiSettings};
+pub use winbrew_windows as windows;
 
 #[derive(Debug, Clone)]
 pub struct AppContext {
-    pub ui: ui::UiSettings,
+    pub ui: UiSettings,
     pub paths: ResolvedPaths,
     pub sections: Vec<ConfigSection>,
     pub root_from_env: bool,
@@ -37,7 +37,7 @@ impl AppContext {
         let sections = config.effective_sections()?.into_iter().collect();
 
         Ok(Self {
-            ui: ui::UiSettings {
+            ui: UiSettings {
                 color_enabled: config.core.color,
                 default_yes: config.core.default_yes,
             },

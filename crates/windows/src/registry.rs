@@ -1,7 +1,7 @@
 use anyhow::Result;
 use regex::RegexBuilder;
 
-use crate::windows::uninstall::uninstall_roots;
+use crate::uninstall::uninstall_roots;
 
 /// Holds complete app info for display and filtering.
 #[derive(Debug, Eq, PartialEq)]

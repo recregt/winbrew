@@ -2590,15 +2590,12 @@ dependencies = [
  "mockito",
  "r2d2",
  "rayon",
- "regex",
  "reqwest",
  "rusqlite",
  "serde",
  "serde_json",
  "sha1 0.11.0",
  "sha2 0.11.0",
- "strum",
- "strum_macros",
  "tempfile",
  "thiserror",
  "toml",
@@ -2608,8 +2605,7 @@ dependencies = [
  "winbrew-engines",
  "winbrew-models",
  "winbrew-ui",
- "windows",
- "winreg",
+ "winbrew-windows",
  "winresource",
  "zip",
 ]
@@ -2663,6 +2659,17 @@ dependencies = [
  "tracing",
  "unicode-width",
  "winbrew-models",
+]
+
+[[package]]
+name = "winbrew-windows"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "regex",
+ "strum",
+ "strum_macros",
+ "winreg",
 ]
 
 [[package]]

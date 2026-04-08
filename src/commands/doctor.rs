@@ -1,10 +1,9 @@
 use anyhow::Result;
 
 use crate::{
-    AppContext,
+    AppContext, Ui,
     models::{HealthReport, diagnostics::DiagnosisSeverity},
     services::app::doctor,
-    ui::Ui,
 };
 
 pub fn run(ctx: &AppContext) -> Result<()> {
