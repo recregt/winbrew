@@ -131,7 +131,7 @@ impl ExtractionContext {
         }
 
         for directory in missing_directories.iter().rev() {
-            fs::create_dir(directory)
+            fs::create_dir_all(directory)
                 .with_context(|| format!("failed to create directory {}", directory.display()))?;
             self.record_directory(directory);
         }
