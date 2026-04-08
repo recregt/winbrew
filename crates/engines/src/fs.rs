@@ -50,7 +50,8 @@ pub fn cleanup_path(path: &Path) -> Result<()> {
     }
 }
 
-/// Replaces `source_dir` with `target_dir`, rolling back the backup on failure.
+/// Replaces `source_dir` with `target_dir`, copying across volumes when rename
+/// is not available and rolling back the backup on failure.
 pub fn replace_directory(source_dir: &Path, target_dir: &Path) -> Result<()> {
     replace_directory_with_rename(source_dir, target_dir, rename_path)
 }
@@ -60,15 +61,29 @@ where
     R: Fn(&Path, &Path) -> std::io::Result<()>,
 {
     if !target_dir.exists() {
-        rename(source_dir, target_dir).with_context(|| {
-            format!(
-                "failed to move staged installation into place: {} -> {}",
-                source_dir.display(),
-                target_dir.display()
-            )
-        })?;
+        return match rename(source_dir, target_dir) {
+            Ok(()) => Ok(()),
+            Err(err) if is_cross_device_error(&err) => {
+                copy_dir_all(source_dir, target_dir).with_context(|| {
+                    format!(
+                        "failed to copy staged installation across volumes: {} -> {}",
+                        source_dir.display(),
+                        target_dir.display()
+                    )
+                })?;
 
-        return Ok(());
+                let _ = cleanup_path(source_dir);
+
+                Ok(())
+            }
+            Err(err) => Err(err).with_context(|| {
+                format!(
+                    "failed to move staged installation into place: {} -> {}",
+                    source_dir.display(),
+                    target_dir.display()
+                )
+            }),
+        };
     }
 
     let backup_dir = backup_directory_path(target_dir);
@@ -82,39 +97,109 @@ where
         )
     })?;
 
-    let rename_result = rename(source_dir, target_dir).with_context(|| {
-        format!(
-            "failed to move staged installation into place: {} -> {}",
-            source_dir.display(),
-            target_dir.display()
-        )
-    });
-
-    if let Err(err) = rename_result {
-        if let Err(rollback_err) = rename(&backup_dir, target_dir) {
-            return Err(err).with_context(|| {
-                format!(
-                    "rollback also failed ({rollback_err}) - installation directory may be lost"
-                )
-            });
+    match rename(source_dir, target_dir) {
+        Ok(()) => {
+            let _ = cleanup_path(&backup_dir);
+            Ok(())
         }
+        Err(err) if is_cross_device_error(&err) => {
+            if let Err(copy_err) = copy_dir_all(source_dir, target_dir) {
+                let _ = cleanup_path(target_dir);
 
-        return Err(err);
+                if let Err(rollback_err) = rename(&backup_dir, target_dir) {
+                    return Err(copy_err).with_context(|| {
+                        format!(
+                            "rollback also failed ({rollback_err}) - installation directory may be lost"
+                        )
+                    });
+                }
+
+                return Err(copy_err).with_context(|| {
+                    format!(
+                        "failed to copy staged installation across volumes: {} -> {}",
+                        source_dir.display(),
+                        target_dir.display()
+                    )
+                });
+            }
+
+            let _ = cleanup_path(source_dir);
+            let _ = cleanup_path(&backup_dir);
+
+            Ok(())
+        }
+        Err(err) => {
+            if let Err(rollback_err) = rename(&backup_dir, target_dir) {
+                return Err(err).with_context(|| {
+                    format!(
+                        "rollback also failed ({rollback_err}) - installation directory may be lost"
+                    )
+                });
+            }
+
+            Err(err).with_context(|| {
+                format!(
+                    "failed to move staged installation into place: {} -> {}",
+                    source_dir.display(),
+                    target_dir.display()
+                )
+            })
+        }
     }
-
-    let _ = cleanup_path(&backup_dir);
-
-    Ok(())
 }
 
 fn rename_path(from: &Path, to: &Path) -> std::io::Result<()> {
     fs::rename(from, to)
 }
 
+fn copy_dir_all(source_dir: &Path, target_dir: &Path) -> Result<()> {
+    fs::create_dir_all(target_dir).with_context(|| {
+        format!(
+            "failed to create destination directory {}",
+            target_dir.display()
+        )
+    })?;
+
+    for entry in fs::read_dir(source_dir)
+        .with_context(|| format!("failed to read source directory {}", source_dir.display()))?
+    {
+        let entry =
+            entry.with_context(|| format!("failed to read entry in {}", source_dir.display()))?;
+        let source_path = entry.path();
+        let target_path = target_dir.join(entry.file_name());
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("failed to inspect entry {}", source_path.display()))?;
+
+        if file_type.is_dir() {
+            copy_dir_all(&source_path, &target_path)?;
+        } else if file_type.is_file() {
+            fs::copy(&source_path, &target_path)
+                .with_context(|| format!("failed to copy file {}", source_path.display()))?;
+        } else if file_type.is_symlink() {
+            return Err(anyhow::anyhow!(
+                "refusing to copy symlink {}",
+                source_path.display()
+            ));
+        } else {
+            return Err(anyhow::anyhow!(
+                "unsupported entry type {}",
+                source_path.display()
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn is_cross_device_error(err: &std::io::Error) -> bool {
+    matches!(err.raw_os_error(), Some(17) | Some(18))
+}
+
 /// Extracts `zip_path` into `destination_dir`, rejecting entries with invalid paths.
 ///
 /// The extraction target is validated so the archive cannot be unpacked through
-/// an existing reparse-point ancestor.
+/// an existing reparse-point ancestor, and symlink entries are refused.
 pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()> {
     let file = fs::File::open(zip_path)
         .with_context(|| format!("failed to open zip archive {}", zip_path.display()))?;
@@ -129,6 +214,13 @@ pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()
             .enclosed_name()
             .ok_or_else(|| anyhow::anyhow!("zip entry contains an invalid path"))?;
         let outpath = destination_dir.join(enclosed_name);
+
+        if entry.is_symlink() {
+            return Err(anyhow::anyhow!(
+                "refusing to extract symlink entry {}",
+                outpath.display()
+            ));
+        }
 
         validate_extraction_target(&outpath)?;
 
@@ -147,7 +239,7 @@ pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()
 
         let mut outfile = fs::File::create(&outpath)
             .with_context(|| format!("failed to create extracted file {}", outpath.display()))?;
-        let mut buffer = [0u8; ZIP_COPY_BUFFER_SIZE];
+        let mut buffer = vec![0u8; ZIP_COPY_BUFFER_SIZE];
 
         loop {
             let bytes_read = entry
@@ -221,4 +313,68 @@ fn deferred_delete_path(path: &Path) -> Option<PathBuf> {
     let suffix = DEFERRED_DELETE_SUFFIX.fetch_add(1, Ordering::Relaxed);
 
     Some(path.with_file_name(format!("{file_name}.deleted.{}.{}", process::id(), suffix)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_zip_archive, replace_directory_with_rename};
+    use std::fs;
+    use std::io;
+    use tempfile::tempdir;
+    use zip::ZipWriter;
+    use zip::write::SimpleFileOptions;
+
+    fn create_symlink_archive(path: &std::path::Path, link_name: &str, target: &str) {
+        let file = fs::File::create(path).expect("create zip file");
+        let mut writer = ZipWriter::new(file);
+        writer
+            .add_symlink(link_name, target, SimpleFileOptions::default())
+            .expect("add zip symlink");
+        writer.finish().expect("finish zip file");
+    }
+
+    #[test]
+    fn replace_directory_copies_across_volumes_when_rename_fails() {
+        let temp_dir = tempdir().expect("temp dir");
+        let source_dir = temp_dir.path().join("source");
+        let target_dir = temp_dir.path().join("target");
+
+        fs::create_dir_all(&source_dir).expect("source dir");
+        fs::write(source_dir.join("payload.txt"), b"copied payload").expect("source file");
+
+        let result = replace_directory_with_rename(&source_dir, &target_dir, |from, to| {
+            if from == source_dir.as_path() && to == target_dir.as_path() {
+                Err(io::Error::from_raw_os_error(18))
+            } else {
+                fs::rename(from, to)
+            }
+        });
+
+        result.expect("cross-volume replacement");
+        assert_eq!(
+            fs::read_to_string(target_dir.join("payload.txt")).expect("copied payload"),
+            "copied payload"
+        );
+        assert!(!source_dir.exists());
+    }
+
+    #[test]
+    fn extract_zip_archive_rejects_symlink_entries() {
+        let temp_dir = tempdir().expect("temp dir");
+        let destination_dir = temp_dir.path().join("dest");
+        let zip_path = temp_dir.path().join("archive.zip");
+
+        fs::create_dir_all(&destination_dir).expect("destination dir");
+        create_symlink_archive(&zip_path, "bin/tool.exe", "target.exe");
+
+        let error = extract_zip_archive(&zip_path, &destination_dir)
+            .expect_err("expected symlink rejection");
+
+        assert!(
+            error
+                .to_string()
+                .contains("refusing to extract symlink entry")
+        );
+        assert!(!destination_dir.join("bin").exists());
+    }
 }

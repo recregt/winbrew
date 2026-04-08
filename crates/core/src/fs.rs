@@ -11,7 +11,39 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(windows)]
+use winbrew_windows::inspect_path as winfs_inspect_path;
+
 static DEFERRED_DELETE_SUFFIX: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Debug, Clone, Copy)]
+struct PathInfo {
+    is_directory: bool,
+    is_reparse_point: bool,
+    hard_link_count: u32,
+}
+
+fn inspect_path(path: &Path) -> std::io::Result<PathInfo> {
+    #[cfg(windows)]
+    {
+        let info = winfs_inspect_path(path)?;
+        Ok(PathInfo {
+            is_directory: info.is_directory,
+            is_reparse_point: info.is_reparse_point,
+            hard_link_count: info.hard_link_count,
+        })
+    }
+
+    #[cfg(not(windows))]
+    {
+        let metadata = fs::symlink_metadata(path)?;
+        Ok(PathInfo {
+            is_directory: metadata.is_dir(),
+            is_reparse_point: false,
+            hard_link_count: 1,
+        })
+    }
+}
 
 /// Removes `path` if it exists.
 ///
@@ -19,7 +51,7 @@ static DEFERRED_DELETE_SUFFIX: AtomicUsize = AtomicUsize::new(0);
 /// aside to a deferred-delete path so cleanup can continue later. On Windows,
 /// directory reparse points are removed without recursively walking their target.
 pub fn cleanup_path(path: &Path) -> Result<()> {
-    let metadata = match fs::symlink_metadata(path) {
+    let info = match inspect_path(path) {
         Ok(metadata) => metadata,
         Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
         Err(err) => {
@@ -27,9 +59,9 @@ pub fn cleanup_path(path: &Path) -> Result<()> {
         }
     };
 
-    let removal_result = if is_reparse_point(&metadata) {
+    let removal_result = if info.is_reparse_point {
         fs::remove_dir(path).or_else(|_| fs::remove_file(path))
-    } else if metadata.is_dir() {
+    } else if info.is_directory {
         fs::remove_dir_all(path)
     } else {
         fs::remove_file(path)
@@ -63,7 +95,7 @@ pub fn cleanup_path(path: &Path) -> Result<()> {
 
 /// Writes `contents` to `path` through `temp_path` and publishes the result atomically.
 ///
-/// The temp file is flushed and synced before rename, so callers either see the
+/// The temp file is synced before rename, so callers either see the
 /// old file or the fully-written new file. The temp file is removed on failure.
 pub fn atomic_write(path: &Path, temp_path: &Path, contents: &[u8]) -> Result<()> {
     if let Some(parent) = path.parent() {
@@ -76,8 +108,6 @@ pub fn atomic_write(path: &Path, temp_path: &Path, contents: &[u8]) -> Result<()
             .with_context(|| format!("failed to create temp file at {}", temp_path.display()))?;
         file.write_all(contents)
             .with_context(|| format!("failed to write temp file at {}", temp_path.display()))?;
-        file.flush()
-            .with_context(|| format!("failed to flush temp file at {}", temp_path.display()))?;
         file.sync_all()
             .with_context(|| format!("failed to sync temp file at {}", temp_path.display()))?;
 
@@ -125,9 +155,10 @@ pub fn finalize_temp_file(temp_path: &Path, final_path: &Path) -> Result<()> {
 }
 
 /// Replaces `target_dir` with `source_dir`.
-///
 /// The existing target is moved aside to a sibling backup directory first. If
-/// the staged move fails, the backup is moved back into place when possible.
+/// the staged move crosses volumes, the source tree is copied instead of
+/// renamed. If the staged move fails, the backup is moved back into place when
+/// possible.
 /// If rollback also fails, the returned error includes both failures.
 pub fn replace_directory(source_dir: &Path, target_dir: &Path) -> Result<()> {
     replace_directory_with_rename(source_dir, target_dir, rename_path)
@@ -138,15 +169,29 @@ where
     R: Fn(&Path, &Path) -> std::io::Result<()>,
 {
     if !target_dir.exists() {
-        rename(source_dir, target_dir).with_context(|| {
-            format!(
-                "failed to move staged installation into place: {} -> {}",
-                source_dir.display(),
-                target_dir.display()
-            )
-        })?;
+        return match rename(source_dir, target_dir) {
+            Ok(()) => Ok(()),
+            Err(err) if is_cross_device_error(&err) => {
+                copy_dir_all(source_dir, target_dir).with_context(|| {
+                    format!(
+                        "failed to copy staged installation across volumes: {} -> {}",
+                        source_dir.display(),
+                        target_dir.display()
+                    )
+                })?;
 
-        return Ok(());
+                let _ = cleanup_path(source_dir);
+
+                Ok(())
+            }
+            Err(err) => Err(err).with_context(|| {
+                format!(
+                    "failed to move staged installation into place: {} -> {}",
+                    source_dir.display(),
+                    target_dir.display()
+                )
+            }),
+        };
     }
 
     let backup_dir = backup_directory_path(target_dir);
@@ -160,39 +205,109 @@ where
         )
     })?;
 
-    let rename_result = rename(source_dir, target_dir).with_context(|| {
-        format!(
-            "failed to move staged installation into place: {} -> {}",
-            source_dir.display(),
-            target_dir.display()
-        )
-    });
-
-    if let Err(err) = rename_result {
-        if let Err(rollback_err) = rename(&backup_dir, target_dir) {
-            return Err(err).with_context(|| {
-                format!(
-                    "rollback also failed ({rollback_err}) - installation directory may be lost"
-                )
-            });
+    match rename(source_dir, target_dir) {
+        Ok(()) => {
+            let _ = cleanup_path(&backup_dir);
+            Ok(())
         }
+        Err(err) if is_cross_device_error(&err) => {
+            if let Err(copy_err) = copy_dir_all(source_dir, target_dir) {
+                let _ = cleanup_path(target_dir);
 
-        return Err(err);
+                if let Err(rollback_err) = rename(&backup_dir, target_dir) {
+                    return Err(copy_err).with_context(|| {
+                        format!(
+                            "rollback also failed ({rollback_err}) - installation directory may be lost"
+                        )
+                    });
+                }
+
+                return Err(copy_err).with_context(|| {
+                    format!(
+                        "failed to copy staged installation across volumes: {} -> {}",
+                        source_dir.display(),
+                        target_dir.display()
+                    )
+                });
+            }
+
+            let _ = cleanup_path(source_dir);
+            let _ = cleanup_path(&backup_dir);
+
+            Ok(())
+        }
+        Err(err) => {
+            if let Err(rollback_err) = rename(&backup_dir, target_dir) {
+                return Err(err).with_context(|| {
+                    format!(
+                        "rollback also failed ({rollback_err}) - installation directory may be lost"
+                    )
+                });
+            }
+
+            Err(err).with_context(|| {
+                format!(
+                    "failed to move staged installation into place: {} -> {}",
+                    source_dir.display(),
+                    target_dir.display()
+                )
+            })
+        }
     }
-
-    let _ = cleanup_path(&backup_dir);
-
-    Ok(())
 }
 
 fn rename_path(from: &Path, to: &Path) -> std::io::Result<()> {
     fs::rename(from, to)
 }
 
+fn copy_dir_all(source_dir: &Path, target_dir: &Path) -> Result<()> {
+    fs::create_dir_all(target_dir).with_context(|| {
+        format!(
+            "failed to create destination directory {}",
+            target_dir.display()
+        )
+    })?;
+
+    for entry in fs::read_dir(source_dir)
+        .with_context(|| format!("failed to read source directory {}", source_dir.display()))?
+    {
+        let entry =
+            entry.with_context(|| format!("failed to read entry in {}", source_dir.display()))?;
+        let source_path = entry.path();
+        let target_path = target_dir.join(entry.file_name());
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("failed to inspect entry {}", source_path.display()))?;
+
+        if file_type.is_dir() {
+            copy_dir_all(&source_path, &target_path)?;
+        } else if file_type.is_file() {
+            fs::copy(&source_path, &target_path)
+                .with_context(|| format!("failed to copy file {}", source_path.display()))?;
+        } else if file_type.is_symlink() {
+            return Err(anyhow::anyhow!(
+                "refusing to copy symlink {}",
+                source_path.display()
+            ));
+        } else {
+            return Err(anyhow::anyhow!(
+                "unsupported entry type {}",
+                source_path.display()
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn is_cross_device_error(err: &std::io::Error) -> bool {
+    matches!(err.raw_os_error(), Some(17) | Some(18))
+}
+
 /// Extracts `zip_path` into `destination_dir`, rejecting entries with invalid paths.
 ///
 /// The extraction target is validated so the archive cannot be unpacked through
-/// an existing reparse-point ancestor.
+/// an existing reparse-point ancestor, and symlink entries are refused.
 pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()> {
     let file = fs::File::open(zip_path)
         .with_context(|| format!("failed to open zip archive {}", zip_path.display()))?;
@@ -207,6 +322,13 @@ pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()
             .enclosed_name()
             .ok_or_else(|| anyhow::anyhow!("zip entry contains an invalid path"))?;
         let outpath = destination_dir.join(enclosed_name);
+
+        if entry.is_symlink() {
+            return Err(anyhow::anyhow!(
+                "refusing to extract symlink entry {}",
+                outpath.display()
+            ));
+        }
 
         validate_extraction_target(&outpath)?;
 
@@ -225,7 +347,7 @@ pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()
 
         let mut outfile = fs::File::create(&outpath)
             .with_context(|| format!("failed to create extracted file {}", outpath.display()))?;
-        let mut buffer = [0u8; ZIP_COPY_BUFFER_SIZE];
+        let mut buffer = vec![0u8; ZIP_COPY_BUFFER_SIZE];
 
         loop {
             let bytes_read = entry
@@ -266,11 +388,18 @@ fn validate_extraction_target(path: &Path) -> Result<()> {
     let mut current = Some(path);
 
     while let Some(candidate) = current {
-        match fs::symlink_metadata(candidate) {
-            Ok(metadata) => {
-                if is_reparse_point(&metadata) {
+        match inspect_path(candidate) {
+            Ok(info) => {
+                if info.is_reparse_point {
                     return Err(anyhow::anyhow!(
                         "refusing to extract through reparse point {}",
+                        candidate.display()
+                    ));
+                }
+
+                if !info.is_directory && info.hard_link_count > 1 {
+                    return Err(anyhow::anyhow!(
+                        "refusing to overwrite hardlinked file {}",
                         candidate.display()
                     ));
                 }
@@ -288,27 +417,37 @@ fn validate_extraction_target(path: &Path) -> Result<()> {
     Ok(())
 }
 
-#[cfg(windows)]
-fn is_reparse_point(metadata: &fs::Metadata) -> bool {
-    use std::os::windows::fs::MetadataExt;
-
-    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-
-    metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-}
-
-#[cfg(not(windows))]
-fn is_reparse_point(_: &fs::Metadata) -> bool {
-    false
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{atomic_write, backup_directory_path, cleanup_path, replace_directory_with_rename};
+    use super::{
+        atomic_write, backup_directory_path, cleanup_path, extract_zip_archive,
+        replace_directory_with_rename,
+    };
     use std::fs;
-    use std::io::{self, ErrorKind};
+    use std::io::{self, ErrorKind, Write};
     use std::path::Path;
     use tempfile::tempdir;
+    use zip::ZipWriter;
+    use zip::write::SimpleFileOptions;
+
+    fn create_zip_archive(path: &Path, file_name: &str, contents: &[u8]) {
+        let file = fs::File::create(path).expect("create zip file");
+        let mut writer = ZipWriter::new(file);
+        writer
+            .start_file(file_name, SimpleFileOptions::default())
+            .expect("start zip entry");
+        writer.write_all(contents).expect("write zip contents");
+        writer.finish().expect("finish zip file");
+    }
+
+    fn create_symlink_archive(path: &Path, link_name: &str, target: &str) {
+        let file = fs::File::create(path).expect("create zip file");
+        let mut writer = ZipWriter::new(file);
+        writer
+            .add_symlink(link_name, target, SimpleFileOptions::default())
+            .expect("add zip symlink");
+        writer.finish().expect("finish zip file");
+    }
 
     #[test]
     fn backup_directory_path_appends_old_suffix_next_to_target() {
@@ -341,6 +480,31 @@ mod tests {
             "name=winbrew"
         );
         assert!(!temp_path.exists());
+    }
+
+    #[test]
+    fn replace_directory_copies_across_volumes_when_rename_fails() {
+        let temp_dir = tempdir().expect("temp dir");
+        let source_dir = temp_dir.path().join("source");
+        let target_dir = temp_dir.path().join("target");
+
+        fs::create_dir_all(&source_dir).expect("source dir");
+        fs::write(source_dir.join("payload.txt"), b"copied payload").expect("source file");
+
+        let result = replace_directory_with_rename(&source_dir, &target_dir, |from, to| {
+            if from == source_dir.as_path() && to == target_dir.as_path() {
+                Err(io::Error::from_raw_os_error(18))
+            } else {
+                fs::rename(from, to)
+            }
+        });
+
+        result.expect("cross-volume replacement");
+        assert_eq!(
+            fs::read_to_string(target_dir.join("payload.txt")).expect("copied payload"),
+            "copied payload"
+        );
+        assert!(!source_dir.exists());
     }
 
     #[test]
@@ -405,5 +569,45 @@ mod tests {
         assert!(error.to_string().contains("rollback also failed"));
         assert!(backup_dir.exists());
         assert!(!target_dir.exists());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn extract_zip_archive_rejects_hardlinked_targets() {
+        let temp_dir = tempdir().expect("temp dir");
+        let destination_dir = temp_dir.path().join("dest");
+        let anchor_path = temp_dir.path().join("anchor.txt");
+        let target_path = destination_dir.join("payload.txt");
+        let zip_path = temp_dir.path().join("archive.zip");
+
+        fs::create_dir_all(&destination_dir).expect("destination dir");
+        fs::write(&anchor_path, b"anchor").expect("anchor file");
+        fs::hard_link(&anchor_path, &target_path).expect("hard link");
+        create_zip_archive(&zip_path, "payload.txt", b"zip payload");
+
+        let error = extract_zip_archive(&zip_path, &destination_dir)
+            .expect_err("expected hardlinked target rejection");
+
+        assert!(error.to_string().contains("hardlinked file"));
+    }
+
+    #[test]
+    fn extract_zip_archive_rejects_symlink_entries() {
+        let temp_dir = tempdir().expect("temp dir");
+        let destination_dir = temp_dir.path().join("dest");
+        let zip_path = temp_dir.path().join("archive.zip");
+
+        fs::create_dir_all(&destination_dir).expect("destination dir");
+        create_symlink_archive(&zip_path, "bin/tool.exe", "target.exe");
+
+        let error = extract_zip_archive(&zip_path, &destination_dir)
+            .expect_err("expected symlink rejection");
+
+        assert!(
+            error
+                .to_string()
+                .contains("refusing to extract symlink entry")
+        );
+        assert!(!destination_dir.join("bin").exists());
     }
 }
