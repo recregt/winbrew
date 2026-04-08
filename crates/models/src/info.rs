@@ -1,4 +1,4 @@
-use crate::models::report::RuntimeReport;
+use crate::report::RuntimeReport;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InfoReport {

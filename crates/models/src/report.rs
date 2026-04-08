@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::models::diagnostics::DiagnosisResult;
+use crate::diagnostics::DiagnosisResult;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HealthReport {

@@ -14,11 +14,11 @@ use crate::services::shared::config as shared_config;
 pub mod cli;
 pub mod commands;
 pub mod database;
-pub mod models;
 pub mod services;
 
 pub use winbrew_core as core;
 pub use winbrew_engines as engines;
+pub use winbrew_models as models;
 pub use winbrew_runtime as runtime;
 pub use winbrew_ui::{Ui, UiBuilder, UiSettings};
 pub use winbrew_windows as windows;

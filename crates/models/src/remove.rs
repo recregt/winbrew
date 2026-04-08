@@ -1,4 +1,4 @@
-use crate::models::Package;
+use crate::Package;
 
 #[derive(Debug, Clone)]
 pub struct RemovalPlan {
