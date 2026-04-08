@@ -1,13 +1,10 @@
-pub mod cancel;
 pub mod env;
 pub mod fs;
 pub mod hash;
-pub mod logging;
 pub mod network;
 pub mod paths;
 pub mod time;
 
-pub use cancel::{CancellationError, check, init_handler, is_cancelled};
 pub use env::{LOCALAPPDATA, WINBREW_PATHS_ROOT};
 pub use fs::{
     atomic_write, atomic_write_with_pid_suffix, backup_directory_path, cleanup_path,
@@ -17,7 +14,6 @@ pub use hash::{
     HashAlgorithm, HashError, Hasher, Result as HashResult, hash_algorithm, normalize_hash,
     verify_hash,
 };
-pub use logging::init as init_logging;
 pub use network::{
     Client, build_client, download_url_to_temp_file, installer_filename, is_zip_path,
 };

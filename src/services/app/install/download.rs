@@ -2,13 +2,13 @@ use anyhow::Result;
 use std::fs;
 use std::path::Path;
 
-use crate::core::cancel::check;
 use crate::core::fs::finalize_temp_file;
 use crate::core::hash::{
     HashAlgorithm, HashError, Hasher, hash_algorithm, normalize_hash, verify_hash,
 };
 use crate::core::network::{build_client as network_build_client, download_url_to_temp_file};
 use crate::models::CatalogInstaller;
+use crate::runtime::cancel::check;
 
 const CATALOG_USER_AGENT: &str = "winbrew-package-installer";
 

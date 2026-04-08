@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::core::cancel;
+use crate::runtime::cancel;
 
 pub mod cleanup;
 

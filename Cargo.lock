@@ -2599,6 +2599,7 @@ dependencies = [
  "winbrew-core",
  "winbrew-engines",
  "winbrew-models",
+ "winbrew-runtime",
  "winbrew-ui",
  "winbrew-windows",
  "winresource",
@@ -2611,15 +2612,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "ctrlc",
  "md-5",
  "reqwest",
  "sha1 0.11.0",
  "sha2 0.11.0",
  "thiserror",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
  "zip",
 ]
 
@@ -2657,6 +2654,18 @@ dependencies = [
  "serde_json",
  "thiserror",
  "url",
+]
+
+[[package]]
+name = "winbrew-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ctrlc",
+ "thiserror",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
 ]
 
 [[package]]

@@ -3,9 +3,9 @@ use std::io;
 use thiserror::Error;
 
 use super::state::InstallStateError;
-use crate::core::cancel::CancellationError;
 use crate::core::hash::{HashAlgorithm, HashError};
 use crate::models::install::InstallFailureClass;
+use crate::runtime::cancel::CancellationError;
 use crate::services::shared::catalog::InstallerSelectionError;
 
 #[derive(Debug, Error)]
@@ -112,9 +112,9 @@ impl From<Error> for InstallError {
 #[cfg(test)]
 mod tests {
     use super::{InstallError, InstallStateError};
-    use crate::core::cancel::CancellationError;
     use crate::core::hash::{HashAlgorithm, HashError};
     use crate::models::install::InstallFailureClass;
+    use crate::runtime::cancel::CancellationError;
 
     #[test]
     fn maps_state_conflicts_to_user_facing_errors() {
