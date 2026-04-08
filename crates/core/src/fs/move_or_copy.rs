@@ -65,9 +65,8 @@ where
                         "failed to copy staged installation across volumes",
                         source_dir,
                         target_dir,
-                        copy_err.to_string(),
-                        rollback_err.to_string(),
                         copy_err,
+                        rollback_err,
                     ));
                 }
 
@@ -87,9 +86,8 @@ where
                     "failed to move staged installation into place",
                     source_dir,
                     target_dir,
-                    err.to_string(),
-                    rollback_err.to_string(),
                     err,
+                    rollback_err,
                 ));
             }
 
@@ -105,10 +103,8 @@ fn rename_path(from: &Path, to: &Path) -> std::io::Result<()> {
 fn copy_dir_all(source_dir: &Path, target_dir: &Path) -> Result<()> {
     fs::create_dir_all(target_dir).map_err(|err| FsError::create_directory(target_dir, err))?;
 
-    for entry in fs::read_dir(source_dir)
-        .map_err(|err| FsError::io("failed to read source directory", source_dir, err))?
-    {
-        let entry = entry.map_err(|err| FsError::io("failed to read entry in", source_dir, err))?;
+    for entry in fs::read_dir(source_dir).map_err(|err| FsError::read_directory(source_dir, err))? {
+        let entry = entry.map_err(|err| FsError::read_directory_entry(source_dir, err))?;
         let source_path = entry.path();
         let target_path = target_dir.join(entry.file_name());
         let file_type = entry
@@ -119,7 +115,7 @@ fn copy_dir_all(source_dir: &Path, target_dir: &Path) -> Result<()> {
             copy_dir_all(&source_path, &target_path)?;
         } else if file_type.is_file() {
             fs::copy(&source_path, &target_path)
-                .map_err(|err| FsError::io("failed to copy file", &source_path, err))?;
+                .map_err(|err| FsError::copy_file(&source_path, &target_path, err))?;
         } else if file_type.is_symlink() {
             return Err(FsError::copy_symlink(&source_path));
         } else {
