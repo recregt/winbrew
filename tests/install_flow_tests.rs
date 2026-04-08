@@ -11,9 +11,11 @@ use std::path::Path;
 use winbrew::AppContext;
 use winbrew::core::hash::{HashAlgorithm, Hasher};
 use winbrew::database;
-use winbrew::models::{PackageId, PackageName, PackageRef};
 use winbrew::services::app::install;
 use winbrew::services::app::install::InstallObserver;
+use winbrew_models::{
+    CatalogPackage, InstallerType, PackageId, PackageName, PackageRef, PackageStatus,
+};
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;
 
@@ -79,7 +81,7 @@ impl InstallObserver for NoopInstallObserver {
     fn choose_package(
         &mut self,
         _query: &str,
-        _matches: &[winbrew::models::CatalogPackage],
+        _matches: &[CatalogPackage],
     ) -> anyhow::Result<usize> {
         unreachable!("install should not prompt for an exact match")
     }
@@ -176,8 +178,8 @@ fn install_runs_end_to_end_in_an_isolated_root() -> Result<()> {
     let conn = database::get_conn()?;
     let stored = database::get_package(&conn, "Winbrew Test Zip")?
         .expect("package should be marked as installed");
-    assert_eq!(stored.status, winbrew::models::PackageStatus::Ok);
-    assert_eq!(stored.kind, winbrew::models::InstallerType::Zip);
+    assert_eq!(stored.status, PackageStatus::Ok);
+    assert_eq!(stored.kind, InstallerType::Zip);
     fixture.assert_downloaded();
 
     Ok(())
@@ -316,7 +318,7 @@ fn install_rolls_back_on_download_failure() -> Result<()> {
     let conn = database::get_conn()?;
     let stored = database::get_package(&conn, &fixture.package_name)?
         .expect("package should remain tracked after rollback");
-    assert_eq!(stored.status, winbrew::models::PackageStatus::Failed);
+    assert_eq!(stored.status, PackageStatus::Failed);
 
     Ok(())
 }

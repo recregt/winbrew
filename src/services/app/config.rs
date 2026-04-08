@@ -1,8 +1,8 @@
 use anyhow::Result;
 
 use crate::AppContext;
-pub use crate::models::config::{ConfigSection, ConfigValue, ConfigValueSource};
 use crate::services::shared::storage;
+pub use winbrew_models::{ConfigSection, ConfigValue, ConfigValueSource};
 
 pub fn list_sections(ctx: &AppContext) -> Vec<ConfigSection> {
     ctx.sections.clone()

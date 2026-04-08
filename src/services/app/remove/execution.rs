@@ -4,10 +4,10 @@ use tracing::{debug, warn};
 use std::path::PathBuf;
 
 use crate::engines::{self, EngineKind, PackageEngine};
-use crate::models::Package;
 use crate::services::shared::storage;
 
 use super::{RemovalError, RemovalPlan, Result};
+use winbrew_models::Package;
 
 pub fn execute_removal(plan: &RemovalPlan, force: bool) -> Result<()> {
     let conn = storage::get_conn()?;

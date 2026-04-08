@@ -3,8 +3,8 @@ use std::path::Path;
 use thiserror::Error;
 
 use crate::core::fs::cleanup_path;
-use crate::models::{InstallerType, Package, PackageStatus};
 use crate::services::shared::storage;
+use winbrew_models::{InstallerType, Package, PackageStatus};
 
 #[derive(Debug, Error)]
 pub enum InstallStateError {

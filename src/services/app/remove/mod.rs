@@ -3,11 +3,11 @@ mod plan;
 
 use thiserror::Error;
 
-use crate::models::InstallerType;
+use winbrew_models::InstallerType;
 
-pub use crate::models::remove::RemovalPlan;
 pub use execution::execute_removal;
 pub use plan::{find_dependents, plan_removal};
+pub use winbrew_models::RemovalPlan;
 
 #[derive(Debug, Error)]
 pub enum RemovalError {

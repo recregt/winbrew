@@ -9,6 +9,7 @@ use crate::engines::{EngineKind, PackageEngine};
 
 use super::download;
 use super::state;
+use winbrew_models::CatalogInstaller;
 
 pub(crate) fn cleanup_temp_root(temp_root: &Path) {
     if let Err(err) = cleanup_path(temp_root) {
@@ -41,7 +42,7 @@ where
 {
     pub client: &'a crate::core::network::Client,
     pub engine: EngineKind,
-    pub installer: &'a crate::models::CatalogInstaller,
+    pub installer: &'a CatalogInstaller,
     pub temp_root: &'a Path,
     pub install_dir: &'a Path,
     pub ignore_checksum_security: bool,

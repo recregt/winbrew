@@ -7,8 +7,8 @@ use common::shared_root::test_root;
 use std::fs;
 use std::path::Path;
 use winbrew::database;
-use winbrew::models::{InstallerType, Package, PackageStatus};
 use winbrew::services::app::install::state;
+use winbrew_models::{InstallerType, Package, PackageStatus};
 
 fn sample_package(name: &str, status: PackageStatus, install_dir: &Path) -> Package {
     Package {

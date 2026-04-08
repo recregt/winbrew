@@ -1,8 +1,7 @@
 use anyhow::Result;
 
-use crate::models::Package;
-use crate::models::PackageQuery;
 use crate::services::shared::storage;
+use winbrew_models::{Package, PackageQuery};
 
 pub fn list_packages(query: Option<&str>) -> Result<Vec<Package>> {
     let conn = storage::get_conn()?;
@@ -63,7 +62,7 @@ fn normalize(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{filter_packages, normalize};
-    use crate::models::{InstallerType, Package, PackageStatus};
+    use winbrew_models::{InstallerType, Package, PackageStatus};
 
     fn package(name: &str, version: &str, kind: InstallerType, install_dir: &str) -> Package {
         Package {

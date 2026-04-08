@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::models::{Architecture, CatalogInstaller};
+use winbrew_models::{Architecture, CatalogInstaller};
 
 #[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
 pub enum InstallerSelectionError {
@@ -34,7 +34,7 @@ mod tests {
 
     fn sample_installer(
         arch: Architecture,
-        kind: crate::models::InstallerType,
+        kind: winbrew_models::InstallerType,
     ) -> CatalogInstaller {
         CatalogInstaller {
             package_id: "Contoso.App".into(),
@@ -48,15 +48,15 @@ mod tests {
     #[test]
     fn select_installer_prefers_matching_arch() -> Result<()> {
         let installers = vec![
-            sample_installer(Architecture::Any, crate::models::InstallerType::Portable),
-            sample_installer(Architecture::current(), crate::models::InstallerType::Msix),
-            sample_installer(Architecture::X64, crate::models::InstallerType::Zip),
+            sample_installer(Architecture::Any, winbrew_models::InstallerType::Portable),
+            sample_installer(Architecture::current(), winbrew_models::InstallerType::Msix),
+            sample_installer(Architecture::X64, winbrew_models::InstallerType::Zip),
         ];
 
         let selected = select_installer(&installers)?;
 
         assert_eq!(selected.arch, Architecture::current());
-        assert_eq!(selected.kind, crate::models::InstallerType::Msix);
+        assert_eq!(selected.kind, winbrew_models::InstallerType::Msix);
 
         Ok(())
     }
@@ -71,14 +71,14 @@ mod tests {
         };
 
         let installers = vec![
-            sample_installer(non_matching_arch, crate::models::InstallerType::Zip),
-            sample_installer(Architecture::Any, crate::models::InstallerType::Portable),
+            sample_installer(non_matching_arch, winbrew_models::InstallerType::Zip),
+            sample_installer(Architecture::Any, winbrew_models::InstallerType::Portable),
         ];
 
         let selected = select_installer(&installers)?;
 
         assert_eq!(selected.arch, Architecture::Any);
-        assert_eq!(selected.kind, crate::models::InstallerType::Portable);
+        assert_eq!(selected.kind, winbrew_models::InstallerType::Portable);
 
         Ok(())
     }
