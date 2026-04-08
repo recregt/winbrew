@@ -39,7 +39,7 @@ where
     FStart: FnOnce(Option<u64>),
     FProgress: FnMut(u64),
 {
-    pub client: &'a reqwest::blocking::Client,
+    pub client: &'a crate::core::network::Client,
     pub engine: EngineKind,
     pub installer: &'a crate::models::CatalogInstaller,
     pub temp_root: &'a Path,
