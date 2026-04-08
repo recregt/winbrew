@@ -27,18 +27,9 @@ type Config struct {
 }
 
 func Run(ctx context.Context, inputPath, metadataPath, objectKey string) error {
-	if strings.TrimSpace(inputPath) == "" {
-		inputPath = strings.TrimSpace(os.Getenv("WINBREW_DB_PATH"))
-	}
-	if inputPath == "" {
-		return fmt.Errorf("input path cannot be empty")
-	}
-	if strings.TrimSpace(metadataPath) == "" {
-		metadataPath = defaultMetadataPath(inputPath)
-	}
-
-	if strings.TrimSpace(objectKey) == "" {
-		objectKey = defaultObjectKey
+	inputPath, metadataPath, objectKey, err := resolveRunInputs(inputPath, metadataPath, objectKey)
+	if err != nil {
+		return err
 	}
 
 	cfg, err := LoadConfigFromEnv()
@@ -51,21 +42,52 @@ func Run(ctx context.Context, inputPath, metadataPath, objectKey string) error {
 		return err
 	}
 
-	localMetadata, err := LoadMetadata(metadataPath)
+	localMetadata, err := loadVerifiedMetadata(inputPath, metadataPath)
 	if err != nil {
 		return err
+	}
+
+	return publish(ctx, client, cfg.BucketName, inputPath, metadataPath, objectKey, localMetadata)
+}
+
+func resolveRunInputs(inputPath, metadataPath, objectKey string) (string, string, string, error) {
+	if strings.TrimSpace(inputPath) == "" {
+		inputPath = strings.TrimSpace(os.Getenv("WINBREW_DB_PATH"))
+	}
+	if inputPath == "" {
+		return "", "", "", fmt.Errorf("input path cannot be empty")
+	}
+	if strings.TrimSpace(metadataPath) == "" {
+		metadataPath = defaultMetadataPath(inputPath)
+	}
+	if strings.TrimSpace(objectKey) == "" {
+		objectKey = defaultObjectKey
+	}
+
+	return inputPath, metadataPath, objectKey, nil
+}
+
+func loadVerifiedMetadata(inputPath, metadataPath string) (Metadata, error) {
+	localMetadata, err := LoadMetadata(metadataPath)
+	if err != nil {
+		return Metadata{}, err
 	}
 
 	inputHash, err := hashFile(inputPath)
 	if err != nil {
-		return err
+		return Metadata{}, err
 	}
 	if localMetadata.CurrentHash != inputHash {
-		return fmt.Errorf("metadata current hash mismatch: expected %s, got %s", localMetadata.CurrentHash, inputHash)
+		return Metadata{}, fmt.Errorf("metadata current hash mismatch: expected %s, got %s", localMetadata.CurrentHash, inputHash)
 	}
 
+	return localMetadata, nil
+}
+
+func publish(ctx context.Context, client *minio.Client, bucketName, inputPath, metadataPath, objectKey string, localMetadata Metadata) error {
+
 	metadataKey := metadataKeyForObjectKey(objectKey)
-	remoteMetadata, err := loadRemoteMetadata(ctx, client, cfg.BucketName, metadataKey)
+	remoteMetadata, err := loadRemoteMetadata(ctx, client, bucketName, metadataKey)
 	if err != nil {
 		return err
 	}
@@ -80,16 +102,16 @@ func Run(ctx context.Context, inputPath, metadataPath, objectKey string) error {
 		return err
 	}
 
-	if _, err := client.FPutObject(ctx, cfg.BucketName, objectKey, inputPath, minio.PutObjectOptions{
+	if _, err := client.FPutObject(ctx, bucketName, objectKey, inputPath, minio.PutObjectOptions{
 		ContentType: "application/octet-stream",
 	}); err != nil {
-		return fmt.Errorf("failed to upload %s to bucket %s: %w", filepath.Base(inputPath), cfg.BucketName, err)
+		return fmt.Errorf("failed to upload %s to bucket %s: %w", filepath.Base(inputPath), bucketName, err)
 	}
 
-	if _, err := client.FPutObject(ctx, cfg.BucketName, metadataKey, metadataPath, minio.PutObjectOptions{
+	if _, err := client.FPutObject(ctx, bucketName, metadataKey, metadataPath, minio.PutObjectOptions{
 		ContentType: "application/json",
 	}); err != nil {
-		return fmt.Errorf("failed to upload metadata to bucket %s: %w", cfg.BucketName, err)
+		return fmt.Errorf("failed to upload metadata to bucket %s: %w", bucketName, err)
 	}
 
 	return nil
