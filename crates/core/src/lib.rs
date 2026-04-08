@@ -26,15 +26,16 @@ pub mod time;
 
 pub use env::{LOCALAPPDATA, WINBREW_PATHS_ROOT};
 pub use fs::{
-    atomic_write, atomic_write_temp, backup_path_for, cleanup_path, extract_zip_archive,
-    finalize_temp_file, replace_directory,
+    BoxError as FsBoxError, FsError, Result as FsResult, atomic_write, atomic_write_temp,
+    backup_path_for, cleanup_path, extract_zip_archive, finalize_temp_file, replace_directory,
 };
 pub use hash::{
     HashAlgorithm, HashError, Hasher, Result as HashResult, hash_algorithm, normalize_hash,
     verify_hash,
 };
 pub use network::{
-    Client, build_client, download_url_to_temp_file, installer_filename, is_zip_path,
+    BoxError as NetworkBoxError, Client, DownloadError, Result as NetworkResult, build_client,
+    download_url_to_temp_file, installer_filename, is_zip_path,
 };
 pub use paths::{
     ResolvedPaths, cache_dir_at, cache_file_at, catalog_db_at, config_file_at, data_dir_at,

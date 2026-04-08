@@ -84,14 +84,14 @@ pub fn prepare_install_target(
                 })?;
                 cleanup_path(install_dir).map_err(|source| InstallStateError::CleanupFailed {
                     path: install_dir.to_string_lossy().into_owned(),
-                    source,
+                    source: source.into(),
                 })?;
             }
         }
     } else if install_dir.exists() {
         cleanup_path(install_dir).map_err(|source| InstallStateError::CleanupFailed {
             path: install_dir.to_string_lossy().into_owned(),
-            source,
+            source: source.into(),
         })?;
     }
 

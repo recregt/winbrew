@@ -1,8 +1,9 @@
-use anyhow::{Context, Result};
-use std::fs;
-use std::path::{Path, PathBuf};
+#![allow(clippy::result_large_err)]
 
 use super::cleanup::cleanup_path;
+use super::{FsError, Result};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Replaces `source_dir` with `target_dir`, copying across volumes when rename
 /// is not available and rolling back the backup on failure.
@@ -32,38 +33,23 @@ where
         return match rename(source_dir, target_dir) {
             Ok(()) => Ok(()),
             Err(err) if is_cross_device_error(&err) => {
-                copy_dir_all(source_dir, target_dir).with_context(|| {
-                    format!(
-                        "failed to copy staged installation across volumes: {} -> {}",
-                        source_dir.display(),
-                        target_dir.display()
-                    )
+                copy_dir_all(source_dir, target_dir).map_err(|copy_err| {
+                    FsError::copy_across_volumes(source_dir, target_dir, copy_err)
                 })?;
 
                 let _ = cleanup_path(source_dir);
 
                 Ok(())
             }
-            Err(err) => Err(err).with_context(|| {
-                format!(
-                    "failed to move staged installation into place: {} -> {}",
-                    source_dir.display(),
-                    target_dir.display()
-                )
-            }),
+            Err(err) => Err(FsError::move_into_place(source_dir, target_dir, err)),
         };
     }
 
     let backup_dir = backup_path_for(target_dir);
     cleanup_path(&backup_dir)?;
 
-    rename(target_dir, &backup_dir).with_context(|| {
-        format!(
-            "failed to move existing installation aside: {} -> {}",
-            target_dir.display(),
-            backup_dir.display()
-        )
-    })?;
+    rename(target_dir, &backup_dir)
+        .map_err(|err| FsError::move_aside(target_dir, &backup_dir, err))?;
 
     match rename(source_dir, target_dir) {
         Ok(()) => {
@@ -75,20 +61,19 @@ where
                 let _ = cleanup_path(target_dir);
 
                 if let Err(rollback_err) = rename(&backup_dir, target_dir) {
-                    return Err(copy_err).with_context(|| {
-                        format!(
-                            "rollback also failed ({rollback_err}) - installation directory may be lost"
-                        )
-                    });
+                    return Err(FsError::rollback_failed(
+                        "failed to copy staged installation across volumes",
+                        source_dir,
+                        target_dir,
+                        copy_err.to_string(),
+                        rollback_err.to_string(),
+                        copy_err,
+                    ));
                 }
 
-                return Err(copy_err).with_context(|| {
-                    format!(
-                        "failed to copy staged installation across volumes: {} -> {}",
-                        source_dir.display(),
-                        target_dir.display()
-                    )
-                });
+                return Err(FsError::copy_across_volumes(
+                    source_dir, target_dir, copy_err,
+                ));
             }
 
             let _ = cleanup_path(source_dir);
@@ -98,20 +83,17 @@ where
         }
         Err(err) => {
             if let Err(rollback_err) = rename(&backup_dir, target_dir) {
-                return Err(err).with_context(|| {
-                    format!(
-                        "rollback also failed ({rollback_err}) - installation directory may be lost"
-                    )
-                });
+                return Err(FsError::rollback_failed(
+                    "failed to move staged installation into place",
+                    source_dir,
+                    target_dir,
+                    err.to_string(),
+                    rollback_err.to_string(),
+                    err,
+                ));
             }
 
-            Err(err).with_context(|| {
-                format!(
-                    "failed to move staged installation into place: {} -> {}",
-                    source_dir.display(),
-                    target_dir.display()
-                )
-            })
+            Err(FsError::move_into_place(source_dir, target_dir, err))
         }
     }
 }
@@ -121,39 +103,27 @@ fn rename_path(from: &Path, to: &Path) -> std::io::Result<()> {
 }
 
 fn copy_dir_all(source_dir: &Path, target_dir: &Path) -> Result<()> {
-    fs::create_dir_all(target_dir).with_context(|| {
-        format!(
-            "failed to create destination directory {}",
-            target_dir.display()
-        )
-    })?;
+    fs::create_dir_all(target_dir).map_err(|err| FsError::create_directory(target_dir, err))?;
 
     for entry in fs::read_dir(source_dir)
-        .with_context(|| format!("failed to read source directory {}", source_dir.display()))?
+        .map_err(|err| FsError::io("failed to read source directory", source_dir, err))?
     {
-        let entry =
-            entry.with_context(|| format!("failed to read entry in {}", source_dir.display()))?;
+        let entry = entry.map_err(|err| FsError::io("failed to read entry in", source_dir, err))?;
         let source_path = entry.path();
         let target_path = target_dir.join(entry.file_name());
         let file_type = entry
             .file_type()
-            .with_context(|| format!("failed to inspect entry {}", source_path.display()))?;
+            .map_err(|err| FsError::inspect(&source_path, err))?;
 
         if file_type.is_dir() {
             copy_dir_all(&source_path, &target_path)?;
         } else if file_type.is_file() {
             fs::copy(&source_path, &target_path)
-                .with_context(|| format!("failed to copy file {}", source_path.display()))?;
+                .map_err(|err| FsError::io("failed to copy file", &source_path, err))?;
         } else if file_type.is_symlink() {
-            return Err(anyhow::anyhow!(
-                "refusing to copy symlink {}",
-                source_path.display()
-            ));
+            return Err(FsError::copy_symlink(&source_path));
         } else {
-            return Err(anyhow::anyhow!(
-                "unsupported entry type {}",
-                source_path.display()
-            ));
+            return Err(FsError::unsupported_entry(&source_path));
         }
     }
 
