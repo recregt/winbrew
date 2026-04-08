@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use super::keys::env_override;
 use super::registry;
+use crate::core::env::LOCALAPPDATA;
 pub use crate::models::config::{ConfigSection, ConfigValueSource as ConfigSource};
 use serde::{Deserialize, Serialize};
 
@@ -122,8 +123,7 @@ fn default_file_log_level() -> String {
 }
 
 pub fn default_root_path() -> String {
-    let local_app_data =
-        std::env::var("LOCALAPPDATA").expect("LOCALAPPDATA must be set on Windows");
+    let local_app_data = std::env::var(LOCALAPPDATA).expect("LOCALAPPDATA must be set on Windows");
 
     std::path::PathBuf::from(local_app_data)
         .join("winbrew")

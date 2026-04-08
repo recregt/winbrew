@@ -1,4 +1,5 @@
 pub mod cancel;
+pub mod env;
 pub mod fs;
 pub mod hash;
 pub mod logging;

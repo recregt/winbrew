@@ -108,6 +108,7 @@ pub fn resolve_catalog_package_by_id(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::env::WINBREW_PATHS_ROOT;
     use crate::models::{PackageId, PackageRef, PackageSource};
     use anyhow::Result;
     use rusqlite::{Connection, params};
@@ -185,18 +186,18 @@ mod tests {
     fn search_packages_returns_catalog_unavailable_when_catalog_db_is_missing() {
         let _guard = ENV_LOCK.lock().unwrap();
         let temp_dir = tempdir().expect("temp dir should be created");
-        let previous_root = std::env::var("WINBREW_PATHS_ROOT").ok();
+        let previous_root = std::env::var(WINBREW_PATHS_ROOT).ok();
 
         unsafe {
-            std::env::set_var("WINBREW_PATHS_ROOT", temp_dir.path());
+            std::env::set_var(WINBREW_PATHS_ROOT, temp_dir.path());
         }
 
         let result = search_packages("winbrew");
 
         unsafe {
             match previous_root {
-                Some(value) => std::env::set_var("WINBREW_PATHS_ROOT", value),
-                None => std::env::remove_var("WINBREW_PATHS_ROOT"),
+                Some(value) => std::env::set_var(WINBREW_PATHS_ROOT, value),
+                None => std::env::remove_var(WINBREW_PATHS_ROOT),
             }
         }
 

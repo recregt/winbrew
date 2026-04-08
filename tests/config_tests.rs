@@ -7,6 +7,7 @@ use common::env_lock;
 use std::path::PathBuf;
 use test_env::TestEnvVar;
 use winbrew::AppContext;
+use winbrew::core::env::{LOCALAPPDATA, WINBREW_PATHS_ROOT};
 use winbrew::database::{Config, ConfigEnv};
 use winbrew::models::config::ConfigSection;
 use winbrew::services::{app::doctor::health_report, shared::report::runtime_report};
@@ -42,7 +43,7 @@ impl Drop for UnsetEnvVar {
 #[test]
 fn get_value_returns_current_values() {
     let _guard = env_lock();
-    let _root = UnsetEnvVar::new("WINBREW_PATHS_ROOT");
+    let _root = UnsetEnvVar::new(WINBREW_PATHS_ROOT);
     let config = Config {
         env: ConfigEnv::capture(),
         ..Config::default()
@@ -61,7 +62,7 @@ fn get_value_returns_current_values() {
 #[test]
 fn removed_network_config_keys_are_rejected() {
     let _guard = env_lock();
-    let _root = UnsetEnvVar::new("WINBREW_PATHS_ROOT");
+    let _root = UnsetEnvVar::new(WINBREW_PATHS_ROOT);
     let mut config = Config {
         env: ConfigEnv::capture(),
         ..Config::default()
@@ -84,7 +85,7 @@ fn removed_network_config_keys_are_rejected() {
 #[test]
 fn runtime_report_builds_expected_sections() {
     let _guard = env_lock();
-    let _root = UnsetEnvVar::new("WINBREW_PATHS_ROOT");
+    let _root = UnsetEnvVar::new(WINBREW_PATHS_ROOT);
     let ctx = app_context(false);
     let report = runtime_report(&ctx.sections, &ctx.paths).expect("report should build");
 
@@ -117,7 +118,7 @@ fn health_report_marks_env_root_source() {
     let _guard = env_lock();
     let root = common::shared_root::test_root();
     let root_path = root.path().to_string_lossy().to_string();
-    let _env = TestEnvVar::set("WINBREW_PATHS_ROOT", &root_path);
+    let _env = TestEnvVar::set(WINBREW_PATHS_ROOT, &root_path);
     common::db::init_database(root.path()).expect("database should initialize");
     std::fs::create_dir_all(root.path().join("packages")).expect("packages dir should exist");
     let ctx = app_context(true);
@@ -130,7 +131,7 @@ fn health_report_marks_env_root_source() {
 }
 
 fn expected_default_root() -> String {
-    PathBuf::from(std::env::var("LOCALAPPDATA").expect("LOCALAPPDATA must be set on Windows"))
+    PathBuf::from(std::env::var(LOCALAPPDATA).expect("LOCALAPPDATA must be set on Windows"))
         .join("winbrew")
         .to_string_lossy()
         .to_string()
