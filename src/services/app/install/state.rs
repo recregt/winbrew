@@ -3,8 +3,8 @@ use std::path::Path;
 use thiserror::Error;
 
 use crate::core::fs::cleanup_path;
-use crate::database;
 use crate::models::{InstallerType, Package, PackageStatus};
+use crate::services::shared::storage;
 
 #[derive(Debug, Error)]
 pub enum InstallStateError {
@@ -54,7 +54,7 @@ pub fn prepare_install_target(
     install_dir: &Path,
 ) -> Result<()> {
     if let Some(existing) =
-        database::get_package(conn, name).map_err(|source| InstallStateError::LookupFailed {
+        storage::get_package(conn, name).map_err(|source| InstallStateError::LookupFailed {
             name: name.to_string(),
             source,
         })?
@@ -76,7 +76,7 @@ pub fn prepare_install_target(
                 });
             }
             PackageStatus::Failed => {
-                database::delete_package(conn, name).map_err(|source| {
+                storage::delete_package(conn, name).map_err(|source| {
                     InstallStateError::DeleteFailed {
                         name: name.to_string(),
                         source,
@@ -106,7 +106,7 @@ pub fn mark_installing(
     install_dir: &Path,
 ) -> Result<()> {
     let package = installing_package(name, version, kind, install_dir);
-    database::insert_package(conn, &package).map_err(|source| {
+    storage::insert_package(conn, &package).map_err(|source| {
         InstallStateError::DatabaseOperationFailed {
             operation: "marking package as installing",
             source,
@@ -119,7 +119,7 @@ pub fn mark_ok(
     name: &str,
     msix_package_full_name: Option<&str>,
 ) -> Result<()> {
-    database::update_status_and_msix_package_full_name(
+    storage::update_status_and_msix_package_full_name(
         conn,
         name,
         PackageStatus::Ok,
@@ -132,7 +132,7 @@ pub fn mark_ok(
 }
 
 pub fn mark_failed(conn: &rusqlite::Connection, name: &str) -> Result<()> {
-    database::update_status(conn, name, PackageStatus::Failed).map_err(|source| {
+    storage::update_status(conn, name, PackageStatus::Failed).map_err(|source| {
         InstallStateError::DatabaseOperationFailed {
             operation: "marking package as failed",
             source,

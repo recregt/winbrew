@@ -9,14 +9,14 @@ use std::path::{Path, PathBuf};
 use tracing::warn;
 
 use crate::core::fs::cleanup_path;
-use crate::database;
 use crate::models::Package;
 use crate::models::PackageStatus;
+use crate::services::shared::storage;
 use crate::services::shared::temp_workspace;
 
 pub fn cleanup_stale_installations() -> Result<()> {
-    let conn = database::get_conn()?;
-    let stale_packages = database::list_installing_packages(&conn)?;
+    let conn = storage::get_conn()?;
+    let stale_packages = storage::list_installing_packages(&conn)?;
 
     for package in stale_packages {
         cleanup_stale_installation(&conn, &package);
@@ -26,7 +26,7 @@ pub fn cleanup_stale_installations() -> Result<()> {
 }
 
 fn cleanup_stale_installation(conn: &rusqlite::Connection, package: &Package) {
-    if let Err(err) = database::update_status(conn, &package.name, PackageStatus::Failed) {
+    if let Err(err) = storage::update_status(conn, &package.name, PackageStatus::Failed) {
         warn!(package = %package.name, error = %err, "failed to mark stale install as failed");
     }
 
@@ -75,8 +75,8 @@ fn cleanup_temp_roots(name: &str, version: &str) {
 #[cfg(test)]
 mod tests {
     use super::cleanup_stale_installations;
-    use crate::database;
     use crate::models::{InstallerType, Package, PackageStatus};
+    use crate::services::shared::storage;
     use crate::services::shared::temp_workspace;
     use std::fs;
     use tempfile::tempdir;
@@ -99,15 +99,15 @@ mod tests {
         let temp_root = tempdir().expect("temp root");
         let root = temp_root.path();
 
-        let config = database::Config::load_at(root).expect("config should load");
-        database::init(&config.resolved_paths()).expect("database should initialize");
+        let config = crate::database::Config::load_at(root).expect("config should load");
+        storage::init(&config.resolved_paths()).expect("database should initialize");
 
-        let conn = database::get_conn().expect("db connection");
+        let conn = storage::get_conn().expect("db connection");
         let install_dir = root.join("packages").join("Contoso.Stale");
         fs::create_dir_all(&install_dir).expect("install dir");
 
         let package = sample_package("Contoso.Stale", "1.0.0", &install_dir);
-        database::insert_package(&conn, &package).expect("insert package");
+        storage::insert_package(&conn, &package).expect("insert package");
 
         let temp_root_path = temp_workspace::temp_root_base().join(format!(
             "{}test",
@@ -117,7 +117,7 @@ mod tests {
 
         cleanup_stale_installations().expect("cleanup should succeed");
 
-        let stored = database::get_package(&conn, &package.name)
+        let stored = storage::get_package(&conn, &package.name)
             .expect("query package")
             .expect("package should still exist");
         assert_eq!(stored.status, PackageStatus::Failed);

@@ -1,10 +1,13 @@
 use anyhow::Result;
+use indicatif::ProgressBar;
+use std::io;
 
 use crate::commands::command_errors::{cancelled, reported_with_hint};
 use crate::models::CatalogPackage;
 use crate::models::PackageRef;
 use crate::services::app::install;
 use crate::services::app::install::InstallError;
+use crate::services::app::install::InstallObserver;
 use crate::{AppContext, Ui};
 
 pub fn run(ctx: &AppContext, query: &[String], ignore_checksum_security: bool) -> Result<()> {
@@ -22,31 +25,14 @@ pub fn run(ctx: &AppContext, query: &[String], ignore_checksum_security: bool) -
 
     let progress = ui.progress_bar();
 
-    let result = install::run(
-        ctx,
-        package_ref,
-        ignore_checksum_security,
-        |query, matches| {
-            let choices = matches
-                .iter()
-                .map(format_catalog_choice)
-                .collect::<Vec<_>>();
+    let result = {
+        let mut observer = InstallUi {
+            ui: &mut ui,
+            progress: &progress,
+        };
 
-            ui.select_index(
-                &format!("Multiple packages matched '{query}'. Choose one:"),
-                &choices,
-            )
-        },
-        |total_bytes| {
-            if let Some(total_bytes) = total_bytes {
-                progress.set_length(total_bytes);
-            }
-            progress.set_message("Downloading installer");
-        },
-        |downloaded_bytes| {
-            progress.inc(downloaded_bytes);
-        },
-    );
+        install::run(ctx, package_ref, ignore_checksum_security, &mut observer)
+    };
 
     progress.finish_and_clear();
 
@@ -141,4 +127,34 @@ fn format_catalog_choice(pkg: &CatalogPackage) -> String {
     }
 
     label
+}
+
+struct InstallUi<'a> {
+    ui: &'a mut Ui<io::Stdout>,
+    progress: &'a ProgressBar,
+}
+
+impl InstallObserver for InstallUi<'_> {
+    fn choose_package(&mut self, query: &str, matches: &[CatalogPackage]) -> anyhow::Result<usize> {
+        let choices = matches
+            .iter()
+            .map(format_catalog_choice)
+            .collect::<Vec<_>>();
+
+        self.ui.select_index(
+            &format!("Multiple packages matched '{query}'. Choose one:"),
+            &choices,
+        )
+    }
+
+    fn on_start(&mut self, total_bytes: Option<u64>) {
+        if let Some(total_bytes) = total_bytes {
+            self.progress.set_length(total_bytes);
+        }
+        self.progress.set_message("Downloading installer");
+    }
+
+    fn on_progress(&mut self, downloaded_bytes: u64) {
+        self.progress.inc(downloaded_bytes);
+    }
 }

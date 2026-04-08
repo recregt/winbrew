@@ -16,6 +16,8 @@ mod migration;
 
 use self::connection::SqliteConnectionManager;
 
+pub type DbConnection = PooledConnection<SqliteConnectionManager>;
+
 pub use errors::CatalogNotFoundError;
 
 pub use catalog::{get_installers, get_package_by_id, search};

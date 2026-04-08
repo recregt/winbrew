@@ -1,8 +1,8 @@
 use anyhow::Result;
 
-use crate::database;
 use crate::models::Package;
 use crate::models::diagnostics::{DiagnosisResult, DiagnosisSeverity};
+use crate::services::shared::storage;
 use indicatif::ProgressBar;
 use rayon::prelude::*;
 use std::collections::HashSet;
@@ -147,8 +147,8 @@ pub fn scan_orphaned_install_dirs(
 }
 
 pub fn installed_packages() -> Result<Vec<Package>> {
-    let conn = database::get_conn()?;
-    database::list_packages(&conn)
+    let conn = storage::get_conn()?;
+    storage::list_packages(&conn)
 }
 
 #[cfg(test)]

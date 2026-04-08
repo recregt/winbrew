@@ -1,12 +1,12 @@
 use anyhow::Result;
 
-use crate::database;
 use crate::models::Package;
 use crate::models::PackageQuery;
+use crate::services::shared::storage;
 
 pub fn list_packages(query: Option<&str>) -> Result<Vec<Package>> {
-    let conn = database::get_conn()?;
-    let packages = database::list_packages(&conn)?;
+    let conn = storage::get_conn()?;
+    let packages = storage::list_packages(&conn)?;
 
     Ok(match query {
         Some(query) if !query.trim().is_empty() => {
