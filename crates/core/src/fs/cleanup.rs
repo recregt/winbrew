@@ -2,7 +2,9 @@
 //!
 //! Provides safe deletion with deferred-cleanup fallback for locked files.
 
-use anyhow::{Context, Result};
+#![allow(clippy::result_large_err)]
+
+use super::{FsError, Result};
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -52,9 +54,7 @@ pub fn cleanup_path(path: &Path) -> Result<()> {
     let info = match inspect_path(path) {
         Ok(metadata) => metadata,
         Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
-        Err(err) => {
-            return Err(err).with_context(|| format!("failed to inspect {}", path.display()));
-        }
+        Err(err) => return Err(FsError::inspect(path, err)),
     };
 
     let removal_result = if info.is_reparse_point {
@@ -77,16 +77,10 @@ pub fn cleanup_path(path: &Path) -> Result<()> {
                     return Ok(());
                 }
 
-                return Err(err).with_context(|| {
-                    format!(
-                        "failed to remove {} and defer deletion to {}",
-                        path.display(),
-                        deferred_path.display()
-                    )
-                });
+                return Err(FsError::remove_and_defer(path, &deferred_path, err));
             }
 
-            Err(err).with_context(|| format!("failed to remove {}", path.display()))
+            Err(FsError::remove(path, err))
         }
     }
 }

@@ -13,7 +13,7 @@ use crate::runtime::cancel::check;
 const CATALOG_USER_AGENT: &str = "winbrew-package-installer";
 
 pub fn build_client() -> Result<crate::core::network::Client> {
-    network_build_client(CATALOG_USER_AGENT)
+    Ok(network_build_client(CATALOG_USER_AGENT)?)
 }
 
 pub fn download_installer<FStart, FProgress>(

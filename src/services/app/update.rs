@@ -48,7 +48,7 @@ where
 {
     let client = build_client("winbrew-catalog-downloader")?;
 
-    download_url_to_temp_file(
+    Ok(download_url_to_temp_file(
         &client,
         CATALOG_DIRECT_DOWNLOAD_URL,
         temp_path,
@@ -56,5 +56,5 @@ where
         on_start,
         on_progress,
         |_| Ok(()),
-    )
+    )?)
 }

@@ -15,7 +15,8 @@
 //! ancestor inspection results, and best-effort cleans up anything it created if
 //! extraction fails halfway through.
 
-use anyhow::{Context, Result};
+#![allow(clippy::result_large_err)]
+
 use std::collections::HashMap;
 use std::fs;
 use std::io::{ErrorKind, Read, Write};
@@ -23,7 +24,7 @@ use std::path::{Path, PathBuf};
 
 use super::cleanup::PathInfo;
 use super::cleanup::inspect_path;
-use super::cleanup_path;
+use super::{FsError, Result, cleanup_path};
 
 #[derive(Clone, Copy)]
 enum CachedPath {
@@ -36,9 +37,9 @@ enum CachedPath {
 /// The extraction target is validated so the archive cannot be unpacked through
 /// an existing reparse-point ancestor, and symlink entries are refused.
 pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()> {
-    let file = fs::File::open(zip_path)
-        .with_context(|| format!("failed to open zip archive {}", zip_path.display()))?;
-    let mut archive = zip::ZipArchive::new(file).context("failed to open zip archive")?;
+    let file = fs::File::open(zip_path).map_err(|err| FsError::open_zip_archive(zip_path, err))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|err| FsError::open_zip_archive(zip_path, err))?;
     const ZIP_COPY_BUFFER_SIZE: usize = 256 * 1024;
     let mut extraction = ExtractionContext::new();
     let mut buffer = vec![0u8; ZIP_COPY_BUFFER_SIZE];
@@ -46,7 +47,7 @@ pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()
     for index in 0..archive.len() {
         let mut entry = archive
             .by_index(index)
-            .context("failed to read zip entry")?;
+            .map_err(|err| FsError::read_zip_entry(zip_path, err))?;
         extract_entry(&mut entry, destination_dir, &mut extraction, &mut buffer)?;
     }
 
@@ -78,17 +79,11 @@ impl ExtractionContext {
             match self.inspect_cached(candidate)? {
                 CachedPath::Present(info) => {
                     if info.is_reparse_point {
-                        return Err(anyhow::anyhow!(
-                            "refusing to extract through reparse point {}",
-                            candidate.display()
-                        ));
+                        return Err(FsError::reparse_point(candidate));
                     }
 
                     if !info.is_directory && info.hard_link_count > 1 {
-                        return Err(anyhow::anyhow!(
-                            "refusing to overwrite hardlinked file {}",
-                            candidate.display()
-                        ));
+                        return Err(FsError::hardlinked_target(candidate));
                     }
                 }
                 CachedPath::Missing => {}
@@ -108,17 +103,11 @@ impl ExtractionContext {
             match self.inspect_cached(candidate)? {
                 CachedPath::Present(info) => {
                     if info.is_reparse_point {
-                        return Err(anyhow::anyhow!(
-                            "refusing to create directory through reparse point {}",
-                            candidate.display()
-                        ));
+                        return Err(FsError::reparse_point(candidate));
                     }
 
                     if !info.is_directory {
-                        return Err(anyhow::anyhow!(
-                            "failed to create directory {}: path exists and is not a directory",
-                            candidate.display()
-                        ));
+                        return Err(FsError::path_not_directory(candidate));
                     }
 
                     break;
@@ -132,7 +121,7 @@ impl ExtractionContext {
 
         for directory in missing_directories.iter().rev() {
             fs::create_dir_all(directory)
-                .with_context(|| format!("failed to create directory {}", directory.display()))?;
+                .map_err(|err| FsError::create_directory(directory, err))?;
             self.record_directory(directory);
         }
 
@@ -171,9 +160,7 @@ impl ExtractionContext {
         let state = match inspect_path(path) {
             Ok(info) => CachedPath::Present(info),
             Err(err) if err.kind() == ErrorKind::NotFound => CachedPath::Missing,
-            Err(err) => {
-                return Err(err).with_context(|| format!("failed to inspect {}", path.display()));
-            }
+            Err(err) => return Err(FsError::inspect(path, err)),
         };
 
         self.cached_paths.insert(path.to_path_buf(), state);
@@ -209,14 +196,11 @@ fn extract_entry<R: Read>(
 ) -> Result<()> {
     let enclosed_name = entry
         .enclosed_name()
-        .ok_or_else(|| anyhow::anyhow!("zip entry contains an invalid path"))?;
+        .ok_or_else(FsError::invalid_zip_entry_path)?;
     let outpath = destination_dir.join(enclosed_name);
 
     if entry.is_symlink() {
-        return Err(anyhow::anyhow!(
-            "refusing to extract symlink entry {}",
-            outpath.display()
-        ));
+        return Err(FsError::symlink_entry(&outpath));
     }
 
     extraction.validate_target(&outpath)?;
@@ -231,20 +215,20 @@ fn extract_entry<R: Read>(
     }
 
     let mut outfile = fs::File::create(&outpath)
-        .with_context(|| format!("failed to create extracted file {}", outpath.display()))?;
+        .map_err(|err| FsError::io("failed to create extracted file", &outpath, err))?;
     extraction.record_file(&outpath);
 
     loop {
         let bytes_read = entry
             .read(buffer)
-            .with_context(|| format!("failed to read zip entry {}", outpath.display()))?;
+            .map_err(|err| FsError::read_entry(&outpath, err))?;
         if bytes_read == 0 {
             break;
         }
 
         outfile
             .write_all(&buffer[..bytes_read])
-            .with_context(|| format!("failed to extract {}", outpath.display()))?;
+            .map_err(|err| FsError::write_entry(&outpath, err))?;
     }
 
     Ok(())
@@ -366,7 +350,7 @@ mod tests {
         extract_zip_archive(&zip_path, &destination_dir).expect("extraction");
 
         assert_eq!(
-            fs::read(&destination_dir.join("bin/tool.exe")).expect("read"),
+            fs::read(destination_dir.join("bin/tool.exe")).expect("read"),
             b"binary content"
         );
     }

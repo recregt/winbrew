@@ -1,10 +1,11 @@
-use anyhow::{Context, Result};
+#![allow(clippy::result_large_err)]
+
+use super::cleanup::cleanup_path;
+use super::{FsError, Result};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process;
-
-use super::cleanup::cleanup_path;
 
 /// Writes `contents` to `path` through `temp_path` and publishes the result atomically.
 ///
@@ -12,17 +13,16 @@ use super::cleanup::cleanup_path;
 /// old file or the fully-written new file. The temp file is removed on failure.
 pub fn atomic_write(path: &Path, temp_path: &Path, contents: &[u8]) -> Result<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create directory for {}", path.display()))?;
+        fs::create_dir_all(parent).map_err(|err| FsError::create_directory(parent, err))?;
     }
 
     let result = (|| -> Result<()> {
-        let mut file = fs::File::create(temp_path)
-            .with_context(|| format!("failed to create temp file at {}", temp_path.display()))?;
+        let mut file =
+            fs::File::create(temp_path).map_err(|err| FsError::create_temp_file(temp_path, err))?;
         file.write_all(contents)
-            .with_context(|| format!("failed to write temp file at {}", temp_path.display()))?;
+            .map_err(|err| FsError::write_temp_file(temp_path, err))?;
         file.sync_all()
-            .with_context(|| format!("failed to sync temp file at {}", temp_path.display()))?;
+            .map_err(|err| FsError::sync_temp_file(temp_path, err))?;
 
         Ok(())
     })();
@@ -34,13 +34,7 @@ pub fn atomic_write(path: &Path, temp_path: &Path, contents: &[u8]) -> Result<()
 
     if let Err(err) = fs::rename(temp_path, path) {
         let _ = fs::remove_file(temp_path);
-        return Err(err).with_context(|| {
-            format!(
-                "failed to finalize atomic write: {} -> {}",
-                temp_path.display(),
-                path.display()
-            )
-        });
+        return Err(FsError::finalize_file(temp_path, path, err));
     }
 
     Ok(())
@@ -61,13 +55,8 @@ pub fn finalize_temp_file(temp_path: &Path, final_path: &Path) -> Result<()> {
         cleanup_path(final_path)?;
     }
 
-    fs::rename(temp_path, final_path).with_context(|| {
-        format!(
-            "failed to finalize file: {} -> {}",
-            temp_path.display(),
-            final_path.display()
-        )
-    })
+    fs::rename(temp_path, final_path)
+        .map_err(|err| FsError::finalize_file(temp_path, final_path, err))
 }
 
 #[cfg(test)]

@@ -1,8 +1,9 @@
-use anyhow::{Context, Result};
 use std::fs;
 use std::io::{BufWriter, Read, Write};
 use std::path::Path;
 use std::time::Duration;
+
+use super::{BoxError, DownloadError, Result};
 
 /// Blocking HTTP client used by the download helpers.
 pub type Client = reqwest::blocking::Client;
@@ -23,7 +24,7 @@ pub fn build_client(user_agent: &str) -> Result<Client> {
         .timeout(Duration::from_secs(DOWNLOAD_REQUEST_TIMEOUT_SECS))
         .connect_timeout(Duration::from_secs(DOWNLOAD_CONNECT_TIMEOUT_SECS))
         .build()
-        .context("failed to build HTTP client")
+        .map_err(DownloadError::build_client)
 }
 
 /// Streams `url` into `temp_path`.
@@ -47,7 +48,7 @@ pub fn download_url_to_temp_file<FStart, FProgress, FChunk>(
 where
     FStart: FnOnce(Option<u64>),
     FProgress: FnMut(u64),
-    FChunk: FnMut(&[u8]) -> Result<()>,
+    FChunk: FnMut(&[u8]) -> std::result::Result<(), BoxError>,
 {
     let label = label.to_string();
     let temp_file_guard = TempFileGuard::new(temp_path);
@@ -55,22 +56,18 @@ where
     let mut response = client
         .get(url)
         .send()
-        .with_context(|| format!("failed to request {label} {url}"))?
+        .map_err(|err| DownloadError::request(&label, url, err))?
         .error_for_status()
-        .with_context(|| format!("{label} request failed"))?;
+        .map_err(|err| DownloadError::request_failed(&label, err))?;
 
     let content_length = response.content_length();
 
-    let file = fs::File::create(temp_path).with_context(|| {
-        format!(
-            "failed to create {label} download file at {}",
-            temp_path.display()
-        )
-    })?;
+    let file = fs::File::create(temp_path)
+        .map_err(|err| DownloadError::create_temp_file(&label, temp_path.to_path_buf(), err))?;
 
     if let Some(total_size) = content_length {
         file.set_len(total_size)
-            .with_context(|| format!("failed to pre-allocate {label} download file"))?;
+            .map_err(|err| DownloadError::preallocate(&label, err))?;
         // `set_len` reserves the size, but the cursor still starts at byte 0.
     }
 
@@ -84,7 +81,7 @@ where
     loop {
         let read = response
             .read(&mut buffer)
-            .with_context(|| format!("failed to read {label}"))?;
+            .map_err(|err| DownloadError::read(&label, err))?;
         if read == 0 {
             break;
         }
@@ -93,7 +90,7 @@ where
         on_chunk(chunk)?;
         writer
             .write_all(chunk)
-            .with_context(|| format!("failed to write {label} to disk"))?;
+            .map_err(|err| DownloadError::write(&label, err))?;
 
         downloaded += read as u64;
         if downloaded - last_reported >= PROGRESS_REPORT_INTERVAL {
@@ -111,11 +108,11 @@ where
     let file = writer
         .into_inner()
         .map_err(|err| err.into_error())
-        .with_context(|| format!("failed to finalize {label} download buffer"))?;
+        .map_err(|err| DownloadError::finalize_buffer(&label, err))?;
 
     // This is the durability boundary for the temp file; callers only rename it.
     file.sync_all()
-        .with_context(|| format!("failed to sync {label} download file"))?;
+        .map_err(|err| DownloadError::sync(&label, err))?;
 
     temp_file_guard.commit();
 
@@ -155,9 +152,7 @@ fn validate_download_size(label: &str, expected: Option<u64>, actual: u64) -> Re
     if let Some(expected) = expected
         && actual != expected
     {
-        return Err(anyhow::anyhow!(
-            "{label} size mismatch: expected {expected}, got {actual}"
-        ));
+        return Err(DownloadError::size_mismatch(label, expected, actual));
     }
 
     Ok(())

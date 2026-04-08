@@ -2610,7 +2610,6 @@ dependencies = [
 name = "winbrew-core"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "chrono",
  "md-5",
  "reqwest",
