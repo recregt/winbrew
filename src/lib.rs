@@ -14,11 +14,12 @@ pub mod cli;
 pub mod commands;
 pub mod core;
 pub mod database;
-pub mod engines;
 pub mod models;
 pub mod services;
 pub mod ui;
 pub mod windows;
+
+pub use winbrew_engines as engines;
 
 #[derive(Debug, Clone)]
 pub struct AppContext {

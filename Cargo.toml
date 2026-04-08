@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/models", "infra/parser"]
+members = [".", "crates/engines", "crates/models", "infra/parser"]
 resolver = "2"
 
 [package]
@@ -13,6 +13,7 @@ name = "winbrew"
 path = "src/main.rs"
 
 [dependencies]
+winbrew-engines = { path = "crates/engines" }
 winbrew-models = { path = "crates/models" }
 winreg = "0.56"
 reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-features = false }

@@ -1,13 +1,14 @@
 use anyhow::{Result, anyhow};
 use std::path::Path;
 
-use crate::core::network::is_zip_path;
-use crate::models::{CatalogInstaller, InstallerType, Package};
+use winbrew_models::{CatalogInstaller, InstalledPackage, InstallerType};
+
+use crate::network::is_zip_path;
 
 use super::{EngineKind, msix, portable, zip};
 
 type InstallFn = fn(&CatalogInstaller, &Path, &Path) -> Result<()>;
-type RemoveFn = fn(&Package) -> Result<()>;
+type RemoveFn = fn(&InstalledPackage) -> Result<()>;
 type MatchesInstallerFn = fn(&CatalogInstaller) -> bool;
 
 struct EngineDescriptor {
@@ -54,15 +55,15 @@ fn portable_install(
     portable::install::install(download_path, install_dir, &installer.url)
 }
 
-fn msix_remove(package: &Package) -> Result<()> {
+fn msix_remove(package: &InstalledPackage) -> Result<()> {
     msix::remove::remove(package)
 }
 
-fn zip_remove(package: &Package) -> Result<()> {
+fn zip_remove(package: &InstalledPackage) -> Result<()> {
     zip::remove::remove(package)
 }
 
-fn portable_remove(package: &Package) -> Result<()> {
+fn portable_remove(package: &InstalledPackage) -> Result<()> {
     portable::remove::remove(package)
 }
 
@@ -108,7 +109,7 @@ pub(crate) fn install(
     (descriptor.install)(installer, download_path, install_dir)
 }
 
-pub(crate) fn remove(kind: EngineKind, package: &Package) -> Result<()> {
+pub(crate) fn remove(kind: EngineKind, package: &InstalledPackage) -> Result<()> {
     let descriptor = resolve_engine_descriptor(kind)?;
 
     (descriptor.remove)(package)
@@ -124,8 +125,8 @@ fn resolve_engine_descriptor(kind: EngineKind) -> Result<&'static EngineDescript
 #[cfg(test)]
 mod tests {
     use super::resolve_engine_kind_for_installer;
-    use crate::engines::EngineKind;
-    use crate::models::{CatalogInstaller, InstallerType};
+    use crate::EngineKind;
+    use winbrew_models::{CatalogInstaller, InstallerType};
 
     fn installer(kind: InstallerType, url: &str) -> CatalogInstaller {
         CatalogInstaller {

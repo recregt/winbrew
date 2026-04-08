@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::core::fs::{cleanup_path, extract_zip_archive, replace_directory};
-use crate::core::network::installer_filename;
+use crate::fs::{cleanup_path, extract_zip_archive, replace_directory};
+use crate::network::installer_filename;
 
 pub fn install(download_path: &Path, install_dir: &Path, installer_url: &str) -> Result<()> {
     let stage_dir = staging_dir_for(install_dir);
