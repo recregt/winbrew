@@ -1,7 +1,7 @@
 use crate::core::paths;
 use anyhow::{Context, Result};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 mod errors;
 mod keys;
@@ -36,7 +36,9 @@ impl Config {
             .root_override()
             .map(str::to_owned)
             .unwrap_or_else(default_root_path);
-        Ok(Self::load(&paths::config_file_at(Path::new(&root)))?.with_env(env))
+        let root = PathBuf::from(root);
+        let config_path = paths::config_file_at(&root);
+        Ok(Self::load(&config_path)?.with_env(env))
     }
 
     pub fn load_at(root: &Path) -> Result<Self> {
@@ -62,7 +64,9 @@ impl Config {
             })
             .unwrap_or_else(default_root_path);
 
-        self.save(&paths::config_file_at(Path::new(&root)))
+        let root = PathBuf::from(root);
+        let config_path = paths::config_file_at(&root);
+        self.save(&config_path)
     }
 
     pub fn load_current() -> Result<Self> {
@@ -72,7 +76,9 @@ impl Config {
             .map(str::to_owned)
             .unwrap_or_else(default_root_path);
 
-        Ok(Self::load(&paths::config_file_at(Path::new(&root)))?.with_env(env))
+        let root = PathBuf::from(root);
+        let config_path = paths::config_file_at(&root);
+        Ok(Self::load(&config_path)?.with_env(env))
     }
 
     pub fn resolved_paths(&self) -> paths::ResolvedPaths {
