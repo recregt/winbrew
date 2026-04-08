@@ -50,7 +50,7 @@ where
     FChunk: FnMut(&[u8]) -> Result<()>,
 {
     let label = label.to_string();
-    let mut temp_file_guard = TempFileGuard::new(temp_path);
+    let temp_file_guard = TempFileGuard::new(temp_path);
 
     let mut response = client
         .get(url)
@@ -146,6 +146,11 @@ fn last_path_segment(url: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Validates the streamed byte count against `Content-Length` when the server
+/// reports one.
+///
+/// The check is exact: both short downloads and extra bytes are treated as
+/// errors. If the server does not report a length, the check is skipped.
 fn validate_download_size(label: &str, expected: Option<u64>, actual: u64) -> Result<()> {
     if let Some(expected) = expected
         && actual != expected
@@ -171,7 +176,7 @@ impl<'a> TempFileGuard<'a> {
         }
     }
 
-    fn commit(&mut self) {
+    fn commit(mut self) {
         self.committed = true;
     }
 }
@@ -232,6 +237,12 @@ mod tests {
     #[test]
     fn validate_download_size_accepts_matching_length() {
         assert!(super::validate_download_size("installer", Some(42), 42).is_ok());
+    }
+
+    #[test]
+    fn validate_download_size_skips_check_without_content_length() {
+        assert!(super::validate_download_size("installer", None, 0).is_ok());
+        assert!(super::validate_download_size("installer", None, 999).is_ok());
     }
 
     #[test]
