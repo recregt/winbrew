@@ -7,7 +7,7 @@ use indicatif::ProgressBar;
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 fn diagnosis_result(
     error_code: &str,
@@ -22,7 +22,8 @@ fn diagnosis_result(
 }
 
 fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
-    let install_dir = Path::new(&pkg.install_dir);
+    let install_dir = PathBuf::from(&pkg.install_dir);
+    let install_dir = install_dir.as_path();
 
     if !install_dir.exists() {
         return Some(diagnosis_result(

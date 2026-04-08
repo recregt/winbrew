@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::warn;
 
 use crate::core::fs::cleanup_path;
@@ -30,7 +30,8 @@ fn cleanup_stale_installation(conn: &rusqlite::Connection, package: &Package) {
         warn!(package = %package.name, error = %err, "failed to mark stale install as failed");
     }
 
-    cleanup_install_dir(Path::new(&package.install_dir), &package.name);
+    let install_dir = PathBuf::from(&package.install_dir);
+    cleanup_install_dir(&install_dir, &package.name);
     cleanup_temp_roots(&package.name, &package.version);
 }
 
