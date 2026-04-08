@@ -169,7 +169,7 @@ mod tests {
         let installer = CatalogInstaller {
             package_id: "winget/Contoso.App".into(),
             url: "https://example.test/app.exe".to_string(),
-            hash: String::new(),
+            hash: String::default(),
             arch: Architecture::Any,
             kind: InstallerType::Portable,
         };
@@ -224,8 +224,8 @@ mod tests {
         let installer = RawCatalogInstaller {
             package_id: "winget/Contoso.App".to_string(),
             url: "https://example.test/app.exe".to_string(),
-            hash: String::new(),
-            arch: String::new(),
+            hash: String::default(),
+            arch: String::default(),
             kind: "portable".to_string(),
         };
 
