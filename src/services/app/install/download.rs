@@ -12,12 +12,12 @@ use crate::models::CatalogInstaller;
 
 const CATALOG_USER_AGENT: &str = "winbrew-package-installer";
 
-pub fn build_client() -> Result<reqwest::blocking::Client> {
+pub fn build_client() -> Result<crate::core::network::Client> {
     network_build_client(CATALOG_USER_AGENT)
 }
 
 pub fn download_installer<FStart, FProgress>(
-    client: &reqwest::blocking::Client,
+    client: &crate::core::network::Client,
     installer: &CatalogInstaller,
     download_path: &Path,
     ignore_checksum_security: bool,

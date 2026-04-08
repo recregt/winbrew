@@ -2,16 +2,14 @@
 mod shared_root;
 
 use anyhow::Result;
-use md5::Md5;
 use mockito::{Mock, Server, ServerGuard};
 use rusqlite::{Connection, params};
-use sha1::Sha1;
-use sha2::{Digest, Sha512};
 use shared_root::test_root;
 use std::fs;
 use std::io::{Cursor, Write};
 use std::path::Path;
 use winbrew::AppContext;
+use winbrew::core::hash::{HashAlgorithm, Hasher};
 use winbrew::database;
 use winbrew::models::{PackageId, PackageName, PackageRef};
 use winbrew::services::app::install;
@@ -40,25 +38,24 @@ fn reset_install_state(root: &Path) -> Result<()> {
     Ok(())
 }
 
-fn md5_hex(bytes: &[u8]) -> String {
-    let mut hasher = Md5::new();
+fn digest_hex(algorithm: HashAlgorithm, bytes: &[u8]) -> String {
+    let mut hasher = Hasher::new(algorithm);
     hasher.update(bytes);
     let digest = hasher.finalize();
+
     digest.iter().map(|byte| format!("{:02x}", byte)).collect()
+}
+
+fn md5_hex(bytes: &[u8]) -> String {
+    digest_hex(HashAlgorithm::Md5, bytes)
 }
 
 fn sha1_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha1::new();
-    hasher.update(bytes);
-    let digest = hasher.finalize();
-    digest.iter().map(|byte| format!("{:02x}", byte)).collect()
+    digest_hex(HashAlgorithm::Sha1, bytes)
 }
 
 fn sha512_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha512::new();
-    hasher.update(bytes);
-    let digest = hasher.finalize();
-    digest.iter().map(|byte| format!("{:02x}", byte)).collect()
+    digest_hex(HashAlgorithm::Sha512, bytes)
 }
 
 fn init_context(root: &Path) -> Result<AppContext> {
