@@ -1,3 +1,7 @@
+//! Path cleanup utilities with Windows reparse point awareness.
+//!
+//! Provides safe deletion with deferred-cleanup fallback for locked files.
+
 use anyhow::{Context, Result};
 use std::fs;
 use std::io::ErrorKind;
@@ -97,6 +101,7 @@ fn deferred_delete_path(path: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::cleanup_path;
+    use std::fs;
     use tempfile::tempdir;
 
     #[test]
@@ -106,5 +111,16 @@ mod tests {
 
         assert!(cleanup_path(&missing).is_ok());
         assert!(!missing.exists());
+    }
+
+    #[test]
+    fn cleanup_path_removes_directory() {
+        let temp_dir = tempdir().expect("temp dir");
+        let dir = temp_dir.path().join("test_dir");
+
+        fs::create_dir(&dir).expect("create dir");
+
+        assert!(cleanup_path(&dir).is_ok());
+        assert!(!dir.exists());
     }
 }
