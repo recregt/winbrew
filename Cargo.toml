@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/engines", "crates/models", "infra/parser"]
+members = [".", "crates/engines", "crates/models", "crates/ui", "infra/parser"]
 resolver = "2"
 
 [package]
@@ -15,21 +15,16 @@ path = "src/main.rs"
 [dependencies]
 winbrew-engines = { path = "crates/engines" }
 winbrew-models = { path = "crates/models" }
+winbrew-ui = { path = "crates/ui" }
 winreg = "0.56"
 reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-features = false }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 sha2 = "0.11"
 sha1 = "0.11"
 md-5 = "0.11"
 zip = "8"
 
 clap = { version = "4", default-features = false, features = ["color", "derive", "error-context", "help", "std", "suggestions", "usage"] }
-dialoguer = { version = "0.12", default-features = false }
 indicatif = { version = "0.18", default-features = false, features = ["unicode-width"] }
-comfy-table = "7.2"
-console = { version = "0.16", default-features = false, features = ["std"] }
-terminal_size = "0.4"
-unicode-width = "0.2"
 
 rusqlite = { version = "0.39", default-features = false, features = ["bundled", "unlock_notify"] }
 chrono = { version = "0.4", features = ["serde"] }

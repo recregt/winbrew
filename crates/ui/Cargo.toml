@@ -1,0 +1,16 @@
+[package]
+name = "winbrew-ui"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+anyhow = "1"
+comfy-table = "7.2"
+console = { version = "0.16", default-features = false, features = ["std"] }
+dialoguer = { version = "0.12", default-features = false }
+indicatif = { version = "0.18", default-features = false, features = ["unicode-width"] }
+terminal_size = "0.4"
+tracing = "0.1"
+unicode-width = "0.2"
+winbrew-models = { path = "../models" }
