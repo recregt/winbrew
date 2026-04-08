@@ -21,10 +21,10 @@ pub struct RunConfig {
 
 impl RunConfig {
     pub fn new(winget_db_path: PathBuf, output_db_path: PathBuf) -> Self {
-        let metadata_path = output_db_path
-            .parent()
-            .map(|parent| parent.join("metadata.json"))
-            .unwrap_or_else(|| PathBuf::from("metadata.json"));
+        let metadata_path = output_db_path.parent().map_or_else(
+            || PathBuf::from("metadata.json"),
+            |parent| parent.join("metadata.json"),
+        );
 
         Self {
             winget_db_path,

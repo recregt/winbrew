@@ -11,8 +11,7 @@ pub fn is_zip_path(url: &str) -> bool {
     let path = url_path(url);
 
     path.rsplit_once('.')
-        .map(|(_, ext)| ext.eq_ignore_ascii_case("zip"))
-        .unwrap_or(false)
+        .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("zip"))
 }
 
 fn url_path(url: &str) -> &str {

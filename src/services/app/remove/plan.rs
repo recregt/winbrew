@@ -43,7 +43,7 @@ fn removal_plan(pkg: Package, dependents: Vec<String>) -> RemovalPlan {
 }
 
 fn dependency_name(dep: &str) -> &str {
-    dep.split_once('@').map(|(name, _)| name).unwrap_or(dep)
+    dep.split_once('@').map_or(dep, |(name, _)| name)
 }
 
 #[cfg(test)]
