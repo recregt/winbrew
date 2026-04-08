@@ -9,10 +9,10 @@ use std::fs;
 use std::io::{Cursor, Write};
 use std::path::Path;
 use winbrew::AppContext;
-use winbrew::core::hash::{HashAlgorithm, Hasher};
 use winbrew::database;
 use winbrew::services::app::install;
 use winbrew::services::app::install::InstallObserver;
+use winbrew_core::hash::{HashAlgorithm, Hasher};
 use winbrew_models::{
     CatalogPackage, InstallerType, PackageId, PackageName, PackageRef, PackageStatus,
 };
@@ -264,7 +264,7 @@ fn install_allows_sha1_with_override() -> Result<()> {
 
     assert!(matches!(
         outcome.legacy_checksum_algorithms.as_slice(),
-        [winbrew::core::hash::HashAlgorithm::Sha1]
+        [winbrew_core::hash::HashAlgorithm::Sha1]
     ));
     fixture.assert_downloaded();
     Ok(())

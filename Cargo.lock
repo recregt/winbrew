@@ -2601,7 +2601,6 @@ dependencies = [
  "winbrew-models",
  "winbrew-runtime",
  "winbrew-ui",
- "winbrew-windows",
  "winresource",
  "zip",
 ]
