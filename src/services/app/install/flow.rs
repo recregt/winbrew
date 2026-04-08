@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::path::Path;
 use tracing::warn;
 
-use crate::core::fs::{backup_directory_path, cleanup_path};
+use crate::core::fs::{backup_path_for, cleanup_path};
 use crate::core::hash::HashAlgorithm;
 use crate::core::network::installer_filename;
 use crate::engines::{EngineKind, PackageEngine};
@@ -84,7 +84,7 @@ where
 
 fn cleanup_install_artifacts(install_dir: &Path) {
     let stage_dir = install_dir.parent().unwrap_or(install_dir).join("staging");
-    let backup_dir = backup_directory_path(install_dir);
+    let backup_dir = backup_path_for(install_dir);
 
     if let Err(err) = cleanup_path(&stage_dir) {
         warn!(path = %stage_dir.display(), error = %err, "failed to clean up staged install directory");

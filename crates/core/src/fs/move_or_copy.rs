@@ -6,12 +6,15 @@ use super::cleanup::cleanup_path;
 
 /// Replaces `source_dir` with `target_dir`, copying across volumes when rename
 /// is not available and rolling back the backup on failure.
+///
+/// On Windows, cross-volume rename failures fall back to copy + cleanup instead
+/// of failing the install outright.
 pub fn replace_directory(source_dir: &Path, target_dir: &Path) -> Result<()> {
     replace_directory_with_rename(source_dir, target_dir, rename_path)
 }
 
 /// Returns the sibling `.old` backup path used during directory replacement.
-pub fn backup_directory_path(target_dir: &Path) -> PathBuf {
+pub fn backup_path_for(target_dir: &Path) -> PathBuf {
     let parent = target_dir.parent().unwrap_or(target_dir);
     let name = target_dir
         .file_name()
@@ -51,7 +54,7 @@ where
         };
     }
 
-    let backup_dir = backup_directory_path(target_dir);
+    let backup_dir = backup_path_for(target_dir);
     cleanup_path(&backup_dir)?;
 
     rename(target_dir, &backup_dir).with_context(|| {
@@ -163,16 +166,16 @@ fn is_cross_device_error(err: &std::io::Error) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{backup_directory_path, replace_directory_with_rename};
+    use super::{backup_path_for, replace_directory_with_rename};
     use std::fs;
     use std::io::{self, ErrorKind};
     use tempfile::tempdir;
 
     #[test]
-    fn backup_directory_path_appends_old_suffix_next_to_target() {
+    fn backup_path_for_appends_old_suffix_next_to_target() {
         let path = std::path::Path::new(r"C:\pkg\tool.exe");
         assert_eq!(
-            backup_directory_path(path),
+            backup_path_for(path),
             std::path::Path::new(r"C:\pkg\tool.exe.old")
         );
     }
@@ -207,7 +210,7 @@ mod tests {
         let temp_dir = tempdir().expect("temp dir");
         let source_dir = temp_dir.path().join("source");
         let target_dir = temp_dir.path().join("target");
-        let backup_dir = backup_directory_path(&target_dir);
+        let backup_dir = backup_path_for(&target_dir);
 
         fs::create_dir_all(&source_dir).expect("source dir");
         fs::create_dir_all(&target_dir).expect("target dir");
@@ -242,7 +245,7 @@ mod tests {
         let temp_dir = tempdir().expect("temp dir");
         let source_dir = temp_dir.path().join("source");
         let target_dir = temp_dir.path().join("target");
-        let backup_dir = backup_directory_path(&target_dir);
+        let backup_dir = backup_path_for(&target_dir);
 
         fs::create_dir_all(&source_dir).expect("source dir");
         fs::create_dir_all(&target_dir).expect("target dir");

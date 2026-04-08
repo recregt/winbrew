@@ -47,7 +47,10 @@ pub fn atomic_write(path: &Path, temp_path: &Path, contents: &[u8]) -> Result<()
 }
 
 /// Writes `contents` to a PID-scoped TOML temp file and atomically publishes it.
-pub fn atomic_write_with_pid_suffix(path: &Path, contents: &str) -> Result<()> {
+///
+/// This is useful when the caller wants a predictable temporary name per
+/// process and does not need to manage the temp file path directly.
+pub fn atomic_write_temp(path: &Path, contents: &str) -> Result<()> {
     let temp_path = path.with_extension(format!("toml.{}.tmp", process::id()));
     atomic_write(path, &temp_path, contents.as_bytes())
 }
