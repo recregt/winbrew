@@ -31,7 +31,7 @@ impl CatalogMetadata {
                 .unwrap_or_default()
                 .as_secs(),
             current_hash,
-            previous_hash: String::new(),
+            previous_hash: String::default(),
             package_count,
             source_counts,
         }

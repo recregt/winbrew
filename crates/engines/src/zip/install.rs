@@ -46,7 +46,7 @@ mod tests {
         install(&download_path, &install_dir).expect("zip install");
 
         let installed_file = install_dir.join("bin").join("tool.exe");
-        let mut contents = String::new();
+        let mut contents = String::default();
         fs::File::open(&installed_file)
             .expect("installed file")
             .read_to_string(&mut contents)
