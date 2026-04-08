@@ -9,18 +9,16 @@ use crate::commands::run;
 use crate::core::paths::ResolvedPaths;
 use crate::services::bootstrap;
 use crate::services::shared::config as shared_config;
+use winbrew_core as core;
+use winbrew_engines as engines;
 use winbrew_models::ConfigSection;
+use winbrew_runtime as runtime;
+use winbrew_ui::{Ui, UiSettings};
 
 pub mod cli;
 pub mod commands;
 pub mod database;
 pub mod services;
-
-pub use winbrew_core as core;
-pub use winbrew_engines as engines;
-pub use winbrew_runtime as runtime;
-pub use winbrew_ui::{Ui, UiBuilder, UiSettings};
-pub use winbrew_windows as windows;
 
 #[derive(Debug, Clone)]
 pub struct AppContext {
@@ -55,7 +53,7 @@ pub fn run_app() -> Result<()> {
     let config = shared_config::load_current()?;
     let ctx = AppContext::from_config(config)?;
 
-    runtime::logging::init(&ctx.paths.logs, &ctx.log_level, &ctx.file_log_level)?;
+    runtime::init_logging(&ctx.paths.logs, &ctx.log_level, &ctx.file_log_level)?;
     database::init(&ctx.paths)?;
     bootstrap::init_runtime()?;
 

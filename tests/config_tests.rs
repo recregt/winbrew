@@ -7,9 +7,9 @@ use common::env_lock;
 use std::path::PathBuf;
 use test_env::TestEnvVar;
 use winbrew::AppContext;
-use winbrew::core::env::{LOCALAPPDATA, WINBREW_PATHS_ROOT};
 use winbrew::database::{Config, ConfigEnv};
 use winbrew::services::{app::doctor::health_report, shared::report::runtime_report};
+use winbrew_core::env::{LOCALAPPDATA, WINBREW_PATHS_ROOT};
 use winbrew_models::ConfigSection;
 
 struct UnsetEnvVar {
@@ -150,7 +150,7 @@ fn app_context(root_from_env: bool) -> AppContext {
         .collect();
 
     AppContext {
-        ui: winbrew::UiSettings::default(),
+        ui: winbrew_ui::UiSettings::default(),
         paths,
         sections,
         root_from_env,
