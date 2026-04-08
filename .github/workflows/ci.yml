@@ -38,7 +38,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: infra/${{ matrix.module }}/go.mod
-          cache: true
+          cache: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           cache-dependency-path: infra/${{ matrix.module }}/go.sum
 
       - name: Install golangci-lint
@@ -61,6 +61,8 @@ jobs:
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
       - name: Run Parser CI Script
         shell: pwsh
@@ -76,6 +78,8 @@ jobs:
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@v2

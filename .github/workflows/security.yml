@@ -58,6 +58,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
       - name: Audit Rust Dependencies
         uses: actions-rust-lang/audit@v1
@@ -104,6 +106,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: infra/${{ matrix.module }}/go.mod
+          cache: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           cache-dependency-path: infra/${{ matrix.module }}/go.sum
 
       - uses: golang/govulncheck-action@v1
