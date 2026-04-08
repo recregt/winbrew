@@ -8,6 +8,7 @@ license = "MIT OR Apache-2.0"
 anyhow = "1"
 regex = "1.12"
 strum_macros = "0.28"
+url = "2"
 zip = "8"
 winbrew-models = { path = "../models" }
 
