@@ -1,8 +1,8 @@
 use anyhow::Result;
 use rusqlite::Connection;
 
-use crate::database;
 use crate::models::{CatalogPackage, PackageRef};
+use crate::services::shared::storage;
 
 #[derive(Debug)]
 pub enum SearchError {
@@ -19,15 +19,15 @@ impl From<anyhow::Error> for SearchError {
 }
 
 pub fn search_catalog_packages(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
-    database::search(conn, query)
+    storage::search(conn, query)
 }
 
 pub fn search_packages(query: &str) -> SearchResult<Vec<CatalogPackage>> {
-    let conn = match database::get_catalog_conn() {
+    let conn = match storage::get_catalog_conn() {
         Ok(conn) => conn,
         Err(err)
             if err
-                .downcast_ref::<database::CatalogNotFoundError>()
+                .downcast_ref::<storage::CatalogNotFoundError>()
                 .is_some() =>
         {
             return Err(SearchError::CatalogUnavailable);
@@ -35,11 +35,11 @@ pub fn search_packages(query: &str) -> SearchResult<Vec<CatalogPackage>> {
         Err(err) => return Err(SearchError::Unexpected(err)),
     };
 
-    match database::search(&conn, query) {
+    match storage::search(&conn, query) {
         Ok(packages) => Ok(packages),
         Err(err)
             if err
-                .downcast_ref::<database::CatalogNotFoundError>()
+                .downcast_ref::<storage::CatalogNotFoundError>()
                 .is_some() =>
         {
             Err(SearchError::CatalogUnavailable)
@@ -101,7 +101,7 @@ pub fn resolve_catalog_package_by_id(
     conn: &Connection,
     package_id: &str,
 ) -> Result<CatalogPackage> {
-    database::get_package_by_id(conn, package_id)?
+    storage::get_package_by_id(conn, package_id)?
         .ok_or_else(|| anyhow::anyhow!("no catalog package matched '{package_id}'"))
 }
 

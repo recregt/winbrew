@@ -3,14 +3,15 @@ pub mod flow;
 pub mod state;
 pub mod types;
 
+use std::cell::RefCell;
 use std::fs;
 
 use crate::AppContext;
-use crate::database;
 use crate::engines::{self, EngineKind};
 use crate::models::{CatalogPackage, PackageRef};
 use crate::runtime::cancel;
 use crate::services::shared::catalog;
+use crate::services::shared::storage;
 use crate::services::shared::temp_workspace;
 
 pub use crate::models::install::InstallFailureClass;
@@ -18,24 +19,27 @@ pub use crate::models::install::{InstallOutcome, InstallResult};
 pub use types::InstallError;
 pub type Result<T> = types::Result<T>;
 
-pub fn run<FChoose, FStart, FProgress>(
+pub trait InstallObserver {
+    fn choose_package(&mut self, query: &str, matches: &[CatalogPackage]) -> anyhow::Result<usize>;
+    fn on_start(&mut self, total_bytes: Option<u64>);
+    fn on_progress(&mut self, downloaded_bytes: u64);
+}
+
+pub fn run<O: InstallObserver>(
     ctx: &AppContext,
     package_ref: PackageRef,
     ignore_checksum_security: bool,
-    mut choose_package: FChoose,
-    on_start: FStart,
-    on_progress: FProgress,
-) -> Result<InstallOutcome>
-where
-    FChoose: FnMut(&str, &[CatalogPackage]) -> anyhow::Result<usize>,
-    FStart: FnOnce(Option<u64>),
-    FProgress: FnMut(u64),
-{
-    let catalog_conn = database::get_catalog_conn()?;
-    let package =
-        catalog::resolve_catalog_package_ref(&catalog_conn, &package_ref, &mut choose_package)?;
+    observer: &mut O,
+) -> Result<InstallOutcome> {
+    let observer = RefCell::new(observer);
+    let catalog_conn = storage::get_catalog_conn()?;
+    let package = catalog::resolve_catalog_package_ref(
+        &catalog_conn,
+        &package_ref,
+        &mut |query, matches| observer.borrow_mut().choose_package(query, matches),
+    )?;
     let installer =
-        catalog::select_installer(&database::get_installers(&catalog_conn, &package.id)?)?;
+        catalog::select_installer(&storage::get_installers(&catalog_conn, &package.id)?)?;
     let engine = engines::get_engine(&installer)?;
     let package_version = package.version.to_string();
 
@@ -49,7 +53,7 @@ where
 
     let _temp_root_guard = TempRootGuard::new(temp_root.clone());
 
-    let conn = database::get_conn()?;
+    let conn = storage::get_conn()?;
     state::prepare_install_target(&conn, &package.name, &install_dir)?;
     state::mark_installing(
         &conn,
@@ -68,8 +72,8 @@ where
         temp_root: &temp_root,
         install_dir: &install_dir,
         ignore_checksum_security,
-        on_start,
-        on_progress,
+        on_start: |total_bytes| observer.borrow_mut().on_start(total_bytes),
+        on_progress: |downloaded_bytes| observer.borrow_mut().on_progress(downloaded_bytes),
     }) {
         Ok(legacy_checksum_algorithms) => legacy_checksum_algorithms,
         Err(err) => {

@@ -1,11 +1,11 @@
-use crate::database;
 use crate::models::Package;
 use crate::models::remove::RemovalPlan;
+use crate::services::shared::storage;
 
 use super::Result;
 
 pub fn find_dependents(name: &str, conn: &rusqlite::Connection) -> Result<Vec<String>> {
-    let mut dependents = database::list_packages(conn)?
+    let mut dependents = storage::list_packages(conn)?
         .into_iter()
         .filter(|pkg| {
             pkg.name != name
@@ -24,9 +24,9 @@ pub fn find_dependents(name: &str, conn: &rusqlite::Connection) -> Result<Vec<St
 }
 
 pub fn plan_removal(name: &str) -> Result<RemovalPlan> {
-    let conn = database::get_conn()?;
-    let pkg = database::get_package(&conn, name)?.ok_or_else(|| {
-        anyhow::Error::new(database::PackageNotFoundError {
+    let conn = storage::get_conn()?;
+    let pkg = storage::get_package(&conn, name)?.ok_or_else(|| {
+        anyhow::Error::new(storage::PackageNotFoundError {
             name: name.to_string(),
         })
     })?;

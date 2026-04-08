@@ -13,6 +13,7 @@ use winbrew::core::hash::{HashAlgorithm, Hasher};
 use winbrew::database;
 use winbrew::models::{PackageId, PackageName, PackageRef};
 use winbrew::services::app::install;
+use winbrew::services::app::install::InstallObserver;
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;
 
@@ -72,6 +73,22 @@ struct InstallTestFixture {
     download_mock: Option<Mock>,
 }
 
+struct NoopInstallObserver;
+
+impl InstallObserver for NoopInstallObserver {
+    fn choose_package(
+        &mut self,
+        _query: &str,
+        _matches: &[winbrew::models::CatalogPackage],
+    ) -> anyhow::Result<usize> {
+        unreachable!("install should not prompt for an exact match")
+    }
+
+    fn on_start(&mut self, _total_bytes: Option<u64>) {}
+
+    fn on_progress(&mut self, _downloaded_bytes: u64) {}
+}
+
 impl InstallTestFixture {
     fn from_catalog(root: &Path, installer_url: &str, hash: &str) -> Result<Self> {
         reset_install_state(root)?;
@@ -114,13 +131,12 @@ impl InstallTestFixture {
     }
 
     fn run_install(&self, ignore_checksum_security: bool) -> Result<install::InstallOutcome> {
+        let mut observer = NoopInstallObserver;
         Ok(install::run(
             &self.ctx,
             PackageRef::ByName(PackageName::parse(self.package_name.as_str())?),
             ignore_checksum_security,
-            |_query, _matches| unreachable!("install should not prompt for an exact match"),
-            |_| {},
-            |_| {},
+            &mut observer,
         )?)
     }
 
@@ -129,13 +145,12 @@ impl InstallTestFixture {
         package_ref: PackageRef,
         ignore_checksum_security: bool,
     ) -> Result<install::InstallOutcome> {
+        let mut observer = NoopInstallObserver;
         Ok(install::run(
             &self.ctx,
             package_ref,
             ignore_checksum_security,
-            |_query, _matches| unreachable!("install should not prompt for an exact match"),
-            |_| {},
-            |_| {},
+            &mut observer,
         )?)
     }
 }

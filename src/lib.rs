@@ -9,6 +9,7 @@ use crate::commands::run;
 use crate::core::paths::ResolvedPaths;
 use crate::models::config::ConfigSection;
 use crate::services::bootstrap;
+use crate::services::shared::config as shared_config;
 
 pub mod cli;
 pub mod commands;
@@ -52,7 +53,7 @@ impl AppContext {
 }
 
 pub fn run_app() -> Result<()> {
-    let config = database::Config::load_current()?;
+    let config = shared_config::load_current()?;
     let ctx = AppContext::from_config(config)?;
 
     runtime::logging::init(&ctx.paths.logs, &ctx.log_level, &ctx.file_log_level)?;
