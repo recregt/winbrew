@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::fs::{cleanup_path, extract_zip_archive, replace_directory};
-use crate::network::installer_filename;
+use crate::network::{installer_filename, is_zip_path};
 
 pub fn install(download_path: &Path, install_dir: &Path, installer_url: &str) -> Result<()> {
     let stage_dir = staging_dir_for(install_dir);
@@ -11,7 +11,7 @@ pub fn install(download_path: &Path, install_dir: &Path, installer_url: &str) ->
     cleanup_path(&stage_dir)?;
     fs::create_dir_all(&stage_dir)?;
 
-    if is_zip_installer(installer_url) {
+    if is_zip_path(installer_url) {
         extract_zip_archive(download_path, &stage_dir)?;
     } else {
         let file_name = installer_filename(installer_url);
@@ -34,16 +34,6 @@ pub fn install(download_path: &Path, install_dir: &Path, installer_url: &str) ->
 
 fn staging_dir_for(install_dir: &Path) -> PathBuf {
     install_dir.parent().unwrap_or(install_dir).join("staging")
-}
-
-fn is_zip_installer(url: &str) -> bool {
-    let clean_url = url.split('?').next().unwrap_or(url);
-    let clean_url = clean_url.split('#').next().unwrap_or(clean_url);
-
-    clean_url
-        .rsplit_once('.')
-        .map(|(_, ext)| ext.eq_ignore_ascii_case("zip"))
-        .unwrap_or(false)
 }
 
 #[cfg(test)]
