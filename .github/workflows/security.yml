@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   semgrep:
-    name: Semgrep SAST
+    name: SAST › Semgrep
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -50,7 +50,7 @@ jobs:
         run: exit 1
 
   cargo-audit:
-    name: Rust Audit
+    name: Audit › Rust
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -68,7 +68,7 @@ jobs:
           createIssues: true
 
   gitleaks:
-    name: Secret Scanning
+    name: Secrets
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -93,7 +93,7 @@ jobs:
           sarif_file: gitleaks.sarif
 
   govulncheck:
-    name: Go Vuln Check (${{ matrix.module }})
+    name: Vuln › Go (${{ matrix.module }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -123,7 +123,7 @@ jobs:
           sarif_file: infra/${{ matrix.module }}/govulncheck.sarif
 
   actionlint:
-    name: Lint Workflows
+    name: Lint › Workflows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
