@@ -9,7 +9,8 @@ anyhow = "1"
 regex = "1.12"
 strum = "0.28"
 strum_macros = "0.28"
-winreg = "0.56"
 
 [target.'cfg(windows)'.dependencies]
+winreg = "0.56"
+
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem"] }
