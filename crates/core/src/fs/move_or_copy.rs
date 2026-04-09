@@ -1,16 +1,16 @@
-#![allow(clippy::result_large_err)]
-
+use super::FsError;
 use super::cleanup::cleanup_path;
-use super::{FsError, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+type BoxedResult<T> = std::result::Result<T, Box<FsError>>;
 
 /// Replaces `source_dir` with `target_dir`, copying across volumes when rename
 /// is not available and rolling back the backup on failure.
 ///
 /// On Windows, cross-volume rename failures fall back to copy + cleanup instead
 /// of failing the install outright.
-pub fn replace_directory(source_dir: &Path, target_dir: &Path) -> Result<()> {
+pub fn replace_directory(source_dir: &Path, target_dir: &Path) -> BoxedResult<()> {
     replace_directory_with_rename(source_dir, target_dir, rename_path)
 }
 
@@ -25,7 +25,11 @@ pub fn backup_path_for(target_dir: &Path) -> PathBuf {
     parent.join(format!("{name}.old"))
 }
 
-fn replace_directory_with_rename<R>(source_dir: &Path, target_dir: &Path, rename: R) -> Result<()>
+fn replace_directory_with_rename<R>(
+    source_dir: &Path,
+    target_dir: &Path,
+    rename: R,
+) -> BoxedResult<()>
 where
     R: Fn(&Path, &Path) -> std::io::Result<()>,
 {
@@ -34,22 +38,26 @@ where
             Ok(()) => Ok(()),
             Err(err) if is_cross_device_error(&err) => {
                 copy_dir_all(source_dir, target_dir).map_err(|copy_err| {
-                    FsError::copy_across_volumes(source_dir, target_dir, copy_err)
+                    Box::new(FsError::copy_across_volumes(
+                        source_dir, target_dir, copy_err,
+                    ))
                 })?;
 
                 let _ = cleanup_path(source_dir);
 
                 Ok(())
             }
-            Err(err) => Err(FsError::move_into_place(source_dir, target_dir, err)),
+            Err(err) => Err(Box::new(FsError::move_into_place(
+                source_dir, target_dir, err,
+            ))),
         };
     }
 
     let backup_dir = backup_path_for(target_dir);
-    cleanup_path(&backup_dir).map_err(|err| *err)?;
+    cleanup_path(&backup_dir)?;
 
     rename(target_dir, &backup_dir)
-        .map_err(|err| FsError::move_aside(target_dir, &backup_dir, err))?;
+        .map_err(|err| Box::new(FsError::move_aside(target_dir, &backup_dir, err)))?;
 
     match rename(source_dir, target_dir) {
         Ok(()) => {
@@ -61,18 +69,18 @@ where
                 let _ = cleanup_path(target_dir);
 
                 if let Err(rollback_err) = rename(&backup_dir, target_dir) {
-                    return Err(FsError::rollback_failed(
+                    return Err(Box::new(FsError::rollback_failed(
                         "failed to copy staged installation across volumes",
                         source_dir,
                         target_dir,
                         copy_err,
                         rollback_err,
-                    ));
+                    )));
                 }
 
-                return Err(FsError::copy_across_volumes(
+                return Err(Box::new(FsError::copy_across_volumes(
                     source_dir, target_dir, copy_err,
-                ));
+                )));
             }
 
             let _ = cleanup_path(source_dir);
@@ -82,16 +90,18 @@ where
         }
         Err(err) => {
             if let Err(rollback_err) = rename(&backup_dir, target_dir) {
-                return Err(FsError::rollback_failed(
+                return Err(Box::new(FsError::rollback_failed(
                     "failed to move staged installation into place",
                     source_dir,
                     target_dir,
                     err,
                     rollback_err,
-                ));
+                )));
             }
 
-            Err(FsError::move_into_place(source_dir, target_dir, err))
+            Err(Box::new(FsError::move_into_place(
+                source_dir, target_dir, err,
+            )))
         }
     }
 }
@@ -100,26 +110,30 @@ fn rename_path(from: &Path, to: &Path) -> std::io::Result<()> {
     fs::rename(from, to)
 }
 
-fn copy_dir_all(source_dir: &Path, target_dir: &Path) -> Result<()> {
-    fs::create_dir_all(target_dir).map_err(|err| FsError::create_directory(target_dir, err))?;
+fn copy_dir_all(source_dir: &Path, target_dir: &Path) -> BoxedResult<()> {
+    fs::create_dir_all(target_dir)
+        .map_err(|err| Box::new(FsError::create_directory(target_dir, err)))?;
 
-    for entry in fs::read_dir(source_dir).map_err(|err| FsError::read_directory(source_dir, err))? {
-        let entry = entry.map_err(|err| FsError::read_directory_entry(source_dir, err))?;
+    for entry in fs::read_dir(source_dir)
+        .map_err(|err| Box::new(FsError::read_directory(source_dir, err)))?
+    {
+        let entry =
+            entry.map_err(|err| Box::new(FsError::read_directory_entry(source_dir, err)))?;
         let source_path = entry.path();
         let target_path = target_dir.join(entry.file_name());
         let file_type = entry
             .file_type()
-            .map_err(|err| FsError::inspect(&source_path, err))?;
+            .map_err(|err| Box::new(FsError::inspect(&source_path, err)))?;
 
         if file_type.is_dir() {
             copy_dir_all(&source_path, &target_path)?;
         } else if file_type.is_file() {
             fs::copy(&source_path, &target_path)
-                .map_err(|err| FsError::copy_file(&source_path, &target_path, err))?;
+                .map_err(|err| Box::new(FsError::copy_file(&source_path, &target_path, err)))?;
         } else if file_type.is_symlink() {
-            return Err(FsError::copy_symlink(&source_path));
+            return Err(Box::new(FsError::copy_symlink(&source_path)));
         } else {
-            return Err(FsError::unsupported_entry(&source_path));
+            return Err(Box::new(FsError::unsupported_entry(&source_path)));
         }
     }
 

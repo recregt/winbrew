@@ -1,28 +1,29 @@
-#![allow(clippy::result_large_err)]
-
+use super::FsError;
 use super::cleanup::cleanup_path;
-use super::{FsError, Result};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process;
 
+type BoxedResult<T> = std::result::Result<T, Box<FsError>>;
+
 /// Writes `contents` to `path` through `temp_path` and publishes the result atomically.
 ///
 /// The temp file is synced before rename, so callers either see the
 /// old file or the fully-written new file. The temp file is removed on failure.
-pub fn atomic_write(path: &Path, temp_path: &Path, contents: &[u8]) -> Result<()> {
+pub fn atomic_write(path: &Path, temp_path: &Path, contents: &[u8]) -> BoxedResult<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| FsError::create_directory(parent, err))?;
+        fs::create_dir_all(parent)
+            .map_err(|err| Box::new(FsError::create_directory(parent, err)))?;
     }
 
-    let result = (|| -> Result<()> {
-        let mut file =
-            fs::File::create(temp_path).map_err(|err| FsError::create_temp_file(temp_path, err))?;
+    let result = (|| -> BoxedResult<()> {
+        let mut file = fs::File::create(temp_path)
+            .map_err(|err| Box::new(FsError::create_temp_file(temp_path, err)))?;
         file.write_all(contents)
-            .map_err(|err| FsError::write_temp_file(temp_path, err))?;
+            .map_err(|err| Box::new(FsError::write_temp_file(temp_path, err)))?;
         file.sync_all()
-            .map_err(|err| FsError::sync_temp_file(temp_path, err))?;
+            .map_err(|err| Box::new(FsError::sync_temp_file(temp_path, err)))?;
 
         Ok(())
     })();
@@ -34,7 +35,7 @@ pub fn atomic_write(path: &Path, temp_path: &Path, contents: &[u8]) -> Result<()
 
     if let Err(err) = fs::rename(temp_path, path) {
         let _ = fs::remove_file(temp_path);
-        return Err(FsError::finalize_file(temp_path, path, err));
+        return Err(Box::new(FsError::finalize_file(temp_path, path, err)));
     }
 
     Ok(())
@@ -44,19 +45,19 @@ pub fn atomic_write(path: &Path, temp_path: &Path, contents: &[u8]) -> Result<()
 ///
 /// This is useful when the caller wants a predictable temporary name per
 /// process and does not need to manage the temp file path directly.
-pub fn atomic_write_temp(path: &Path, contents: &str) -> Result<()> {
+pub fn atomic_write_temp(path: &Path, contents: &str) -> BoxedResult<()> {
     let temp_path = path.with_extension(format!("toml.{}.tmp", process::id()));
     atomic_write(path, &temp_path, contents.as_bytes())
 }
 
 /// Replaces `final_path` with `temp_path`, removing any existing target first.
-pub fn finalize_temp_file(temp_path: &Path, final_path: &Path) -> Result<()> {
+pub fn finalize_temp_file(temp_path: &Path, final_path: &Path) -> BoxedResult<()> {
     if final_path.exists() {
-        cleanup_path(final_path).map_err(|err| *err)?;
+        cleanup_path(final_path)?;
     }
 
     fs::rename(temp_path, final_path)
-        .map_err(|err| FsError::finalize_file(temp_path, final_path, err))
+        .map_err(|err| Box::new(FsError::finalize_file(temp_path, final_path, err)))
 }
 
 #[cfg(test)]
