@@ -1,13 +1,8 @@
 name: CI
 on:
-  merge_group:
-  pull_request:
-    branches:
-      - '**'
   push:
     branches:
       - main
-  workflow_dispatch:
 
 defaults:
   run:
@@ -26,10 +21,9 @@ env:
 
 jobs:
   conclusion:
-    if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
     needs:
       - go
-      - doc-validate
+      - doc
       - spellcheck
       - rust-parser
       - rust
@@ -45,7 +39,6 @@ jobs:
   go:
     name: Go › ${{ matrix.module == 'crawler' && 'Crawler' || 'Publisher' }}
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
     strategy:
       fail-fast: false
       matrix:
@@ -60,7 +53,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: infra/${{ matrix.module }}/go.mod
-          cache: ${{ github.event_name == 'merge_group' }}
+          cache: ${{ github.event_name == 'push' }}
           cache-dependency-path: infra/${{ matrix.module }}/go.sum
 
       - name: Install golangci-lint
@@ -76,7 +69,6 @@ jobs:
   rust-parser:
     name: Rust › Parser
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
 
     steps:
       - name: Checkout
@@ -85,39 +77,15 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          save-if: ${{ github.event_name == 'merge_group' }}
+          save-if: ${{ github.event_name == 'push' }}
 
       - name: Run Parser CI Script
         shell: pwsh
         run: ./scripts/ci/check-rust-parser.ps1
 
-  doc-validate:
-    name: Doc › Validate
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.event_name == 'merge_group' }}
-
-      - name: Build Docs
-        shell: bash
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: cargo doc --locked --workspace --no-deps
-
   doc:
     name: doc
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
 
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -164,7 +132,6 @@ jobs:
   spellcheck:
     name: Spell Check with Typos
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
 
     steps:
       - name: Checkout
@@ -176,7 +143,6 @@ jobs:
   rust:
     name: Rust
     runs-on: windows-latest
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
 
     steps:
       - name: Checkout
@@ -188,7 +154,7 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          save-if: ${{ github.event_name == 'merge_group' }}
+          save-if: ${{ github.event_name == 'push' }}
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@v2
