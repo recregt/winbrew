@@ -64,7 +64,7 @@ jobs:
       - name: Audit Rust Dependencies
         uses: actions-rust-lang/audit@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
           createIssues: true
 
   gitleaks:
@@ -84,8 +84,12 @@ jobs:
           GITLEAKS_ENABLE_SUMMARY: true
 
       - name: Move SARIF to workspace
-        if: always() && hashFiles(format('{0}/results.sarif', env.HOME)) != ''
-        run: mv "$HOME/results.sarif" gitleaks.sarif
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$HOME/results.sarif" ]; then
+            mv "$HOME/results.sarif" gitleaks.sarif
+          fi
 
       - uses: github/codeql-action/upload-sarif@v4
         if: always() && hashFiles('gitleaks.sarif') != ''
