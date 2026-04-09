@@ -1,25 +1,16 @@
-[workspace]
-members = [".", "crates/app", "crates/core", "crates/engines", "crates/models", "crates/runtime", "crates/ui", "infra/parser"]
-resolver = "2"
-
 [package]
-name = "winbrew"
+name = "winbrew-app"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85" # MSRV:3
 license = "MIT OR Apache-2.0"
 
-[[bin]]
-name = "winbrew"
-path = "src/main.rs"
-
 [dependencies]
-winbrew-app = { path = "crates/app" }
-winbrew-core = { path = "crates/core" }
-winbrew-engines = { path = "crates/engines" }
-winbrew-models = { path = "crates/models" }
-winbrew-runtime = { path = "crates/runtime" }
-winbrew-ui = { path = "crates/ui" }
+winbrew-core = { path = "../core" }
+winbrew-engines = { path = "../engines" }
+winbrew-models = { path = "../models" }
+winbrew-runtime = { path = "../runtime" }
+winbrew-ui = { path = "../ui" }
 
 clap = { version = "4", default-features = false, features = ["color", "derive", "error-context", "help", "std", "suggestions", "usage"] }
 indicatif = { version = "0.18", default-features = false, features = ["unicode-width"] }
@@ -38,20 +29,9 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["ansi", "env-filter", "fmt", "registry", "std"] }
 tempfile = "3"
 
-[target.'cfg(windows)'.dependencies]
-mimalloc = "0.1"
-
 [build-dependencies]
 chrono = { version = "0.4", features = ["clock"] }
-winresource = "0.1"
 
 [dev-dependencies]
 mockito = "1.7.2"
 zip = "8"
-
-[profile.release]
-opt-level = "z"
-lto = "fat"
-codegen-units = 1
-panic = "abort"
-strip = true
