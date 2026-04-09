@@ -134,6 +134,8 @@ impl ExtractionContext {
             ));
         }
 
+        // Empty entries do not have a meaningful compression ratio, but they still
+        // count toward quota and entry-count limits.
         if entry_size > 0
             && (compressed_size == 0
                 || entry_size > compressed_size.saturating_mul(self.limits.max_compression_ratio))
@@ -255,11 +257,11 @@ fn extract_entry<R: Read>(
         ));
     }
 
-    extraction.check_limits(&enclosed_name, entry.size(), entry.compressed_size())?;
-
     let outpath = destination_dir.join(&enclosed_name);
 
     extraction.validate_target(&outpath)?;
+
+    extraction.check_limits(&enclosed_name, entry.size(), entry.compressed_size())?;
 
     if entry.is_dir() {
         extraction.ensure_directory_tree(&outpath)?;
@@ -293,7 +295,14 @@ fn extract_entry<R: Read>(
 impl Drop for ExtractionCleanup {
     fn drop(&mut self) {
         while let Some(path) = self.created_paths.pop() {
-            let _ = cleanup_path(&path);
+            let cleanup_result = cleanup_path(&path);
+
+            #[cfg(debug_assertions)]
+            if let Err(err) = &cleanup_result {
+                eprintln!("cleanup failed for {}: {}", path.display(), err);
+            }
+
+            let _ = cleanup_result;
         }
     }
 }
