@@ -43,6 +43,13 @@ tasks:
     cmds:
       - cargo clippy --locked --all-targets --all-features -- -D warnings
 
+  check:doc:
+    desc: Run cargo doc with warnings denied
+    env:
+      RUSTDOCFLAGS: -D warnings
+    cmds:
+      - cargo doc --locked --workspace --no-deps
+
   ci:smoke:
     desc: Build and smoke-test the CLI
     cmds:
