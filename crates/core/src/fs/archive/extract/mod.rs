@@ -1,6 +1,5 @@
 //! ZIP archive extraction facade.
-
-#![allow(clippy::result_large_err)]
+//! This module provides a high-level API for extracting ZIP archives, enforcing security and resource limits.
 
 mod cleanup;
 mod context;
@@ -16,8 +15,10 @@ pub(crate) use context::ExtractionContext;
 pub(crate) use limits::ExtractionLimits;
 pub(crate) use types::{CachedPath, PathInfo};
 
-use crate::fs::Result;
+use crate::fs::{FsError, Result};
 use std::path::Path;
+
+type BoxedResult<T> = std::result::Result<T, Box<FsError>>;
 
 #[cfg(not(windows))]
 use super::platform::PortablePlatform as DefaultPlatform;
@@ -28,8 +29,9 @@ use super::platform::WindowsPlatform as DefaultPlatform;
 ///
 /// The extraction target is validated so the archive cannot be unpacked through
 /// an existing reparse-point ancestor, and symlink entries are refused.
-pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()> {
+pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> BoxedResult<()> {
     extract_zip_archive_with_limits(zip_path, destination_dir, ExtractionLimits::default())
+        .map_err(Box::new)
 }
 
 fn extract_zip_archive_with_limits(
