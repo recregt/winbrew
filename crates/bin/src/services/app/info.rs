@@ -1,10 +1,10 @@
 use anyhow::Result;
 
+use crate::models::InfoReport;
 use crate::{
     AppContext,
     services::{app::version, shared::report},
 };
-use winbrew_models::InfoReport;
 
 pub fn collect(ctx: &AppContext) -> Result<InfoReport> {
     Ok(InfoReport {

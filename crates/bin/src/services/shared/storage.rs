@@ -3,7 +3,7 @@ use rusqlite::Connection;
 
 use crate::core::paths::ResolvedPaths;
 use crate::database;
-use winbrew_models::{
+use crate::models::{
     CatalogInstaller, CatalogPackage, ConfigSection, ConfigValueSource, Package, PackageStatus,
 };
 

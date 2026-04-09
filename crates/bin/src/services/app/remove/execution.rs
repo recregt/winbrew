@@ -7,7 +7,7 @@ use crate::engines::{self, EngineKind, PackageEngine};
 use crate::services::shared::storage;
 
 use super::{RemovalError, RemovalPlan, Result};
-use winbrew_models::Package;
+use crate::models::Package;
 
 pub fn execute_removal(plan: &RemovalPlan, force: bool) -> Result<()> {
     let conn = storage::get_conn()?;

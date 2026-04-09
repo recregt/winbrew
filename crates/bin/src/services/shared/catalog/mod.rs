@@ -1,1 +1,1 @@
-pub use winbrew_catalog::*;
+pub use crate::catalog::*;

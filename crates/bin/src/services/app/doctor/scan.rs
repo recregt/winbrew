@@ -1,12 +1,12 @@
 use anyhow::Result;
 
+use crate::models::{DiagnosisResult, DiagnosisSeverity, Package};
 use crate::services::shared::storage;
 use indicatif::ProgressBar;
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use winbrew_models::{DiagnosisResult, DiagnosisSeverity, Package};
 
 fn diagnosis_result(
     error_code: &str,
@@ -153,9 +153,9 @@ pub fn installed_packages() -> Result<Vec<Package>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{InstallerType, PackageStatus};
     use indicatif::ProgressBar;
     use tempfile::tempdir;
-    use winbrew_models::{InstallerType, PackageStatus};
 
     fn sample_package(name: &str, install_dir: &std::path::Path) -> Package {
         Package {

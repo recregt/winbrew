@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use winbrew_cancel as cancel;
+use crate::cancel;
 
 pub mod cleanup;
 pub mod logging;

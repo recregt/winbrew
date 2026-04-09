@@ -5,6 +5,7 @@ use std::path::PathBuf;
 pub use winbrew_catalog as catalog;
 pub use winbrew_core as core;
 pub use winbrew_engines as engines;
+pub use winbrew_models as models;
 pub use winbrew_models::{
     CatalogPackage, InstallFailureClass, InstallOutcome, InstallResult, PackageRef,
 };

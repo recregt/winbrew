@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 
+use crate::models::{DiagnosisSeverity, HealthReport};
 use crate::{AppContext, Ui, services::app::doctor};
-use winbrew_models::{DiagnosisSeverity, HealthReport};
 
 pub fn run(ctx: &AppContext) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);

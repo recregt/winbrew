@@ -1,5 +1,5 @@
+use crate::models::{Package, RemovalPlan};
 use crate::services::shared::storage;
-use winbrew_models::{Package, RemovalPlan};
 
 use super::Result;
 
@@ -48,7 +48,7 @@ fn dependency_name(dep: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::removal_plan;
-    use winbrew_models::{InstallerType, Package, PackageStatus};
+    use crate::models::{InstallerType, Package, PackageStatus};
 
     fn package(
         name: &str,
