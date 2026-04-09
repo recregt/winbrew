@@ -76,6 +76,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
