@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::fs::cleanup_path;
+use tracing::warn;
 
 pub(crate) struct ExtractionCleanup {
     created_files: Vec<PathBuf>,
@@ -29,14 +30,9 @@ impl ExtractionCleanup {
     }
 
     fn cleanup_recorded_path(path: &Path) {
-        let cleanup_result = cleanup_path(path);
-
-        #[cfg(debug_assertions)]
-        if let Err(err) = &cleanup_result {
-            eprintln!("cleanup failed for {}: {}", path.display(), err);
+        if let Err(err) = cleanup_path(path) {
+            warn!(path = %path.display(), error = %err, "cleanup failed");
         }
-
-        let _ = cleanup_result;
     }
 }
 
