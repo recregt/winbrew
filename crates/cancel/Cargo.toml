@@ -1,5 +1,5 @@
 [package]
-name = "winbrew-runtime"
+name = "winbrew-cancel"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,5 @@ repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-tracing.workspace = true
-tracing-appender = "0.2"
-tracing-subscriber = { version = "0.3", default-features = false, features = ["ansi", "env-filter", "fmt", "registry", "std"] }
+ctrlc = "3"
+thiserror = "2.0"
