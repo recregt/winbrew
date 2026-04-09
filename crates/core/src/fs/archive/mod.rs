@@ -1,10 +1,6 @@
 //! ZIP archive extraction facade.
 
 mod extract;
-#[cfg(not(windows))]
-mod portable;
-#[cfg(windows)]
-mod windows;
+mod platform;
 
 pub use extract::extract_zip_archive;
-pub(super) use extract::{CachedPath, ExtractionContext, PathInfo};
