@@ -14,7 +14,11 @@ pub(super) fn inspect_path(path: &Path) -> std::io::Result<PathInfo> {
     })
 }
 
-pub(super) fn validate_target(context: &mut ExtractionContext, path: &Path) -> Result<()> {
+pub(super) fn validate_target(
+    context: &mut ExtractionContext,
+    path: &Path,
+    destination_dir: &Path,
+) -> Result<()> {
     let mut current = Some(path);
     let mut is_final_component = true;
 
@@ -32,6 +36,10 @@ pub(super) fn validate_target(context: &mut ExtractionContext, path: &Path) -> R
             CachedPath::Missing => {}
         }
 
+        if candidate == destination_dir {
+            break;
+        }
+
         is_final_component = false;
         current = candidate.parent();
     }
@@ -46,10 +54,6 @@ pub(super) fn ensure_directory_tree(context: &mut ExtractionContext, path: &Path
     while let Some(candidate) = current {
         match context.inspect_cached(candidate)? {
             CachedPath::Present(info) => {
-                if info.is_reparse_point {
-                    return Err(FsError::reparse_point(candidate));
-                }
-
                 if !info.is_directory {
                     return Err(FsError::path_not_directory(candidate));
                 }
@@ -63,6 +67,8 @@ pub(super) fn ensure_directory_tree(context: &mut ExtractionContext, path: &Path
         }
     }
 
+    // missing_directories is collected deepest-first, so the first entry is the
+    // deepest full path and create_dir_all on it materializes the whole chain.
     if let Some(deepest_missing) = missing_directories.first() {
         fs::create_dir_all(deepest_missing)
             .map_err(|err| FsError::create_directory(deepest_missing, err))?;

@@ -115,8 +115,8 @@ impl ExtractionContext {
         self.cleanup.commit();
     }
 
-    fn validate_target(&mut self, path: &Path) -> Result<()> {
-        platform::validate_target(self, path)
+    fn validate_target(&mut self, path: &Path, destination_dir: &Path) -> Result<()> {
+        platform::validate_target(self, path, destination_dir)
     }
 
     fn ensure_directory_tree(&mut self, path: &Path) -> Result<()> {
@@ -266,7 +266,7 @@ fn extract_entry<R: Read>(
 
     let outpath = destination_dir.join(&enclosed_name);
 
-    extraction.validate_target(&outpath)?;
+    extraction.validate_target(&outpath, destination_dir)?;
 
     extraction.check_limits(&enclosed_name, entry.size(), entry.compressed_size())?;
 
@@ -279,7 +279,7 @@ fn extract_entry<R: Read>(
         extraction.ensure_directory_tree(parent)?;
     }
 
-    extraction.validate_target(&outpath)?;
+    extraction.validate_target(&outpath, destination_dir)?;
 
     let mut outfile = platform::create_extracted_file(&outpath)
         .map_err(|err| FsError::create_extracted_file(&outpath, err))?;
