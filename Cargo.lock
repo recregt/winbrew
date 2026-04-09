@@ -2596,12 +2596,40 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "winbrew-app",
  "winbrew-core",
  "winbrew-engines",
  "winbrew-models",
  "winbrew-runtime",
  "winbrew-ui",
  "winresource",
+ "zip",
+]
+
+[[package]]
+name = "winbrew-app"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "indicatif",
+ "mockito",
+ "r2d2",
+ "rayon",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "winbrew-core",
+ "winbrew-engines",
+ "winbrew-models",
+ "winbrew-runtime",
+ "winbrew-ui",
  "zip",
 ]
 
