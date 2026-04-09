@@ -2581,6 +2581,8 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
  "winbrew-cancel",
  "winbrew-catalog",
  "winbrew-core",
@@ -2588,7 +2590,6 @@ dependencies = [
  "winbrew-install",
  "winbrew-models",
  "winbrew-report",
- "winbrew-runtime",
  "winbrew-storage",
  "winbrew-ui",
  "winresource",
@@ -2704,16 +2705,6 @@ dependencies = [
  "anyhow",
  "winbrew-core",
  "winbrew-models",
-]
-
-[[package]]
-name = "winbrew-runtime"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
 ]
 
 [[package]]
