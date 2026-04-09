@@ -1,0 +1,19 @@
+[package]
+name = "winbrew-storage"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85" # MSRV:3
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+anyhow = "1"
+r2d2 = "0.8"
+rusqlite = { version = "0.39", default-features = false, features = ["bundled", "unlock_notify"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2.0"
+toml = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["ansi", "env-filter", "fmt", "registry", "std"] }
+winbrew-core = { path = "../core" }
+winbrew-models = { path = "../models" }

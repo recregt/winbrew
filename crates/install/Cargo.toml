@@ -1,0 +1,19 @@
+[package]
+name = "winbrew-install"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85" # MSRV:3
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+anyhow = "1"
+chrono = "0.4"
+rusqlite = { version = "0.39", default-features = false, features = ["bundled", "unlock_notify"] }
+thiserror = "2.0"
+tracing = "0.1"
+winbrew-catalog = { path = "../catalog" }
+winbrew-core = { path = "../core" }
+winbrew-engines = { path = "../engines" }
+winbrew-models = { path = "../models" }
+winbrew-runtime = { path = "../runtime" }
+winbrew-storage = { path = "../storage" }

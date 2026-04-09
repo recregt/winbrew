@@ -3,7 +3,7 @@ use std::path::Path;
 use thiserror::Error;
 
 use crate::core::fs::cleanup_path;
-use crate::services::shared::storage;
+use crate::storage;
 use winbrew_models::{InstallerType, Package, PackageStatus};
 
 #[derive(Debug, Error)]

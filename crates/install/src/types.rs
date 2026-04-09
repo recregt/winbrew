@@ -3,9 +3,9 @@ use std::io;
 use thiserror::Error;
 
 use super::state::InstallStateError;
+use crate::catalog::InstallerSelectionError;
 use crate::core::hash::{HashAlgorithm, HashError};
-use crate::runtime::cancel::CancellationError;
-use crate::services::shared::catalog::InstallerSelectionError;
+use crate::runtime::CancellationError;
 use winbrew_models::InstallFailureClass;
 
 #[derive(Debug, Error)]
@@ -113,7 +113,7 @@ impl From<Error> for InstallError {
 mod tests {
     use super::{InstallError, InstallStateError};
     use crate::core::hash::{HashAlgorithm, HashError};
-    use crate::runtime::cancel::CancellationError;
+    use crate::runtime::CancellationError;
     use winbrew_models::InstallFailureClass;
 
     #[test]

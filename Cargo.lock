@@ -2586,23 +2586,35 @@ dependencies = [
  "indicatif",
  "mimalloc",
  "mockito",
- "r2d2",
  "rayon",
  "rusqlite",
- "serde",
- "serde_json",
  "tempfile",
  "thiserror",
- "toml",
  "tracing",
- "tracing-subscriber",
+ "winbrew-catalog",
  "winbrew-core",
  "winbrew-engines",
+ "winbrew-install",
  "winbrew-models",
+ "winbrew-report",
  "winbrew-runtime",
+ "winbrew-storage",
  "winbrew-ui",
  "winresource",
  "zip",
+]
+
+[[package]]
+name = "winbrew-catalog"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rusqlite",
+ "tempfile",
+ "thiserror",
+ "winbrew-core",
+ "winbrew-models",
+ "winbrew-storage",
 ]
 
 [[package]]
@@ -2652,6 +2664,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "winbrew-install"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "rusqlite",
+ "thiserror",
+ "tracing",
+ "winbrew-catalog",
+ "winbrew-core",
+ "winbrew-engines",
+ "winbrew-models",
+ "winbrew-runtime",
+ "winbrew-storage",
+]
+
+[[package]]
 name = "winbrew-models"
 version = "0.1.0"
 dependencies = [
@@ -2664,6 +2693,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "winbrew-report"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "winbrew-core",
+ "winbrew-models",
+]
+
+[[package]]
 name = "winbrew-runtime"
 version = "0.1.0"
 dependencies = [
@@ -2673,6 +2711,23 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "winbrew-storage"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "r2d2",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "winbrew-core",
+ "winbrew-models",
 ]
 
 [[package]]
