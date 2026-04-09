@@ -8,7 +8,9 @@ pub use winbrew_engines as engines;
 pub use winbrew_models::{
     CatalogPackage, InstallFailureClass, InstallOutcome, InstallResult, PackageRef,
 };
-pub use winbrew_runtime as runtime;
+pub mod cancel {
+    pub use winbrew_cancel::{CancellationError, check, init_handler, is_cancelled};
+}
 pub use winbrew_storage as storage;
 
 pub mod download;
@@ -96,9 +98,9 @@ pub fn run<O: InstallObserver>(
         }
     };
 
-    if runtime::is_cancelled() {
+    if cancel::is_cancelled() {
         flow::rollback_cancelled_install(&conn, &package.name, &install_dir);
-        return Err(runtime::CancellationError.into());
+        return Err(cancel::CancellationError.into());
     }
 
     let install_result = InstallResult {

@@ -8,6 +8,7 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+winbrew-hash = { path = "../hash" }
 chrono = { version = "0.4", features = ["clock", "serde"] }
 libc = "0.2"
 md-5 = "0.11"

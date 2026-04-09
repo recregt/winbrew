@@ -2581,6 +2581,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tracing",
+ "winbrew-cancel",
  "winbrew-catalog",
  "winbrew-core",
  "winbrew-engines",
@@ -2592,6 +2593,15 @@ dependencies = [
  "winbrew-ui",
  "winresource",
  "zip",
+]
+
+[[package]]
+name = "winbrew-cancel"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ctrlc",
+ "thiserror",
 ]
 
 [[package]]
@@ -2621,6 +2631,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "url",
+ "winbrew-hash",
  "winbrew-windows",
  "windows-sys 0.61.2",
  "zip",
@@ -2640,6 +2651,10 @@ dependencies = [
  "windows",
  "zip",
 ]
+
+[[package]]
+name = "winbrew-hash"
+version = "0.1.0"
 
 [[package]]
 name = "winbrew-infra-parser"
@@ -2662,11 +2677,11 @@ dependencies = [
  "rusqlite",
  "thiserror",
  "tracing",
+ "winbrew-cancel",
  "winbrew-catalog",
  "winbrew-core",
  "winbrew-engines",
  "winbrew-models",
- "winbrew-runtime",
  "winbrew-storage",
 ]
 
@@ -2679,7 +2694,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "url",
- "winbrew-core",
+ "winbrew-hash",
 ]
 
 [[package]]
@@ -2696,8 +2711,6 @@ name = "winbrew-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "ctrlc",
- "thiserror",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
