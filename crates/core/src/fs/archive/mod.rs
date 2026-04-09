@@ -22,9 +22,17 @@ use std::fs;
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 
-use super::cleanup::PathInfo;
-use super::cleanup::inspect_path;
 use super::{FsError, Result, cleanup_path};
+
+#[cfg(not(windows))]
+mod portable;
+#[cfg(windows)]
+mod windows;
+
+#[cfg(not(windows))]
+use portable::{PathInfo, inspect_path};
+#[cfg(windows)]
+use windows::{PathInfo, inspect_path};
 
 #[derive(Clone, Copy)]
 enum CachedPath {

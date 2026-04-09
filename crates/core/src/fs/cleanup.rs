@@ -20,7 +20,6 @@ static DEFERRED_DELETE_SUFFIX: AtomicUsize = AtomicUsize::new(0);
 pub(super) struct PathInfo {
     pub(super) is_directory: bool,
     pub(super) is_reparse_point: bool,
-    pub(super) hard_link_count: u32,
 }
 
 pub(super) fn inspect_path(path: &Path) -> std::io::Result<PathInfo> {
@@ -30,7 +29,6 @@ pub(super) fn inspect_path(path: &Path) -> std::io::Result<PathInfo> {
         Ok(PathInfo {
             is_directory: info.is_directory,
             is_reparse_point: info.is_reparse_point,
-            hard_link_count: info.hard_link_count,
         })
     }
 
@@ -40,7 +38,6 @@ pub(super) fn inspect_path(path: &Path) -> std::io::Result<PathInfo> {
         Ok(PathInfo {
             is_directory: metadata.is_dir(),
             is_reparse_point: false,
-            hard_link_count: 1,
         })
     }
 }
