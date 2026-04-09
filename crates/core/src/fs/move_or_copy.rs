@@ -46,6 +46,8 @@ where
         Err(err) if is_cross_device_error(&err) => match rename(target_dir, &backup_dir) {
             Ok(()) => finish_replacement_after_backup(source_dir, target_dir, &backup_dir, rename),
             Err(rename_err) if rename_err.kind() == ErrorKind::NotFound => {
+                // Cross-device fallback copies the staged directory tree after the
+                // original target has been moved aside.
                 copy_dir_all(source_dir, target_dir).map_err(|copy_err| {
                     Box::new(FsError::copy_across_volumes(
                         source_dir, target_dir, copy_err,
@@ -107,6 +109,8 @@ where
                     )));
                 }
 
+                let _ = cleanup_path(source_dir);
+
                 return Err(Box::new(FsError::copy_across_volumes(
                     source_dir, target_dir, copy_err,
                 )));
@@ -150,6 +154,9 @@ fn copy_dir_all(source_dir: &Path, target_dir: &Path) -> BoxedResult<()> {
             entry.map_err(|err| Box::new(FsError::read_directory_entry(source_dir, err)))?;
         let source_path = entry.path();
         let target_path = target_dir.join(entry.file_name());
+
+        // `file_type()` tells us file vs directory, but the path inspection is
+        // still needed to reject Windows reparse points explicitly.
         let path_info = inspect_cleanup_path(&source_path)
             .map_err(|err| Box::new(FsError::inspect(&source_path, err)))?;
         let file_type = entry
@@ -187,6 +194,8 @@ fn is_cross_device_error(err: &std::io::Error) -> bool {
 
 #[cfg(windows)]
 fn is_target_conflict_error(err: &io::Error) -> bool {
+    // Windows may report a target that already exists or is otherwise busy as
+    // PermissionDenied, so treat both as a backup-and-retry conflict.
     matches!(
         err.kind(),
         ErrorKind::AlreadyExists | ErrorKind::PermissionDenied
