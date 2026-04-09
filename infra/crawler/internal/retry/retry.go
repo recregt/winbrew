@@ -2,9 +2,10 @@ package retry
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/rand/v2"
+	"math/big"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -68,7 +69,7 @@ type NonRetryableError interface {
 type Config struct {
 	MaxAttempts int
 	BaseDelay   time.Duration
-	RandSource  rand.Source
+	RandInt64N  func(n int64) (int64, error)
 	OnRetry     func(attempt int, err error, nextDelay time.Duration)
 	OnSuccess   func(attempt int, duration time.Duration)
 }
@@ -125,7 +126,7 @@ func DoConfig(ctx context.Context, cfg Config, fn func() error) error {
 			}
 		}
 
-		delay := calculateDelay(attempt, cfg.BaseDelay, cfg.RandSource)
+		delay := calculateDelay(attempt, cfg.BaseDelay, cfg.RandInt64N)
 		if deadline, ok := ctx.Deadline(); ok {
 			remaining := time.Until(deadline)
 			if remaining <= 0 || remaining < delay {
@@ -175,7 +176,7 @@ func IsRetryable(err error) bool {
 	return true
 }
 
-func calculateDelay(attempt int, baseDelay time.Duration, src rand.Source) time.Duration {
+func calculateDelay(attempt int, baseDelay time.Duration, randInt64N func(n int64) (int64, error)) time.Duration {
 	if attempt < 1 || baseDelay <= 0 {
 		return 0
 	}
@@ -187,7 +188,7 @@ func calculateDelay(attempt int, baseDelay time.Duration, src rand.Source) time.
 
 	multiplier := time.Duration(1) << shift
 	if baseDelay > 0 && multiplier > maxBackoffDelay/baseDelay {
-		return withJitter(maxBackoffDelay, src)
+		return withJitter(maxBackoffDelay, randInt64N)
 	}
 
 	delay := baseDelay * multiplier
@@ -195,7 +196,7 @@ func calculateDelay(attempt int, baseDelay time.Duration, src rand.Source) time.
 		delay = maxBackoffDelay
 	}
 
-	return withJitter(delay, src)
+	return withJitter(delay, randInt64N)
 }
 
 func safeFn(fn func() error) (err error) {
@@ -234,16 +235,37 @@ func sleepWithContext(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func withJitter(delay time.Duration, src rand.Source) time.Duration {
+func withJitter(delay time.Duration, randInt64N func(n int64) (int64, error)) time.Duration {
 	if delay <= 0 {
 		return 0
 	}
 
-	if src != nil {
-		return delay/2 + time.Duration(rand.New(src).Int64N(int64(delay)))
+	half := delay / 2
+	if randInt64N != nil {
+		if n, err := randInt64N(int64(delay)); err == nil {
+			return half + time.Duration(n)
+		}
 	}
 
-	return delay/2 + time.Duration(rand.Int64N(int64(delay)))
+	n, err := cryptoInt64N(int64(delay))
+	if err != nil {
+		return half
+	}
+
+	return half + time.Duration(n)
+}
+
+func cryptoInt64N(n int64) (int64, error) {
+	if n <= 0 {
+		return 0, nil
+	}
+
+	value, err := rand.Int(rand.Reader, big.NewInt(n))
+	if err != nil {
+		return 0, err
+	}
+
+	return value.Int64(), nil
 }
 
 func minInt(a, b int) int {
