@@ -1,4 +1,4 @@
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::path::Path;
 
 use crate::fs::{FsError, Result};
@@ -53,10 +53,18 @@ pub(super) fn ensure_directory_tree(context: &mut ExtractionContext, path: &Path
         }
     }
 
-    for directory in missing_directories.iter().rev() {
-        fs::create_dir_all(directory).map_err(|err| FsError::create_directory(directory, err))?;
-        context.record_directory(directory);
+    if let Some(deepest_missing) = missing_directories.first() {
+        fs::create_dir_all(deepest_missing)
+            .map_err(|err| FsError::create_directory(deepest_missing, err))?;
+
+        for directory in missing_directories.iter().rev() {
+            context.record_directory(directory);
+        }
     }
 
     Ok(())
+}
+
+pub(super) fn create_extracted_file(path: &Path) -> std::io::Result<fs::File> {
+    OpenOptions::new().write(true).create_new(true).open(path)
 }

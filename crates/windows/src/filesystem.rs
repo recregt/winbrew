@@ -1,8 +1,15 @@
+use std::fs::{self, OpenOptions};
 use std::io;
 use std::path::Path;
 
 #[cfg(windows)]
+use std::os::windows::fs::OpenOptionsExt;
+
+#[cfg(windows)]
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+
+#[cfg(windows)]
+use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PathInfo {
@@ -55,6 +62,15 @@ pub fn inspect_path(path: &Path) -> io::Result<PathInfo> {
             hard_link_count: info.nNumberOfLinks,
         })
     }
+}
+
+#[cfg(windows)]
+pub fn create_extracted_file(path: &Path) -> io::Result<fs::File> {
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
 }
 
 #[cfg(not(windows))]
