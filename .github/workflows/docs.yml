@@ -72,3 +72,12 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Publish Page URL
+        shell: bash
+        run: |
+          {
+            echo "Documentation published at: ${{ steps.deployment.outputs.page_url }}"
+            echo
+            echo "Open docs: ${{ steps.deployment.outputs.page_url }}"
+          } >> "$GITHUB_STEP_SUMMARY"
