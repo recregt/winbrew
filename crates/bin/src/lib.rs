@@ -13,13 +13,12 @@ pub use winbrew_storage as database;
 
 use crate::cli::Cli;
 use crate::commands::run;
-use crate::core::paths::ResolvedPaths;
 use crate::services::bootstrap;
 use crate::services::shared::config as shared_config;
 use winbrew_core as core;
+use winbrew_core::paths::ResolvedPaths;
 use winbrew_engines as engines;
 use winbrew_models::ConfigSection;
-use winbrew_runtime as runtime;
 use winbrew_ui::{Ui, UiSettings};
 
 #[derive(Debug, Clone)]
@@ -55,7 +54,7 @@ pub fn run_app() -> Result<()> {
     let config = shared_config::load_current()?;
     let ctx = AppContext::from_config(config)?;
 
-    runtime::init_logging(&ctx.paths.logs, &ctx.log_level, &ctx.file_log_level)?;
+    bootstrap::logging::init(&ctx.paths.logs, &ctx.log_level, &ctx.file_log_level)?;
     database::init(&ctx.paths)?;
     bootstrap::init_runtime()?;
 

@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["crates/*", "infra/*"]
-exclude = ["infra/crawler", "infra/publisher"]
+exclude = ["infra/crawler", "infra/publisher", "crates/runtime"]
 
 [workspace.package]
 version = "0.1.0"
@@ -14,7 +14,6 @@ repository = "https://github.com/recregt/winbrew"
 [workspace.dependencies]
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
-tokio = "1"
 tracing = "0.1"
 
 [profile.release]

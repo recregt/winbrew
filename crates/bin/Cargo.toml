@@ -18,7 +18,6 @@ winbrew-storage = { path = "../storage" }
 winbrew-core = { path = "../core" }
 winbrew-engines = { path = "../engines" }
 winbrew-models = { path = "../models" }
-winbrew-runtime = { path = "../runtime" }
 winbrew-ui = { path = "../ui" }
 winbrew-cancel = { path = "../cancel" }
 
@@ -32,6 +31,8 @@ chrono = { version = "0.4", features = ["clock", "serde"] }
 thiserror = "2.0"
 rayon = "1.11"
 tempfile = "3"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["ansi", "env-filter", "fmt", "registry", "std"] }
 
 [target.'cfg(windows)'.dependencies]
 mimalloc = "0.1"
