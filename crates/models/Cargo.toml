@@ -1,14 +1,16 @@
 [package]
 name = "winbrew-models"
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.85" # MSRV:3
-license = "MIT OR Apache-2.0"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [dependencies]
 semver = { version = "1", features = ["serde"] }
-serde = { version = "1", features = ["derive"] }
-thiserror = "2"
+serde.workspace = true
+thiserror = "2.0"
 url = "2"
 winbrew-core = { path = "../core" }
 

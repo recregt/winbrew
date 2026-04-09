@@ -25,7 +25,7 @@ try {
 
     Write-Host 'Running cargo clippy'
     $global:LASTEXITCODE = 0
-    & cargo clippy --locked --all-targets --all-features -p winbrew -- -D warnings
+    & cargo clippy --locked --all-targets --all-features -p winbrew-bin -- -D warnings
     if ($global:LASTEXITCODE -ne 0) {
         exit $global:LASTEXITCODE
     }
@@ -45,7 +45,7 @@ try {
 
     Write-Host 'Running cargo nextest'
     $global:LASTEXITCODE = 0
-    & cargo nextest run --locked --all-targets --all-features -p winbrew
+    & cargo nextest run --locked --all-targets --all-features -p winbrew-bin
     if ($global:LASTEXITCODE -ne 0) {
         exit $global:LASTEXITCODE
     }

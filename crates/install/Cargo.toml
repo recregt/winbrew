@@ -1,16 +1,18 @@
 [package]
 name = "winbrew-install"
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.85" # MSRV:3
-license = "MIT OR Apache-2.0"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [dependencies]
-anyhow = "1"
-chrono = "0.4"
-rusqlite = { version = "0.39", default-features = false, features = ["bundled", "unlock_notify"] }
+anyhow.workspace = true
+chrono = { version = "0.4", features = ["clock", "serde"] }
+rusqlite = { version = "0.39", default-features = false, features = ["bundled", "modern_sqlite", "unlock_notify"] }
 thiserror = "2.0"
-tracing = "0.1"
+tracing.workspace = true
 winbrew-catalog = { path = "../catalog" }
 winbrew-core = { path = "../core" }
 winbrew-engines = { path = "../engines" }
