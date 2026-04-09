@@ -89,6 +89,7 @@ impl<P: PlatformAdapter> ExtractionContext<P> {
             fs::create_dir_all(deepest_missing)
                 .map_err(|err| FsError::create_directory(deepest_missing, err))?;
 
+            // Record parents before children so drop can clean up deepest paths first.
             for directory in missing_directories.iter().rev() {
                 self.record_directory(directory);
             }

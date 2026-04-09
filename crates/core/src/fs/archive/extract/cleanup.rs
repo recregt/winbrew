@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::fs::cleanup_path;
 
@@ -27,30 +27,27 @@ impl ExtractionCleanup {
         self.created_files.clear();
         self.created_dirs.clear();
     }
+
+    fn cleanup_recorded_path(path: &Path) {
+        let cleanup_result = cleanup_path(path);
+
+        #[cfg(debug_assertions)]
+        if let Err(err) = &cleanup_result {
+            eprintln!("cleanup failed for {}: {}", path.display(), err);
+        }
+
+        let _ = cleanup_result;
+    }
 }
 
 impl Drop for ExtractionCleanup {
     fn drop(&mut self) {
-        while let Some(path) = self.created_files.pop() {
-            let cleanup_result = cleanup_path(&path);
-
-            #[cfg(debug_assertions)]
-            if let Err(err) = &cleanup_result {
-                eprintln!("cleanup failed for {}: {}", path.display(), err);
-            }
-
-            let _ = cleanup_result;
+        for path in self.created_files.iter().rev() {
+            Self::cleanup_recorded_path(path);
         }
 
-        while let Some(path) = self.created_dirs.pop() {
-            let cleanup_result = cleanup_path(&path);
-
-            #[cfg(debug_assertions)]
-            if let Err(err) = &cleanup_result {
-                eprintln!("cleanup failed for {}: {}", path.display(), err);
-            }
-
-            let _ = cleanup_result;
+        for path in self.created_dirs.iter().rev() {
+            Self::cleanup_recorded_path(path);
         }
     }
 }
