@@ -52,7 +52,7 @@ pub fn atomic_write_temp(path: &Path, contents: &str) -> Result<()> {
 /// Replaces `final_path` with `temp_path`, removing any existing target first.
 pub fn finalize_temp_file(temp_path: &Path, final_path: &Path) -> Result<()> {
     if final_path.exists() {
-        cleanup_path(final_path)?;
+        cleanup_path(final_path).map_err(|err| *err)?;
     }
 
     fs::rename(temp_path, final_path)

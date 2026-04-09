@@ -2,9 +2,7 @@
 //!
 //! Provides safe deletion with deferred-cleanup fallback for locked files.
 
-#![allow(clippy::result_large_err)]
-
-use super::{FsError, Result};
+use super::FsError;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -16,17 +14,19 @@ use winbrew_windows::inspect_path as winfs_inspect_path;
 
 static DEFERRED_DELETE_SUFFIX: AtomicUsize = AtomicUsize::new(0);
 
+type BoxedResult<T> = std::result::Result<T, Box<FsError>>;
+
 #[derive(Debug, Clone, Copy)]
-pub(super) struct PathInfo {
+pub(super) struct CleanupPathInfo {
     pub(super) is_directory: bool,
     pub(super) is_reparse_point: bool,
 }
 
-pub(super) fn inspect_path(path: &Path) -> std::io::Result<PathInfo> {
+pub(super) fn inspect_path(path: &Path) -> std::io::Result<CleanupPathInfo> {
     #[cfg(windows)]
     {
         let info = winfs_inspect_path(path)?;
-        Ok(PathInfo {
+        Ok(CleanupPathInfo {
             is_directory: info.is_directory,
             is_reparse_point: info.is_reparse_point,
         })
@@ -35,7 +35,7 @@ pub(super) fn inspect_path(path: &Path) -> std::io::Result<PathInfo> {
     #[cfg(not(windows))]
     {
         let metadata = fs::symlink_metadata(path)?;
-        Ok(PathInfo {
+        Ok(CleanupPathInfo {
             is_directory: metadata.is_dir(),
             is_reparse_point: false,
         })
@@ -47,15 +47,15 @@ pub(super) fn inspect_path(path: &Path) -> std::io::Result<PathInfo> {
 /// If immediate deletion fails and the path has a file name, the item is moved
 /// aside to a deferred-delete path so cleanup can continue later. On Windows,
 /// directory reparse points are removed without recursively walking their target.
-pub fn cleanup_path(path: &Path) -> Result<()> {
+pub fn cleanup_path(path: &Path) -> BoxedResult<()> {
     let info = match inspect_path(path) {
         Ok(metadata) => metadata,
         Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
-        Err(err) => return Err(FsError::inspect(path, err)),
+        Err(err) => return Err(Box::new(FsError::inspect(path, err))),
     };
 
     let removal_result = if info.is_reparse_point {
-        fs::remove_dir(path).or_else(|_| fs::remove_file(path))
+        fs::remove_dir(path).or_else(|original_err| fs::remove_file(path).map_err(|_| original_err))
     } else if info.is_directory {
         fs::remove_dir_all(path)
     } else {
@@ -66,18 +66,24 @@ pub fn cleanup_path(path: &Path) -> Result<()> {
         Ok(()) => Ok(()),
         Err(err) => {
             if let Some(deferred_path) = deferred_delete_path(path) {
-                if deferred_path.exists() {
-                    let _ = cleanup_path(&deferred_path);
+                if fs::rename(path, &deferred_path).is_ok() {
+                    return Ok(());
                 }
+
+                let _ = cleanup_path(&deferred_path);
 
                 if fs::rename(path, &deferred_path).is_ok() {
                     return Ok(());
                 }
 
-                return Err(FsError::remove_and_defer(path, &deferred_path, err));
+                return Err(Box::new(FsError::remove_and_defer(
+                    path,
+                    &deferred_path,
+                    err,
+                )));
             }
 
-            Err(FsError::remove(path, err))
+            Err(Box::new(FsError::remove(path, err)))
         }
     }
 }
