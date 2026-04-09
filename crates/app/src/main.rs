@@ -10,11 +10,10 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 #[cfg(windows)]
 fn main() -> anyhow::Result<()> {
-    if let Err(err) = winbrew_app::run_app() {
-        if let Some(cmd_err) =
-            err.downcast_ref::<winbrew_app::commands::command_errors::CommandError>()
+    if let Err(err) = winbrew::run_app() {
+        if let Some(cmd_err) = err.downcast_ref::<winbrew::commands::command_errors::CommandError>()
         {
-            if let winbrew_app::commands::command_errors::CommandError::Fatal(message) = cmd_err {
+            if let winbrew::commands::command_errors::CommandError::Fatal(message) = cmd_err {
                 eprintln!("\nFATAL: {message}");
             }
 
