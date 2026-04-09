@@ -42,16 +42,43 @@ pub(crate) enum CachedPath {
     Present(PathInfo),
 }
 
+#[derive(Clone, Copy, Debug)]
+struct ExtractionLimits {
+    max_total_size: u64,
+    max_file_count: usize,
+    max_compression_ratio: u64,
+    max_path_depth: usize,
+}
+
+impl Default for ExtractionLimits {
+    fn default() -> Self {
+        Self {
+            max_total_size: 10 * 1024 * 1024 * 1024,
+            max_file_count: 100_000,
+            max_compression_ratio: 100,
+            max_path_depth: 255,
+        }
+    }
+}
+
 /// Extracts `zip_path` into `destination_dir`, rejecting entries with invalid paths.
 ///
 /// The extraction target is validated so the archive cannot be unpacked through
 /// an existing reparse-point ancestor, and symlink entries are refused.
 pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()> {
+    extract_zip_archive_with_limits(zip_path, destination_dir, ExtractionLimits::default())
+}
+
+fn extract_zip_archive_with_limits(
+    zip_path: &Path,
+    destination_dir: &Path,
+    limits: ExtractionLimits,
+) -> Result<()> {
     let file = fs::File::open(zip_path).map_err(|err| FsError::open_zip_archive(zip_path, err))?;
     let mut archive =
         zip::ZipArchive::new(file).map_err(|err| FsError::open_zip_archive(zip_path, err))?;
     const ZIP_COPY_BUFFER_SIZE: usize = 256 * 1024;
-    let mut extraction = ExtractionContext::new();
+    let mut extraction = ExtractionContext::new(limits);
     let mut buffer = vec![0u8; ZIP_COPY_BUFFER_SIZE];
 
     for index in 0..archive.len() {
@@ -68,13 +95,19 @@ pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> Result<()
 pub(crate) struct ExtractionContext {
     cached_paths: HashMap<PathBuf, CachedPath>,
     cleanup: ExtractionCleanup,
+    limits: ExtractionLimits,
+    current_total_size: u64,
+    current_file_count: usize,
 }
 
 impl ExtractionContext {
-    fn new() -> Self {
+    fn new(limits: ExtractionLimits) -> Self {
         Self {
             cached_paths: HashMap::new(),
             cleanup: ExtractionCleanup::new(),
+            limits,
+            current_total_size: 0,
+            current_file_count: 0,
         }
     }
 
@@ -88,6 +121,62 @@ impl ExtractionContext {
 
     fn ensure_directory_tree(&mut self, path: &Path) -> Result<()> {
         platform::ensure_directory_tree(self, path)
+    }
+
+    fn check_limits(&mut self, path: &Path, entry_size: u64, compressed_size: u64) -> Result<()> {
+        let path_depth = path.components().count();
+
+        if path_depth > self.limits.max_path_depth {
+            return Err(FsError::path_too_deep(
+                path,
+                path_depth,
+                self.limits.max_path_depth,
+            ));
+        }
+
+        if entry_size > 0
+            && (compressed_size == 0
+                || entry_size > compressed_size.saturating_mul(self.limits.max_compression_ratio))
+        {
+            return Err(FsError::suspicious_compression_ratio(
+                path,
+                entry_size,
+                compressed_size,
+                self.limits.max_compression_ratio,
+            ));
+        }
+
+        let new_total_size = self
+            .current_total_size
+            .checked_add(entry_size)
+            .ok_or_else(|| {
+                FsError::quota_exceeded(
+                    self.limits.max_total_size,
+                    self.current_total_size,
+                    entry_size,
+                )
+            })?;
+        if new_total_size > self.limits.max_total_size {
+            return Err(FsError::quota_exceeded(
+                self.limits.max_total_size,
+                self.current_total_size,
+                entry_size,
+            ));
+        }
+
+        let new_file_count = self.current_file_count.checked_add(1).ok_or_else(|| {
+            FsError::file_count_exceeded(self.limits.max_file_count, self.current_file_count)
+        })?;
+        if new_file_count > self.limits.max_file_count {
+            return Err(FsError::file_count_exceeded(
+                self.limits.max_file_count,
+                self.current_file_count,
+            ));
+        }
+
+        self.current_total_size = new_total_size;
+        self.current_file_count = new_file_count;
+        Ok(())
     }
 
     pub(super) fn record_directory(&mut self, path: &Path) {
@@ -159,11 +248,16 @@ fn extract_entry<R: Read>(
     let enclosed_name = entry
         .enclosed_name()
         .ok_or_else(FsError::invalid_zip_entry_path)?;
-    let outpath = destination_dir.join(enclosed_name);
 
     if entry.is_symlink() {
-        return Err(FsError::symlink_entry(&outpath));
+        return Err(FsError::symlink_entry(
+            &destination_dir.join(&enclosed_name),
+        ));
     }
+
+    extraction.check_limits(&enclosed_name, entry.size(), entry.compressed_size())?;
+
+    let outpath = destination_dir.join(&enclosed_name);
 
     extraction.validate_target(&outpath)?;
 
@@ -206,7 +300,7 @@ impl Drop for ExtractionCleanup {
 
 #[cfg(test)]
 mod tests {
-    use super::extract_zip_archive;
+    use super::{ExtractionLimits, extract_zip_archive, extract_zip_archive_with_limits};
     use std::fs;
     use std::io::Write;
     use tempfile::tempdir;
@@ -229,6 +323,20 @@ mod tests {
         writer
             .add_symlink(link_name, target, SimpleFileOptions::default())
             .expect("add zip symlink");
+        writer.finish().expect("finish zip file");
+    }
+
+    fn create_archive_with_entries(path: &std::path::Path, entries: &[(&str, &[u8])]) {
+        let file = fs::File::create(path).expect("create zip file");
+        let mut writer = ZipWriter::new(file);
+
+        for (name, contents) in entries {
+            writer
+                .start_file(name, SimpleFileOptions::default())
+                .expect("start zip entry");
+            writer.write_all(contents).expect("write zip contents");
+        }
+
         writer.finish().expect("finish zip file");
     }
 
@@ -349,6 +457,106 @@ mod tests {
                 .contains("refusing to extract symlink entry")
         );
         assert!(destination_dir.exists());
+        assert!(!destination_dir.join("a").exists());
+    }
+
+    #[test]
+    fn extract_zip_archive_rejects_suspicious_compression_ratio() {
+        let temp_dir = tempdir().expect("temp dir");
+        let destination_dir = temp_dir.path().join("dest");
+        let zip_path = temp_dir.path().join("archive.zip");
+
+        fs::create_dir_all(&destination_dir).expect("destination dir");
+        create_zip_archive(&zip_path, "payload.txt", b"compressible payload");
+
+        let error = extract_zip_archive_with_limits(
+            &zip_path,
+            &destination_dir,
+            ExtractionLimits {
+                max_total_size: 10 * 1024 * 1024 * 1024,
+                max_file_count: 100_000,
+                max_compression_ratio: 0,
+                max_path_depth: 255,
+            },
+        )
+        .expect_err("expected suspicious compression ratio rejection");
+
+        assert!(error.to_string().contains("suspicious compression ratio"));
+        assert!(!destination_dir.join("payload.txt").exists());
+    }
+
+    #[test]
+    fn extract_zip_archive_rejects_total_size_limit() {
+        let temp_dir = tempdir().expect("temp dir");
+        let destination_dir = temp_dir.path().join("dest");
+        let zip_path = temp_dir.path().join("archive.zip");
+
+        fs::create_dir_all(&destination_dir).expect("destination dir");
+        create_zip_archive(&zip_path, "payload.txt", b"abcd");
+
+        let error = extract_zip_archive_with_limits(
+            &zip_path,
+            &destination_dir,
+            ExtractionLimits {
+                max_total_size: 3,
+                max_file_count: 100_000,
+                max_compression_ratio: 100,
+                max_path_depth: 255,
+            },
+        )
+        .expect_err("expected quota rejection");
+
+        assert!(error.to_string().contains("quota exceeded"));
+        assert!(!destination_dir.join("payload.txt").exists());
+    }
+
+    #[test]
+    fn extract_zip_archive_rejects_file_count_limit() {
+        let temp_dir = tempdir().expect("temp dir");
+        let destination_dir = temp_dir.path().join("dest");
+        let zip_path = temp_dir.path().join("archive.zip");
+
+        fs::create_dir_all(&destination_dir).expect("destination dir");
+        create_archive_with_entries(&zip_path, &[("first.txt", b""), ("second.txt", b"")]);
+
+        let error = extract_zip_archive_with_limits(
+            &zip_path,
+            &destination_dir,
+            ExtractionLimits {
+                max_total_size: 10 * 1024 * 1024 * 1024,
+                max_file_count: 1,
+                max_compression_ratio: 100,
+                max_path_depth: 255,
+            },
+        )
+        .expect_err("expected file count rejection");
+
+        assert!(error.to_string().contains("entry count exceeded"));
+        assert!(!destination_dir.join("first.txt").exists());
+    }
+
+    #[test]
+    fn extract_zip_archive_rejects_path_depth_limit() {
+        let temp_dir = tempdir().expect("temp dir");
+        let destination_dir = temp_dir.path().join("dest");
+        let zip_path = temp_dir.path().join("archive.zip");
+
+        fs::create_dir_all(&destination_dir).expect("destination dir");
+        create_zip_archive(&zip_path, "a/b/c/file.txt", b"payload");
+
+        let error = extract_zip_archive_with_limits(
+            &zip_path,
+            &destination_dir,
+            ExtractionLimits {
+                max_total_size: 10 * 1024 * 1024 * 1024,
+                max_file_count: 100_000,
+                max_compression_ratio: 100,
+                max_path_depth: 2,
+            },
+        )
+        .expect_err("expected path depth rejection");
+
+        assert!(error.to_string().contains("too deep"));
         assert!(!destination_dir.join("a").exists());
     }
 }

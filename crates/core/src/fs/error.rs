@@ -128,6 +128,40 @@ pub enum FsError {
     #[error("refusing to extract symlink entry {path}")]
     SymlinkEntry { path: PathBuf },
 
+    #[error(
+        "suspicious compression ratio for {path}: {uncompressed_size} bytes from {compressed_size} compressed bytes exceeds {max_ratio}x"
+    )]
+    SuspiciousCompressionRatio {
+        path: PathBuf,
+        uncompressed_size: u64,
+        compressed_size: u64,
+        max_ratio: u64,
+    },
+
+    #[error(
+        "zip extraction quota exceeded: current total {current_total_size} bytes + entry {entry_size} bytes exceeds limit {max_total_size}"
+    )]
+    QuotaExceeded {
+        max_total_size: u64,
+        current_total_size: u64,
+        entry_size: u64,
+    },
+
+    #[error("zip entry path is too deep {path}: depth {depth} exceeds limit {max_depth}")]
+    PathTooDeep {
+        path: PathBuf,
+        depth: usize,
+        max_depth: usize,
+    },
+
+    #[error(
+        "zip extraction entry count exceeded: current count {current_file_count} exceeds limit {max_file_count}"
+    )]
+    FileCountExceeded {
+        max_file_count: usize,
+        current_file_count: usize,
+    },
+
     #[error("refusing to create directory through reparse point {path}")]
     ReparsePoint { path: PathBuf },
 
@@ -312,6 +346,47 @@ impl FsError {
     pub(crate) fn symlink_entry(path: &Path) -> Self {
         Self::SymlinkEntry {
             path: path.to_path_buf(),
+        }
+    }
+
+    pub(crate) fn suspicious_compression_ratio(
+        path: &Path,
+        uncompressed_size: u64,
+        compressed_size: u64,
+        max_ratio: u64,
+    ) -> Self {
+        Self::SuspiciousCompressionRatio {
+            path: path.to_path_buf(),
+            uncompressed_size,
+            compressed_size,
+            max_ratio,
+        }
+    }
+
+    pub(crate) fn quota_exceeded(
+        max_total_size: u64,
+        current_total_size: u64,
+        entry_size: u64,
+    ) -> Self {
+        Self::QuotaExceeded {
+            max_total_size,
+            current_total_size,
+            entry_size,
+        }
+    }
+
+    pub(crate) fn path_too_deep(path: &Path, depth: usize, max_depth: usize) -> Self {
+        Self::PathTooDeep {
+            path: path.to_path_buf(),
+            depth,
+            max_depth,
+        }
+    }
+
+    pub(crate) fn file_count_exceeded(max_file_count: usize, current_file_count: usize) -> Self {
+        Self::FileCountExceeded {
+            max_file_count,
+            current_file_count,
         }
     }
 
