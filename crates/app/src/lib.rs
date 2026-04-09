@@ -6,8 +6,10 @@ use std::sync::Arc;
 
 pub mod cli;
 pub mod commands;
-pub mod database;
 pub mod services;
+
+pub use winbrew_catalog as catalog;
+pub use winbrew_storage as database;
 
 use crate::cli::Cli;
 use crate::commands::run;

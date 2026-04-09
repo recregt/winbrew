@@ -3,11 +3,9 @@ use std::fs;
 use std::path::Path;
 
 use crate::core::fs::finalize_temp_file;
-use crate::core::hash::{
-    HashAlgorithm, HashError, Hasher, hash_algorithm, normalize_hash, verify_hash,
-};
+use crate::core::hash::{HashAlgorithm, Hasher, hash_algorithm, normalize_hash, verify_hash};
 use crate::core::network::{build_client as network_build_client, download_url_to_temp_file};
-use crate::runtime::cancel::check;
+use crate::runtime::check;
 use winbrew_models::CatalogInstaller;
 
 const CATALOG_USER_AGENT: &str = "winbrew-package-installer";
@@ -107,7 +105,7 @@ fn verify_strategy(
         Some(HashAlgorithm::Md5) if ignore_checksum_security => {
             Ok((Verification::None, vec![HashAlgorithm::Md5]))
         }
-        Some(HashAlgorithm::Md5) => Err(HashError::LegacyChecksumAlgorithm {
+        Some(HashAlgorithm::Md5) => Err(crate::core::HashError::LegacyChecksumAlgorithm {
             algorithm: HashAlgorithm::Md5,
         }
         .into()),
@@ -115,7 +113,7 @@ fn verify_strategy(
             Verification::Active(Box::new(Hasher::new(HashAlgorithm::Sha1))),
             vec![HashAlgorithm::Sha1],
         )),
-        Some(HashAlgorithm::Sha1) => Err(HashError::LegacyChecksumAlgorithm {
+        Some(HashAlgorithm::Sha1) => Err(crate::core::HashError::LegacyChecksumAlgorithm {
             algorithm: HashAlgorithm::Sha1,
         }
         .into()),

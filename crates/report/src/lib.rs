@@ -1,7 +1,8 @@
 use anyhow::Result;
 
-use crate::core::paths::ResolvedPaths;
-use winbrew_models::{ConfigSection, ReportSection, RuntimeReport};
+use winbrew_core::paths::ResolvedPaths;
+use winbrew_models::ConfigSection;
+pub use winbrew_models::{ReportSection, RuntimeReport};
 
 pub fn runtime_report(
     sections: &[ConfigSection],

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rusqlite::Connection;
 
-use crate::services::shared::storage;
+use crate::storage;
 use winbrew_models::{CatalogPackage, PackageRef};
 
 #[derive(Debug)]
