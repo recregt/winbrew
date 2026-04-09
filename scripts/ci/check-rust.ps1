@@ -7,6 +7,8 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 
 Push-Location $RepoRoot
 try {
+    $env:CARGO_BUILD_TARGET = 'x86_64-pc-windows-msvc'
+
     Write-Host 'Ensuring x86_64-pc-windows-msvc target is installed'
     $global:LASTEXITCODE = 0
     & rustup target add x86_64-pc-windows-msvc
