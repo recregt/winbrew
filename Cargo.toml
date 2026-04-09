@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/app", "crates/core", "crates/engines", "crates/models", "crates/runtime", "crates/ui", "infra/parser"]
+members = [".", "crates/core", "crates/engines", "crates/models", "crates/runtime", "crates/ui", "infra/parser"]
 resolver = "2"
 
 [package]
@@ -9,12 +9,14 @@ edition = "2024"
 rust-version = "1.85" # MSRV:3
 license = "MIT OR Apache-2.0"
 
+[lib]
+path = "crates/app/src/lib.rs"
+
 [[bin]]
 name = "winbrew"
-path = "src/main.rs"
+path = "crates/app/src/main.rs"
 
 [dependencies]
-winbrew-app = { path = "crates/app" }
 winbrew-core = { path = "crates/core" }
 winbrew-engines = { path = "crates/engines" }
 winbrew-models = { path = "crates/models" }
