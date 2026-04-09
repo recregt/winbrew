@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand/v2"
 	"strings"
 	"testing"
 	"time"
@@ -258,19 +257,25 @@ func TestDoTreatsNonPositiveMaxAttemptsAsOne(t *testing.T) {
 	}
 }
 
-func TestCalculateDelayUsesInjectedRandSource(t *testing.T) {
+func TestCalculateDelayUsesInjectedJitterFunc(t *testing.T) {
 	t.Parallel()
 
-	seed1 := rand.NewPCG(1, 2)
-	seed2 := rand.NewPCG(1, 2)
+	randFunc := func(n int64) (int64, error) {
+		wantMax := int64(100 * time.Millisecond)
+		if n != wantMax {
+			t.Fatalf("randFunc max = %d, want %d", n, wantMax)
+		}
 
-	got1 := calculateDelay(1, 100*time.Millisecond, seed1)
-	got2 := calculateDelay(1, 100*time.Millisecond, seed2)
+		return int64(25 * time.Millisecond), nil
+	}
+
+	got1 := calculateDelay(1, 100*time.Millisecond, randFunc)
+	got2 := calculateDelay(1, 100*time.Millisecond, randFunc)
 	if got1 != got2 {
 		t.Fatalf("calculateDelay() = %v and %v, want deterministic output", got1, got2)
 	}
-	if got1 < 50*time.Millisecond || got1 >= 150*time.Millisecond {
-		t.Fatalf("calculateDelay() = %v, want jittered within [50ms, 150ms)", got1)
+	if got1 != 75*time.Millisecond {
+		t.Fatalf("calculateDelay() = %v, want 75ms", got1)
 	}
 }
 
