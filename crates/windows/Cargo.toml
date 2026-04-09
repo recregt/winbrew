@@ -1,17 +1,18 @@
 [package]
 name = "winbrew-windows"
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.85" # MSRV:3
-license = "MIT OR Apache-2.0"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [dependencies]
-anyhow = "1"
+anyhow.workspace = true
 regex = "1.12"
 strum = "0.28"
 strum_macros = "0.28"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
-
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem"] }

@@ -126,10 +126,10 @@ impl CatalogWriter {
     }
 
     pub fn write_package(&mut self, parsed: &ParsedPackage) -> Result<(), ParserError> {
-        let mut package_stmt = self.connection.prepare_cached(PACKAGE_UPSERT)?;
-        let mut raw_stmt = self.connection.prepare_cached(RAW_UPSERT)?;
-        let mut delete_installers_stmt = self.connection.prepare_cached(DELETE_INSTALLERS)?;
-        let mut installer_stmt = self.connection.prepare_cached(INSTALLER_INSERT)?;
+        let mut package_stmt = self.connection.prepare(PACKAGE_UPSERT)?;
+        let mut raw_stmt = self.connection.prepare(RAW_UPSERT)?;
+        let mut delete_installers_stmt = self.connection.prepare(DELETE_INSTALLERS)?;
+        let mut installer_stmt = self.connection.prepare(INSTALLER_INSERT)?;
 
         package_stmt.execute(params![
             parsed.package.id.as_str(),
