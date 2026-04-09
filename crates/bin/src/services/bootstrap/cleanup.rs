@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 use tracing::warn;
 
 use crate::core::fs::cleanup_path;
+use crate::models::{Package, PackageStatus};
 use crate::services::shared::storage;
 use crate::services::shared::temp_workspace;
-use winbrew_models::{Package, PackageStatus};
 
 pub fn cleanup_stale_installations() -> Result<()> {
     let conn = storage::get_conn()?;
@@ -74,11 +74,11 @@ fn cleanup_temp_roots(name: &str, version: &str) {
 #[cfg(test)]
 mod tests {
     use super::cleanup_stale_installations;
+    use crate::models::{InstallerType, Package, PackageStatus};
     use crate::services::shared::storage;
     use crate::services::shared::temp_workspace;
     use std::fs;
     use tempfile::tempdir;
-    use winbrew_models::{InstallerType, Package, PackageStatus};
 
     fn sample_package(name: &str, version: &str, install_dir: &std::path::Path) -> Package {
         Package {

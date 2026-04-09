@@ -3,8 +3,8 @@
 //! This module keeps the command boundary stable while the shared catalog layer
 //! owns the actual search error semantics.
 
+use crate::models::CatalogPackage;
 use crate::services::shared::catalog;
-use winbrew_models::CatalogPackage;
 
 pub use catalog::{SearchError, SearchResult};
 

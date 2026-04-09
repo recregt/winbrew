@@ -5,7 +5,7 @@ use std::time::Instant;
 use crate::AppContext;
 
 use super::scan;
-use winbrew_models::{DiagnosisSeverity, HealthReport};
+use crate::models::{DiagnosisSeverity, HealthReport};
 
 pub struct Reporter<'a> {
     ctx: &'a AppContext,

@@ -11,15 +11,8 @@ repository.workspace = true
 name = "winbrew"
 
 [dependencies]
-winbrew-catalog = { path = "../catalog" }
 winbrew-install = { path = "../install" }
-winbrew-report = { path = "../report" }
-winbrew-storage = { path = "../storage" }
-winbrew-core = { path = "../core" }
-winbrew-engines = { path = "../engines" }
-winbrew-models = { path = "../models" }
 winbrew-ui = { path = "../ui" }
-winbrew-cancel = { path = "../cancel" }
 
 anyhow.workspace = true
 tracing.workspace = true
@@ -27,7 +20,6 @@ tracing.workspace = true
 clap = { version = "4", default-features = false, features = ["color", "derive", "error-context", "help", "std", "suggestions", "usage"] }
 indicatif = { version = "0.18", default-features = false, features = ["unicode-width"] }
 rusqlite = { version = "0.39", default-features = false, features = ["bundled", "modern_sqlite", "unlock_notify"] }
-chrono = { version = "0.4", features = ["clock", "serde"] }
 thiserror = "2.0"
 rayon = "1.11"
 tempfile = "3"

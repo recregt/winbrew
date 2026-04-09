@@ -2583,14 +2583,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "winbrew-cancel",
- "winbrew-catalog",
- "winbrew-core",
- "winbrew-engines",
  "winbrew-install",
- "winbrew-models",
- "winbrew-report",
- "winbrew-storage",
  "winbrew-ui",
  "winresource",
  "zip",
@@ -2696,15 +2689,6 @@ dependencies = [
  "thiserror",
  "url",
  "winbrew-hash",
-]
-
-[[package]]
-name = "winbrew-report"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "winbrew-core",
- "winbrew-models",
 ]
 
 [[package]]
