@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 use crate::{AppContext, Ui, services::app::doctor};
 use winbrew_models::{DiagnosisSeverity, HealthReport};
@@ -11,6 +11,10 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     ui.display_key_values(&report_summary(&report));
     ui.info("");
     render_results(&mut ui, &report);
+
+    if report.error_count > 0 {
+        bail!("system health check found {} error(s)", report.error_count);
+    }
 
     Ok(())
 }
