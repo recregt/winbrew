@@ -131,6 +131,7 @@ impl<P: PlatformAdapter> ExtractionContext<P> {
         let new_total_size = self
             .current_total_size
             .checked_add(entry_size)
+            .filter(|&size| size <= self.limits.max_total_size)
             .ok_or_else(|| {
                 FsError::quota_exceeded(
                     self.limits.max_total_size,
@@ -138,23 +139,14 @@ impl<P: PlatformAdapter> ExtractionContext<P> {
                     entry_size,
                 )
             })?;
-        if new_total_size > self.limits.max_total_size {
-            return Err(FsError::quota_exceeded(
-                self.limits.max_total_size,
-                self.current_total_size,
-                entry_size,
-            ));
-        }
 
-        let new_file_count = self.current_file_count.checked_add(1).ok_or_else(|| {
-            FsError::file_count_exceeded(self.limits.max_file_count, self.current_file_count)
-        })?;
-        if new_file_count > self.limits.max_file_count {
-            return Err(FsError::file_count_exceeded(
-                self.limits.max_file_count,
-                self.current_file_count,
-            ));
-        }
+        let new_file_count = self
+            .current_file_count
+            .checked_add(1)
+            .filter(|&count| count <= self.limits.max_file_count)
+            .ok_or_else(|| {
+                FsError::file_count_exceeded(self.limits.max_file_count, self.current_file_count)
+            })?;
 
         self.current_total_size = new_total_size;
         self.current_file_count = new_file_count;
