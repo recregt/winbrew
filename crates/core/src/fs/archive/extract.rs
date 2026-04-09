@@ -190,7 +190,7 @@ impl ExtractionContext {
                 hard_link_count: 1,
             }),
         );
-        self.cleanup.record(path.to_path_buf());
+        self.cleanup.record_directory(path.to_path_buf());
     }
 
     fn record_file(&mut self, path: &Path) {
@@ -202,7 +202,7 @@ impl ExtractionContext {
                 hard_link_count: 1,
             }),
         );
-        self.cleanup.record(path.to_path_buf());
+        self.cleanup.record_file(path.to_path_buf());
     }
 
     pub(super) fn inspect_cached(&mut self, path: &Path) -> Result<CachedPath> {
@@ -222,22 +222,29 @@ impl ExtractionContext {
 }
 
 struct ExtractionCleanup {
-    created_paths: Vec<PathBuf>,
+    created_files: Vec<PathBuf>,
+    created_dirs: Vec<PathBuf>,
 }
 
 impl ExtractionCleanup {
     fn new() -> Self {
         Self {
-            created_paths: Vec::new(),
+            created_files: Vec::new(),
+            created_dirs: Vec::new(),
         }
     }
 
-    fn record(&mut self, path: PathBuf) {
-        self.created_paths.push(path);
+    fn record_file(&mut self, path: PathBuf) {
+        self.created_files.push(path);
+    }
+
+    fn record_directory(&mut self, path: PathBuf) {
+        self.created_dirs.push(path);
     }
 
     fn commit(mut self) {
-        self.created_paths.clear();
+        self.created_files.clear();
+        self.created_dirs.clear();
     }
 }
 
@@ -272,8 +279,10 @@ fn extract_entry<R: Read>(
         extraction.ensure_directory_tree(parent)?;
     }
 
-    let mut outfile =
-        fs::File::create(&outpath).map_err(|err| FsError::create_extracted_file(&outpath, err))?;
+    extraction.validate_target(&outpath)?;
+
+    let mut outfile = platform::create_extracted_file(&outpath)
+        .map_err(|err| FsError::create_extracted_file(&outpath, err))?;
     extraction.record_file(&outpath);
 
     loop {
@@ -294,7 +303,18 @@ fn extract_entry<R: Read>(
 
 impl Drop for ExtractionCleanup {
     fn drop(&mut self) {
-        while let Some(path) = self.created_paths.pop() {
+        while let Some(path) = self.created_files.pop() {
+            let cleanup_result = cleanup_path(&path);
+
+            #[cfg(debug_assertions)]
+            if let Err(err) = &cleanup_result {
+                eprintln!("cleanup failed for {}: {}", path.display(), err);
+            }
+
+            let _ = cleanup_result;
+        }
+
+        while let Some(path) = self.created_dirs.pop() {
             let cleanup_result = cleanup_path(&path);
 
             #[cfg(debug_assertions)]
@@ -431,6 +451,31 @@ mod tests {
         assert_eq!(
             fs::read(destination_dir.join("bin/tool.exe")).expect("read"),
             b"binary content"
+        );
+    }
+
+    #[test]
+    fn extract_zip_archive_rejects_existing_target_files() {
+        let temp_dir = tempdir().expect("temp dir");
+        let destination_dir = temp_dir.path().join("dest");
+        let existing_target = destination_dir.join("bin/tool.exe");
+        let zip_path = temp_dir.path().join("archive.zip");
+
+        fs::create_dir_all(existing_target.parent().expect("parent dir")).expect("destination dir");
+        fs::write(&existing_target, b"existing content").expect("preexisting target");
+        create_zip_archive(&zip_path, "bin/tool.exe", b"new content");
+
+        let error = extract_zip_archive(&zip_path, &destination_dir)
+            .expect_err("expected overwrite protection");
+
+        assert!(
+            error
+                .to_string()
+                .contains("failed to create extracted file")
+        );
+        assert_eq!(
+            fs::read(&existing_target).expect("read preexisting target"),
+            b"existing content"
         );
     }
 
