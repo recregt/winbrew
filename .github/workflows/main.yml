@@ -120,7 +120,7 @@ jobs:
         with:
           apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy target/doc --project-name=winbrew
+          command: pages deploy target/doc --project-name=winbrew --branch=main --commit-dirty=true
 
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
