@@ -11,6 +11,8 @@ $SmokeScript = (Resolve-Path (Join-Path $PSScriptRoot '..\tasks\smoke.ps1')).Pat
 
 Push-Location $RepoRoot
 try {
+    $env:CARGO_BUILD_TARGET = 'x86_64-pc-windows-msvc'
+
     Write-Host 'Building release binary'
     $global:LASTEXITCODE = 0
     & cargo build --locked --release

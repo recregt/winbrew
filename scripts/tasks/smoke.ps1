@@ -33,8 +33,12 @@ function Invoke-WinbrewCommand {
 
 $ResolvedBinaryPath = Resolve-BinaryPath -Path $BinaryPath
 $ResolvedRootPath = Resolve-BinaryPath -Path $ROOT
+$ResolvedPackagesPath = Join-Path $ResolvedRootPath 'packages'
 $PreviousWinbrewRoot = $env:WINBREW_PATHS_ROOT
 $HadPreviousWinbrewRoot = Test-Path env:WINBREW_PATHS_ROOT
+
+$null = New-Item -ItemType Directory -Force -Path $ResolvedRootPath
+$null = New-Item -ItemType Directory -Force -Path $ResolvedPackagesPath
 
 $env:WINBREW_PATHS_ROOT = $ResolvedRootPath
 
