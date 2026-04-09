@@ -49,11 +49,11 @@ jobs:
           <html lang="en">
             <head>
               <meta charset="utf-8">
-              <meta http-equiv="refresh" content="0; url=/docs/">
+              <meta http-equiv="refresh" content="0; url=/docs/winbrew/index.html">
               <title>Winbrew Documentation</title>
             </head>
             <body>
-              <p>Redirecting to <a href="/docs/">/docs/</a>...</p>
+              <p>Redirecting to <a href="/docs/winbrew/index.html">/docs/winbrew/</a>...</p>
             </body>
           </html>
           EOF
