@@ -31,7 +31,7 @@
 //! )?;
 //!
 //! replace_directory(Path::new("staging/app"), Path::new("app"))?;
-//! cleanup_path(Path::new("app.old"))?;
+//! cleanup_path(Path::new("app.old")).map_err(|err| *err)?;
 //! # Ok::<(), winbrew_core::fs::FsError>(())
 //! ```
 

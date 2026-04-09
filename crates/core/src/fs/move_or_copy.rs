@@ -46,7 +46,7 @@ where
     }
 
     let backup_dir = backup_path_for(target_dir);
-    cleanup_path(&backup_dir)?;
+    cleanup_path(&backup_dir).map_err(|err| *err)?;
 
     rename(target_dir, &backup_dir)
         .map_err(|err| FsError::move_aside(target_dir, &backup_dir, err))?;
