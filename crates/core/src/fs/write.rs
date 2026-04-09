@@ -24,6 +24,8 @@ pub fn atomic_write(path: &Path, temp_path: &Path, contents: &[u8]) -> BoxedResu
     }
 
     if let Err(err) = finalize_temp_file(temp_path, path) {
+        // atomic_write owns the temp path, so it cleans up here even though
+        // finalize_temp_file leaves cleanup to direct callers on failure.
         let _ = fs::remove_file(temp_path);
         return Err(err);
     }
@@ -41,6 +43,9 @@ pub fn atomic_write_toml_temp(path: &Path, contents: &str) -> BoxedResult<()> {
 }
 
 /// Replaces `final_path` with `temp_path`, removing any existing target first.
+///
+/// If this helper is called directly and the rename fails, the caller remains
+/// responsible for cleaning up `temp_path`.
 pub fn finalize_temp_file(temp_path: &Path, final_path: &Path) -> BoxedResult<()> {
     match fs::rename(temp_path, final_path) {
         Ok(()) => Ok(()),
