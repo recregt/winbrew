@@ -1,8 +1,6 @@
 use anyhow::Result;
-#[cfg(windows)]
 use regex::RegexBuilder;
 
-#[cfg(windows)]
 use crate::uninstall::uninstall_roots;
 
 /// Holds complete app info for display and filtering.
@@ -13,7 +11,6 @@ pub struct AppInfo {
     pub publisher: String,
 }
 
-#[cfg(windows)]
 pub fn collect_installed_apps(filter: Option<&str>) -> Result<Vec<AppInfo>> {
     let pattern = filter
         .map(|f| {
@@ -62,10 +59,4 @@ pub fn collect_installed_apps(filter: Option<&str>) -> Result<Vec<AppInfo>> {
     apps.dedup_by(|a, b| a.name == b.name);
 
     Ok(apps)
-}
-
-#[cfg(not(windows))]
-pub fn collect_installed_apps(filter: Option<&str>) -> Result<Vec<AppInfo>> {
-    let _ = filter;
-    Ok(Vec::new())
 }
