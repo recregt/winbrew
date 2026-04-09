@@ -6,6 +6,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 chrono = { version = "0.4", features = ["clock"] }
+libc = "0.2"
 md-5 = "0.11"
 reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-features = false }
 sha1 = "0.11"
@@ -19,4 +20,5 @@ zip = "8"
 tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation"] }
 winbrew-windows = { path = "../windows" }

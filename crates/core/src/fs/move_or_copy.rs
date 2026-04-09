@@ -1,9 +1,14 @@
 use super::FsError;
-use super::cleanup::cleanup_path;
+use super::cleanup::{cleanup_path, inspect_path as inspect_cleanup_path};
 use std::fs;
+use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 
 type BoxedResult<T> = std::result::Result<T, Box<FsError>>;
+
+#[cfg(windows)]
+const ERROR_NOT_SAME_DEVICE_CODE: i32 =
+    windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as i32;
 
 /// Replaces `source_dir` with `target_dir`, copying across volumes when rename
 /// is not available and rolling back the backup on failure.
@@ -33,10 +38,14 @@ fn replace_directory_with_rename<R>(
 where
     R: Fn(&Path, &Path) -> std::io::Result<()>,
 {
-    if !target_dir.exists() {
-        return match rename(source_dir, target_dir) {
-            Ok(()) => Ok(()),
-            Err(err) if is_cross_device_error(&err) => {
+    let backup_dir = backup_path_for(target_dir);
+    cleanup_path(&backup_dir)?;
+
+    match rename(source_dir, target_dir) {
+        Ok(()) => Ok(()),
+        Err(err) if is_cross_device_error(&err) => match rename(target_dir, &backup_dir) {
+            Ok(()) => finish_replacement_after_backup(source_dir, target_dir, &backup_dir, rename),
+            Err(rename_err) if rename_err.kind() == ErrorKind::NotFound => {
                 copy_dir_all(source_dir, target_dir).map_err(|copy_err| {
                     Box::new(FsError::copy_across_volumes(
                         source_dir, target_dir, copy_err,
@@ -47,28 +56,48 @@ where
 
                 Ok(())
             }
-            Err(err) => Err(Box::new(FsError::move_into_place(
-                source_dir, target_dir, err,
+            Err(rename_err) => Err(Box::new(FsError::move_aside(
+                target_dir,
+                &backup_dir,
+                rename_err,
             ))),
-        };
+        },
+        Err(err) if is_target_conflict_error(&err) => match rename(target_dir, &backup_dir) {
+            Ok(()) => finish_replacement_after_backup(source_dir, target_dir, &backup_dir, rename),
+            Err(rename_err) if rename_err.kind() == ErrorKind::NotFound => Err(Box::new(
+                FsError::move_into_place(source_dir, target_dir, err),
+            )),
+            Err(rename_err) => Err(Box::new(FsError::move_aside(
+                target_dir,
+                &backup_dir,
+                rename_err,
+            ))),
+        },
+        Err(err) => Err(Box::new(FsError::move_into_place(
+            source_dir, target_dir, err,
+        ))),
     }
+}
 
-    let backup_dir = backup_path_for(target_dir);
-    cleanup_path(&backup_dir)?;
-
-    rename(target_dir, &backup_dir)
-        .map_err(|err| Box::new(FsError::move_aside(target_dir, &backup_dir, err)))?;
-
+fn finish_replacement_after_backup<R>(
+    source_dir: &Path,
+    target_dir: &Path,
+    backup_dir: &Path,
+    rename: R,
+) -> BoxedResult<()>
+where
+    R: Fn(&Path, &Path) -> std::io::Result<()>,
+{
     match rename(source_dir, target_dir) {
         Ok(()) => {
-            let _ = cleanup_path(&backup_dir);
+            let _ = cleanup_path(backup_dir);
             Ok(())
         }
         Err(err) if is_cross_device_error(&err) => {
             if let Err(copy_err) = copy_dir_all(source_dir, target_dir) {
                 let _ = cleanup_path(target_dir);
 
-                if let Err(rollback_err) = rename(&backup_dir, target_dir) {
+                if let Err(rollback_err) = rename(backup_dir, target_dir) {
                     return Err(Box::new(FsError::rollback_failed(
                         "failed to copy staged installation across volumes",
                         source_dir,
@@ -84,12 +113,12 @@ where
             }
 
             let _ = cleanup_path(source_dir);
-            let _ = cleanup_path(&backup_dir);
+            let _ = cleanup_path(backup_dir);
 
             Ok(())
         }
         Err(err) => {
-            if let Err(rollback_err) = rename(&backup_dir, target_dir) {
+            if let Err(rollback_err) = rename(backup_dir, target_dir) {
                 return Err(Box::new(FsError::rollback_failed(
                     "failed to move staged installation into place",
                     source_dir,
@@ -121,11 +150,15 @@ fn copy_dir_all(source_dir: &Path, target_dir: &Path) -> BoxedResult<()> {
             entry.map_err(|err| Box::new(FsError::read_directory_entry(source_dir, err)))?;
         let source_path = entry.path();
         let target_path = target_dir.join(entry.file_name());
+        let path_info = inspect_cleanup_path(&source_path)
+            .map_err(|err| Box::new(FsError::inspect(&source_path, err)))?;
         let file_type = entry
             .file_type()
             .map_err(|err| Box::new(FsError::inspect(&source_path, err)))?;
 
-        if file_type.is_dir() {
+        if path_info.is_reparse_point {
+            return Err(Box::new(FsError::copy_symlink(&source_path)));
+        } else if file_type.is_dir() {
             copy_dir_all(&source_path, &target_path)?;
         } else if file_type.is_file() {
             fs::copy(&source_path, &target_path)
@@ -141,7 +174,28 @@ fn copy_dir_all(source_dir: &Path, target_dir: &Path) -> BoxedResult<()> {
 }
 
 fn is_cross_device_error(err: &std::io::Error) -> bool {
-    matches!(err.raw_os_error(), Some(17) | Some(18))
+    #[cfg(windows)]
+    {
+        matches!(err.raw_os_error(), Some(ERROR_NOT_SAME_DEVICE_CODE))
+    }
+
+    #[cfg(not(windows))]
+    {
+        matches!(err.raw_os_error(), Some(libc::EXDEV))
+    }
+}
+
+#[cfg(windows)]
+fn is_target_conflict_error(err: &io::Error) -> bool {
+    matches!(
+        err.kind(),
+        ErrorKind::AlreadyExists | ErrorKind::PermissionDenied
+    )
+}
+
+#[cfg(not(windows))]
+fn is_target_conflict_error(err: &io::Error) -> bool {
+    matches!(err.kind(), ErrorKind::AlreadyExists)
 }
 
 #[cfg(test)]
@@ -150,6 +204,21 @@ mod tests {
     use std::fs;
     use std::io::{self, ErrorKind};
     use tempfile::tempdir;
+
+    #[cfg(windows)]
+    use super::ERROR_NOT_SAME_DEVICE_CODE;
+
+    fn cross_device_error() -> io::Error {
+        #[cfg(windows)]
+        {
+            io::Error::from_raw_os_error(ERROR_NOT_SAME_DEVICE_CODE)
+        }
+
+        #[cfg(not(windows))]
+        {
+            io::Error::from_raw_os_error(libc::EXDEV)
+        }
+    }
 
     #[test]
     fn backup_path_for_appends_old_suffix_next_to_target() {
@@ -171,7 +240,7 @@ mod tests {
 
         let result = replace_directory_with_rename(&source_dir, &target_dir, |from, to| {
             if from == source_dir.as_path() && to == target_dir.as_path() {
-                Err(io::Error::from_raw_os_error(18))
+                Err(cross_device_error())
             } else {
                 fs::rename(from, to)
             }
