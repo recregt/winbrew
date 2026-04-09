@@ -28,9 +28,9 @@
 //!     Path::new("config.toml"),
 //!     Path::new("config.toml.tmp"),
 //!     b"key = value",
-//! )?;
+//! ).map_err(|err| *err)?;
 //!
-//! replace_directory(Path::new("staging/app"), Path::new("app"))?;
+//! replace_directory(Path::new("staging/app"), Path::new("app")).map_err(|err| *err)?;
 //! cleanup_path(Path::new("app.old")).map_err(|err| *err)?;
 //! # Ok::<(), winbrew_core::fs::FsError>(())
 //! ```
