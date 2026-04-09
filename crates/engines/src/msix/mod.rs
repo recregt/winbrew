@@ -23,7 +23,10 @@ pub mod remove {
     }
 }
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
+
+#[cfg(windows)]
+use anyhow::Context;
 
 #[cfg(windows)]
 use windows::Management::Deployment::PackageManager;

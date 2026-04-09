@@ -2,13 +2,10 @@ use std::fs::{self, OpenOptions};
 use std::io;
 use std::path::Path;
 
-#[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
 
-#[cfg(windows)]
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 
-#[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,7 +15,6 @@ pub struct PathInfo {
     pub hard_link_count: u32,
 }
 
-#[cfg(windows)]
 pub fn inspect_path(path: &Path) -> io::Result<PathInfo> {
     use std::mem::MaybeUninit;
     use std::os::windows::ffi::OsStrExt;
@@ -64,7 +60,6 @@ pub fn inspect_path(path: &Path) -> io::Result<PathInfo> {
     }
 }
 
-#[cfg(windows)]
 pub fn create_extracted_file(path: &Path) -> io::Result<fs::File> {
     OpenOptions::new()
         .write(true)
@@ -73,21 +68,8 @@ pub fn create_extracted_file(path: &Path) -> io::Result<fs::File> {
         .open(path)
 }
 
-#[cfg(not(windows))]
-pub fn inspect_path(path: &Path) -> io::Result<PathInfo> {
-    let metadata = std::fs::symlink_metadata(path)?;
-
-    Ok(PathInfo {
-        is_directory: metadata.is_dir(),
-        is_reparse_point: false,
-        hard_link_count: 1,
-    })
-}
-
-#[cfg(windows)]
 struct HandleGuard(HANDLE);
 
-#[cfg(windows)]
 impl Drop for HandleGuard {
     fn drop(&mut self) {
         unsafe {
