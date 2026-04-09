@@ -1,0 +1,7 @@
+name = "winbrew-docs"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+routes = [
+  { pattern = "winbrew.recregt.com/*", zone_name = "recregt.com" }
+]

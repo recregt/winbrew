@@ -1,0 +1,204 @@
+name: CI
+on:
+  merge_group:
+  pull_request:
+    branches:
+      - '**'
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+env:
+  GOLANGCI_LINT_VERSION: v2.11.4
+  CARGO_NEXTEST_VERSION: 0.9.132
+
+jobs:
+  conclusion:
+    if: ${{ !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+    needs:
+      - go
+      - doc-validate
+      - spellcheck
+      - rust-parser
+      - rust
+    permissions:
+      contents: none
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conclusion
+        run: |
+          jq -C <<< '${{ toJson(needs) }}'
+          jq --exit-status 'all(.result == "success")' <<< '${{ toJson(needs) }}'
+
+  go:
+    name: Go › ${{ matrix.module == 'crawler' && 'Crawler' || 'Publisher' }}
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - crawler
+          - publisher
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: infra/${{ matrix.module }}/go.mod
+          cache: ${{ github.event_name == 'merge_group' }}
+          cache-dependency-path: infra/${{ matrix.module }}/go.sum
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          install-only: true
+
+      - name: Run Go CI Script
+        shell: pwsh
+        run: ./scripts/ci/check-go.ps1 -Module ${{ matrix.module }}
+
+  rust-parser:
+    name: Rust › Parser
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'merge_group' }}
+
+      - name: Run Parser CI Script
+        shell: pwsh
+        run: ./scripts/ci/check-rust-parser.ps1
+
+  doc-validate:
+    name: Doc › Validate
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'merge_group' }}
+
+      - name: Build Docs
+        shell: bash
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --locked --workspace --no-deps
+
+  doc:
+    name: doc
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Build Docs
+        shell: bash
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: |
+          set -euo pipefail
+
+          cargo doc --locked --workspace --document-private-items --no-deps
+
+          printf '%s\n' '<meta http-equiv="refresh" content="0; url=winbrew/index.html">' > target/doc/index.html
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy target/doc --project-name=winbrew
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: .cloudflare
+          command: deploy
+
+  spellcheck:
+    name: Spell Check with Typos
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Spell Check Repo
+        uses: crate-ci/typos@v1.44.0
+
+  rust:
+    name: Rust
+    runs-on: windows-latest
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'merge_group' }}
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@${{ env.CARGO_NEXTEST_VERSION }}
+
+      - name: Run Rust CI Script
+        shell: pwsh
+        run: ./scripts/ci/check-rust.ps1
+
+      - name: Smoke test CLI
+        shell: pwsh
+        run: ./scripts/ci/smoke.ps1 -BinaryPath 'target\x86_64-pc-windows-msvc\release\winbrew.exe' -ROOT 'target\winbrew-ci'
