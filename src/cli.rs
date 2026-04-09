@@ -27,7 +27,7 @@ pub enum Command {
     },
 
     /// Install a package from the catalog
-    /// Use @winget/<id> or @scoop/<bucket>/<id> for exact package IDs.
+    /// Use `@winget/<id>` or `@scoop/<bucket>/<id>` for exact package IDs.
     Install {
         #[arg(value_name = "QUERY", num_args = 1..)]
         query: Vec<String>,
