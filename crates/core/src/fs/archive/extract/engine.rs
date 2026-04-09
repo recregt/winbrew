@@ -61,8 +61,6 @@ fn extract_entry<P: PlatformAdapter, R: Read>(
         extraction.ensure_directory_tree(parent)?;
     }
 
-    extraction.validate_target(&outpath, destination_dir)?;
-
     let mut outfile = P::create_extracted_file(&outpath)
         .map_err(|err| FsError::create_extracted_file(&outpath, err))?;
     extraction.record_file(&outpath);
