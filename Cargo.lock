@@ -2616,6 +2616,7 @@ dependencies = [
  "sha2 0.11.0",
  "tempfile",
  "thiserror",
+ "tracing",
  "url",
  "winbrew-windows",
  "zip",

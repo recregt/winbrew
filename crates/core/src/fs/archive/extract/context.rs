@@ -39,6 +39,10 @@ impl<P: PlatformAdapter> ExtractionContext<P> {
         let mut is_final_component = true;
 
         while let Some(candidate) = current {
+            if candidate == destination_dir {
+                break;
+            }
+
             match self.inspect_cached(candidate)? {
                 CachedPath::Present(info) => {
                     if info.is_reparse_point {
@@ -50,10 +54,6 @@ impl<P: PlatformAdapter> ExtractionContext<P> {
                     }
                 }
                 CachedPath::Missing => {}
-            }
-
-            if candidate == destination_dir {
-                break;
             }
 
             is_final_component = false;
