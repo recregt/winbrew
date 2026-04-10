@@ -5,7 +5,7 @@ use std::time::Instant;
 use crate::AppContext;
 
 use super::scan;
-use crate::models::{DiagnosisSeverity, HealthReport};
+use crate::models::{DiagnosisResult, DiagnosisSeverity, HealthReport, Package};
 
 pub struct Reporter<'a> {
     ctx: &'a AppContext,
@@ -20,11 +20,20 @@ impl<'a> Reporter<'a> {
         let paths = &self.ctx.paths;
         let started_at = Instant::now();
 
-        let packages = scan::installed_packages()?;
-        let progress = ProgressBar::hidden();
-        let mut diagnostics = scan::scan_packages_with_progress(&packages, &progress);
+        let (packages, mut diagnostics) = collect_packages(scan::installed_packages());
+        let progress = if self.ctx.verbosity > 0 {
+            ProgressBar::new(packages.len() as u64)
+        } else {
+            ProgressBar::hidden()
+        };
+
+        diagnostics.extend(scan::scan_packages_with_progress(&packages, &progress));
+        if self.ctx.verbosity > 0 {
+            progress.finish_and_clear();
+        }
+
         diagnostics.extend(scan::scan_orphaned_install_dirs(&paths.packages, &packages));
-        diagnostics.sort_by(|left, right| {
+        diagnostics.sort_unstable_by(|left, right| {
             left.error_code
                 .cmp(&right.error_code)
                 .then_with(|| left.description.cmp(&right.description))
@@ -56,6 +65,38 @@ impl<'a> Reporter<'a> {
     }
 }
 
+fn collect_packages(packages_result: Result<Vec<Package>>) -> (Vec<Package>, Vec<DiagnosisResult>) {
+    match packages_result {
+        Ok(packages) => (packages, Vec::new()),
+        Err(err) => (
+            Vec::new(),
+            vec![DiagnosisResult {
+                error_code: "installed_packages_unavailable".to_string(),
+                description: format!("installed packages: unavailable ({err})"),
+                severity: DiagnosisSeverity::Error,
+            }],
+        ),
+    }
+}
+
 pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
     Reporter::new(ctx).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::collect_packages;
+    use crate::models::DiagnosisSeverity;
+    use anyhow::anyhow;
+
+    #[test]
+    fn collect_packages_converts_errors_into_diagnostics() {
+        let (packages, diagnostics) = collect_packages(Err(anyhow!("database unavailable")));
+
+        assert!(packages.is_empty());
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].error_code, "installed_packages_unavailable");
+        assert_eq!(diagnostics[0].severity, DiagnosisSeverity::Error);
+        assert!(diagnostics[0].description.contains("database unavailable"));
+    }
 }

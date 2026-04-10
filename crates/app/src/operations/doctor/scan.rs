@@ -80,7 +80,7 @@ pub fn scan_packages_with_progress(
         })
         .collect();
 
-    diagnoses.sort_by(|left, right| {
+    diagnoses.sort_unstable_by(|left, right| {
         left.error_code
             .cmp(&right.error_code)
             .then_with(|| left.description.cmp(&right.description))
@@ -137,7 +137,7 @@ pub fn scan_orphaned_install_dirs(
         ));
     }
 
-    diagnoses.sort_by(|left, right| {
+    diagnoses.sort_unstable_by(|left, right| {
         left.error_code
             .cmp(&right.error_code)
             .then_with(|| left.description.cmp(&right.description))

@@ -14,8 +14,10 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[cfg(windows)]
 fn main() -> std::process::ExitCode {
     let cli = winbrew_cli::cli::Cli::parse();
+    let verbose = cli.verbose;
+    let command = cli.command;
 
-    if let Err(err) = winbrew_cli::run_app(cli.command) {
+    if let Err(err) = winbrew_cli::run_app(command, verbose) {
         if let Some(cmd_err) = err.downcast_ref::<winbrew_cli::commands::error::CommandError>() {
             if let winbrew_cli::commands::error::CommandError::Fatal(message) = cmd_err {
                 eprintln!("\nFATAL: {message}");
