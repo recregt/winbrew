@@ -38,39 +38,71 @@ func LoadMetadata(path string) (Metadata, error) {
 		return Metadata{}, fmt.Errorf("unsupported metadata schema version: %d", metadata.SchemaVersion)
 	}
 
-	if metadata.CurrentHash == "" {
-		return Metadata{}, fmt.Errorf("metadata.current_hash cannot be empty")
-	}
-
 	return metadata, nil
 }
 
 func SaveMetadata(path string, metadata Metadata) error {
-	if err := metadata.validate(); err != nil {
+	data, err := metadataBytes(metadata)
+	if err != nil {
 		return err
-	}
-	if metadata.SchemaVersion != metadataSchemaVersion {
-		return fmt.Errorf("unsupported metadata schema version: %d", metadata.SchemaVersion)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return fmt.Errorf("failed to create metadata directory: %w", err)
 	}
 
+	return writeFileAtomic(path, data, 0o644)
+}
+
+func metadataBytes(metadata Metadata) ([]byte, error) {
+	if err := metadata.validate(); err != nil {
+		return nil, err
+	}
+	if metadata.SchemaVersion != metadataSchemaVersion {
+		return nil, fmt.Errorf("unsupported metadata schema version: %d", metadata.SchemaVersion)
+	}
+
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to encode metadata: %w", err)
+		return nil, fmt.Errorf("failed to encode metadata: %w", err)
 	}
-	data = append(data, '\n')
 
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("failed to write metadata file: %w", err)
+	return append(data, '\n'), nil
+}
+
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	tempFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create metadata temp file: %w", err)
 	}
+	tempPath := tempFile.Name()
+	renamed := false
+	defer func() {
+		if !renamed {
+			_ = tempFile.Close()
+			_ = os.Remove(tempPath)
+		}
+	}()
+
+	if _, err := tempFile.Write(data); err != nil {
+		return fmt.Errorf("failed to write metadata temp file: %w", err)
+	}
+	if err := tempFile.Chmod(perm); err != nil {
+		return fmt.Errorf("failed to set metadata file permissions: %w", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("failed to close metadata temp file: %w", err)
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		return fmt.Errorf("failed to replace metadata file: %w", err)
+	}
+	renamed = true
 
 	return nil
 }
 
 func metadataKeyForObjectKey(objectKey string) string {
+	// Object keys use slash separators regardless of host OS.
 	return path.Join(path.Dir(objectKey), "metadata.json")
 }
 
