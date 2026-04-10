@@ -3,9 +3,9 @@ use std::path::Path;
 use tracing::warn;
 
 use crate::core::fs::{backup_path_for, cleanup_path};
-use crate::core::hash::HashAlgorithm;
 use crate::core::network::installer_filename;
 use crate::engines::{EngineKind, PackageEngine};
+use crate::models::HashAlgorithm;
 
 use super::download;
 use super::state;

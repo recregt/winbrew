@@ -12,7 +12,6 @@ semver = { version = "1", features = ["serde"] }
 serde.workspace = true
 thiserror = "2.0"
 url = "2"
-winbrew-hash = { path = "../hash" }
 
 [dev-dependencies]
 serde_json = "1"

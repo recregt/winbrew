@@ -2633,7 +2633,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "url",
- "winbrew-hash",
+ "winbrew-models",
  "winbrew-windows",
  "windows-sys 0.61.2",
  "zip",
@@ -2653,10 +2653,6 @@ dependencies = [
  "windows",
  "zip",
 ]
-
-[[package]]
-name = "winbrew-hash"
-version = "0.1.0"
 
 [[package]]
 name = "winbrew-infra-parser"
@@ -2694,7 +2690,6 @@ dependencies = [
  "serde_json",
  "thiserror",
  "url",
- "winbrew-hash",
 ]
 
 [[package]]

@@ -30,8 +30,7 @@ pub use fs::{
     cleanup_path, extract_zip_archive, finalize_temp_file, replace_directory,
 };
 pub use hash::{
-    HashAlgorithm, HashError, Hasher, Result as HashResult, hash_algorithm, normalize_hash,
-    verify_hash,
+    HashError, Hasher, Result as HashResult, hash_algorithm, normalize_hash, verify_hash,
 };
 pub use network::{
     BoxError as NetworkBoxError, Client, DownloadError, Result as NetworkResult, build_client,
