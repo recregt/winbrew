@@ -83,14 +83,14 @@ tasks:
     env:
       WINBREW_PATHS_ROOT: target\winbrew-dev
     cmds:
-      - cargo run --locked -- {{.CLI_ARGS}}
+      - cargo run --locked -p winbrew-bin --bin winbrew -- {{.CLI_ARGS}}
 
   dev:run-release:
     desc: Run the CLI in release mode with a repo-local development root
     env:
       WINBREW_PATHS_ROOT: target\winbrew-dev
     cmds:
-      - cargo run --locked --release -- {{.CLI_ARGS}}
+      - cargo run --locked -p winbrew-bin --bin winbrew --release -- {{.CLI_ARGS}}
 
   dev:clean:
     desc: Remove the repo-local development root
