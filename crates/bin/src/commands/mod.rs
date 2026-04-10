@@ -14,7 +14,7 @@ pub mod search;
 pub mod update;
 pub mod version;
 
-pub fn run(command: Command, ctx: &AppContext) -> Result<()> {
+pub fn run(command: Command, ctx: &AppContext, config: &mut crate::database::Config) -> Result<()> {
     match command {
         Command::List { query } => list::run(ctx, &query),
         Command::Install {
@@ -30,6 +30,6 @@ pub fn run(command: Command, ctx: &AppContext) -> Result<()> {
         } => doctor::run(ctx, json, warn_as_error),
         Command::Update => update::run(ctx),
         Command::Remove { name, yes, force } => remove::run(ctx, &name, yes, force),
-        Command::Config { command } => config::run(ctx, command),
+        Command::Config { command } => config::run(ctx, config, command),
     }
 }
