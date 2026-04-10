@@ -1,6 +1,9 @@
 use md5::Md5;
 use sha1::Sha1;
 use sha2::{Digest, Sha256, Sha512};
+use std::fs::File;
+use std::io::{self, Write};
+use std::path::Path;
 use thiserror::Error;
 use winbrew_models::HashAlgorithm;
 
@@ -107,6 +110,15 @@ pub fn verify_hash(expected_hash: &str, actual_hash: impl AsRef<[u8]>) -> Result
     Ok(())
 }
 
+pub fn hash_file(path: &Path, algorithm: HashAlgorithm) -> io::Result<Vec<u8>> {
+    let mut file = File::open(path)?;
+    let mut writer = HashWriter::new(Hasher::new(algorithm));
+
+    io::copy(&mut file, &mut writer)?;
+
+    Ok(writer.finish())
+}
+
 pub fn normalize_hash(value: &str) -> String {
     let trimmed = value.trim();
     let stripped = ["md5:", "sha1:", "sha256:", "sha512:"]
@@ -117,10 +129,37 @@ pub fn normalize_hash(value: &str) -> String {
     stripped.to_ascii_lowercase()
 }
 
+struct HashWriter {
+    hasher: Hasher,
+}
+
+impl HashWriter {
+    fn new(hasher: Hasher) -> Self {
+        Self { hasher }
+    }
+
+    fn finish(self) -> Vec<u8> {
+        self.hasher.finalize()
+    }
+}
+
+impl Write for HashWriter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.hasher.update(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{HashAlgorithm, Hasher, hash_algorithm, normalize_hash, verify_hash};
-    use sha2::{Digest, Sha512};
+    use super::{HashAlgorithm, Hasher, hash_algorithm, hash_file, normalize_hash, verify_hash};
+    use sha2::{Digest, Sha256, Sha512};
+    use std::fs;
+    use tempfile::tempdir;
 
     #[test]
     fn normalize_hash_strips_prefix_and_whitespace() {
@@ -174,5 +213,17 @@ mod tests {
         hasher.update(b"c");
 
         assert_eq!(hasher.finalize(), Sha512::digest(b"abc").to_vec());
+    }
+
+    #[test]
+    fn hash_file_streams_contents() {
+        let temp_dir = tempdir().expect("temp dir");
+        let path = temp_dir.path().join("payload.bin");
+
+        fs::write(&path, b"abc").expect("write payload");
+
+        let digest = hash_file(&path, HashAlgorithm::Sha256).expect("hash file");
+
+        assert_eq!(digest, Sha256::digest(b"abc").to_vec());
     }
 }

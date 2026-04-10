@@ -2,11 +2,11 @@
 
 use anyhow::{Context, Result};
 use std::fs::{self, File};
-use std::io::Read;
+use std::io::ErrorKind;
 use std::path::Path;
 
 use crate::core::fs::finalize_temp_file;
-use crate::core::hash::{Hasher, verify_hash};
+use crate::core::hash::{hash_file, verify_hash};
 use crate::core::network::{Client, build_client, download_url_to_temp_file};
 use crate::core::paths::ResolvedPaths;
 use crate::models::{CatalogMetadata, HashAlgorithm};
@@ -57,11 +57,11 @@ where
 }
 
 fn clear_temp_file(path: &Path) -> Result<()> {
-    if path.exists() {
-        fs::remove_file(path).context("failed to clear previous catalog download")?;
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err).context("failed to clear previous catalog download"),
     }
-
-    Ok(())
 }
 
 fn download_catalog_metadata_release(client: &Client, temp_path: &Path) -> Result<CatalogMetadata> {
@@ -88,7 +88,7 @@ where
     FStart: FnOnce(Option<u64>),
     FProgress: FnMut(u64),
 {
-    Ok(download_url_to_temp_file(
+    download_url_to_temp_file(
         client,
         CATALOG_DIRECT_DOWNLOAD_URL,
         temp_path,
@@ -96,7 +96,8 @@ where
         on_start,
         on_progress,
         |_| Ok(()),
-    )?)
+    )
+    .map_err(Into::into)
 }
 
 fn load_catalog_metadata(path: &Path) -> Result<CatalogMetadata> {
@@ -109,22 +110,10 @@ fn load_catalog_metadata(path: &Path) -> Result<CatalogMetadata> {
 }
 
 fn verify_catalog_hash(path: &Path, expected_hash: &str) -> Result<()> {
-    let mut file = File::open(path).context("failed to open downloaded catalog database")?;
-    let mut hasher = Hasher::new(HashAlgorithm::Sha256);
-    let mut buffer = [0u8; 256 * 1024];
+    let actual_hash = hash_file(path, HashAlgorithm::Sha256)
+        .context("failed to hash downloaded catalog database")?;
 
-    loop {
-        let read = file
-            .read(&mut buffer)
-            .context("failed to read downloaded catalog database")?;
-        if read == 0 {
-            break;
-        }
-
-        hasher.update(&buffer[..read]);
-    }
-
-    verify_hash(expected_hash, hasher.finalize()).map_err(Into::into)
+    verify_hash(expected_hash, actual_hash).map_err(Into::into)
 }
 
 #[cfg(test)]
