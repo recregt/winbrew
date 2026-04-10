@@ -3,6 +3,6 @@ pub fn test_root() -> tempfile::TempDir {
 }
 
 pub fn init_database(root: &std::path::Path) -> anyhow::Result<()> {
-    let config = winbrew::database::Config::load_at(root)?;
-    winbrew::database::init(&config.resolved_paths())
+    let config = winbrew_cli::database::Config::load_at(root)?;
+    winbrew_cli::database::init(&config.resolved_paths())
 }

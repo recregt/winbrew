@@ -7,12 +7,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tempfile::TempDir;
-use winbrew::AppContext;
-use winbrew::app::doctor::health_report;
-use winbrew::commands::doctor::{exit_error, format_duration, render_results, write_json};
-use winbrew::commands::error::CommandError;
-use winbrew::database::{self, Config};
-use winbrew::models::{
+use winbrew_cli::AppContext;
+use winbrew_cli::app::doctor::health_report;
+use winbrew_cli::commands::doctor::{exit_error, format_duration, render_results, write_json};
+use winbrew_cli::commands::error::CommandError;
+use winbrew_cli::database::{self, Config};
+use winbrew_cli::models::{
     DiagnosisResult, DiagnosisSeverity, HealthReport, InstalledPackage, InstallerType,
     PackageStatus,
 };

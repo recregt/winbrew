@@ -11,9 +11,6 @@ repository.workspace = true
 name = "winbrew"
 path = "src/main.rs"
 
-[lib]
-name = "winbrew"
-
 [dependencies]
 winbrew-cli = { path = "../cli" }
 
@@ -27,14 +24,9 @@ winresource = "0.1"
 
 [dev-dependencies]
 anyhow.workspace = true
-mockito = "1.7.2"
-rusqlite = { version = "0.39", default-features = false, features = ["bundled", "modern_sqlite", "unlock_notify"] }
 serde_json = "1"
 tempfile = "3"
-winbrew-core = { path = "../core" }
 winbrew-ui = { path = "../ui" }
-winbrew-models = { path = "../models" }
-zip = "8"
 
 [[test]]
 name = "cli_tests"
