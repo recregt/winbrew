@@ -44,5 +44,13 @@ winbrew-models = { path = "../models" }
 zip = "8"
 
 [[test]]
+name = "cli_tests"
+path = "tests/cli.rs"
+
+[[test]]
 name = "config_tests"
-path = "../../tests/config_tests.rs"
+path = "tests/commands/config.rs"
+
+[[test]]
+name = "doctor_tests"
+path = "tests/commands/doctor.rs"

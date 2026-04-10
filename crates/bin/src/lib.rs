@@ -28,7 +28,7 @@ pub struct AppContext {
 }
 
 impl AppContext {
-    pub fn from_config(config: crate::database::Config) -> Result<Self> {
+    pub fn from_config(config: &crate::database::Config) -> Result<Self> {
         let paths = config.resolved_paths();
         let sections = config.effective_sections()?.into_iter().collect();
 
@@ -47,13 +47,13 @@ impl AppContext {
 }
 
 pub fn run_app() -> Result<()> {
-    let config = shared_config::load_current()?;
-    let ctx = AppContext::from_config(config)?;
+    let mut config = shared_config::load_current()?;
+    let ctx = AppContext::from_config(&config)?;
 
     bootstrap::logging::init(&ctx.paths.logs, &ctx.log_level, &ctx.file_log_level)?;
     database::init(&ctx.paths)?;
     bootstrap::init_runtime()?;
 
     let cli = Cli::parse();
-    run(cli.command, &ctx)
+    run(cli.command, &ctx, &mut config)
 }

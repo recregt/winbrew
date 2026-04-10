@@ -8,24 +8,25 @@ use std::io::Write;
 
 use crate::cli::ConfigCommand;
 use crate::commands::error::reported;
+use crate::database::Config;
 use crate::{AppContext, Ui, services::app::config};
 
 /// Dispatches a `config` subcommand to the appropriate handler.
-pub fn run(ctx: &AppContext, command: ConfigCommand) -> Result<()> {
+pub fn run(ctx: &AppContext, config: &mut Config, command: ConfigCommand) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);
     ui.page_title("Configuration");
 
     match command {
-        ConfigCommand::List => list(ctx, &mut ui),
-        ConfigCommand::Get { key } => get(&mut ui, key.trim()),
-        ConfigCommand::Set { key, value } => set(&mut ui, key.trim(), value.as_deref()),
-        ConfigCommand::Unset { key } => unset(&mut ui, key.trim()),
+        ConfigCommand::List => list(config, &mut ui),
+        ConfigCommand::Get { key } => get(config, &mut ui, key.trim()),
+        ConfigCommand::Set { key, value } => set(config, &mut ui, key.trim(), value.as_deref()),
+        ConfigCommand::Unset { key } => unset(config, &mut ui, key.trim()),
     }
 }
 
 /// Lists all configuration sections and their values.
-fn list<W: Write>(ctx: &AppContext, ui: &mut Ui<W>) -> Result<()> {
-    let sections = config::list_sections(ctx);
+fn list<W: Write>(config: &Config, ui: &mut Ui<W>) -> Result<()> {
+    let sections = config::list_sections(config)?;
 
     if sections.is_empty() {
         ui.notice("No configuration values are set.");
@@ -41,8 +42,8 @@ fn list<W: Write>(ctx: &AppContext, ui: &mut Ui<W>) -> Result<()> {
 }
 
 /// Displays the effective value for a configuration key.
-fn get<W: Write>(ui: &mut Ui<W>, key: &str) -> Result<()> {
-    let value = config::get_display_value(key)
+fn get<W: Write>(config: &Config, ui: &mut Ui<W>, key: &str) -> Result<()> {
+    let value = config::get_display_value(config, key)
         .with_context(|| format!("Failed to retrieve configuration for key: '{key}'"))?;
 
     ui.info(format_args!(
@@ -57,7 +58,12 @@ fn get<W: Write>(ui: &mut Ui<W>, key: &str) -> Result<()> {
 ///
 /// Empty values are rejected so callers use `unset` to remove keys instead of
 /// silently writing blank entries.
-fn set<W: Write>(ui: &mut Ui<W>, key: &str, value: Option<&str>) -> Result<()> {
+fn set<W: Write>(
+    config: &mut Config,
+    ui: &mut Ui<W>,
+    key: &str,
+    value: Option<&str>,
+) -> Result<()> {
     let owned_prompt;
     let clean_value = match value {
         Some(value) => value.trim(),
@@ -73,7 +79,7 @@ fn set<W: Write>(ui: &mut Ui<W>, key: &str, value: Option<&str>) -> Result<()> {
         ));
     }
 
-    config::set_value(key, clean_value)
+    config::set_value(config, key, clean_value)
         .with_context(|| format!("Failed to set configuration for key: '{key}'"))?;
 
     ui.success(format!("{key} updated."));
@@ -81,8 +87,8 @@ fn set<W: Write>(ui: &mut Ui<W>, key: &str, value: Option<&str>) -> Result<()> {
 }
 
 /// Removes a configuration key by restoring its default value.
-fn unset<W: Write>(ui: &mut Ui<W>, key: &str) -> Result<()> {
-    config::unset_value(key)
+fn unset<W: Write>(config: &mut Config, ui: &mut Ui<W>, key: &str) -> Result<()> {
+    config::unset_value(config, key)
         .with_context(|| format!("Failed to remove configuration for key: '{key}'"))?;
 
     ui.success(format!("{key} removed."));
