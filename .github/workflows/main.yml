@@ -67,7 +67,7 @@ jobs:
         run: ./scripts/ci/check-go.ps1 -Module ${{ matrix.module }}
 
   rust-parser:
-    name: Rust › Parser
+    name: Rust › Catalog Parser
     runs-on: ubuntu-latest
 
     steps:
@@ -79,7 +79,7 @@ jobs:
         with:
           save-if: ${{ github.event_name == 'push' }}
 
-      - name: Run Parser CI Script
+      - name: Run Catalog Parser CI Script
         shell: pwsh
         run: ./scripts/ci/check-rust-parser.ps1
 
