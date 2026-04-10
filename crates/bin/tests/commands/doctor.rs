@@ -25,8 +25,8 @@ struct DoctorFixture {
 
 impl DoctorFixture {
     fn new() -> Self {
-        let root = common::shared_root::test_root();
-        common::db::init_database(root.path()).expect("database should initialize");
+        let root = common::test_root();
+        common::init_database(root.path()).expect("database should initialize");
         std::fs::create_dir_all(root.path().join("packages")).expect("packages dir should exist");
 
         let config = Config::load_at(root.path()).expect("config should load");
