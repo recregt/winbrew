@@ -7,6 +7,7 @@ The parser is the transformation stage of the catalog pipeline. It consumes the 
 - Reads Scoop package envelopes from `stdin`.
 - Loads the staged Winget database from `--winget-db`.
 - Normalizes both sources into the shared catalog schema.
+- Accepts common Winget version variants, normalizes them into semver-compatible catalog versions, and only skips entries that are still truly unrecoverable.
 - Writes the catalog database to `--out`.
 - Writes `metadata.json` next to the output database unless `--metadata` overrides it.
 - Hashes the final database and stores the digest in the metadata bundle.

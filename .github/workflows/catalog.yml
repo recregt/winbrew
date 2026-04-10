@@ -3,7 +3,7 @@ name: Catalog Publish
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 6 * * *' # every day at 6:00 UTC
 
 permissions:
   contents: read
@@ -20,14 +20,15 @@ jobs:
   publish:
     name: Build and Publish Catalog Bundle
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 120
 
     env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
-      R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME || 'winbrew' }}
-      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-
+      R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME || 'winbrew-assets' }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || secrets.AWS_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
