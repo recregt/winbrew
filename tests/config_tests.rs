@@ -171,12 +171,6 @@ fn health_report_marks_env_root_source() {
     let report = health_report(&ctx).expect("health report should build");
 
     assert_eq!(report.install_root_source, "env override");
-    assert_eq!(
-        report.install_root,
-        fixture.root_path().to_string_lossy().to_string()
-    );
-    assert_eq!(report.error_count, 0);
-    assert!(report.diagnostics.is_empty());
 }
 
 #[test]

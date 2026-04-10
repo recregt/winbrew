@@ -43,7 +43,15 @@ pub enum Command {
     Version,
 
     /// Check local winbrew installation health
-    Doctor,
+    Doctor {
+        /// Emit machine-readable JSON instead of the standard UI output
+        #[arg(long, help_heading = "Output")]
+        json: bool,
+
+        /// Treat warnings as failures and exit non-zero when warnings are found
+        #[arg(long, help_heading = "Output")]
+        warn_as_error: bool,
+    },
 
     /// Refresh the package catalog
     Update,
@@ -109,6 +117,45 @@ mod tests {
                 command: ConfigCommand::Unset {
                     key: "core.log_level".to_string(),
                 },
+            }
+        );
+    }
+
+    #[test]
+    fn parse_doctor() {
+        let cli = Cli::parse_from(["brew", "doctor"]);
+
+        assert_eq!(
+            cli.command,
+            Command::Doctor {
+                json: false,
+                warn_as_error: false,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_doctor_json() {
+        let cli = Cli::parse_from(["brew", "doctor", "--json"]);
+
+        assert_eq!(
+            cli.command,
+            Command::Doctor {
+                json: true,
+                warn_as_error: false,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_doctor_warn_as_error() {
+        let cli = Cli::parse_from(["brew", "doctor", "--warn-as-error"]);
+
+        assert_eq!(
+            cli.command,
+            Command::Doctor {
+                json: false,
+                warn_as_error: true,
             }
         );
     }

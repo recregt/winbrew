@@ -24,7 +24,10 @@ pub fn run(command: Command, ctx: &AppContext) -> Result<()> {
         Command::Search { query } => search::run(ctx, &query),
         Command::Info => info::run(ctx),
         Command::Version => version::run(ctx),
-        Command::Doctor => doctor::run(ctx),
+        Command::Doctor {
+            json,
+            warn_as_error,
+        } => doctor::run(ctx, json, warn_as_error),
         Command::Update => update::run(ctx),
         Command::Remove { name, yes, force } => remove::run(ctx, &name, yes, force),
         Command::Config { command } => config::run(ctx, command),
