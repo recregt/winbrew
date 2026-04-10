@@ -14,7 +14,7 @@ pub fn run(ctx: &AppContext) -> Result<()> {
             if let Some(total_bytes) = total_bytes {
                 progress.set_length(total_bytes);
             }
-            progress.set_message("Downloading catalog.db");
+            progress.set_message("Downloading catalog bundle");
         },
         |downloaded_bytes| {
             progress.inc(downloaded_bytes);

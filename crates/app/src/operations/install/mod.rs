@@ -33,11 +33,10 @@ pub fn run<O: InstallObserver>(
 ) -> Result<InstallOutcome> {
     let observer = RefCell::new(observer);
     let catalog_conn = storage::get_catalog_conn()?;
-    let package = catalog::resolve_catalog_package_ref(
-        &catalog_conn,
-        &package_ref,
-        &mut |query, matches| observer.borrow_mut().choose_package(query, matches),
-    )?;
+    let package =
+        catalog::resolve_catalog_package_ref(&catalog_conn, &package_ref, |query, matches| {
+            observer.borrow_mut().choose_package(query, matches)
+        })?;
     let installer =
         catalog::select_installer(&storage::get_installers(&catalog_conn, &package.id)?)?;
     let engine = engines::get_engine(&installer)?;
