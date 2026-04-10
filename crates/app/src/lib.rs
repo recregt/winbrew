@@ -1,3 +1,5 @@
+#![cfg(windows)]
+
 pub use winbrew_core as core;
 pub use winbrew_engines as engines;
 pub use winbrew_models as models;
