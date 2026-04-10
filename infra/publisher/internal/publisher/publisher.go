@@ -1,6 +1,7 @@
 package publisher
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -89,8 +90,7 @@ func loadVerifiedMetadata(inputPath, metadataPath string) (Metadata, error) {
 }
 
 func publish(ctx context.Context, client *minio.Client, bucketName, inputPath, metadataPath, objectKey string, localMetadata Metadata) error {
-	metadataKey := metadataKeyForObjectKey(objectKey)
-	remoteMetadata, err := loadRemoteMetadata(ctx, client, bucketName, metadataKey)
+	remoteMetadata, err := loadRemoteMetadata(ctx, client, bucketName, metadataKeyForObjectKey(objectKey))
 	if err != nil {
 		return err
 	}
@@ -101,11 +101,11 @@ func publish(ctx context.Context, client *minio.Client, bucketName, inputPath, m
 		localMetadata.PreviousHash = remoteMetadata.CurrentHash
 	}
 
-	if err := SaveMetadata(metadataPath, localMetadata); err != nil {
+	if err := uploadObjects(ctx, client, bucketName, inputPath, objectKey, localMetadata); err != nil {
 		return err
 	}
 
-	return uploadObjects(ctx, client, bucketName, inputPath, metadataPath, objectKey, metadataKey)
+	return SaveMetadata(metadataPath, localMetadata)
 }
 
 func LoadConfigFromEnv() (Config, error) {
@@ -246,22 +246,23 @@ func isMissingObject(err error) bool {
 	}
 }
 
-func uploadObjects(ctx context.Context, client *minio.Client, bucketName, inputPath, metadataPath, objectKey, metadataKey string) error {
-	uploads := []struct {
-		key         string
-		path        string
-		contentType string
-	}{
-		{key: objectKey, path: inputPath, contentType: "application/octet-stream"},
-		{key: metadataKey, path: metadataPath, contentType: "application/json"},
+func uploadObjects(ctx context.Context, client *minio.Client, bucketName, inputPath, objectKey string, metadata Metadata) error {
+	if _, err := client.FPutObject(ctx, bucketName, objectKey, inputPath, minio.PutObjectOptions{
+		ContentType: "application/octet-stream",
+	}); err != nil {
+		return fmt.Errorf("failed to upload %s to bucket %s: %w", filepath.Base(inputPath), bucketName, err)
 	}
 
-	for _, upload := range uploads {
-		if _, err := client.FPutObject(ctx, bucketName, upload.key, upload.path, minio.PutObjectOptions{
-			ContentType: upload.contentType,
-		}); err != nil {
-			return fmt.Errorf("failed to upload %s to bucket %s: %w", filepath.Base(upload.path), bucketName, err)
-		}
+	metadataBytes, err := metadataBytes(metadata)
+	if err != nil {
+		return err
+	}
+
+	metadataKey := metadataKeyForObjectKey(objectKey)
+	if _, err := client.PutObject(ctx, bucketName, metadataKey, bytes.NewReader(metadataBytes), int64(len(metadataBytes)), minio.PutObjectOptions{
+		ContentType: "application/json",
+	}); err != nil {
+		return fmt.Errorf("failed to upload metadata object %s to bucket %s: %w", metadataKey, bucketName, err)
 	}
 
 	return nil
