@@ -1,8 +1,8 @@
-use chrono::Utc;
 use std::path::Path;
 use thiserror::Error;
 
 use crate::core::fs::cleanup_path;
+use crate::core::now;
 use crate::storage;
 use winbrew_models::{InstallerType, Package, PackageStatus};
 
@@ -49,7 +49,7 @@ pub enum InstallStateError {
 pub type Result<T> = std::result::Result<T, InstallStateError>;
 
 pub fn prepare_install_target(
-    conn: &rusqlite::Connection,
+    conn: &crate::storage::DbConnection,
     name: &str,
     install_dir: &Path,
 ) -> Result<()> {
@@ -99,7 +99,7 @@ pub fn prepare_install_target(
 }
 
 pub fn mark_installing(
-    conn: &rusqlite::Connection,
+    conn: &crate::storage::DbConnection,
     name: impl Into<String>,
     version: impl Into<String>,
     kind: InstallerType,
@@ -115,7 +115,7 @@ pub fn mark_installing(
 }
 
 pub fn mark_ok(
-    conn: &rusqlite::Connection,
+    conn: &crate::storage::DbConnection,
     name: &str,
     msix_package_full_name: Option<&str>,
 ) -> Result<()> {
@@ -131,7 +131,7 @@ pub fn mark_ok(
     })
 }
 
-pub fn mark_failed(conn: &rusqlite::Connection, name: &str) -> Result<()> {
+pub fn mark_failed(conn: &crate::storage::DbConnection, name: &str) -> Result<()> {
     storage::update_status(conn, name, PackageStatus::Failed).map_err(|source| {
         InstallStateError::DatabaseOperationFailed {
             operation: "marking package as failed",
@@ -154,6 +154,6 @@ fn installing_package(
         msix_package_full_name: None,
         dependencies: Vec::new(),
         status: PackageStatus::Installing,
-        installed_at: Utc::now().to_rfc3339(),
+        installed_at: now(),
     }
 }

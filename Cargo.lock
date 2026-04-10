@@ -2571,13 +2571,11 @@ name = "winbrew-bin"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "chrono",
  "clap",
  "indicatif",
  "mimalloc",
  "mockito",
  "rayon",
- "rusqlite",
  "tempfile",
  "thiserror",
  "tracing",
@@ -2667,8 +2665,6 @@ name = "winbrew-install"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "chrono",
- "rusqlite",
  "thiserror",
  "tracing",
  "winbrew-cancel",

@@ -9,7 +9,6 @@ repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-rusqlite = { version = "0.39", default-features = false, features = ["bundled", "modern_sqlite", "unlock_notify"] }
 thiserror = "2.0"
 winbrew-core = { path = "../core" }
 winbrew-models = { path = "../models" }
@@ -17,3 +16,4 @@ winbrew-storage = { path = "../storage" }
 
 [dev-dependencies]
 tempfile = "3"
+rusqlite = { version = "0.39", default-features = false, features = ["bundled", "modern_sqlite", "unlock_notify"] }

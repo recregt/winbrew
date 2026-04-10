@@ -24,7 +24,7 @@ pub fn cleanup_stale_installations() -> Result<()> {
     Ok(())
 }
 
-fn cleanup_stale_installation(conn: &rusqlite::Connection, package: &Package) {
+fn cleanup_stale_installation(conn: &crate::database::DbConnection, package: &Package) {
     if let Err(err) = storage::update_status(conn, &package.name, PackageStatus::Failed) {
         warn!(package = %package.name, error = %err, "failed to mark stale install as failed");
     }
