@@ -1,0 +1,71 @@
+name: Catalog Publish
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-publish
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  publish:
+    name: Build and Publish Catalog Bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME || 'winbrew' }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: infra/crawler/go.mod
+          cache: true
+          cache-dependency-path: infra/**/go.sum
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          save-if: true
+
+      - name: Build catalog bundle
+        run: |
+          set -euo pipefail
+
+          staging="$(mktemp -d)"
+          winget_db="$staging/winget_source.db"
+          catalog_db="$staging/catalog.db"
+          metadata_json="$staging/metadata.json"
+
+          (cd infra/crawler && go run ./cmd/crawler --config config.yaml --winget-out "$winget_db") \
+            | cargo run --locked -p winbrew-infra-parser -- --winget-db "$winget_db" --out "$catalog_db" --metadata "$metadata_json"
+
+          {
+            echo "CATALOG_DB=$catalog_db"
+            echo "CATALOG_METADATA=$metadata_json"
+          } >> "$GITHUB_ENV"
+
+      - name: Publish catalog bundle to R2
+        working-directory: infra/publisher
+        run: |
+          set -euo pipefail
+
+          go run ./cmd/publisher --input "$CATALOG_DB" --metadata "$CATALOG_METADATA"
