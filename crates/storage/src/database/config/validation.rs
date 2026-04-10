@@ -35,6 +35,37 @@ impl Config {
 
         Ok(())
     }
+
+    pub fn unset_value(&mut self, key: &str) -> ConfigResult<()> {
+        let key = key.trim();
+
+        if key.is_empty() {
+            return Err(ConfigError::EmptyKey);
+        }
+
+        let defaults = Config::default();
+
+        match key {
+            "core.log_level" => self.core.log_level = defaults.core.log_level,
+            "core.file_log_level" => self.core.file_log_level = defaults.core.file_log_level,
+            "core.auto_update" => self.core.auto_update = defaults.core.auto_update,
+            "core.confirm_remove" => self.core.confirm_remove = defaults.core.confirm_remove,
+            "core.default_yes" => self.core.default_yes = defaults.core.default_yes,
+            "core.color" => self.core.color = defaults.core.color,
+            "paths.root" => self.paths.root = defaults.paths.root,
+            "paths.packages" => self.paths.packages = defaults.paths.packages,
+            "paths.data" => self.paths.data = defaults.paths.data,
+            "paths.logs" => self.paths.logs = defaults.paths.logs,
+            "paths.cache" => self.paths.cache = defaults.paths.cache,
+            _ => {
+                return Err(ConfigError::UnknownKey {
+                    key: key.to_string(),
+                });
+            }
+        }
+
+        Ok(())
+    }
 }
 
 fn parse_bool(key: &str, value: &str) -> ConfigResult<bool> {
@@ -92,5 +123,21 @@ mod tests {
         assert!(config.core.auto_update);
         assert!(config.core.confirm_remove);
         assert!(config.core.default_yes);
+    }
+
+    #[test]
+    fn unset_value_restores_default_values() {
+        let mut config = Config::default();
+
+        config.set_value("core.auto_update", "false").unwrap();
+        config.set_value("paths.packages", "C:\\custom").unwrap();
+
+        config.unset_value("core.auto_update").unwrap();
+        config.unset_value("paths.packages").unwrap();
+
+        let defaults = Config::default();
+
+        assert_eq!(config.core.auto_update, defaults.core.auto_update);
+        assert_eq!(config.paths.packages, defaults.paths.packages);
     }
 }

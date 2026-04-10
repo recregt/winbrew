@@ -157,6 +157,20 @@ fn parse_config_set_without_value() {
 }
 
 #[test]
+fn parse_config_unset_core_log_level() {
+    let cli = Cli::parse_from(["brew", "config", "unset", "core.log_level"]);
+
+    assert_eq!(
+        cli.command,
+        Command::Config {
+            command: ConfigCommand::Unset {
+                key: "core.log_level".to_string(),
+            },
+        }
+    );
+}
+
+#[test]
 fn parse_config_get_core_log_level() {
     let cli = Cli::parse_from(["brew", "config", "get", "core.log_level"]);
 

@@ -83,6 +83,10 @@ pub fn config_set(key: &str, value: &str) -> Result<()> {
     database::config_set(key, value)
 }
 
+pub fn config_unset(key: &str) -> Result<()> {
+    database::config_unset(key)
+}
+
 pub fn config_sections() -> Result<Vec<ConfigSection>> {
     database::config_sections()
 }

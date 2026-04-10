@@ -17,3 +17,7 @@ pub fn get_display_value(key: &str) -> Result<ConfigValue> {
 pub fn set_value(key: &str, value: &str) -> Result<()> {
     storage::config_set(key, value)
 }
+
+pub fn unset_value(key: &str) -> Result<()> {
+    storage::config_unset(key)
+}

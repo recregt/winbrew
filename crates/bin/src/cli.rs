@@ -86,4 +86,30 @@ pub enum ConfigCommand {
         #[arg(value_name = "VALUE")]
         value: Option<String>,
     },
+
+    /// Remove a configuration value
+    Unset {
+        #[arg(value_name = "KEY")]
+        key: String,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cli, Command, ConfigCommand};
+    use clap::Parser;
+
+    #[test]
+    fn parse_config_unset_core_log_level() {
+        let cli = Cli::parse_from(["brew", "config", "unset", "core.log_level"]);
+
+        assert_eq!(
+            cli.command,
+            Command::Config {
+                command: ConfigCommand::Unset {
+                    key: "core.log_level".to_string(),
+                },
+            }
+        );
+    }
 }

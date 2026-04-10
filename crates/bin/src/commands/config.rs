@@ -1,20 +1,29 @@
+//! Configuration command handlers.
+//!
+//! This module routes `config` subcommands, reads effective values,
+//! updates persisted values, and removes overrides when requested.
+
 use anyhow::{Context, Result};
 use std::io::Write;
 
 use crate::cli::ConfigCommand;
+use crate::commands::error::reported;
 use crate::{AppContext, Ui, services::app::config};
 
+/// Dispatches a `config` subcommand to the appropriate handler.
 pub fn run(ctx: &AppContext, command: ConfigCommand) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);
     ui.page_title("Configuration");
 
     match command {
         ConfigCommand::List => list(ctx, &mut ui),
-        ConfigCommand::Get { key } => get(&mut ui, key.as_str()),
-        ConfigCommand::Set { key, value } => set(&mut ui, key.as_str(), value.as_deref()),
+        ConfigCommand::Get { key } => get(&mut ui, key.trim()),
+        ConfigCommand::Set { key, value } => set(&mut ui, key.trim(), value.as_deref()),
+        ConfigCommand::Unset { key } => unset(&mut ui, key.trim()),
     }
 }
 
+/// Lists all configuration sections and their values.
 fn list<W: Write>(ctx: &AppContext, ui: &mut Ui<W>) -> Result<()> {
     let sections = config::list_sections(ctx);
 
@@ -23,45 +32,85 @@ fn list<W: Write>(ctx: &AppContext, ui: &mut Ui<W>) -> Result<()> {
         return Ok(());
     }
 
-    for config::ConfigSection { title, entries } in sections {
+    for config::ConfigSection { title, entries } in &sections {
         ui.notice(title);
-        ui.display_key_values(&entries);
+        ui.display_key_values(entries);
     }
 
     Ok(())
 }
 
+/// Displays the effective value for a configuration key.
 fn get<W: Write>(ui: &mut Ui<W>, key: &str) -> Result<()> {
-    let clean_key = key.trim();
-    let value = config::get_display_value(clean_key)
-        .with_context(|| format!("Failed to retrieve configuration for key: '{clean_key}'"))?;
-    let suffix = if value.source == config::ConfigValueSource::Env {
-        " (overridden by environment)"
-    } else {
-        ""
+    let value = config::get_display_value(key)
+        .with_context(|| format!("Failed to retrieve configuration for key: '{key}'"))?;
+
+    ui.info(format_args!(
+        "{key} = {}{}",
+        value.value,
+        source_suffix(value.source)
+    ));
+    Ok(())
+}
+
+/// Stores a configuration value, either from the CLI argument or an interactive prompt.
+///
+/// Empty values are rejected so callers use `unset` to remove keys instead of
+/// silently writing blank entries.
+fn set<W: Write>(ui: &mut Ui<W>, key: &str, value: Option<&str>) -> Result<()> {
+    let owned_prompt;
+    let clean_value = match value {
+        Some(value) => value.trim(),
+        None => {
+            owned_prompt = ui.prompt_text(&format!("Enter value for {key}"), None)?;
+            owned_prompt.trim()
+        }
     };
 
-    ui.info(format_args!("{clean_key} = {}{suffix}", value.value));
+    if clean_value.is_empty() {
+        return Err(reported(
+            "Empty value is not allowed. Use 'unset' to remove a configuration key.",
+        ));
+    }
+
+    config::set_value(key, clean_value)
+        .with_context(|| format!("Failed to set configuration for key: '{key}'"))?;
+
+    ui.success(format!("{key} updated."));
     Ok(())
 }
 
-fn set<W: Write>(ui: &mut Ui<W>, key: &str, value: Option<&str>) -> Result<()> {
-    let clean_key = key.trim();
+/// Removes a configuration key by restoring its default value.
+fn unset<W: Write>(ui: &mut Ui<W>, key: &str) -> Result<()> {
+    config::unset_value(key)
+        .with_context(|| format!("Failed to remove configuration for key: '{key}'"))?;
 
-    match value {
-        Some(value) => {
-            let clean_value = value.trim();
-            config::set_value(clean_key, clean_value)
-                .with_context(|| format!("Failed to set configuration for key: '{clean_key}'"))?;
-        }
-        None => {
-            let prompted_value = ui.prompt_text(&format!("Enter value for {clean_key}"), None)?;
-            let clean_value = prompted_value.trim();
-            config::set_value(clean_key, clean_value)
-                .with_context(|| format!("Failed to set configuration for key: '{clean_key}'"))?;
-        }
-    }
-
-    ui.success(format!("{clean_key} updated."));
+    ui.success(format!("{key} removed."));
     Ok(())
+}
+
+/// Returns the visual suffix used when a value is overridden by the environment.
+fn source_suffix(source: config::ConfigValueSource) -> &'static str {
+    match source {
+        config::ConfigValueSource::Env => " (overridden by environment)",
+        config::ConfigValueSource::File => "",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::set;
+    use crate::commands::error::CommandError;
+    use crate::{Ui, UiSettings};
+
+    #[test]
+    fn set_rejects_empty_values() {
+        let mut ui = Ui::with_writer(Vec::new(), UiSettings::default());
+
+        let err = set(&mut ui, "core.log_level", Some("   ")).expect_err("empty value should fail");
+
+        let cmd_err = err.downcast_ref::<CommandError>().expect("command error");
+        assert!(matches!(cmd_err, CommandError::Reported { .. }));
+        assert_eq!(cmd_err.exit_code(), 1);
+    }
 }
