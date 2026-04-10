@@ -3,9 +3,9 @@ use anyhow::Result;
 use crate::AppContext;
 use crate::cli::Command;
 
-pub mod command_errors;
 pub mod config;
 pub mod doctor;
+pub mod error;
 pub mod info;
 pub mod install;
 pub mod list;
