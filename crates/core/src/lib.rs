@@ -17,6 +17,7 @@
 //! from [`env::LOCALAPPDATA`] and expanded into the resolved path set in
 //! [`crate::paths::ResolvedPaths`].
 
+pub mod cancel;
 pub mod env;
 pub mod fs;
 pub mod hash;
@@ -24,6 +25,7 @@ pub mod network;
 pub mod paths;
 pub mod time;
 
+pub use cancel::{CancellationError, check, init_handler, is_cancelled};
 pub use env::{LOCALAPPDATA, WINBREW_PATHS_ROOT};
 pub use fs::{
     FsError, Result as FsResult, atomic_write, atomic_write_toml_temp, backup_path_for,

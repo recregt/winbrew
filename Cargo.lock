@@ -2598,15 +2598,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "winbrew-cancel"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ctrlc",
- "thiserror",
-]
-
-[[package]]
 name = "winbrew-catalog"
 version = "0.1.0"
 dependencies = [
@@ -2623,7 +2614,9 @@ dependencies = [
 name = "winbrew-core"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "chrono",
+ "ctrlc",
  "libc",
  "md-5",
  "reqwest",
@@ -2673,7 +2666,6 @@ dependencies = [
  "anyhow",
  "thiserror",
  "tracing",
- "winbrew-cancel",
  "winbrew-catalog",
  "winbrew-core",
  "winbrew-engines",
