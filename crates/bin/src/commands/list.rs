@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{AppContext, Ui, services::app::list};
+use crate::{AppContext, Ui, app::list};
 
 pub fn run(ctx: &AppContext, query: &[String]) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);

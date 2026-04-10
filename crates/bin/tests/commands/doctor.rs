@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use tempfile::TempDir;
 use winbrew::AppContext;
+use winbrew::app::doctor::health_report;
 use winbrew::commands::doctor::{exit_error, format_duration, render_results, write_json};
 use winbrew::commands::error::CommandError;
 use winbrew::database::{self, Config};
@@ -15,7 +16,6 @@ use winbrew::models::{
     DiagnosisResult, DiagnosisSeverity, HealthReport, InstalledPackage, InstallerType,
     PackageStatus,
 };
-use winbrew::services::app::doctor::health_report;
 use winbrew_ui::{UiBuilder, UiSettings};
 
 struct DoctorFixture {

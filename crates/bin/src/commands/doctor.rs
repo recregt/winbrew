@@ -3,7 +3,7 @@ use std::io::{self, Write};
 
 use crate::commands::error::CommandError;
 use crate::models::{DiagnosisResult, DiagnosisSeverity, HealthReport};
-use crate::{AppContext, Ui, services::app::doctor};
+use crate::{AppContext, Ui, app::doctor};
 
 /// Runs the system health check command.
 ///

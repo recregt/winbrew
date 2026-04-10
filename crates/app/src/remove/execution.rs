@@ -4,13 +4,13 @@ use tracing::{debug, warn};
 use std::path::PathBuf;
 
 use crate::engines::{self, EngineKind, PackageEngine};
-use crate::services::shared::storage;
+use crate::storage::database;
 
 use super::{RemovalError, RemovalPlan, Result};
 use crate::models::Package;
 
 pub fn execute_removal(plan: &RemovalPlan, force: bool) -> Result<()> {
-    let conn = storage::get_conn()?;
+    let conn = database::get_conn()?;
 
     execute_removal_with_conn(plan, force, &conn)
 }
@@ -18,7 +18,7 @@ pub fn execute_removal(plan: &RemovalPlan, force: bool) -> Result<()> {
 fn execute_removal_with_conn(
     plan: &RemovalPlan,
     force: bool,
-    conn: &crate::database::DbConnection,
+    conn: &database::DbConnection,
 ) -> Result<()> {
     debug!(
         package = plan.package.name.as_str(),
@@ -55,7 +55,7 @@ fn execute_removal_with_conn(
                 );
             }
 
-            storage::delete_package(conn, &plan.package.name)?;
+            database::delete_package(conn, &plan.package.name)?;
         }
         EngineKind::Zip | EngineKind::Portable => {
             if install_dir.exists() {
@@ -74,7 +74,7 @@ fn execute_removal_with_conn(
                     ..plan.package.clone()
                 };
 
-                if let Err(err) = storage::delete_package(conn, &plan.package.name) {
+                if let Err(err) = database::delete_package(conn, &plan.package.name) {
                     let _ = std::fs::rename(&trash_dir, &install_dir);
                     return Err(RemovalError::Unexpected(err));
                 }
@@ -86,7 +86,7 @@ fn execute_removal_with_conn(
                     );
                 }
             } else {
-                storage::delete_package(conn, &plan.package.name)?;
+                database::delete_package(conn, &plan.package.name)?;
             }
         }
     }

@@ -2,11 +2,11 @@ use anyhow::Result;
 use indicatif::ProgressBar;
 use std::io;
 
+use crate::app::install;
+use crate::app::install::InstallError;
+use crate::app::install::InstallObserver;
 use crate::commands::error::{cancelled, reported_with_hint};
 use crate::models::{CatalogPackage, PackageRef};
-use crate::services::app::install;
-use crate::services::app::install::InstallError;
-use crate::services::app::install::InstallObserver;
 use crate::{AppContext, Ui};
 
 pub fn run(ctx: &AppContext, query: &[String], ignore_checksum_security: bool) -> Result<()> {
