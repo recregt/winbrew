@@ -1,5 +1,6 @@
 use anyhow::Result;
 use indicatif::ProgressBar;
+use std::path::Path;
 use std::time::Instant;
 
 use crate::AppContext;
@@ -21,47 +22,57 @@ impl<'a> Reporter<'a> {
         let started_at = Instant::now();
 
         let (packages, mut diagnostics) = collect_packages(scan::installed_packages());
-        let progress = if self.ctx.verbosity > 0 {
-            ProgressBar::new(packages.len() as u64)
-        } else {
-            ProgressBar::hidden()
-        };
+        let progress = (self.ctx.verbosity > 0).then(|| ProgressBar::new(packages.len() as u64));
 
-        diagnostics.extend(scan::scan_packages_with_progress(&packages, &progress));
-        if self.ctx.verbosity > 0 {
+        diagnostics.extend(scan::scan_packages_with_progress(
+            &packages,
+            progress.as_ref(),
+        ));
+        if let Some(progress) = progress.as_ref() {
             progress.finish_and_clear();
         }
 
         diagnostics.extend(scan::scan_orphaned_install_dirs(&paths.packages, &packages));
         diagnostics.sort_unstable_by(|left, right| {
-            left.error_code
-                .cmp(&right.error_code)
+            right
+                .severity
+                .cmp(&left.severity)
+                .then_with(|| left.error_code.cmp(&right.error_code))
                 .then_with(|| left.description.cmp(&right.description))
-                .then_with(|| left.severity.cmp(&right.severity))
         });
 
         let error_count = diagnostics
             .iter()
-            .filter(|diagnosis| diagnosis.severity == DiagnosisSeverity::Error)
+            .filter(|diagnosis| matches!(diagnosis.severity, DiagnosisSeverity::Error))
             .count();
 
         Ok(HealthReport {
-            database_path: paths.db.to_string_lossy().to_string(),
+            database_path: paths.db.to_display(),
             database_exists: paths.db.exists(),
-            catalog_database_path: paths.catalog_db.to_string_lossy().to_string(),
+            catalog_database_path: paths.catalog_db.to_display(),
             catalog_database_exists: paths.catalog_db.exists(),
             install_root_source: if self.ctx.root_from_env {
                 "env override".to_string()
             } else {
                 "config:paths.root".to_string()
             },
-            install_root: paths.root.to_string_lossy().to_string(),
+            install_root: paths.root.to_display(),
             install_root_exists: paths.root.exists(),
-            packages_dir: paths.packages.to_string_lossy().to_string(),
+            packages_dir: paths.packages.to_display(),
             diagnostics,
             scan_duration: started_at.elapsed(),
             error_count,
         })
+    }
+}
+
+trait PathDisplay {
+    fn to_display(&self) -> String;
+}
+
+impl PathDisplay for Path {
+    fn to_display(&self) -> String {
+        self.to_string_lossy().into_owned()
     }
 }
 

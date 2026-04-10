@@ -61,21 +61,25 @@ fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
 }
 
 pub fn scan_packages(packages: &[Package]) -> Vec<DiagnosisResult> {
-    scan_packages_with_progress(packages, &ProgressBar::hidden())
+    scan_packages_with_progress(packages, None)
 }
 
 pub fn scan_packages_with_progress(
     packages: &[Package],
-    progress: &ProgressBar,
+    progress: Option<&ProgressBar>,
 ) -> Vec<DiagnosisResult> {
-    progress.set_length(packages.len() as u64);
-    progress.set_message("Scanning packages");
+    if let Some(progress) = progress {
+        progress.set_length(packages.len() as u64);
+        progress.set_message("Scanning packages");
+    }
 
     let mut diagnoses: Vec<_> = packages
         .par_iter()
         .filter_map(|pkg| {
             let diagnosis = check_package(pkg);
-            progress.inc(1);
+            if let Some(progress) = progress {
+                progress.inc(1);
+            }
             diagnosis
         })
         .collect();
@@ -154,7 +158,6 @@ pub fn installed_packages() -> Result<Vec<Package>> {
 mod tests {
     use super::*;
     use crate::models::{InstallerType, PackageStatus};
-    use indicatif::ProgressBar;
     use tempfile::tempdir;
 
     fn sample_package(name: &str, install_dir: &std::path::Path) -> Package {
@@ -209,7 +212,7 @@ mod tests {
             sample_package("Beta.Missing", &temp_dir.path().join("missing-beta")),
         ];
 
-        let diagnoses = scan_packages_with_progress(&packages, &ProgressBar::hidden());
+        let diagnoses = scan_packages_with_progress(&packages, None);
 
         assert_eq!(diagnoses.len(), 2);
         assert_eq!(diagnoses[0].error_code, "missing_install_directory");
