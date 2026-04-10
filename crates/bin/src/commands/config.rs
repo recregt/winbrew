@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::io::Write;
 
 use crate::cli::ConfigCommand;
@@ -33,29 +33,35 @@ fn list<W: Write>(ctx: &AppContext, ui: &mut Ui<W>) -> Result<()> {
 
 fn get<W: Write>(ui: &mut Ui<W>, key: &str) -> Result<()> {
     let clean_key = key.trim();
-    let value = config::get_display_value(clean_key)?;
+    let value = config::get_display_value(clean_key)
+        .with_context(|| format!("Failed to retrieve configuration for key: '{clean_key}'"))?;
     let suffix = if value.source == config::ConfigValueSource::Env {
         " (overridden by environment)"
     } else {
         ""
     };
 
-    ui.info(format!("{clean_key} = {}{suffix}", value.value));
+    ui.info(format_args!("{clean_key} = {}{suffix}", value.value));
     Ok(())
 }
 
 fn set<W: Write>(ui: &mut Ui<W>, key: &str, value: Option<&str>) -> Result<()> {
     let clean_key = key.trim();
 
-    let clean_value = match value {
-        Some(value) => value.trim().to_string(),
-        None => ui
-            .prompt_text(&format!("Enter value for {clean_key}"), None)?
-            .trim()
-            .to_owned(),
-    };
+    match value {
+        Some(value) => {
+            let clean_value = value.trim();
+            config::set_value(clean_key, clean_value)
+                .with_context(|| format!("Failed to set configuration for key: '{clean_key}'"))?;
+        }
+        None => {
+            let prompted_value = ui.prompt_text(&format!("Enter value for {clean_key}"), None)?;
+            let clean_value = prompted_value.trim();
+            config::set_value(clean_key, clean_value)
+                .with_context(|| format!("Failed to set configuration for key: '{clean_key}'"))?;
+        }
+    }
 
-    config::set_value(clean_key, &clean_value)?;
     ui.success(format!("{clean_key} updated."));
     Ok(())
 }

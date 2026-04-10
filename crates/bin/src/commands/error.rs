@@ -17,29 +17,19 @@ pub enum CommandError {
 }
 
 pub fn reported(message: impl Into<String>) -> anyhow::Error {
-    CommandError::Reported {
-        message: message.into(),
-        exit_code: 1,
-        hint: None,
-    }
-    .into()
+    CommandError::reported(message).into()
 }
 
 pub fn reported_with_hint(message: impl Into<String>, hint: impl Into<String>) -> anyhow::Error {
-    CommandError::Reported {
-        message: message.into(),
-        exit_code: 1,
-        hint: Some(hint.into()),
-    }
-    .into()
+    CommandError::reported(message).with_hint(hint).into()
 }
 
 pub fn cancelled() -> anyhow::Error {
-    CommandError::Cancelled.into()
+    CommandError::cancelled().into()
 }
 
 pub fn fatal(message: impl Into<String>) -> anyhow::Error {
-    CommandError::Fatal(message.into()).into()
+    CommandError::fatal(message).into()
 }
 
 pub fn is_handled(err: &anyhow::Error) -> bool {
@@ -47,6 +37,56 @@ pub fn is_handled(err: &anyhow::Error) -> bool {
 }
 
 impl CommandError {
+    pub fn reported(message: impl Into<String>) -> Self {
+        Self::Reported {
+            message: message.into(),
+            exit_code: 1,
+            hint: None,
+        }
+    }
+
+    pub fn cancelled() -> Self {
+        Self::Cancelled
+    }
+
+    pub fn fatal(message: impl Into<String>) -> Self {
+        Self::Fatal(message.into())
+    }
+
+    pub fn with_hint(mut self, hint: impl Into<String>) -> Self {
+        if let Self::Reported {
+            hint: current_hint, ..
+        } = &mut self
+        {
+            *current_hint = Some(hint.into());
+        }
+
+        self
+    }
+
+    pub fn with_exit_code(mut self, exit_code: i32) -> Self {
+        if let Self::Reported {
+            exit_code: current_exit_code,
+            ..
+        } = &mut self
+        {
+            *current_exit_code = exit_code;
+        }
+
+        self
+    }
+
+    pub fn as_reported(&self) -> Option<(&str, i32, Option<&str>)> {
+        match self {
+            Self::Reported {
+                message,
+                exit_code,
+                hint,
+            } => Some((message.as_str(), *exit_code, hint.as_deref())),
+            _ => None,
+        }
+    }
+
     pub fn exit_code(&self) -> i32 {
         match self {
             Self::Reported { exit_code, .. } => *exit_code,
@@ -55,13 +95,12 @@ impl CommandError {
         }
     }
 
+    pub fn is_fatal(&self) -> bool {
+        matches!(self, Self::Fatal(_))
+    }
+
     pub fn hint(&self) -> Option<&str> {
-        match self {
-            Self::Reported {
-                hint: Some(hint), ..
-            } => Some(hint.as_str()),
-            _ => None,
-        }
+        self.as_reported().and_then(|(_, _, hint)| hint)
     }
 }
 
@@ -88,6 +127,18 @@ mod tests {
     }
 
     #[test]
+    fn reported_builder_can_customize_hint_and_exit_code() {
+        let err = CommandError::reported("already shown")
+            .with_hint("try again later")
+            .with_exit_code(2);
+
+        assert_eq!(
+            err.as_reported(),
+            Some(("already shown", 2, Some("try again later")))
+        );
+    }
+
+    #[test]
     fn cancelled_errors_exit_with_130() {
         let err = cancelled();
 
@@ -102,6 +153,7 @@ mod tests {
 
         let cmd_err = err.downcast_ref::<CommandError>().expect("command error");
         assert!(matches!(cmd_err, CommandError::Fatal(_)));
+        assert!(cmd_err.is_fatal());
         assert_eq!(cmd_err.exit_code(), 1);
     }
 }

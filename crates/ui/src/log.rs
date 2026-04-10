@@ -1,16 +1,17 @@
 use super::{Ui, theme::styled_line};
 use console::Style;
+use std::fmt::Display;
 use std::io::Write;
 
 impl<W: Write> Ui<W> {
-    pub fn info(&mut self, message: impl AsRef<str>) {
-        let _ = writeln!(self.err, "{}", message.as_ref());
+    pub fn info(&mut self, message: impl Display) {
+        let _ = writeln!(self.err, "{message}");
     }
 
     /// `notice` is reserved for neutral status messages; may gain distinct
     /// formatting in future (e.g. dimmed). Prefer `info` for general output.
-    pub fn notice(&mut self, message: impl AsRef<str>) {
-        let _ = writeln!(self.err, "{}", message.as_ref());
+    pub fn notice(&mut self, message: impl Display) {
+        let _ = writeln!(self.err, "{message}");
     }
 
     pub fn warn(&mut self, message: impl AsRef<str>) {

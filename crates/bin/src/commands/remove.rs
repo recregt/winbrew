@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::commands::command_errors::reported_with_hint;
+use crate::commands::error::reported_with_hint;
 use crate::{AppContext, Ui, services::app::remove};
 
 pub fn run(ctx: &AppContext, name: &str, yes: bool, force: bool) -> Result<()> {

@@ -2,7 +2,7 @@ use anyhow::Result;
 use indicatif::ProgressBar;
 use std::io;
 
-use crate::commands::command_errors::{cancelled, reported_with_hint};
+use crate::commands::error::{cancelled, reported_with_hint};
 use crate::models::{CatalogPackage, PackageRef};
 use crate::services::app::install;
 use crate::services::app::install::InstallError;
