@@ -66,6 +66,12 @@ root = "C:\\Users\\<you>\\AppData\\Local\\winbrew"
 
 Development setup and contributor tasks are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
 
+Detailed technical docs for the catalog pipeline live in:
+
+- [infra/crawler/README.md](infra/crawler/README.md)
+- [infra/parser/README.md](infra/parser/README.md)
+- [infra/publisher/README.md](infra/publisher/README.md)
+
 ## License
 
 WinBrew is dual-licensed under **[MIT](LICENSE-MIT)** and **[Apache-2.0](LICENSE-APACHE)**.
