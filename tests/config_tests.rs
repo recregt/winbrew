@@ -7,7 +7,10 @@ use common::env_lock;
 use std::path::PathBuf;
 use test_env::TestEnvVar;
 use winbrew::AppContext;
+use winbrew::cli::ConfigCommand;
+use winbrew::commands::{config as config_command, error::CommandError};
 use winbrew::database::{Config, ConfigEnv};
+use winbrew::services::app::config as app_config;
 use winbrew::services::{app::doctor::health_report, shared::report::runtime_report};
 use winbrew_core::env::{LOCALAPPDATA, WINBREW_PATHS_ROOT};
 use winbrew_models::ConfigSection;
@@ -128,6 +131,42 @@ fn health_report_marks_env_root_source() {
     assert_eq!(report.install_root, root_path);
     assert_eq!(report.error_count, 0);
     assert!(report.diagnostics.is_empty());
+}
+
+#[test]
+fn config_set_rejects_empty_values() {
+    let _guard = env_lock();
+    let root = common::shared_root::test_root();
+    let root_path = root.path().to_string_lossy().to_string();
+    let _env = TestEnvVar::set(WINBREW_PATHS_ROOT, &root_path);
+    let ctx = app_context(true);
+
+    let err = config_command::run(
+        &ctx,
+        ConfigCommand::Set {
+            key: "core.log_level".to_string(),
+            value: Some("   ".to_string()),
+        },
+    )
+    .expect_err("empty value should fail");
+
+    let cmd_err = err.downcast_ref::<CommandError>().expect("command error");
+    assert!(matches!(cmd_err, CommandError::Reported { .. }));
+    assert_eq!(cmd_err.exit_code(), 1);
+}
+
+#[test]
+fn config_set_accepts_valid_value() {
+    let _guard = env_lock();
+    let root = common::shared_root::test_root();
+    let root_path = root.path().to_string_lossy().to_string();
+    let _env = TestEnvVar::set(WINBREW_PATHS_ROOT, &root_path);
+
+    app_config::set_value("core.log_level", "debug").expect("valid value should succeed");
+
+    let config = Config::load_at(root.path()).expect("config should load");
+
+    assert_eq!(config.core.log_level, "debug");
 }
 
 fn expected_default_root() -> String {

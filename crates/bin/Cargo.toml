@@ -37,4 +37,11 @@ winresource = "0.1"
 
 [dev-dependencies]
 mockito = "1.7.2"
+rusqlite = { version = "0.39", default-features = false, features = ["bundled", "modern_sqlite", "unlock_notify"] }
+winbrew-core = { path = "../core" }
+winbrew-models = { path = "../models" }
 zip = "8"
+
+[[test]]
+name = "config_tests"
+path = "../../tests/config_tests.rs"

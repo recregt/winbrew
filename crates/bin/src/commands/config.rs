@@ -96,21 +96,3 @@ fn source_suffix(source: config::ConfigValueSource) -> &'static str {
         config::ConfigValueSource::File => "",
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::set;
-    use crate::commands::error::CommandError;
-    use crate::{Ui, UiSettings};
-
-    #[test]
-    fn set_rejects_empty_values() {
-        let mut ui = Ui::with_writer(Vec::new(), UiSettings::default());
-
-        let err = set(&mut ui, "core.log_level", Some("   ")).expect_err("empty value should fail");
-
-        let cmd_err = err.downcast_ref::<CommandError>().expect("command error");
-        assert!(matches!(cmd_err, CommandError::Reported { .. }));
-        assert_eq!(cmd_err.exit_code(), 1);
-    }
-}
