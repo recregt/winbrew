@@ -137,11 +137,10 @@ fn render_results_groups_errors_before_warnings() {
         "missing directory",
         DiagnosisSeverity::Error,
     );
-    let report = sample_report(vec![warning.clone(), error.clone()]);
     let errors = vec![&error];
     let warnings = vec![&warning];
 
-    render_results(&mut ui, &errors, &warnings, &report);
+    render_results(&mut ui, &errors, &warnings);
 
     let output = String::from_utf8(
         shared_bytes
@@ -178,11 +177,10 @@ fn render_results_handles_empty_diagnostics() {
     .with_error_writer(Box::new(err_writer))
     .build();
 
-    let report = sample_report(Vec::new());
     let errors: Vec<&DiagnosisResult> = Vec::new();
     let warnings: Vec<&DiagnosisResult> = Vec::new();
 
-    render_results(&mut ui, &errors, &warnings, &report);
+    render_results(&mut ui, &errors, &warnings);
 
     let output = String::from_utf8(
         shared_bytes
@@ -258,7 +256,8 @@ fn exit_error_uses_distinct_codes_for_errors_and_warnings() {
         ),
     ]);
 
-    let error = exit_error(&error_report, 0, false).expect("error code should be returned");
+    let error =
+        exit_error(error_report.error_count, 0, false).expect("error code should be returned");
     let cmd_error = error
         .downcast_ref::<CommandError>()
         .expect("command error should exist");
@@ -269,15 +268,15 @@ fn exit_error_uses_distinct_codes_for_errors_and_warnings() {
         "orphaned package",
         DiagnosisSeverity::Warning,
     )]);
-    let warning =
-        exit_error(&warning_report, 1, true).expect("warning exit code should be returned");
+    let warning = exit_error(warning_report.error_count, 1, true)
+        .expect("warning exit code should be returned");
     let cmd_error = warning
         .downcast_ref::<CommandError>()
         .expect("command error should exist");
     assert_eq!(cmd_error.exit_code(), 1);
 
-    assert!(exit_error(&warning_report, 1, false).is_none());
-    assert!(exit_error(&warning_report, 0, false).is_none());
+    assert!(exit_error(warning_report.error_count, 1, false).is_none());
+    assert!(exit_error(warning_report.error_count, 0, false).is_none());
 }
 
 #[test]

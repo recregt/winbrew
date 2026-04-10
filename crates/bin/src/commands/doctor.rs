@@ -11,13 +11,13 @@ use crate::{AppContext, Ui, services::app::doctor};
 /// When `warn_as_error` is enabled, warnings produce a non-zero exit code.
 pub fn run(ctx: &AppContext, json_output: bool, warn_as_error: bool) -> Result<()> {
     let report = doctor::health_report(ctx)?;
-    let diagnostics = group_diagnostics(&report);
+    let (errors, warnings) = split_diagnostics(&report);
 
     if json_output {
         let mut stdout = io::stdout();
         write_json(&mut stdout, &report)?;
 
-        if let Some(exit_error) = exit_error(&report, diagnostics.warning_count(), warn_as_error) {
+        if let Some(exit_error) = exit_error(report.error_count, warnings.len(), warn_as_error) {
             return Err(exit_error);
         }
 
@@ -29,9 +29,9 @@ pub fn run(ctx: &AppContext, json_output: bool, warn_as_error: bool) -> Result<(
     ui.info("Inspecting environment and installed packages...");
     ui.display_key_values(&report_summary(&report));
     ui.info("");
-    render_results(&mut ui, &diagnostics.errors, &diagnostics.warnings, &report);
+    render_results(&mut ui, &errors, &warnings);
 
-    if let Some(exit_error) = exit_error(&report, diagnostics.warning_count(), warn_as_error) {
+    if let Some(exit_error) = exit_error(report.error_count, warnings.len(), warn_as_error) {
         return Err(exit_error);
     }
 
@@ -75,18 +75,7 @@ fn report_summary(report: &HealthReport) -> Vec<(String, String)> {
     ]
 }
 
-struct DiagnosticGroups<'a> {
-    errors: Vec<&'a DiagnosisResult>,
-    warnings: Vec<&'a DiagnosisResult>,
-}
-
-impl<'a> DiagnosticGroups<'a> {
-    fn warning_count(&self) -> usize {
-        self.warnings.len()
-    }
-}
-
-fn group_diagnostics(report: &HealthReport) -> DiagnosticGroups<'_> {
+fn split_diagnostics(report: &HealthReport) -> (Vec<&DiagnosisResult>, Vec<&DiagnosisResult>) {
     let mut errors = Vec::with_capacity(report.error_count);
     let mut warnings =
         Vec::with_capacity(report.diagnostics.len().saturating_sub(report.error_count));
@@ -98,7 +87,7 @@ fn group_diagnostics(report: &HealthReport) -> DiagnosticGroups<'_> {
         }
     }
 
-    DiagnosticGroups { errors, warnings }
+    (errors, warnings)
 }
 
 /// Renders grouped diagnostics with errors first and warnings second.
@@ -106,14 +95,13 @@ pub fn render_results<W: std::io::Write>(
     ui: &mut Ui<W>,
     errors: &[&DiagnosisResult],
     warnings: &[&DiagnosisResult],
-    report: &HealthReport,
 ) {
-    if report.diagnostics.is_empty() {
+    if errors.is_empty() && warnings.is_empty() {
         ui.success("Your Winbrew installation is healthy!");
         return;
     }
 
-    ui.notice(format!("Issues found: {}", report.diagnostics.len()));
+    ui.notice(format!("Issues found: {}", errors.len() + warnings.len()));
 
     if !errors.is_empty() {
         ui.error("Errors:");
@@ -158,15 +146,15 @@ pub fn format_duration(duration: std::time::Duration) -> String {
 }
 
 pub fn exit_error(
-    report: &HealthReport,
+    error_count: usize,
     warning_count: usize,
     warn_as_error: bool,
 ) -> Option<anyhow::Error> {
-    if report.error_count > 0 {
+    if error_count > 0 {
         return Some(
             CommandError::reported(format!(
                 "system health check found {} error(s)",
-                report.error_count
+                error_count
             ))
             .with_exit_code(2)
             .into(),
