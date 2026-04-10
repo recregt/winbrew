@@ -10,11 +10,11 @@ build = "build.rs"
 
 [dependencies]
 anyhow.workspace = true
+winbrew-catalog = { path = "../catalog" }
 winbrew-core = { path = "../core" }
 winbrew-models = { path = "../models" }
 winbrew-storage = { path = "../storage" }
 winbrew-engines = { path = "../engines" }
-winbrew-install = { path = "../install" }
 winbrew-ui = { path = "../ui" }
 indicatif = { version = "0.18", default-features = false, features = ["unicode-width"] }
 rayon = "1.11"
