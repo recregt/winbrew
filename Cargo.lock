@@ -2497,13 +2497,9 @@ dependencies = [
 name = "winbrew-bin"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "clap",
  "mimalloc",
- "serde_json",
- "tempfile",
  "winbrew-cli",
- "winbrew-ui",
  "winresource",
 ]
 

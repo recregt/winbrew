@@ -22,3 +22,15 @@ rayon = "1.11"
 tempfile = "3"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["ansi", "env-filter", "fmt", "registry", "std"] }
+
+[[test]]
+name = "cli_tests"
+path = "tests/cli.rs"
+
+[[test]]
+name = "config_tests"
+path = "tests/commands/config.rs"
+
+[[test]]
+name = "doctor_tests"
+path = "tests/commands/doctor.rs"
