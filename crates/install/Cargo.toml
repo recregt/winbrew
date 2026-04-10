@@ -16,4 +16,3 @@ winbrew-core = { path = "../core" }
 winbrew-engines = { path = "../engines" }
 winbrew-models = { path = "../models" }
 winbrew-storage = { path = "../storage" }
-winbrew-cancel = { path = "../cancel" }
