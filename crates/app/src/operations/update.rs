@@ -11,10 +11,8 @@ use crate::core::network::{Client, build_client, download_url_to_temp_file};
 use crate::core::paths::ResolvedPaths;
 use crate::models::{CatalogMetadata, HashAlgorithm};
 
-const CATALOG_DIRECT_DOWNLOAD_URL: &str =
-    "https://github.com/recregt/winbrew/releases/latest/download/catalog.db";
-const CATALOG_METADATA_DIRECT_DOWNLOAD_URL: &str =
-    "https://github.com/recregt/winbrew/releases/latest/download/metadata.json";
+const CATALOG_DIRECT_DOWNLOAD_URL: &str = "https://wb-assets.recregt.com/catalog.db";
+const CATALOG_METADATA_DIRECT_DOWNLOAD_URL: &str = "https://wb-assets.recregt.com/metadata.json";
 
 pub fn refresh_catalog<FStart, FProgress>(
     paths: &ResolvedPaths,
