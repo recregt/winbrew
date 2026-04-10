@@ -16,7 +16,6 @@ name = "winbrew"
 
 [dependencies]
 winbrew-app = { path = "../app" }
-winbrew-install = { path = "../install" }
 winbrew-ui = { path = "../ui" }
 serde_json = "1"
 
