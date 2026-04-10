@@ -44,6 +44,8 @@ That command streams Scoop JSONL into the parser, stages the Winget database on 
 
 The publisher then uploads the same bundle using the required R2 environment variables.
 
+The GitHub Actions workflow in [.github/workflows/catalog.yml](.github/workflows/catalog.yml) runs the same flow on Ubuntu every 6 hours using the repository secrets `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `CLOUDFLARE_ACCOUNT_ID`; `R2_BUCKET_NAME` can be overridden with a repo variable and defaults to `winbrew`.
+
 ### Exit Codes
 
 | Stage | Exit Code | Meaning | Typical Cause |
