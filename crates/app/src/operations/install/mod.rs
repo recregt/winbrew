@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::catalog;
+use crate::core::temp_workspace;
 use crate::engines;
 use crate::storage;
 
@@ -16,7 +17,6 @@ pub type Result<T> = types::Result<T>;
 pub mod download;
 pub mod flow;
 pub mod state;
-mod temp_workspace;
 pub mod types;
 
 pub trait InstallObserver {
