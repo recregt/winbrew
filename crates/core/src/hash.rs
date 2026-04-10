@@ -2,7 +2,7 @@ use md5::Md5;
 use sha1::Sha1;
 use sha2::{Digest, Sha256, Sha512};
 use thiserror::Error;
-pub use winbrew_hash::HashAlgorithm;
+use winbrew_models::HashAlgorithm;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum HashError {

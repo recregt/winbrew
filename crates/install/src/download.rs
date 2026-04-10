@@ -4,8 +4,9 @@ use std::path::Path;
 
 use crate::cancel::check;
 use crate::core::fs::finalize_temp_file;
-use crate::core::hash::{HashAlgorithm, Hasher, hash_algorithm, normalize_hash, verify_hash};
+use crate::core::hash::{Hasher, hash_algorithm, normalize_hash, verify_hash};
 use crate::core::network::{build_client as network_build_client, download_url_to_temp_file};
+use crate::models::HashAlgorithm;
 use winbrew_models::CatalogInstaller;
 
 const CATALOG_USER_AGENT: &str = "winbrew-package-installer";

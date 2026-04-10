@@ -1,4 +1,4 @@
-use winbrew_hash::HashAlgorithm;
+use crate::HashAlgorithm;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstallFailureClass {
