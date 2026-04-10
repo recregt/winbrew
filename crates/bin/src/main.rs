@@ -1,6 +1,3 @@
-#[cfg(not(windows))]
-compile_error!("winbrew only builds on Windows");
-
 #[cfg(windows)]
 use mimalloc::MiMalloc;
 
