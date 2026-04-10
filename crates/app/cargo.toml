@@ -10,7 +10,6 @@ build = "build.rs"
 
 [dependencies]
 anyhow.workspace = true
-winbrew-catalog = { path = "../catalog" }
 winbrew-core = { path = "../core" }
 winbrew-models = { path = "../models" }
 winbrew-storage = { path = "../storage" }

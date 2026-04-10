@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["crates/*", "infra/*"]
-exclude = ["infra/crawler", "infra/publisher"]
+exclude = ["crates/catalog", "infra/crawler", "infra/publisher"]
 
 [workspace.package]
 version = "0.1.0"

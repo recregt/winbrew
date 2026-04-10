@@ -2582,7 +2582,6 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tracing",
- "winbrew-catalog",
  "winbrew-core",
  "winbrew-engines",
  "winbrew-models",
@@ -2613,19 +2612,6 @@ dependencies = [
  "winbrew-ui",
  "winresource",
  "zip",
-]
-
-[[package]]
-name = "winbrew-catalog"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "rusqlite",
- "tempfile",
- "thiserror",
- "winbrew-core",
- "winbrew-models",
- "winbrew-storage",
 ]
 
 [[package]]
