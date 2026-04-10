@@ -2,26 +2,9 @@
 
 use anyhow::Result;
 
+use super::error::{SearchError, SearchResult};
 use crate::storage;
 use winbrew_models::{CatalogPackage, PackageRef};
-
-/// Errors returned by catalog search helpers that need to distinguish a missing catalog from other failures.
-#[derive(Debug)]
-pub enum SearchError {
-    /// The catalog database is not present on disk.
-    CatalogUnavailable,
-    /// Any other error surfaced while searching or resolving packages.
-    Unexpected(anyhow::Error),
-}
-
-/// Result type used by the high-level catalog search helpers.
-pub type SearchResult<T> = std::result::Result<T, SearchError>;
-
-impl From<anyhow::Error> for SearchError {
-    fn from(value: anyhow::Error) -> Self {
-        Self::Unexpected(value)
-    }
-}
 
 /// Searches the catalog using an already-open catalog database connection.
 ///

@@ -1,12 +1,5 @@
-use thiserror::Error;
-
+use super::error::InstallerSelectionError;
 use winbrew_models::{Architecture, CatalogInstaller};
-
-#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
-pub enum InstallerSelectionError {
-    #[error("catalog package has no installers")]
-    NoInstallers,
-}
 
 pub fn select_installer(
     installers: &[CatalogInstaller],
@@ -87,9 +80,6 @@ mod tests {
     fn select_installer_errors_when_no_installers_exist() {
         let err = select_installer(&[]).expect_err("empty installer list should fail");
 
-        assert!(
-            err.to_string()
-                .contains("catalog package has no installers")
-        );
+        assert_eq!(err, InstallerSelectionError::NoInstallers);
     }
 }
