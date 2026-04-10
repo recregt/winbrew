@@ -7,6 +7,10 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 
+[[bin]]
+name = "winbrew"
+path = "src/main.rs"
+
 [lib]
 name = "winbrew"
 
