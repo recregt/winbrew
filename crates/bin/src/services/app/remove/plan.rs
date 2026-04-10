@@ -3,7 +3,7 @@ use crate::services::shared::storage;
 
 use super::Result;
 
-pub fn find_dependents(name: &str, conn: &rusqlite::Connection) -> Result<Vec<String>> {
+pub fn find_dependents(name: &str, conn: &crate::database::DbConnection) -> Result<Vec<String>> {
     let mut dependents = storage::list_packages(conn)?
         .into_iter()
         .filter(|pkg| {

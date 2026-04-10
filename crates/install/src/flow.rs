@@ -21,13 +21,17 @@ pub(crate) fn cleanup_temp_root(temp_root: &Path) {
     }
 }
 
-pub(crate) fn rollback_failed_install(conn: &rusqlite::Connection, name: &str, install_dir: &Path) {
+pub(crate) fn rollback_failed_install(
+    conn: &crate::storage::DbConnection,
+    name: &str,
+    install_dir: &Path,
+) {
     let _ = state::mark_failed(conn, name);
     cleanup_install_artifacts(install_dir);
 }
 
 pub(crate) fn rollback_cancelled_install(
-    conn: &rusqlite::Connection,
+    conn: &crate::storage::DbConnection,
     name: &str,
     install_dir: &Path,
 ) {

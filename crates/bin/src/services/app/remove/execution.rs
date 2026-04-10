@@ -18,7 +18,7 @@ pub fn execute_removal(plan: &RemovalPlan, force: bool) -> Result<()> {
 fn execute_removal_with_conn(
     plan: &RemovalPlan,
     force: bool,
-    conn: &rusqlite::Connection,
+    conn: &crate::database::DbConnection,
 ) -> Result<()> {
     debug!(
         package = plan.package.name.as_str(),

@@ -9,8 +9,6 @@ repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-chrono = { version = "0.4", features = ["clock", "serde"] }
-rusqlite = { version = "0.39", default-features = false, features = ["bundled", "modern_sqlite", "unlock_notify"] }
 thiserror = "2.0"
 tracing.workspace = true
 winbrew-catalog = { path = "../catalog" }

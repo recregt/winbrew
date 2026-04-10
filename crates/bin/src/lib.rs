@@ -15,7 +15,7 @@ use crate::services::bootstrap;
 use crate::services::shared::config as shared_config;
 pub use winbrew_install::storage as database;
 pub use winbrew_install::{cancel, catalog, core, engines, models};
-use winbrew_ui::{Ui, UiSettings};
+pub use winbrew_ui::{Ui, UiSettings};
 
 #[derive(Debug, Clone)]
 pub struct AppContext {
