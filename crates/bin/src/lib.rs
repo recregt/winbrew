@@ -1,14 +1,12 @@
 #![cfg(windows)]
 
 use anyhow::Result;
-use clap::Parser;
 use std::sync::Arc;
 
 pub mod cli;
 pub mod commands;
 pub mod services;
 
-use crate::cli::Cli;
 use crate::commands::run;
 use crate::core::paths::ResolvedPaths;
 use crate::services::bootstrap;
@@ -46,7 +44,7 @@ impl AppContext {
     }
 }
 
-pub fn run_app() -> Result<()> {
+pub fn run_app(command: crate::cli::Command) -> Result<()> {
     let mut config = shared_config::load_current()?;
     let ctx = AppContext::from_config(&config)?;
 
@@ -54,6 +52,5 @@ pub fn run_app() -> Result<()> {
     database::init(&ctx.paths)?;
     bootstrap::init_runtime()?;
 
-    let cli = Cli::parse();
-    run(cli.command, &ctx, &mut config)
+    run(command, &ctx, &mut config)
 }

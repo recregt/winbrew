@@ -8,6 +8,10 @@ use clap::{Parser, Subcommand};
     arg_required_else_help = true
 )]
 pub struct Cli {
+    /// Increase error detail output.
+    #[arg(short, long, global = true, action = clap::ArgAction::Count, help_heading = "Output")]
+    pub verbose: u8,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -106,6 +110,20 @@ pub enum ConfigCommand {
 mod tests {
     use super::{Cli, Command, ConfigCommand};
     use clap::Parser;
+
+    #[test]
+    fn parse_verbose_doctor() {
+        let cli = Cli::parse_from(["brew", "doctor", "-vv"]);
+
+        assert_eq!(cli.verbose, 2);
+        assert_eq!(
+            cli.command,
+            Command::Doctor {
+                json: false,
+                warn_as_error: false,
+            }
+        );
+    }
 
     #[test]
     fn parse_config_unset_core_log_level() {
