@@ -1,7 +1,8 @@
+//! Catalog search and installer selection helpers.
+
 pub mod error;
 pub mod search;
 pub mod select;
-pub mod update;
 
 pub use error::{InstallerSelectionError, SearchError, SearchResult};
 pub use search::{
@@ -9,4 +10,3 @@ pub use search::{
     search_catalog_packages, search_packages,
 };
 pub use select::select_installer;
-pub use update::refresh_catalog;

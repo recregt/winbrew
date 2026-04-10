@@ -1,6 +1,9 @@
 use super::error::InstallerSelectionError;
 use winbrew_models::{Architecture, CatalogInstaller};
 
+/// Selects the best installer for the current architecture.
+///
+/// Prefers an exact architecture match, falls back to `Any`, then to the first available installer.
 pub fn select_installer(
     installers: &[CatalogInstaller],
 ) -> std::result::Result<CatalogInstaller, InstallerSelectionError> {
