@@ -18,7 +18,7 @@ pub fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, ParserErro
     let package = CatalogPackage {
         id: raw.id.clone().into(),
         name: raw.name,
-        version: Version::parse(&raw.version)?,
+        version: Version::parse_lossy(&raw.version)?,
         source: PackageSource::from_catalog_id(&raw.id),
         description: raw.description,
         homepage: raw.homepage,
@@ -108,6 +108,28 @@ mod tests {
         assert_eq!(parsed.installers[0].arch, Architecture::X64);
         assert_eq!(parsed.installers[0].kind, InstallerType::Portable);
         assert!(parsed.raw_json.contains("Contoso.App"));
+    }
+
+    #[test]
+    fn parses_fetched_package_with_loose_version() {
+        let parsed = parse_package(RawFetchedPackage {
+            id: "winget/Wez.WezTerm".to_string(),
+            name: "WezTerm".to_string(),
+            version: "v2026.03.17".to_string(),
+            description: None,
+            homepage: None,
+            license: None,
+            publisher: Some("Wez Furlong".to_string()),
+            installers: vec![RawFetchedInstaller {
+                url: "https://example.invalid/wezterm.zip".to_string(),
+                hash: String::new(),
+                arch: "x64".to_string(),
+                kind: "portable".to_string(),
+            }],
+        })
+        .expect("package should parse");
+
+        assert_eq!(parsed.package.version.to_string(), "2026.3.17");
     }
 
     #[test]
