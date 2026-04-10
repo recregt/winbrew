@@ -16,9 +16,9 @@ pub use winbrew_ui::{Ui, UiSettings};
 
 pub use app::AppContext;
 
-pub fn run_app(command: crate::cli::Command) -> Result<()> {
+pub fn run_app(command: crate::cli::Command, verbosity: u8) -> Result<()> {
     let mut config = database::Config::load_current()?;
-    let ctx = AppContext::from_config(&config)?;
+    let ctx = AppContext::from_config_with_verbosity(&config, verbosity)?;
 
     bootstrap::logging::init(&ctx.paths.logs, &ctx.log_level, &ctx.file_log_level)?;
     database::init(&ctx.paths)?;

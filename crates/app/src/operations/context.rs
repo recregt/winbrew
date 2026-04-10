@@ -15,10 +15,18 @@ pub struct AppContext {
     pub root_from_env: bool,
     pub log_level: Arc<str>,
     pub file_log_level: Arc<str>,
+    pub verbosity: u8,
 }
 
 impl AppContext {
     pub fn from_config(config: &crate::storage::database::Config) -> anyhow::Result<Self> {
+        Self::from_config_with_verbosity(config, 0)
+    }
+
+    pub fn from_config_with_verbosity(
+        config: &crate::storage::database::Config,
+        verbosity: u8,
+    ) -> anyhow::Result<Self> {
         let paths = config.resolved_paths();
         let sections = config.effective_sections()?.into_iter().collect();
 
@@ -32,6 +40,7 @@ impl AppContext {
             root_from_env: config.env.root_override().is_some(),
             log_level: Arc::from(config.core.log_level.as_str()),
             file_log_level: Arc::from(config.core.file_log_level.as_str()),
+            verbosity,
         })
     }
 }
