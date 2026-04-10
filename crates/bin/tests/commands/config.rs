@@ -3,7 +3,6 @@ mod common;
 
 use std::path::Path;
 
-use common::db;
 use tempfile::TempDir;
 use winbrew::AppContext;
 use winbrew::cli::ConfigCommand;
@@ -20,8 +19,8 @@ struct ConfigFixture {
 
 impl ConfigFixture {
     fn new() -> Self {
-        let root = common::shared_root::test_root();
-        db::init_database(root.path()).expect("database should initialize");
+        let root = common::test_root();
+        common::init_database(root.path()).expect("database should initialize");
         std::fs::create_dir_all(root.path().join("packages")).expect("packages dir should exist");
 
         let config = Config::load_at(root.path()).expect("config should load");
