@@ -23,6 +23,7 @@ pub mod fs;
 pub mod hash;
 pub mod network;
 pub mod paths;
+pub mod temp_workspace;
 pub mod time;
 
 pub use cancel::{CancellationError, check, init_handler, is_cancelled};
@@ -43,4 +44,5 @@ pub use paths::{
     db_dir_at, db_path_at, ensure_dirs_at, ensure_install_dirs_at, install_root_from_package_dir,
     log_dir_at, log_file_at, resolve_template, resolved_paths,
 };
+pub use temp_workspace::{build_temp_root, temp_root_base, temp_root_prefix};
 pub use time::{now, now_ms};

@@ -1,8 +1,3 @@
-//! Shared helper for installation temp workspace paths.
-//!
-//! This module is intentionally low-level utility code used by both app install
-//! flows and bootstrap cleanup. It should not grow into a use-case service.
-
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -12,7 +7,7 @@ pub fn build_temp_root(name: &str, version: &str) -> PathBuf {
     temp_root_base().join(temp_root_name(name, version))
 }
 
-pub(crate) fn temp_root_prefix(name: &str, version: &str) -> String {
+pub fn temp_root_prefix(name: &str, version: &str) -> String {
     format!(
         "winbrew-install-{}-{}-",
         sanitize_component(name),
@@ -20,7 +15,7 @@ pub(crate) fn temp_root_prefix(name: &str, version: &str) -> String {
     )
 }
 
-pub(crate) fn temp_root_base() -> PathBuf {
+pub fn temp_root_base() -> PathBuf {
     std::env::temp_dir().join("winbrew")
 }
 

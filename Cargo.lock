@@ -2596,11 +2596,27 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "indicatif",
  "mimalloc",
  "mockito",
- "rayon",
  "rusqlite",
+ "serde_json",
+ "tempfile",
+ "winbrew-cli",
+ "winbrew-core",
+ "winbrew-models",
+ "winbrew-ui",
+ "winresource",
+ "zip",
+]
+
+[[package]]
+name = "winbrew-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "indicatif",
+ "rayon",
  "serde_json",
  "tempfile",
  "thiserror",
@@ -2608,11 +2624,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "winbrew-app",
- "winbrew-core",
- "winbrew-models",
  "winbrew-ui",
- "winresource",
- "zip",
 ]
 
 [[package]]
