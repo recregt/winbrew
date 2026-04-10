@@ -16,6 +16,14 @@ pub fn config_set(key: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn config_unset(key: &str) -> Result<()> {
+    let mut config = Config::load_default()?;
+
+    config.unset_value(key)?;
+    config.save_default()?;
+    Ok(())
+}
+
 pub fn config_sections() -> Result<Vec<ConfigSection>> {
     Config::load_current()?.effective_sections()
 }
