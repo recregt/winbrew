@@ -5,6 +5,8 @@ mod test_env;
 
 use common::env_lock;
 use std::path::PathBuf;
+use std::sync::MutexGuard;
+use tempfile::TempDir;
 use test_env::TestEnvVar;
 use winbrew::AppContext;
 use winbrew::cli::ConfigCommand;
@@ -39,6 +41,49 @@ impl Drop for UnsetEnvVar {
                 Some(value) => std::env::set_var(self.key, value),
                 None => std::env::remove_var(self.key),
             }
+        }
+    }
+}
+
+struct ConfigRootFixture {
+    _guard: MutexGuard<'static, ()>,
+    root: TempDir,
+    _env: TestEnvVar,
+}
+
+impl ConfigRootFixture {
+    fn new() -> Self {
+        let _guard = env_lock();
+        let root = common::shared_root::test_root();
+        let root_path = root.path().to_string_lossy().to_string();
+        let _env = TestEnvVar::set(WINBREW_PATHS_ROOT, &root_path);
+
+        Self { _guard, root, _env }
+    }
+
+    fn root_path(&self) -> &std::path::Path {
+        self.root.path()
+    }
+
+    fn app_context(&self, root_from_env: bool) -> AppContext {
+        let config = Config::load_current().expect("config should load");
+        let paths = config.resolved_paths();
+        let sections = winbrew::database::config_sections()
+            .expect("config sections should load")
+            .into_iter()
+            .map(|section| ConfigSection {
+                title: section.title,
+                entries: section.entries,
+            })
+            .collect();
+
+        AppContext {
+            ui: winbrew_ui::UiSettings::default(),
+            paths,
+            sections,
+            root_from_env,
+            log_level: config.core.log_level.into(),
+            file_log_level: config.core.file_log_level.into(),
         }
     }
 }
@@ -118,28 +163,26 @@ fn runtime_report_builds_expected_sections() {
 
 #[test]
 fn health_report_marks_env_root_source() {
-    let _guard = env_lock();
-    let root = common::shared_root::test_root();
-    let root_path = root.path().to_string_lossy().to_string();
-    let _env = TestEnvVar::set(WINBREW_PATHS_ROOT, &root_path);
-    common::db::init_database(root.path()).expect("database should initialize");
-    std::fs::create_dir_all(root.path().join("packages")).expect("packages dir should exist");
-    let ctx = app_context(true);
+    let fixture = ConfigRootFixture::new();
+    common::db::init_database(fixture.root_path()).expect("database should initialize");
+    std::fs::create_dir_all(fixture.root_path().join("packages"))
+        .expect("packages dir should exist");
+    let ctx = fixture.app_context(true);
     let report = health_report(&ctx).expect("health report should build");
 
     assert_eq!(report.install_root_source, "env override");
-    assert_eq!(report.install_root, root_path);
+    assert_eq!(
+        report.install_root,
+        fixture.root_path().to_string_lossy().to_string()
+    );
     assert_eq!(report.error_count, 0);
     assert!(report.diagnostics.is_empty());
 }
 
 #[test]
 fn config_set_rejects_empty_values() {
-    let _guard = env_lock();
-    let root = common::shared_root::test_root();
-    let root_path = root.path().to_string_lossy().to_string();
-    let _env = TestEnvVar::set(WINBREW_PATHS_ROOT, &root_path);
-    let ctx = app_context(true);
+    let fixture = ConfigRootFixture::new();
+    let ctx = fixture.app_context(true);
 
     let err = config_command::run(
         &ctx,
@@ -157,23 +200,13 @@ fn config_set_rejects_empty_values() {
 
 #[test]
 fn config_set_accepts_valid_value() {
-    let _guard = env_lock();
-    let root = common::shared_root::test_root();
-    let root_path = root.path().to_string_lossy().to_string();
-    let _env = TestEnvVar::set(WINBREW_PATHS_ROOT, &root_path);
+    let fixture = ConfigRootFixture::new();
 
     app_config::set_value("core.log_level", "debug").expect("valid value should succeed");
 
-    let config = Config::load_at(root.path()).expect("config should load");
+    let config = Config::load_at(fixture.root_path()).expect("config should load");
 
     assert_eq!(config.core.log_level, "debug");
-}
-
-fn expected_default_root() -> String {
-    PathBuf::from(std::env::var(LOCALAPPDATA).expect("LOCALAPPDATA must be set on Windows"))
-        .join("winbrew")
-        .to_string_lossy()
-        .to_string()
 }
 
 fn app_context(root_from_env: bool) -> AppContext {
@@ -196,4 +229,11 @@ fn app_context(root_from_env: bool) -> AppContext {
         log_level: config.core.log_level.into(),
         file_log_level: config.core.file_log_level.into(),
     }
+}
+
+fn expected_default_root() -> String {
+    PathBuf::from(std::env::var(LOCALAPPDATA).expect("LOCALAPPDATA must be set on Windows"))
+        .join("winbrew")
+        .to_string_lossy()
+        .to_string()
 }
