@@ -10,8 +10,8 @@ use crate::commands::run;
 use crate::services::bootstrap;
 use crate::services::shared::config as shared_config;
 pub use winbrew_app as app;
-pub use winbrew_install::storage as database;
-pub use winbrew_install::{cancel, catalog, core, engines, models};
+pub use winbrew_app::core::cancel;
+pub use winbrew_app::{catalog, core, engines, models, storage as database};
 pub use winbrew_ui::{Ui, UiSettings};
 
 // Re-export AppContext from app crate for bin/commands
