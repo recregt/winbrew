@@ -1,10 +1,10 @@
-//! App-facing search facade over shared catalog search.
+//! App-facing search facade over the catalog search.
 //!
-//! This module keeps the command boundary stable while the shared catalog layer
+//! This module keeps the command boundary stable while the catalog layer
 //! owns the actual search error semantics.
 
+use crate::install_crate::catalog;
 use crate::models::CatalogPackage;
-use crate::services::shared::catalog;
 
 pub use catalog::{SearchError, SearchResult};
 

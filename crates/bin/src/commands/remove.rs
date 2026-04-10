@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::commands::error::reported_with_hint;
-use crate::{AppContext, Ui, services::app::remove};
+use crate::{AppContext, Ui, app::remove};
 
 pub fn run(ctx: &AppContext, name: &str, yes: bool, force: bool) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);

@@ -9,7 +9,7 @@ use std::io::Write;
 use crate::cli::ConfigCommand;
 use crate::commands::error::reported;
 use crate::database::Config;
-use crate::{AppContext, Ui, services::app::config};
+use crate::{AppContext, Ui, app::config};
 
 /// Dispatches a `config` subcommand to the appropriate handler.
 pub fn run(ctx: &AppContext, config: &mut Config, command: ConfigCommand) -> Result<()> {

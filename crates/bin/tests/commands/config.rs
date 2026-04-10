@@ -5,11 +5,11 @@ use std::path::Path;
 
 use tempfile::TempDir;
 use winbrew::AppContext;
+use winbrew::app::doctor::health_report;
+use winbrew::app::report::runtime_report;
 use winbrew::cli::ConfigCommand;
 use winbrew::commands::{config as config_command, error::CommandError};
 use winbrew::database::Config;
-use winbrew::services::app::doctor::health_report;
-use winbrew::services::shared::report::runtime_report;
 
 struct ConfigFixture {
     root: TempDir,

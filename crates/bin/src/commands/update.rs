@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{AppContext, Ui, services::app::update};
+use crate::{AppContext, Ui, app::update};
 
 pub fn run(ctx: &AppContext) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);
@@ -9,7 +9,7 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     let progress = ui.progress_bar();
 
     let result = update::refresh_catalog(
-        ctx,
+        &ctx.paths,
         |total_bytes| {
             if let Some(total_bytes) = total_bytes {
                 progress.set_length(total_bytes);
