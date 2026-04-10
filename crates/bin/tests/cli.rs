@@ -1,5 +1,5 @@
 use clap::Parser;
-use winbrew::cli::{Cli, Command, ConfigCommand};
+use winbrew_cli::cli::{Cli, Command, ConfigCommand};
 
 #[test]
 fn parse_list() {
