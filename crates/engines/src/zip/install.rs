@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::fs;
 use std::path::Path;
 
-use crate::fs::{cleanup_path, extract_zip_archive, replace_directory};
+use winbrew_core::fs::{cleanup_path, extract_zip_archive, replace_directory};
 
 use winbrew_models::EngineInstallReceipt;
 use winbrew_models::EngineKind;

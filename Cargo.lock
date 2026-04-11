@@ -2504,6 +2504,7 @@ dependencies = [
  "strum_macros",
  "tempfile",
  "url",
+ "winbrew-core",
  "winbrew-models",
  "winbrew-windows",
  "windows",
