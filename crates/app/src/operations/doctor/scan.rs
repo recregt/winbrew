@@ -6,7 +6,8 @@ use indicatif::{ParallelProgressIterator, ProgressBar};
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::io::ErrorKind;
+use std::path::Path;
 
 fn diagnosis_result(
     error_code: &str,
@@ -21,21 +22,37 @@ fn diagnosis_result(
 }
 
 fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
-    let install_dir = PathBuf::from(&pkg.install_dir);
-    let install_dir = install_dir.as_path();
+    let install_dir = Path::new(&pkg.install_dir);
 
-    if !install_dir.exists() {
-        return Some(diagnosis_result(
-            "missing_install_directory",
-            format!(
-                "{}: missing install directory ({})",
-                pkg.name, pkg.install_dir
-            ),
-            DiagnosisSeverity::Error,
-        ));
-    }
+    let metadata = match fs::metadata(install_dir) {
+        Ok(metadata) => metadata,
+        Err(err) => {
+            let (error_code, description) = match err.kind() {
+                ErrorKind::NotFound => (
+                    "missing_install_directory",
+                    format!(
+                        "{}: missing install directory ({})",
+                        pkg.name, pkg.install_dir
+                    ),
+                ),
+                _ => (
+                    "install_directory_unreadable",
+                    format!(
+                        "{}: install directory is unreadable ({}) - {}",
+                        pkg.name, pkg.install_dir, err
+                    ),
+                ),
+            };
 
-    if !install_dir.is_dir() {
+            return Some(diagnosis_result(
+                error_code,
+                description,
+                DiagnosisSeverity::Error,
+            ));
+        }
+    };
+
+    if !metadata.is_dir() {
         return Some(diagnosis_result(
             "install_directory_not_a_directory",
             format!(
@@ -46,12 +63,12 @@ fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
         ));
     }
 
-    if std::fs::read_dir(install_dir).is_err() {
+    if let Err(err) = fs::read_dir(install_dir) {
         return Some(diagnosis_result(
             "install_directory_unreadable",
             format!(
-                "{}: install directory is unreadable ({})",
-                pkg.name, pkg.install_dir
+                "{}: install directory is unreadable ({}) - {}",
+                pkg.name, pkg.install_dir, err
             ),
             DiagnosisSeverity::Error,
         ));
@@ -60,10 +77,15 @@ fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
     None
 }
 
+/// Scans the installed package list and returns diagnostics for broken package roots.
 pub fn scan_packages(packages: &[Package]) -> Vec<DiagnosisResult> {
     scan_packages_with_progress(packages, None)
 }
 
+/// Scans installed packages and optionally advances a progress bar while doing so.
+///
+/// When a progress bar is supplied, the iterator uses indicatif's Rayon integration
+/// so progress updates stay synchronized with the parallel scan.
 pub fn scan_packages_with_progress(
     packages: &[Package],
     progress: Option<&ProgressBar>,
@@ -93,11 +115,13 @@ pub fn scan_packages_with_progress(
     diagnoses
 }
 
+/// Scans the package root for directories that do not correspond to installed packages.
 pub fn scan_orphaned_install_dirs(
     packages_root: &Path,
     packages: &[Package],
 ) -> Vec<DiagnosisResult> {
-    let known_packages: HashSet<_> = packages.iter().map(|pkg| pkg.name.as_str()).collect();
+    let mut known_packages = HashSet::with_capacity(packages.len());
+    known_packages.extend(packages.iter().map(|pkg| pkg.name.as_str()));
 
     let entries = match fs::read_dir(packages_root) {
         Ok(entries) => entries,
@@ -113,7 +137,7 @@ pub fn scan_orphaned_install_dirs(
         }
     };
 
-    let mut diagnoses = Vec::new();
+    let mut diagnoses = Vec::with_capacity(16);
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -150,6 +174,7 @@ pub fn scan_orphaned_install_dirs(
     diagnoses
 }
 
+/// Loads the current installed package inventory from the database.
 pub fn installed_packages() -> Result<Vec<Package>> {
     let conn = database::get_conn()?;
     database::list_packages(&conn)
