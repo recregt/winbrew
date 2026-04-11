@@ -10,7 +10,7 @@ instead of the Microsoft `windows` projection types directly.
 This crate is responsible for the Windows-only boundary around three areas:
 
 - filesystem inspection and extraction helpers
-- registry enumeration for installed applications and uninstall roots
+- registry enumeration for installed applications, uninstall roots, and named uninstall values
 - MSIX deployment helpers for install and remove flows
 - MSI inventory scanning for package databases and install trees
 
@@ -25,6 +25,7 @@ layout is not part of the contract and can change without breaking consumers.
 | `create_extracted_file` | Create a fresh file for extraction without following existing reparse points | archive extractors |
 | `collect_installed_apps` | Enumerate installed applications from the uninstall registry roots | list / doctor commands |
 | `uninstall_roots` | Iterate over the registry locations that may contain uninstall entries | registry browsing and diagnostics |
+| `uninstall_value` | Read a string value from an uninstall key by key name | MSI install verification |
 | `msix_install` | Install an MSIX package from a downloaded file and return the installed package full name | engine install flow |
 | `msix_installed_package_full_name` | Resolve the installed full name for a package name or family name | MSIX receipt creation |
 | `msix_remove` | Remove an installed MSIX package by full package name | engine remove flow |
@@ -46,7 +47,7 @@ mod registry;
 
 pub use deployment::{msi_scan_inventory, msix_install, msix_installed_package_full_name, msix_remove};
 pub use fs::{PathInfo, create_extracted_file, inspect_path};
-pub use registry::{AppInfo, Hive, UninstallRoot, collect_installed_apps, uninstall_roots};
+pub use registry::{AppInfo, Hive, UninstallRoot, collect_installed_apps, uninstall_roots, uninstall_value};
 ```
 
 That shape matters for two reasons:
@@ -149,6 +150,23 @@ let apps = collect_installed_apps(Some("winbrew")).unwrap();
 for app in apps {
     println!("{} {} - {}", app.name, app.version, app.publisher);
 }
+```
+
+### `uninstall_value`
+
+`uninstall_value` searches the uninstall roots for a key name and then reads
+the first non-empty string value with the requested value name. MSI install
+flows use it to read `InstallLocation` immediately after `msiexec` completes,
+so the engine can record the final path Windows reports instead of assuming the
+requested install directory is always the truth.
+
+```rust,no_run
+use winbrew_windows::uninstall_value;
+
+let install_location = uninstall_value(
+  "{11111111-1111-1111-1111-111111111111}",
+  "InstallLocation",
+);
 ```
 
 ## MSIX deployment helpers

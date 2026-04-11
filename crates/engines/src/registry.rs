@@ -8,6 +8,9 @@ use super::EngineKind;
 use crate::filesystem::{archive::zip, portable};
 use crate::windows::package::msix;
 
+#[cfg(windows)]
+use crate::windows::native::msi;
+
 type InstallFn = fn(&CatalogInstaller, &Path, &Path, &str) -> Result<EngineInstallReceipt>;
 type RemoveFn = fn(&InstalledPackage) -> Result<()>;
 type MatchesInstallerFn = fn(&CatalogInstaller) -> bool;
@@ -21,6 +24,11 @@ struct EngineDescriptor {
 
 fn matches_msix_installer(installer: &CatalogInstaller) -> bool {
     installer.kind == InstallerType::Msix
+}
+
+#[cfg(windows)]
+fn matches_msi_installer(installer: &CatalogInstaller) -> bool {
+    installer.kind == InstallerType::Msi
 }
 
 fn matches_zip_installer(installer: &CatalogInstaller) -> bool {
@@ -39,6 +47,16 @@ fn msix_install(
     package_name: &str,
 ) -> Result<EngineInstallReceipt> {
     msix::install::install(download_path, install_dir, package_name)
+}
+
+#[cfg(windows)]
+fn msi_install(
+    _installer: &CatalogInstaller,
+    download_path: &Path,
+    install_dir: &Path,
+    package_name: &str,
+) -> Result<EngineInstallReceipt> {
+    msi::install(download_path, install_dir, package_name)
 }
 
 fn zip_install(
@@ -63,6 +81,11 @@ fn msix_remove(package: &InstalledPackage) -> Result<()> {
     msix::remove::remove(package)
 }
 
+#[cfg(windows)]
+fn msi_remove(package: &InstalledPackage) -> Result<()> {
+    msi::remove(package)
+}
+
 fn zip_remove(package: &InstalledPackage) -> Result<()> {
     zip::remove::remove(package)
 }
@@ -72,6 +95,13 @@ fn portable_remove(package: &InstalledPackage) -> Result<()> {
 }
 
 const ENGINE_DESCRIPTORS: &[EngineDescriptor] = &[
+    #[cfg(windows)]
+    EngineDescriptor {
+        kind: EngineKind::Msi,
+        install: msi_install,
+        remove: msi_remove,
+        matches_installer: matches_msi_installer,
+    },
     EngineDescriptor {
         kind: EngineKind::Msix,
         install: msix_install,
@@ -163,5 +193,17 @@ mod tests {
         .expect("engine should resolve");
 
         assert_eq!(engine, EngineKind::Msix);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolve_installer_prefers_msi_for_msi_kind() {
+        let engine = resolve_engine_kind_for_installer(&installer(
+            InstallerType::Msi,
+            "https://example.invalid/package.msi",
+        ))
+        .expect("engine should resolve");
+
+        assert_eq!(engine, EngineKind::Msi);
     }
 }

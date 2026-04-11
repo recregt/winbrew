@@ -31,6 +31,10 @@ pub fn install(
             InstallScope::Installed,
         ));
 
-        Ok(EngineInstallReceipt::new(EngineKind::Msix, engine_metadata))
+        Ok(EngineInstallReceipt::new(
+            EngineKind::Msix,
+            install_dir.to_string_lossy().into_owned(),
+            engine_metadata,
+        ))
     }
 }

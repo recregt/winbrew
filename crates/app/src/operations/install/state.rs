@@ -146,8 +146,8 @@ pub fn mark_installing(
 /// Mark a package as successfully installed.
 ///
 /// The engine receipt carries any metadata needed for future removal or repair,
-/// including MSIX-specific package identity data when the engine was able to
-/// resolve it during install.
+/// including MSIX-specific package identity data and the final install
+/// directory reported by the engine after install completes.
 pub fn mark_ok(
     conn: &mut crate::storage::DbConnection,
     name: &str,
@@ -166,6 +166,7 @@ pub fn mark_ok(
         name,
         PackageStatus::Ok,
         engine_receipt.engine_metadata.as_ref(),
+        engine_receipt.install_dir.as_str(),
         &installed_at,
     )
     .map_err(|source| InstallStateError::DatabaseOperationFailed {

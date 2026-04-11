@@ -87,3 +87,25 @@ pub fn collect_installed_apps(filter: Option<&str>) -> Result<Vec<AppInfo>> {
 
     Ok(apps)
 }
+
+/// Read the first non-empty string value from an uninstall entry identified by key name.
+///
+/// MSI install flows use this to read `InstallLocation` after `msiexec`
+/// completes so the engine can store the final path reported by Windows.
+pub fn uninstall_value(key_name: &str, value_name: &str) -> Option<String> {
+    for root in uninstall_roots() {
+        let Ok(app_key) = root.key.open_subkey(key_name) else {
+            continue;
+        };
+
+        let Ok(value) = app_key.get_value::<String, _>(value_name) else {
+            continue;
+        };
+
+        if !value.trim().is_empty() {
+            return Some(value);
+        }
+    }
+
+    None
+}

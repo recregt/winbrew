@@ -2501,6 +2501,7 @@ dependencies = [
  "regex",
  "strum_macros",
  "tempfile",
+ "tracing",
  "url",
  "winbrew-core",
  "winbrew-models",

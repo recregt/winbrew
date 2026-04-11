@@ -64,6 +64,7 @@ pub fn update_status_and_engine_metadata(
     name: &str,
     status: PackageStatus,
     engine_metadata: Option<&EngineMetadata>,
+    install_dir: &str,
     installed_at: &str,
 ) -> Result<()> {
     let engine_metadata = engine_metadata
@@ -76,9 +77,16 @@ pub fn update_status_and_engine_metadata(
             "UPDATE installed_packages
                 SET status = ?1,
                     engine_metadata = ?2,
-                    installed_at = ?3
-              WHERE name = ?4",
-            params![status.as_str(), engine_metadata, installed_at, name],
+                                        install_dir = ?3,
+                                        installed_at = ?4
+                            WHERE name = ?5",
+            params![
+                status.as_str(),
+                engine_metadata,
+                install_dir,
+                installed_at,
+                name
+            ],
         )
         .context("failed to update status and engine metadata")?;
 
@@ -182,4 +190,76 @@ fn row_to_package(row: &rusqlite::Row) -> std::result::Result<Package, SqlError>
         status,
         installed_at: row.get("installed_at")?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{get_package, insert_package, update_status_and_engine_metadata};
+    use crate::database::migration;
+    use rusqlite::Connection;
+    use winbrew_models::{
+        EngineKind, EngineMetadata, InstallScope, InstalledPackage, InstallerType, PackageStatus,
+    };
+
+    fn sample_package(name: &str) -> InstalledPackage {
+        InstalledPackage {
+            name: name.to_string(),
+            version: "1.0.0".to_string(),
+            kind: InstallerType::Msi,
+            engine_kind: EngineKind::Msi,
+            engine_metadata: Some(EngineMetadata::Msi {
+                product_code: "{11111111-1111-1111-1111-111111111111}".to_string(),
+                upgrade_code: None,
+                scope: InstallScope::Installed,
+                registry_keys: Vec::new(),
+                shortcuts: Vec::new(),
+            }),
+            install_dir: "C:/Tools/Old".to_string(),
+            dependencies: Vec::new(),
+            status: PackageStatus::Installing,
+            installed_at: "2026-04-12T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn update_status_and_engine_metadata_overwrites_install_dir() {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        migration::migrate(&conn).expect("run migration");
+
+        let package_name = "demo";
+        insert_package(&conn, &sample_package(package_name)).expect("insert package");
+
+        update_status_and_engine_metadata(
+            &conn,
+            package_name,
+            PackageStatus::Ok,
+            Some(&EngineMetadata::Msi {
+                product_code: "{11111111-1111-1111-1111-111111111111}".to_string(),
+                upgrade_code: Some("{22222222-2222-2222-2222-222222222222}".to_string()),
+                scope: InstallScope::Installed,
+                registry_keys: vec!["HKLM\\Software\\Demo".to_string()],
+                shortcuts: vec!["C:/Users/Public/Desktop/Demo.lnk".to_string()],
+            }),
+            "C:/Tools/Actual",
+            "2026-04-12T00:10:00Z",
+        )
+        .expect("update package state");
+
+        let package = get_package(&conn, package_name)
+            .expect("read updated package")
+            .expect("package should exist");
+
+        assert_eq!(package.install_dir, "C:/Tools/Actual");
+        assert_eq!(package.status, PackageStatus::Ok);
+        assert_eq!(
+            package.engine_metadata.unwrap(),
+            EngineMetadata::Msi {
+                product_code: "{11111111-1111-1111-1111-111111111111}".to_string(),
+                upgrade_code: Some("{22222222-2222-2222-2222-222222222222}".to_string()),
+                scope: InstallScope::Installed,
+                registry_keys: vec!["HKLM\\Software\\Demo".to_string()],
+                shortcuts: vec!["C:/Users/Public/Desktop/Demo.lnk".to_string()],
+            }
+        );
+    }
 }
