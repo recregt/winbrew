@@ -1,7 +1,19 @@
+//! Pure MSI path and reference normalization helpers.
+//!
+//! The functions in this module do not touch the filesystem or the MSI API.
+//! They only normalize strings, choose between MSI long/short names, and map
+//! symbolic references to concrete `PathBuf` values when the information is
+//! already present in the derived lookup tables.
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 pub(super) fn normalize_path(path: &Path) -> String {
+    // Normalize a filesystem path for storage and comparison.
+    //
+    // The normalization strips Windows verbatim prefixes, converts path
+    // separators to forward slashes, and lowercases the result so the storage
+    // layer can compare paths consistently.
     let raw = path.to_string_lossy();
     let stripped = raw
         .strip_prefix(r"\\?\UNC\")
@@ -13,10 +25,16 @@ pub(super) fn normalize_path(path: &Path) -> String {
 }
 
 pub(super) fn normalize_registry_key_path(path: &str) -> String {
+    // Normalize a registry key path for stable lookups.
     path.trim().to_ascii_lowercase()
 }
 
 pub(super) fn select_msi_name(value: &str) -> Option<String> {
+    // Select the best display name from an MSI `long|short` encoded field.
+    //
+    // MSI tables often store both forms in one column. The scanner prefers the
+    // long name, falls back to the short name only when needed, and treats `.`
+    // as an explicit "no value" marker.
     let value = value.trim();
     if value.is_empty() || value == "." {
         return None;
@@ -50,6 +68,11 @@ pub(super) fn resolve_reference_path(
     directory_paths: &HashMap<String, PathBuf>,
     file_paths: &HashMap<String, PathBuf>,
 ) -> Option<PathBuf> {
+    // Resolve an MSI-style path reference into a concrete path when possible.
+    //
+    // Supported forms include `[#FileKey]`, `[DirectoryId]suffix`, direct row
+    // keys, and already-literal filesystem paths. Unknown references are left
+    // unresolved so the caller can keep the output conservative.
     let reference = reference.trim();
     if reference.is_empty() {
         return None;

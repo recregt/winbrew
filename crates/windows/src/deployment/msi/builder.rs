@@ -1,3 +1,15 @@
+//! Converts resolved MSI rows into WinBrew inventory records.
+//!
+//! This layer assumes the database module has already materialized raw MSI
+//! tables and the directory module has already collapsed the `Directory`
+//! graph into absolute paths. The interesting detail here is that file paths
+//! are computed once and reused, because `File`, `Shortcut`, and `Component`
+//! records all need to agree on the same derived locations.
+//!
+//! Registry handling is intentionally narrow. Only `Root = -1` consults the
+//! install scope; the other root values are passed through as their concrete
+//! registry hives.
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -16,6 +28,10 @@ pub(super) fn build_file_paths(
     directory_paths: &HashMap<String, PathBuf>,
     install_root: &Path,
 ) -> HashMap<String, PathBuf> {
+    // Build a cache of derived file paths keyed by the MSI `File` table key.
+    //
+    // The returned map is used as the canonical source for file records and
+    // as a shared lookup for shortcut and component resolution.
     let mut file_paths = HashMap::new();
 
     for file_row in file_rows {
@@ -36,6 +52,10 @@ pub(super) fn build_file_records(
     directory_paths: &HashMap<String, PathBuf>,
     install_root: &Path,
 ) -> Vec<MsiFileRecord> {
+    // Convert MSI `File` rows into storage records.
+    //
+    // If the precomputed file-path cache is missing a key, the code falls
+    // back to row-local resolution instead of dropping the record entirely.
     file_rows
         .iter()
         .map(|file_row| {
@@ -80,6 +100,10 @@ pub(super) fn build_registry_records(
     scope: InstallScope,
     rows: &[RegistryRow],
 ) -> Vec<MsiRegistryRecord> {
+    // Convert MSI `Registry` rows into normalized storage records.
+    //
+    // `Root = -1` is the only case that consults `InstallScope`; the other
+    // roots map directly to concrete hives.
     rows.iter()
         .map(|row| MsiRegistryRecord {
             package_name: package_name.to_string(),
@@ -114,6 +138,11 @@ pub(super) fn build_shortcut_records(
     file_paths: &HashMap<String, PathBuf>,
     install_root: &Path,
 ) -> Vec<MsiShortcutRecord> {
+    // Convert MSI `Shortcut` rows into storage records.
+    //
+    // Shortcut targets are resolved conservatively: when the target is not a
+    // recognizable MSI reference, the target path remains `None` rather than
+    // guessing a filesystem location.
     rows.iter()
         .map(|row| {
             let directory_path = directory_paths
@@ -145,6 +174,11 @@ pub(super) fn build_component_records(
     directory_paths: &HashMap<String, PathBuf>,
     file_paths: &HashMap<String, PathBuf>,
 ) -> Vec<MsiComponentRecord> {
+    // Convert MSI `Component` rows into storage records.
+    //
+    // A component key path may resolve through either file references or
+    // directory references, depending on how the MSI package author encoded
+    // the value.
     component_rows
         .iter()
         .map(|(component_id, component)| {

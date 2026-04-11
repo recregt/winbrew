@@ -1,3 +1,16 @@
+//! Low-level MSI database access and row loading.
+//!
+//! This module is the only place that talks directly to the Windows Installer
+//! C API. It owns the handle lifecycle, the query/view execution flow, and the
+//! strict UTF-16 conversion used for MSI string fields.
+//!
+//! Two implementation details are worth keeping visible here:
+//!
+//! - MSI string extraction uses a probe call first, so the real buffer can be
+//!   sized from the length reported by the API.
+//! - `MsiRecordIsNull` is treated differently from an empty string, because the
+//!   scanner needs to preserve that distinction when normalizing rows.
+
 use anyhow::{Context, Result, bail};
 use std::collections::HashMap;
 use std::os::windows::ffi::OsStrExt;
@@ -14,6 +27,7 @@ use super::{ComponentRow, DirectoryRow, FileRow, RegistryRow, ShortcutRow};
 pub(super) struct MsiDatabase(MsiHandle);
 
 impl MsiDatabase {
+    /// Open the MSI database in read-only mode and keep the handle RAII-owned.
     pub(super) fn open(path: &Path) -> Result<Self> {
         let wide_path = wide_path(path);
         let mut handle = MSIHANDLE(0);
@@ -26,11 +40,16 @@ impl MsiDatabase {
         Ok(Self(MsiHandle::new(handle)))
     }
 
+    /// Borrow the raw MSI handle for query helpers.
     pub(super) fn handle(&self) -> MSIHANDLE {
         self.0.raw()
     }
 }
 
+/// RAII owner for `MSIHANDLE` values.
+///
+/// The underlying MSI API uses manual handle management; this wrapper ensures
+/// that every successfully opened database or view gets closed on drop.
 #[derive(Debug)]
 struct MsiHandle(MSIHANDLE);
 
@@ -55,6 +74,7 @@ impl Drop for MsiHandle {
 }
 
 pub(super) fn load_directory_rows(database: MSIHANDLE) -> Result<HashMap<String, DirectoryRow>> {
+    // Load the `Directory` table into a map keyed by directory id.
     let rows = collect_rows(
         database,
         "SELECT `Directory`, `Directory_Parent`, `DefaultDir` FROM `Directory`",
@@ -73,6 +93,7 @@ pub(super) fn load_directory_rows(database: MSIHANDLE) -> Result<HashMap<String,
 }
 
 pub(super) fn load_component_rows(database: MSIHANDLE) -> Result<HashMap<String, ComponentRow>> {
+    // Load the `Component` table into a map keyed by component id.
     let rows = collect_rows(
         database,
         "SELECT `Component`, `Directory_`, `KeyPath` FROM `Component`",
@@ -91,6 +112,7 @@ pub(super) fn load_component_rows(database: MSIHANDLE) -> Result<HashMap<String,
 }
 
 pub(super) fn load_file_rows(database: MSIHANDLE) -> Result<Vec<FileRow>> {
+    // Load the `File` table in table order.
     collect_rows(
         database,
         "SELECT `File`, `Component_`, `FileName` FROM `File`",
@@ -105,6 +127,7 @@ pub(super) fn load_file_rows(database: MSIHANDLE) -> Result<Vec<FileRow>> {
 }
 
 pub(super) fn load_registry_rows(database: MSIHANDLE) -> Result<Vec<RegistryRow>> {
+    // Load the `Registry` table in table order.
     collect_rows(
         database,
         "SELECT `Root`, `Key`, `Name`, `Value` FROM `Registry`",
@@ -120,6 +143,7 @@ pub(super) fn load_registry_rows(database: MSIHANDLE) -> Result<Vec<RegistryRow>
 }
 
 pub(super) fn load_shortcut_rows(database: MSIHANDLE) -> Result<Vec<ShortcutRow>> {
+    // Load the `Shortcut` table in table order.
     collect_rows(
         database,
         "SELECT `Directory_`, `Name`, `Target` FROM `Shortcut`",
@@ -134,11 +158,13 @@ pub(super) fn load_shortcut_rows(database: MSIHANDLE) -> Result<Vec<ShortcutRow>
 }
 
 pub(super) fn query_required_string(database: MSIHANDLE, query: &str) -> Result<String> {
+    // Execute a scalar query and fail if it returns no rows.
     query_optional_string(database, query)?
         .with_context(|| format!("missing MSI query result for '{query}'"))
 }
 
 pub(super) fn query_optional_string(database: MSIHANDLE, query: &str) -> Result<Option<String>> {
+    // Execute a scalar query and return the first row if one exists.
     let rows = collect_rows(database, query, |record| record_string(record, 1))?;
 
     Ok(rows.into_iter().next())
@@ -148,6 +174,7 @@ fn collect_rows<T, F>(database: MSIHANDLE, query: &str, mut parse_row: F) -> Res
 where
     F: FnMut(MSIHANDLE) -> Result<T>,
 {
+    // Execute a view and collect every fetched record through a parser.
     let view = open_view(database, query)?;
     let view = MsiHandle::new(view);
     execute_view(view.raw())?;
@@ -172,6 +199,7 @@ where
 }
 
 fn open_view(database: MSIHANDLE, query: &str) -> Result<MSIHANDLE> {
+    // Open an MSI view for a textual query.
     let query = HSTRING::from(query);
     let mut view = MSIHANDLE(0);
     let status = unsafe { MsiDatabaseOpenViewW(database, &query, &mut view) };
@@ -182,12 +210,14 @@ fn open_view(database: MSIHANDLE, query: &str) -> Result<MSIHANDLE> {
 }
 
 fn execute_view(view: MSIHANDLE) -> Result<()> {
+    // Execute a previously opened view with the default null record.
     let status = unsafe { MsiViewExecute(view, MSIHANDLE(0)) };
 
     ensure_msi_success(status, "execute MSI view")
 }
 
 fn record_optional_string(record: MSIHANDLE, field: u32) -> Result<Option<String>> {
+    // Read an optional MSI string field while preserving null-vs-empty.
     if unsafe { MsiRecordIsNull(record, field).as_bool() } {
         return Ok(None);
     }
@@ -196,6 +226,11 @@ fn record_optional_string(record: MSIHANDLE, field: u32) -> Result<Option<String
 }
 
 fn record_string(record: MSIHANDLE, field: u32) -> Result<String> {
+    // Read an MSI string field using the API's probe-and-read pattern.
+    //
+    // The first call asks the MSI runtime for the required character count.
+    // The second call reads the actual UTF-16 payload, which is then decoded
+    // strictly so invalid data is surfaced instead of being lossy-converted.
     let mut probe = [0u16; 1];
     let mut length = 0u32;
     let status = unsafe {
@@ -232,10 +267,12 @@ fn record_string(record: MSIHANDLE, field: u32) -> Result<String> {
 }
 
 fn record_integer(record: MSIHANDLE, field: u32) -> i32 {
+    // Read an MSI integer field.
     unsafe { MsiRecordGetInteger(record, field) }
 }
 
 fn ensure_msi_success(status: u32, context: &str) -> Result<()> {
+    // Convert a raw MSI status code into a contextual `anyhow::Result`.
     if status == ERROR_SUCCESS.0 {
         Ok(())
     } else {
@@ -244,5 +281,6 @@ fn ensure_msi_success(status: u32, context: &str) -> Result<()> {
 }
 
 fn wide_path(path: &Path) -> Vec<u16> {
+    // Encode a Rust path as a null-terminated UTF-16 buffer for Windows APIs.
     path.as_os_str().encode_wide().chain(Some(0)).collect()
 }
