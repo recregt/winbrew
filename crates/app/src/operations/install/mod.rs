@@ -37,8 +37,7 @@ pub fn run<O: InstallObserver>(
         catalog::resolve_catalog_package_ref(&catalog_conn, &package_ref, |query, matches| {
             observer.borrow_mut().choose_package(query, matches)
         })?;
-    let installer =
-        catalog::select_installer(&storage::get_installers(&catalog_conn, &package.id)?)?;
+    let installer = types::select_installer(&storage::get_installers(&catalog_conn, &package.id)?)?;
     let engine = engines::get_engine(&installer)?;
     let package_version = package.version.to_string();
 

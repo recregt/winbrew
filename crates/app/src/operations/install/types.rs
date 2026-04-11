@@ -3,11 +3,23 @@ use std::io;
 use thiserror::Error;
 
 use super::state::InstallStateError;
-use crate::catalog::InstallerSelectionError;
+use crate::catalog;
 use crate::core::cancel::CancellationError;
 use crate::core::hash::HashError;
-use crate::models::HashAlgorithm;
+use crate::models::{CatalogInstaller, HashAlgorithm};
 use winbrew_models::InstallFailureClass;
+
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+#[error("catalog package has no installers")]
+pub enum InstallerSelectionError {
+    NoInstallers,
+}
+
+pub(crate) fn select_installer(
+    installers: &[CatalogInstaller],
+) -> std::result::Result<CatalogInstaller, InstallerSelectionError> {
+    catalog::select_installer(installers).ok_or(InstallerSelectionError::NoInstallers)
+}
 
 #[derive(Debug, Error)]
 pub enum InstallError {

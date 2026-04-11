@@ -1,12 +1,9 @@
-use super::error::InstallerSelectionError;
 use winbrew_models::{Architecture, CatalogInstaller};
 
 /// Selects the best installer for the current architecture.
 ///
 /// Prefers an exact architecture match, falls back to `Any`, then to the first available installer.
-pub fn select_installer(
-    installers: &[CatalogInstaller],
-) -> std::result::Result<CatalogInstaller, InstallerSelectionError> {
+pub(crate) fn select_installer(installers: &[CatalogInstaller]) -> Option<CatalogInstaller> {
     let current_arch = Architecture::current();
 
     installers
@@ -20,7 +17,6 @@ pub fn select_installer(
                 .cloned()
         })
         .or_else(|| installers.first().cloned())
-        .ok_or(InstallerSelectionError::NoInstallers)
 }
 
 #[cfg(test)]
@@ -49,7 +45,7 @@ mod tests {
             sample_installer(Architecture::X64, winbrew_models::InstallerType::Zip),
         ];
 
-        let selected = select_installer(&installers)?;
+        let selected = select_installer(&installers).expect("installer should exist");
 
         assert_eq!(selected.arch, Architecture::current());
         assert_eq!(selected.kind, winbrew_models::InstallerType::Msix);
@@ -71,7 +67,7 @@ mod tests {
             sample_installer(Architecture::Any, winbrew_models::InstallerType::Portable),
         ];
 
-        let selected = select_installer(&installers)?;
+        let selected = select_installer(&installers).expect("installer should exist");
 
         assert_eq!(selected.arch, Architecture::Any);
         assert_eq!(selected.kind, winbrew_models::InstallerType::Portable);
@@ -80,9 +76,7 @@ mod tests {
     }
 
     #[test]
-    fn select_installer_errors_when_no_installers_exist() {
-        let err = select_installer(&[]).expect_err("empty installer list should fail");
-
-        assert_eq!(err, InstallerSelectionError::NoInstallers);
+    fn select_installer_returns_none_when_no_installers_exist() {
+        assert!(select_installer(&[]).is_none());
     }
 }

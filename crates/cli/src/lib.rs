@@ -11,7 +11,7 @@ use crate::services::bootstrap;
 
 pub use winbrew_app as app;
 pub use winbrew_app::core::cancel;
-pub use winbrew_app::{catalog, core, engines, models, storage as database};
+pub use winbrew_app::{core, engines, models, storage as database};
 pub use winbrew_ui::{Ui, UiSettings};
 
 pub use app::AppContext;
