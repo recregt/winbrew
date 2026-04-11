@@ -9,7 +9,7 @@
 //! The pipeline is intentionally narrow:
 //!
 //! - `report` assembles the final report structure and summary counts.
-//! - `scan` inspects installed package records and package directories.
+//! - `scan` inspects installed package records, package directories, and MSI inventory snapshots.
 //!
 //! CLI code owns any interactive presentation around the report, including the
 //! spinner and terminal formatting. The app layer only returns structured data.

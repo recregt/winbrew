@@ -1,5 +1,8 @@
+use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+
+use crate::error::ModelError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -37,5 +40,19 @@ impl HashAlgorithm {
 impl fmt::Display for HashAlgorithm {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.display_name())
+    }
+}
+
+impl FromStr for HashAlgorithm {
+    type Err = ModelError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "md5" => Ok(Self::Md5),
+            "sha1" => Ok(Self::Sha1),
+            "sha256" => Ok(Self::Sha256),
+            "sha512" => Ok(Self::Sha512),
+            other => Err(ModelError::invalid_enum_value("hash.algorithm", other)),
+        }
     }
 }

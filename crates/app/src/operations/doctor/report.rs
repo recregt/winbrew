@@ -10,6 +10,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use crate::AppContext;
+use crate::storage::database;
 
 use super::scan;
 use crate::models::{DiagnosisResult, DiagnosisSeverity, HealthReport, Package};
@@ -61,10 +62,12 @@ fn collect_packages(packages_result: Result<Vec<Package>>) -> (Vec<Package>, Vec
 pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
     let paths = &ctx.paths;
     let started_at = Instant::now();
+    let conn = database::get_conn()?;
 
-    let (packages, mut diagnostics) = collect_packages(scan::installed_packages());
+    let (packages, mut diagnostics) = collect_packages(scan::installed_packages(&conn));
 
     diagnostics.extend(scan::scan_packages(&packages));
+    diagnostics.extend(scan::scan_msi_inventory(&conn, &packages));
 
     diagnostics.extend(scan::scan_orphaned_install_dirs(&paths.packages, &packages));
     diagnostics.sort_unstable_by(sort_diagnostics);
