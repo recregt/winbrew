@@ -1,9 +1,8 @@
 use anyhow::{Result, anyhow};
 use std::path::Path;
 
+use winbrew_core::network::is_zip_path;
 use winbrew_models::{CatalogInstaller, EngineInstallReceipt, InstalledPackage, InstallerType};
-
-use crate::network::is_zip_path;
 
 use super::{EngineKind, msix, portable, zip};
 
