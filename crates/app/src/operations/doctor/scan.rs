@@ -21,35 +21,67 @@ fn diagnosis_result(
     }
 }
 
+fn validate_install_path(pkg: &Package) -> Option<DiagnosisResult> {
+    if pkg.install_dir.trim().is_empty() {
+        return Some(diagnosis_result(
+            "empty_install_path",
+            format!("{}: empty install directory", pkg.name),
+            DiagnosisSeverity::Error,
+        ));
+    }
+
+    if pkg.install_dir.contains('\0') {
+        return Some(diagnosis_result(
+            "invalid_path_null_byte",
+            format!(
+                "{}: path contains null byte ({})",
+                pkg.name, pkg.install_dir
+            ),
+            DiagnosisSeverity::Error,
+        ));
+    }
+
+    None
+}
+
+fn diagnose_install_dir_error(pkg: &Package, err: std::io::Error) -> DiagnosisResult {
+    let (error_code, description) = match err.kind() {
+        ErrorKind::NotFound => (
+            "missing_install_directory",
+            format!(
+                "{}: missing install directory ({})",
+                pkg.name, pkg.install_dir
+            ),
+        ),
+        ErrorKind::PermissionDenied => (
+            "install_directory_permission_denied",
+            format!(
+                "{}: install directory permission denied ({})",
+                pkg.name, pkg.install_dir
+            ),
+        ),
+        _ => (
+            "install_directory_unreadable",
+            format!(
+                "{}: install directory is unreadable ({}) - {}",
+                pkg.name, pkg.install_dir, err
+            ),
+        ),
+    };
+
+    diagnosis_result(error_code, description, DiagnosisSeverity::Error)
+}
+
 fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
+    if let Some(diagnosis) = validate_install_path(pkg) {
+        return Some(diagnosis);
+    }
+
     let install_dir = Path::new(&pkg.install_dir);
 
     let metadata = match fs::metadata(install_dir) {
         Ok(metadata) => metadata,
-        Err(err) => {
-            let (error_code, description) = match err.kind() {
-                ErrorKind::NotFound => (
-                    "missing_install_directory",
-                    format!(
-                        "{}: missing install directory ({})",
-                        pkg.name, pkg.install_dir
-                    ),
-                ),
-                _ => (
-                    "install_directory_unreadable",
-                    format!(
-                        "{}: install directory is unreadable ({}) - {}",
-                        pkg.name, pkg.install_dir, err
-                    ),
-                ),
-            };
-
-            return Some(diagnosis_result(
-                error_code,
-                description,
-                DiagnosisSeverity::Error,
-            ));
-        }
+        Err(err) => return Some(diagnose_install_dir_error(pkg, err)),
     };
 
     if !metadata.is_dir() {
@@ -58,17 +90,6 @@ fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
             format!(
                 "{}: install path is not a directory ({})",
                 pkg.name, pkg.install_dir
-            ),
-            DiagnosisSeverity::Error,
-        ));
-    }
-
-    if let Err(err) = fs::read_dir(install_dir) {
-        return Some(diagnosis_result(
-            "install_directory_unreadable",
-            format!(
-                "{}: install directory is unreadable ({}) - {}",
-                pkg.name, pkg.install_dir, err
             ),
             DiagnosisSeverity::Error,
         ));
@@ -90,7 +111,7 @@ pub fn scan_packages_with_progress(
     packages: &[Package],
     progress: Option<&ProgressBar>,
 ) -> Vec<DiagnosisResult> {
-    let mut diagnoses: Vec<DiagnosisResult> = match progress {
+    let diagnoses: Vec<DiagnosisResult> = match progress {
         Some(progress) => {
             progress.set_length(packages.len() as u64);
             progress.set_message("Scanning packages");
@@ -107,12 +128,7 @@ pub fn scan_packages_with_progress(
         None => packages.par_iter().filter_map(check_package).collect(),
     };
 
-    diagnoses.sort_unstable_by(|left, right| {
-        left.error_code
-            .cmp(&right.error_code)
-            .then_with(|| left.description.cmp(&right.description))
-    });
-    diagnoses
+    sort_diagnoses(diagnoses)
 }
 
 /// Scans the package root for directories that do not correspond to installed packages.
@@ -137,14 +153,20 @@ pub fn scan_orphaned_install_dirs(
         }
     };
 
-    let mut diagnoses = Vec::with_capacity(16);
+    let estimated_orphans = (packages.len().saturating_div(10)).max(8);
+    let mut diagnoses = Vec::with_capacity(estimated_orphans);
 
     for entry in entries.flatten() {
-        let path = entry.path();
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(_) => continue,
+        };
 
-        if !path.is_dir() {
+        if !file_type.is_dir() {
             continue;
         }
+
+        let path = entry.path();
 
         let package_name = match path.file_name().and_then(|value| value.to_str()) {
             Some(package_name) => package_name,
@@ -166,18 +188,22 @@ pub fn scan_orphaned_install_dirs(
         ));
     }
 
-    diagnoses.sort_unstable_by(|left, right| {
-        left.error_code
-            .cmp(&right.error_code)
-            .then_with(|| left.description.cmp(&right.description))
-    });
-    diagnoses
+    sort_diagnoses(diagnoses)
 }
 
 /// Loads the current installed package inventory from the database.
 pub fn installed_packages() -> Result<Vec<Package>> {
     let conn = database::get_conn()?;
     database::list_packages(&conn)
+}
+
+fn sort_diagnoses(mut diagnoses: Vec<DiagnosisResult>) -> Vec<DiagnosisResult> {
+    diagnoses.sort_unstable_by(|left, right| {
+        left.error_code
+            .cmp(&right.error_code)
+            .then_with(|| left.description.cmp(&right.description))
+    });
+    diagnoses
 }
 
 #[cfg(test)]
@@ -224,6 +250,28 @@ mod tests {
         assert_eq!(diagnosis.error_code, "install_directory_not_a_directory");
         assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
         assert!(diagnosis.description.contains("Contoso.File"));
+    }
+
+    #[test]
+    fn diagnosis_result_check_package_rejects_empty_install_path() {
+        let package = sample_package("Contoso.Empty", Path::new(""));
+
+        let diagnosis = check_package(&package).expect("empty path should diagnose");
+
+        assert_eq!(diagnosis.error_code, "empty_install_path");
+        assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
+    }
+
+    #[test]
+    fn diagnose_install_dir_error_maps_permission_denied() {
+        let package = sample_package("Contoso.Denied", Path::new("C:/deny"));
+        let error = std::io::Error::from(ErrorKind::PermissionDenied);
+
+        let diagnosis = diagnose_install_dir_error(&package, error);
+
+        assert_eq!(diagnosis.error_code, "install_directory_permission_denied");
+        assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
+        assert!(diagnosis.description.contains("Contoso.Denied"));
     }
 
     #[test]
