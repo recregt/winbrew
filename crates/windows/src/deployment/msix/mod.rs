@@ -6,6 +6,12 @@ use anyhow::{Context, Result, bail};
 #[cfg(windows)]
 use windows::Management::Deployment::PackageManager;
 
+/// Resolve the installed full package name for an MSIX package name.
+///
+/// The lookup accepts either a package full name or a package family name.
+/// If exactly one installed package matches, its full name is returned.
+/// Zero matches and ambiguous matches both return an error so the caller can
+/// handle the mismatch explicitly.
 pub fn installed_package_full_name(package_name: &str) -> Result<String> {
     #[cfg(not(windows))]
     {

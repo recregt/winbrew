@@ -9,6 +9,12 @@ use windows::Management::Deployment::{AddPackageOptions, PackageManager};
 #[cfg(windows)]
 use windows::core::HSTRING;
 
+/// Install an MSIX package from a downloaded file and return the installed full name.
+///
+/// On Windows the input path is canonicalized, converted to a file URI, and
+/// handed to `PackageManager::AddPackageByUriAsync`. The returned string is the
+/// installed package full name, which is what WinBrew stores in an engine
+/// receipt for later removal.
 pub fn install(download_path: &Path, package_name: &str) -> Result<String> {
     #[cfg(not(windows))]
     {

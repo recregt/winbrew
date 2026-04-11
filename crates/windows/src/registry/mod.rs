@@ -5,14 +5,39 @@ mod uninstall;
 
 pub use uninstall::{Hive, UninstallRoot, uninstall_roots};
 
-/// Holds complete app info for display and filtering.
+/// Display information collected from uninstall registry entries.
 #[derive(Debug, Eq, PartialEq)]
 pub struct AppInfo {
+    /// Application display name.
     pub name: String,
+    /// Application version string, if the registry entry exposes one.
     pub version: String,
+    /// Publisher string, if the registry entry exposes one.
     pub publisher: String,
 }
 
+/// Collect installed applications from the available uninstall registry roots.
+///
+/// The optional `filter` is treated as a case-insensitive literal search. Any
+/// regex metacharacters are escaped before matching, so the caller can pass a
+/// human-friendly package name instead of a regex.
+///
+/// Results are sorted by name first and then by version in descending
+/// lexicographic order. After sorting, entries with the same name are removed so
+/// the first entry for each name wins. That keeps the highest version encountered
+/// for each application name, which is good enough for display and removal
+/// workflows, but it is not a semantic-version comparison.
+///
+/// # Example
+///
+/// ```no_run
+/// use winbrew_windows::collect_installed_apps;
+///
+/// let apps = collect_installed_apps(Some("winbrew")).unwrap();
+/// for app in apps {
+///     println!("{} {} - {}", app.name, app.version, app.publisher);
+/// }
+/// ```
 pub fn collect_installed_apps(filter: Option<&str>) -> Result<Vec<AppInfo>> {
     let pattern = filter
         .map(|f| {
