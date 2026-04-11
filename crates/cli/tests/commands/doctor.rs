@@ -52,7 +52,6 @@ impl DoctorFixture {
             engine_kind: EngineKind::Portable,
             engine_metadata: None,
             install_dir: install_dir.to_string_lossy().to_string(),
-            msix_package_full_name: None,
             dependencies: Vec::new(),
             status: PackageStatus::Ok,
             installed_at: "2026-04-10T00:00:00Z".to_string(),

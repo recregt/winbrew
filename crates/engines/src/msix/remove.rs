@@ -20,34 +20,18 @@ pub fn remove(package: &WinbrewPackage) -> Result<()> {
     {
         let package_manager = PackageManager::new().context("failed to create package manager")?;
 
-        if let Some(package_full_name) = package
-            .engine_metadata
-            .as_ref()
-            .and_then(EngineMetadata::msix_package_full_name)
-            .or(package.msix_package_full_name.as_deref())
-        {
-            package_manager
-                .RemovePackageAsync(&HSTRING::from(package_full_name))
-                .with_context(|| format!("failed to start uninstall for {package_full_name}"))?
-                .join()
-                .with_context(|| format!("msix uninstall failed for {package_full_name}"))?;
+        let package_full_name = match package.engine_metadata.as_ref() {
+            Some(EngineMetadata::Msix {
+                package_full_name, ..
+            }) => package_full_name,
+            _ => bail!("missing msix receipt metadata for '{}'", package.name),
+        };
 
-            return Ok(());
-        }
-
-        let matching_full_names = matching_package_full_names(&package_manager, &package.name)?;
-
-        if matching_full_names.is_empty() {
-            bail!("no installed msix package matched '{}'", package.name);
-        }
-
-        for full_name in matching_full_names {
-            package_manager
-                .RemovePackageAsync(&full_name)
-                .with_context(|| format!("failed to start uninstall for {full_name}"))?
-                .join()
-                .with_context(|| format!("msix uninstall failed for {full_name}"))?;
-        }
+        package_manager
+            .RemovePackageAsync(&HSTRING::from(package_full_name))
+            .with_context(|| format!("failed to start uninstall for {package_full_name}"))?
+            .join()
+            .with_context(|| format!("msix uninstall failed for {package_full_name}"))?;
 
         Ok(())
     }

@@ -23,7 +23,6 @@ fn sample_package(
         engine_kind: kind.into(),
         engine_metadata: None,
         install_dir: install_dir.to_string_lossy().into_owned(),
-        msix_package_full_name: None,
         dependencies,
         status: PackageStatus::Ok,
         installed_at: "2026-04-05T00:00:00Z".to_string(),

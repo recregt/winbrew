@@ -1,3 +1,4 @@
+use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::engine::{EngineKind, EngineMetadata};
@@ -21,13 +22,21 @@ impl PackageStatus {
             Self::Failed => "failed",
         }
     }
+}
 
-    pub fn parse(status: &str) -> Self {
-        match status {
-            "ok" => Self::Ok,
-            "updating" => Self::Updating,
-            "failed" => Self::Failed,
-            _ => Self::Installing,
+impl FromStr for PackageStatus {
+    type Err = crate::error::ModelError;
+
+    fn from_str(status: &str) -> Result<Self, Self::Err> {
+        match status.trim().to_ascii_lowercase().as_str() {
+            "installing" => Ok(Self::Installing),
+            "ok" => Ok(Self::Ok),
+            "updating" => Ok(Self::Updating),
+            "failed" => Ok(Self::Failed),
+            other => Err(crate::error::ModelError::invalid_enum_value(
+                "package.status",
+                other,
+            )),
         }
     }
 }
@@ -35,6 +44,19 @@ impl PackageStatus {
 impl std::fmt::Display for PackageStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PackageStatus;
+    use core::str::FromStr;
+
+    #[test]
+    fn package_status_rejects_unknown_value() {
+        let err = PackageStatus::from_str("mystery").expect_err("unknown status should fail");
+
+        assert!(err.to_string().contains("invalid package.status: mystery"));
     }
 }
 
@@ -46,7 +68,6 @@ pub struct InstalledPackage {
     pub engine_kind: EngineKind,
     pub engine_metadata: Option<EngineMetadata>,
     pub install_dir: String,
-    pub msix_package_full_name: Option<String>,
     pub dependencies: Vec<String>,
     pub status: PackageStatus,
     pub installed_at: String,

@@ -54,12 +54,6 @@ impl EngineInstallReceipt {
             engine_metadata,
         }
     }
-
-    pub fn msix_package_full_name(&self) -> Option<&str> {
-        self.engine_metadata
-            .as_ref()
-            .and_then(EngineMetadata::msix_package_full_name)
-    }
 }
 
 impl EngineKind {
@@ -126,7 +120,7 @@ impl FromStr for EngineKind {
             "zip" => Ok(Self::Zip),
             "portable" => Ok(Self::Portable),
             "msi" => Ok(Self::Msi),
-            "nativeexe" | "exe" => Ok(Self::NativeExe),
+            "nativeexe" => Ok(Self::NativeExe),
             other => Err(ModelError::invalid_enum_value("engine.kind", other)),
         }
     }
@@ -165,5 +159,18 @@ impl core::fmt::Display for InstallScope {
 impl From<InstallScope> for String {
     fn from(value: InstallScope) -> Self {
         value.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EngineKind;
+    use core::str::FromStr;
+
+    #[test]
+    fn engine_kind_rejects_exe_alias() {
+        let err = EngineKind::from_str("exe").expect_err("exe should not parse as an engine kind");
+
+        assert!(err.to_string().contains("invalid engine.kind: exe"));
     }
 }

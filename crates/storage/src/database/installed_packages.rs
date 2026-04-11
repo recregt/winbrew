@@ -22,8 +22,8 @@ pub fn insert_package(conn: &Connection, pkg: &Package) -> Result<()> {
 
     conn.execute(
         "INSERT INTO installed_packages
-         (name, version, kind, engine_kind, engine_metadata, install_dir, msix_package_full_name, dependencies, status, installed_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+         (name, version, kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             pkg.name,
             pkg.version,
@@ -31,7 +31,6 @@ pub fn insert_package(conn: &Connection, pkg: &Package) -> Result<()> {
             pkg.engine_kind.to_string(),
             engine_metadata,
             pkg.install_dir,
-            pkg.msix_package_full_name,
             deps,
             pkg.status.as_str(),
             pkg.installed_at,
@@ -60,11 +59,10 @@ pub fn update_status(conn: &Connection, name: &str, status: PackageStatus) -> Re
     Ok(())
 }
 
-pub fn update_status_and_msix_package_full_name(
+pub fn update_status_and_engine_metadata(
     conn: &Connection,
     name: &str,
     status: PackageStatus,
-    msix_package_full_name: Option<&str>,
     engine_metadata: Option<&EngineMetadata>,
 ) -> Result<()> {
     let engine_metadata = engine_metadata
@@ -76,17 +74,11 @@ pub fn update_status_and_msix_package_full_name(
         .execute(
             "UPDATE installed_packages
                 SET status = ?1,
-                    msix_package_full_name = ?2,
-                    engine_metadata = ?3
-              WHERE name = ?4",
-            params![
-                status.as_str(),
-                msix_package_full_name,
-                engine_metadata,
-                name
-            ],
+                    engine_metadata = ?2
+              WHERE name = ?3",
+            params![status.as_str(), engine_metadata, name],
         )
-        .context("failed to update status and msix package full name")?;
+        .context("failed to update status and engine metadata")?;
 
     if affected == 0 {
         return Err(PackageNotFoundError {
@@ -100,7 +92,7 @@ pub fn update_status_and_msix_package_full_name(
 
 pub fn get_package(conn: &Connection, name: &str) -> Result<Option<Package>> {
     let mut stmt = conn.prepare(
-        "SELECT name, version, kind, engine_kind, engine_metadata, install_dir, msix_package_full_name, dependencies, status, installed_at
+        "SELECT name, version, kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at
             FROM installed_packages WHERE name = ?1",
     )?;
 
@@ -112,7 +104,7 @@ pub fn get_package(conn: &Connection, name: &str) -> Result<Option<Package>> {
 pub fn list_packages(conn: &Connection) -> Result<Vec<Package>> {
     let mut stmt = conn.prepare(
         // Returns only packages that completed successfully.
-        "SELECT name, version, kind, engine_kind, engine_metadata, install_dir, msix_package_full_name, dependencies, status, installed_at
+        "SELECT name, version, kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at
             FROM installed_packages WHERE status = 'ok'
          ORDER BY name ASC",
     )?;
@@ -124,7 +116,7 @@ pub fn list_packages(conn: &Connection) -> Result<Vec<Package>> {
 
 pub fn list_installing_packages(conn: &Connection) -> Result<Vec<Package>> {
     let mut stmt = conn.prepare(
-        "SELECT name, version, kind, engine_kind, engine_metadata, install_dir, msix_package_full_name, dependencies, status, installed_at
+        "SELECT name, version, kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at
             FROM installed_packages WHERE status = 'installing'
          ORDER BY installed_at ASC, name ASC",
     )?;
@@ -149,12 +141,13 @@ fn row_to_package(row: &rusqlite::Row) -> std::result::Result<Package, SqlError>
     const COL_KIND: usize = 2;
     const COL_ENGINE_KIND: usize = 3;
     const COL_ENGINE_METADATA: usize = 4;
-    const COL_DEPENDENCIES: usize = 7;
+    const COL_DEPENDENCIES: usize = 6;
+    const COL_STATUS: usize = 7;
 
     let dependencies_raw: String = row.get("dependencies")?;
     let status_raw: String = row.get("status")?;
     let kind_raw: String = row.get("kind")?;
-    let engine_kind_raw: Option<String> = row.get("engine_kind")?;
+    let engine_kind_raw: String = row.get("engine_kind")?;
     let engine_metadata_raw: Option<String> = row.get("engine_metadata")?;
 
     let dependencies: Vec<String> = serde_json::from_str(&dependencies_raw).map_err(|err| {
@@ -163,25 +156,18 @@ fn row_to_package(row: &rusqlite::Row) -> std::result::Result<Package, SqlError>
     let kind = kind_raw
         .parse::<InstallerType>()
         .map_err(|err| SqlError::FromSqlConversionFailure(COL_KIND, Type::Text, Box::new(err)))?;
-    let engine_kind = match engine_kind_raw {
-        Some(value) => value.parse::<EngineKind>().map_err(|err| {
-            SqlError::FromSqlConversionFailure(COL_ENGINE_KIND, Type::Text, Box::new(err))
-        })?,
-        None => kind.into(),
-    };
+    let engine_kind = engine_kind_raw.parse::<EngineKind>().map_err(|err| {
+        SqlError::FromSqlConversionFailure(COL_ENGINE_KIND, Type::Text, Box::new(err))
+    })?;
     let engine_metadata = match engine_metadata_raw {
         Some(value) => Some(serde_json::from_str(&value).map_err(|err| {
             SqlError::FromSqlConversionFailure(COL_ENGINE_METADATA, Type::Text, Box::new(err))
         })?),
         None => None,
     };
-    let msix_package_full_name: Option<String> = match row.get("msix_package_full_name")? {
-        Some(value) => Some(value),
-        None => engine_metadata
-            .as_ref()
-            .and_then(EngineMetadata::msix_package_full_name)
-            .map(ToOwned::to_owned),
-    };
+    let status = status_raw
+        .parse::<PackageStatus>()
+        .map_err(|err| SqlError::FromSqlConversionFailure(COL_STATUS, Type::Text, Box::new(err)))?;
 
     Ok(Package {
         name: row.get("name")?,
@@ -190,9 +176,8 @@ fn row_to_package(row: &rusqlite::Row) -> std::result::Result<Package, SqlError>
         engine_kind,
         engine_metadata,
         install_dir: row.get("install_dir")?,
-        msix_package_full_name,
         dependencies,
-        status: PackageStatus::parse(&status_raw),
+        status,
         installed_at: row.get("installed_at")?,
     })
 }
