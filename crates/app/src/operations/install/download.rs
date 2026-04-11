@@ -1,3 +1,14 @@
+//! Download and verification helpers for installer payloads.
+//!
+//! This module owns the network-specific half of the install flow. It creates
+//! the dedicated installer HTTP client, streams the selected installer into a
+//! temporary file, and finalizes the file only after checksum verification has
+//! passed.
+//!
+//! The higher-level orchestration code uses these helpers as a single phase with
+//! well-defined cleanup behavior: temporary files are removed on failure and the
+//! caller receives any tolerated legacy checksum algorithms for reporting.
+
 use anyhow::Result;
 use std::fs;
 use std::path::Path;
@@ -11,10 +22,24 @@ use winbrew_models::CatalogInstaller;
 
 const CATALOG_USER_AGENT: &str = "winbrew-package-installer";
 
+/// Build the HTTP client used for installer downloads.
+///
+/// A dedicated user agent makes installer traffic easy to identify in server
+/// logs and keeps the install pipeline separate from catalog refresh traffic.
 pub fn build_client() -> Result<crate::core::network::Client> {
     Ok(network_build_client(CATALOG_USER_AGENT)?)
 }
 
+/// Download an installer into a temporary file and verify it before finalizing.
+///
+/// The payload is streamed to a `.part` file next to `download_path`, with
+/// progress forwarded through the provided callbacks. If the installer hash is
+/// present, it is verified as the bytes arrive. On success, the temporary file
+/// is atomically finalized into `download_path` and the set of tolerated legacy
+/// checksum algorithms is returned to the caller.
+///
+/// When any step fails, the temporary file is removed so the install flow does
+/// not leave behind partially downloaded payloads.
 pub fn download_installer<FStart, FProgress>(
     client: &crate::core::network::Client,
     installer: &CatalogInstaller,

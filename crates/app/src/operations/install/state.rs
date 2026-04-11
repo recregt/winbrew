@@ -1,3 +1,14 @@
+//! Database and filesystem state helpers for installation.
+//!
+//! This module is responsible for the persistence side of the install flow.
+//! It validates whether a package can be installed, removes stale failed state,
+//! records the package as installing, and flips the status to either installed
+//! or failed once the engine phase completes.
+//!
+//! Keeping these transitions isolated makes the outer install orchestration
+//! easier to reason about and gives rollback a single place to update package
+//! status.
+
 use std::path::Path;
 use thiserror::Error;
 
@@ -6,6 +17,7 @@ use crate::core::now;
 use crate::storage;
 use winbrew_models::{InstallerType, Package, PackageStatus};
 
+/// Errors raised while preparing or updating install state.
 #[derive(Debug, Error)]
 pub enum InstallStateError {
     #[error("failed to read install state for '{name}'")]
@@ -46,8 +58,16 @@ pub enum InstallStateError {
     },
 }
 
+/// Convenience result type for install-state operations.
 pub type Result<T> = std::result::Result<T, InstallStateError>;
 
+/// Validate the target install path and clear stale failed state if present.
+///
+/// This function enforces the database-level install preconditions before any
+/// download work begins. It rejects packages that are already installed,
+/// already installing, or currently updating. If the previous attempt failed,
+/// the stale package row is removed and the install directory is cleaned so the
+/// next attempt starts from a known-good state.
 pub fn prepare_install_target(
     conn: &crate::storage::DbConnection,
     name: &str,
@@ -98,6 +118,11 @@ pub fn prepare_install_target(
     Ok(())
 }
 
+/// Insert a package record marked as installing.
+///
+/// The record captures the package metadata and provisional install directory so
+/// the database reflects that work is in progress before the payload download
+/// starts.
 pub fn mark_installing(
     conn: &crate::storage::DbConnection,
     name: impl Into<String>,
@@ -114,6 +139,10 @@ pub fn mark_installing(
     })
 }
 
+/// Mark a package as successfully installed.
+///
+/// For MSIX packages, the caller may provide the installed package full name so
+/// it can be persisted alongside the final `Ok` status.
 pub fn mark_ok(
     conn: &crate::storage::DbConnection,
     name: &str,
@@ -131,6 +160,10 @@ pub fn mark_ok(
     })
 }
 
+/// Mark a package as failed.
+///
+/// The outer install flow uses this during rollback to preserve the failure
+/// state in the local database after partial installation has been cleaned up.
 pub fn mark_failed(conn: &crate::storage::DbConnection, name: &str) -> Result<()> {
     storage::update_status(conn, name, PackageStatus::Failed).map_err(|source| {
         InstallStateError::DatabaseOperationFailed {

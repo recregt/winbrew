@@ -1,9 +1,18 @@
-//! # Doctor Operations
+//! Health reporting for installed packages and install roots.
 //!
-//! Health checks and package integrity verification for the `doctor` command.
+//! The doctor workflow provides a single public entry point, [`health_report`],
+//! that gathers database and filesystem diagnostics into a
+//! [`crate::models::HealthReport`]. The implementation stays split across
+//! internal helper modules so the report assembly code does not need to know the
+//! details of package scanning or diagnostic formatting.
 //!
-//! The public API is intentionally small: callers use [`health_report`] to build a
-//! [`crate::models::HealthReport`], while the package scanning pipeline stays internal.
+//! The pipeline is intentionally narrow:
+//!
+//! - `report` assembles the final report structure and summary counts.
+//! - `scan` inspects installed package records and package directories.
+//!
+//! CLI code owns any interactive presentation around the report, including the
+//! spinner and terminal formatting. The app layer only returns structured data.
 
 mod report;
 mod scan;

@@ -1,3 +1,10 @@
+//! Summary assembly for the doctor report.
+//!
+//! This module turns the raw diagnostics produced by `scan` into the final
+//! [`crate::models::HealthReport`]. It is responsible for path rendering,
+//! diagnostic ordering, fallback diagnostics when package inventory lookup
+//! fails, and the final error count used by the UI.
+
 use anyhow::Result;
 use std::path::Path;
 use std::time::Instant;
@@ -7,10 +14,18 @@ use crate::AppContext;
 use super::scan;
 use crate::models::{DiagnosisResult, DiagnosisSeverity, HealthReport, Package};
 
+/// Convert a path into the display string used in the final report.
+///
+/// The conversion is lossy on purpose so the report stays printable even if a
+/// path contains non-UTF-8 bytes.
 fn display_path(path: impl AsRef<Path>) -> String {
     path.as_ref().to_string_lossy().into_owned()
 }
 
+/// Order diagnostics so the final report is deterministic and readable.
+///
+/// Errors are shown before warnings, and items within the same severity are
+/// sorted by error code and then by description.
 fn sort_diagnostics(left: &DiagnosisResult, right: &DiagnosisResult) -> std::cmp::Ordering {
     left.severity
         .cmp(&right.severity)
@@ -18,6 +33,11 @@ fn sort_diagnostics(left: &DiagnosisResult, right: &DiagnosisResult) -> std::cmp
         .then_with(|| left.description.cmp(&right.description))
 }
 
+/// Load installed packages or convert the failure into a diagnostic entry.
+///
+/// A database lookup failure should not prevent the doctor report from being
+/// generated. Instead, the function returns an empty package list plus a single
+/// error diagnostic that explains why package inventory is unavailable.
 fn collect_packages(packages_result: Result<Vec<Package>>) -> (Vec<Package>, Vec<DiagnosisResult>) {
     match packages_result {
         Ok(packages) => (packages, Vec::new()),
@@ -32,7 +52,12 @@ fn collect_packages(packages_result: Result<Vec<Package>>) -> (Vec<Package>, Vec
     }
 }
 
-/// Convenience entry point for callers that need a one-shot health report.
+/// Build a full health report for the current application context.
+///
+/// The function snapshots the current paths, collects installed packages,
+/// scans package directories, sorts the resulting diagnostics, and computes a
+/// final error count. The returned report is intentionally pre-rendered with
+/// display-friendly paths so the caller can present it directly.
 pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
     let paths = &ctx.paths;
     let started_at = Instant::now();

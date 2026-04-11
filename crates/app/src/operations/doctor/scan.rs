@@ -1,3 +1,15 @@
+//! Package and filesystem scanning for doctor diagnostics.
+//!
+//! The scan phase inspects installed package records and the directories they
+//! point at. It intentionally uses lightweight filesystem metadata checks so
+//! the doctor command can diagnose common state problems without launching or
+//! probing package binaries.
+//!
+//! Two categories of diagnostics are produced here:
+//!
+//! - broken package records whose install paths are missing, invalid, or unreadable
+//! - orphaned directories under the package root that no longer have a database record
+
 use anyhow::Result;
 
 use crate::models::{DiagnosisResult, DiagnosisSeverity, Package};
@@ -7,6 +19,11 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 
+/// Validate the install path string stored on a package record.
+///
+/// The doctor scan treats empty paths and paths containing a null byte as
+/// immediate configuration errors because they cannot represent a valid
+/// filesystem location on Windows.
 fn validate_install_path(pkg: &Package) -> Option<DiagnosisResult> {
     if pkg.install_dir.trim().is_empty() {
         return Some(DiagnosisResult {
@@ -30,6 +47,10 @@ fn validate_install_path(pkg: &Package) -> Option<DiagnosisResult> {
     None
 }
 
+/// Translate a filesystem metadata failure into a user-facing diagnosis.
+///
+/// The error code depends on the error kind so the final report can distinguish
+/// missing directories, permission problems, and generic unreadable paths.
 fn diagnose_install_dir_error(pkg: &Package, err: std::io::Error) -> DiagnosisResult {
     let (error_code, description) = match err.kind() {
         ErrorKind::NotFound => (
@@ -62,6 +83,11 @@ fn diagnose_install_dir_error(pkg: &Package, err: std::io::Error) -> DiagnosisRe
     }
 }
 
+/// Check a single installed package for install-directory problems.
+///
+/// The scan is intentionally metadata-only: it validates the stored path string,
+/// checks that the directory exists, and confirms that the path is actually a
+/// directory. Anything else is turned into a diagnosis instead of a hard error.
 fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
     if let Some(diagnosis) = validate_install_path(pkg) {
         return Some(diagnosis);
@@ -88,12 +114,17 @@ fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
     None
 }
 
-/// Scans installed packages and returns diagnostics for broken package roots.
+/// Scan installed packages and return diagnostics for broken install roots.
 pub(super) fn scan_packages(packages: &[Package]) -> Vec<DiagnosisResult> {
     sort_diagnoses(packages.iter().filter_map(check_package).collect())
 }
 
-/// Scans the package root for directories that do not correspond to installed packages.
+/// Scan the package root for directories that do not correspond to packages in the database.
+///
+/// Orphaned directories are reported as warnings because they indicate stale
+/// filesystem state rather than a broken package record. If the root directory
+/// itself cannot be read, the function returns a single error diagnostic so the
+/// caller can surface the storage problem directly.
 pub(super) fn scan_orphaned_install_dirs(
     packages_root: &Path,
     packages: &[Package],
@@ -152,12 +183,16 @@ pub(super) fn scan_orphaned_install_dirs(
     sort_diagnoses(diagnoses)
 }
 
-/// Loads the current installed package inventory from the database.
+/// Load the current installed package inventory from the database.
+///
+/// The scan layer owns the database access here so the caller can treat the
+/// package inventory as just another input to report generation.
 pub(super) fn installed_packages() -> Result<Vec<Package>> {
     let conn = database::get_conn()?;
     database::list_packages(&conn)
 }
 
+/// Sort diagnostics deterministically by code and description.
 fn sort_diagnoses(mut diagnoses: Vec<DiagnosisResult>) -> Vec<DiagnosisResult> {
     diagnoses.sort_unstable_by(|left, right| {
         left.error_code

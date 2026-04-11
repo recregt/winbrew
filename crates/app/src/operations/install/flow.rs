@@ -1,3 +1,14 @@
+//! Orchestration for the middle and final phases of installation.
+//!
+//! The outer install entry point uses this module to keep the overall workflow
+//! readable: `perform_install` downloads the payload and dispatches it to the
+//! selected engine, while the rollback helpers ensure that partial filesystem
+//! state is removed when cancellation or failure interrupts the process.
+//!
+//! The functions here deliberately stay focused on execution and cleanup. They
+//! do not resolve catalog references or translate errors into user-facing types;
+//! that work happens one layer above in [`super::run`].
+
 use anyhow::Result;
 use std::path::Path;
 use tracing::warn;
@@ -11,6 +22,11 @@ use super::download;
 use super::state;
 use winbrew_models::CatalogInstaller;
 
+/// Remove the temporary root directory used for a single install attempt.
+///
+/// Cleanup failures are logged as warnings rather than returned to the caller,
+/// because install rollback should make a best effort without masking the
+/// original failure that triggered cleanup.
 pub(crate) fn cleanup_temp_root(temp_root: &Path) {
     if let Err(err) = cleanup_path(temp_root) {
         warn!(
@@ -21,6 +37,11 @@ pub(crate) fn cleanup_temp_root(temp_root: &Path) {
     }
 }
 
+/// Roll back the database and filesystem state after an install failure.
+///
+/// The package record is marked as failed and any staged, backup, or final
+/// install directories are removed so the next install attempt starts from a
+/// clean slate.
 pub(crate) fn rollback_failed_install(
     conn: &crate::storage::DbConnection,
     name: &str,
@@ -30,6 +51,11 @@ pub(crate) fn rollback_failed_install(
     cleanup_install_artifacts(install_dir);
 }
 
+/// Roll back the database and filesystem state after a cancelled install.
+///
+/// Cancellation uses the same cleanup path as a normal failure, but it remains
+/// a separate function so the outer workflow can keep cancellation semantics
+/// explicit.
 pub(crate) fn rollback_cancelled_install(
     conn: &crate::storage::DbConnection,
     name: &str,
@@ -39,6 +65,11 @@ pub(crate) fn rollback_cancelled_install(
     cleanup_install_artifacts(install_dir);
 }
 
+/// Inputs required to execute a single install attempt.
+///
+/// The outer workflow builds this request once the package, installer, and
+/// temporary paths have been resolved. The request keeps the lower-level
+/// `perform_install` function focused on execution rather than setup.
 pub(crate) struct InstallRequest<'a, FStart, FProgress>
 where
     FStart: FnOnce(Option<u64>),
@@ -54,6 +85,18 @@ where
     pub on_progress: FProgress,
 }
 
+/// Download the installer and hand it to the selected engine.
+///
+/// This function performs the core execution phase of installation:
+///
+/// 1. Derive the temporary download path from the installer URL.
+/// 2. Stream the installer to disk while enforcing cancellation checks.
+/// 3. Verify the hash strategy selected for the installer.
+/// 4. Invoke the engine-specific installation routine.
+///
+/// The returned vector contains the legacy checksum algorithms that were
+/// accepted during download verification, allowing the caller to surface that
+/// detail in the final install result.
 pub(crate) fn perform_install<FStart, FProgress>(
     request: InstallRequest<'_, FStart, FProgress>,
 ) -> Result<Vec<HashAlgorithm>>

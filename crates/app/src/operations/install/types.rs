@@ -1,3 +1,10 @@
+//! Error normalization and installer-selection helpers for installation.
+//!
+//! This module keeps the install boundary stable by translating lower-level
+//! failures into a smaller set of user-facing errors. It also wraps catalog
+//! installer selection so the outer workflow does not need to know the catalog
+//! policy for choosing between multiple installer records.
+
 use anyhow::Error;
 use std::io;
 use thiserror::Error;
@@ -9,18 +16,30 @@ use crate::core::hash::HashError;
 use crate::models::{CatalogInstaller, HashAlgorithm};
 use winbrew_models::InstallFailureClass;
 
+/// Raised when a package has no installers to choose from.
 #[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
 #[error("catalog package has no installers")]
 pub enum InstallerSelectionError {
     NoInstallers,
 }
 
+/// Select the installer that the catalog policy considers best for the package.
+///
+/// The underlying catalog layer owns the actual ranking logic. This helper only
+/// converts the absence of a usable installer into a stable error type for the
+/// install workflow.
 pub(crate) fn select_installer(
     installers: &[CatalogInstaller],
 ) -> std::result::Result<CatalogInstaller, InstallerSelectionError> {
     catalog::select_installer(installers).ok_or(InstallerSelectionError::NoInstallers)
 }
 
+/// User-facing error type produced by the install pipeline.
+///
+/// The variants intentionally map to coarse categories rather than exposing the
+/// raw implementation details from catalog resolution, checksum verification,
+/// cancellation, and rollback. This keeps the CLI behavior predictable while
+/// still preserving enough context for diagnostics and testing.
 #[derive(Debug, Error)]
 pub enum InstallError {
     #[error("package '{name}' is already installed")]
@@ -45,9 +64,11 @@ pub enum InstallError {
     Unexpected(Error),
 }
 
+/// Convenience result type for install operations.
 pub type Result<T> = std::result::Result<T, InstallError>;
 
 impl InstallError {
+    /// Group the error into a coarse failure class for reporting and rollback.
     pub fn failure_class(&self) -> InstallFailureClass {
         match self {
             Self::AlreadyInstalled { .. }
