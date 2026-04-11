@@ -25,6 +25,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::catalog;
+use crate::core::paths::{ensure_install_dirs_at, install_root_from_package_dir};
 use crate::core::temp_workspace;
 use crate::engines;
 use crate::storage;
@@ -102,10 +103,9 @@ pub fn run<O: InstallObserver>(
 
     let install_dir = ctx.paths.packages.join(&package.name);
     let temp_root = temp_workspace::build_temp_root(&package.name, &package_version);
+    let install_root = install_root_from_package_dir(&install_dir);
 
-    if let Some(parent) = install_dir.parent() {
-        fs::create_dir_all(parent)?;
-    }
+    ensure_install_dirs_at(&install_root)?;
     fs::create_dir_all(&temp_root)?;
 
     let _temp_root_guard = TempRootGuard::new(temp_root.clone());
