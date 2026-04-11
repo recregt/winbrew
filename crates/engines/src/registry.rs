@@ -1,13 +1,13 @@
 use anyhow::{Result, anyhow};
 use std::path::Path;
 
-use winbrew_models::{CatalogInstaller, InstalledPackage, InstallerType};
+use winbrew_models::{CatalogInstaller, EngineInstallReceipt, InstalledPackage, InstallerType};
 
 use crate::network::is_zip_path;
 
 use super::{EngineKind, msix, portable, zip};
 
-type InstallFn = fn(&CatalogInstaller, &Path, &Path) -> Result<()>;
+type InstallFn = fn(&CatalogInstaller, &Path, &Path, &str) -> Result<EngineInstallReceipt>;
 type RemoveFn = fn(&InstalledPackage) -> Result<()>;
 type MatchesInstallerFn = fn(&CatalogInstaller) -> bool;
 
@@ -35,15 +35,17 @@ fn msix_install(
     _installer: &CatalogInstaller,
     download_path: &Path,
     install_dir: &Path,
-) -> Result<()> {
-    msix::install::install(download_path, install_dir)
+    package_name: &str,
+) -> Result<EngineInstallReceipt> {
+    msix::install::install(download_path, install_dir, package_name)
 }
 
 fn zip_install(
     _installer: &CatalogInstaller,
     download_path: &Path,
     install_dir: &Path,
-) -> Result<()> {
+    _package_name: &str,
+) -> Result<EngineInstallReceipt> {
     zip::install::install(download_path, install_dir)
 }
 
@@ -51,8 +53,9 @@ fn portable_install(
     installer: &CatalogInstaller,
     download_path: &Path,
     install_dir: &Path,
-) -> Result<()> {
-    portable::install::install(download_path, install_dir, &installer.url)
+    package_name: &str,
+) -> Result<EngineInstallReceipt> {
+    portable::install::install(download_path, install_dir, &installer.url, package_name)
 }
 
 fn msix_remove(package: &InstalledPackage) -> Result<()> {
@@ -103,10 +106,11 @@ pub(crate) fn install(
     installer: &CatalogInstaller,
     download_path: &Path,
     install_dir: &Path,
-) -> Result<()> {
+    package_name: &str,
+) -> Result<EngineInstallReceipt> {
     let descriptor = resolve_engine_descriptor(kind)?;
 
-    (descriptor.install)(installer, download_path, install_dir)
+    (descriptor.install)(installer, download_path, install_dir, package_name)
 }
 
 pub(crate) fn remove(kind: EngineKind, package: &InstalledPackage) -> Result<()> {

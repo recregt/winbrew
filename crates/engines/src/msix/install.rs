@@ -7,10 +7,18 @@ use windows::Management::Deployment::{AddPackageOptions, PackageManager};
 #[cfg(windows)]
 use windows::core::HSTRING;
 
-pub fn install(download_path: &Path, install_dir: &Path) -> Result<()> {
+use winbrew_models::{EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope};
+
+use super::installed_package_full_name;
+
+pub fn install(
+    download_path: &Path,
+    install_dir: &Path,
+    package_name: &str,
+) -> Result<EngineInstallReceipt> {
     #[cfg(not(windows))]
     {
-        let _ = (download_path, install_dir);
+        let _ = (download_path, install_dir, package_name);
         anyhow::bail!("MSIX installation is only supported on Windows")
     }
 
@@ -29,7 +37,15 @@ pub fn install(download_path: &Path, install_dir: &Path) -> Result<()> {
         fs::create_dir_all(install_dir)
             .with_context(|| format!("failed to create {}", install_dir.display()))?;
 
-        Ok(())
+        let engine_metadata = match installed_package_full_name(package_name) {
+            Ok(package_full_name) => Some(EngineMetadata::msix(
+                package_full_name,
+                InstallScope::Installed,
+            )),
+            Err(_) => None,
+        };
+
+        Ok(EngineInstallReceipt::new(EngineKind::Msix, engine_metadata))
     }
 }
 

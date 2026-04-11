@@ -4,7 +4,10 @@ use std::path::Path;
 
 use crate::fs::{cleanup_path, extract_zip_archive, replace_directory};
 
-pub fn install(download_path: &Path, install_dir: &Path) -> Result<()> {
+use winbrew_models::EngineInstallReceipt;
+use winbrew_models::EngineKind;
+
+pub fn install(download_path: &Path, install_dir: &Path) -> Result<EngineInstallReceipt> {
     let stage_dir = install_dir.parent().unwrap_or(install_dir).join("staging");
 
     cleanup_path(&stage_dir)?;
@@ -13,7 +16,7 @@ pub fn install(download_path: &Path, install_dir: &Path) -> Result<()> {
     extract_zip_archive(download_path, &stage_dir)?;
     replace_directory(&stage_dir, install_dir)?;
 
-    Ok(())
+    Ok(EngineInstallReceipt::new(EngineKind::Zip, None))
 }
 
 #[cfg(test)]

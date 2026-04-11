@@ -27,7 +27,6 @@ use std::path::PathBuf;
 use crate::catalog;
 use crate::core::temp_workspace;
 use crate::engines;
-use crate::models::{EngineMetadata, InstallScope};
 use crate::storage;
 
 pub use crate::core::cancel;
@@ -124,32 +123,36 @@ pub fn run<O: InstallObserver>(
 
     let client = download::build_client()?;
 
-    let legacy_checksum_algorithms = match flow::perform_install(flow::InstallRequest {
-        client: &client,
-        engine,
-        installer: &installer,
-        temp_root: &temp_root,
-        install_dir: &install_dir,
-        ignore_checksum_security,
-        on_start: |total_bytes| observer.borrow_mut().on_start(total_bytes),
-        on_progress: |downloaded_bytes| observer.borrow_mut().on_progress(downloaded_bytes),
-    }) {
-        Ok(legacy_checksum_algorithms) => legacy_checksum_algorithms,
-        Err(err) => {
-            let install_error: InstallError = err.into();
-
-            match install_error.failure_class() {
-                InstallFailureClass::Cancelled => {
-                    flow::rollback_cancelled_install(&conn, &package.name, &install_dir);
-                }
-                _ => {
-                    flow::rollback_failed_install(&conn, &package.name, &install_dir);
-                }
+    let (engine_receipt, legacy_checksum_algorithms) =
+        match flow::perform_install(flow::InstallRequest {
+            client: &client,
+            engine,
+            installer: &installer,
+            package_name: &package.name,
+            temp_root: &temp_root,
+            install_dir: &install_dir,
+            ignore_checksum_security,
+            on_start: |total_bytes| observer.borrow_mut().on_start(total_bytes),
+            on_progress: |downloaded_bytes| observer.borrow_mut().on_progress(downloaded_bytes),
+        }) {
+            Ok((engine_receipt, legacy_checksum_algorithms)) => {
+                (engine_receipt, legacy_checksum_algorithms)
             }
+            Err(err) => {
+                let install_error: InstallError = err.into();
 
-            return Err(install_error);
-        }
-    };
+                match install_error.failure_class() {
+                    InstallFailureClass::Cancelled => {
+                        flow::rollback_cancelled_install(&conn, &package.name, &install_dir);
+                    }
+                    _ => {
+                        flow::rollback_failed_install(&conn, &package.name, &install_dir);
+                    }
+                }
+
+                return Err(install_error);
+            }
+        };
 
     if cancel::is_cancelled() {
         flow::rollback_cancelled_install(&conn, &package.name, &install_dir);
@@ -162,22 +165,7 @@ pub fn run<O: InstallObserver>(
         install_dir: install_dir.to_string_lossy().to_string(),
     };
 
-    let engine_metadata = if engine == engines::EngineKind::Msix {
-        match engines::msix::installed_package_full_name(&install_result.name) {
-            Ok(full_name) => Some(full_name),
-            Err(err) => {
-                flow::rollback_failed_install(&conn, &install_result.name, &install_dir);
-                return Err(err.into());
-            }
-        }
-    } else {
-        None
-    };
-
-    let engine_metadata = engine_metadata
-        .map(|package_full_name| EngineMetadata::msix(package_full_name, InstallScope::Installed));
-
-    if let Err(err) = state::mark_ok(&conn, &install_result.name, engine_metadata.as_ref()) {
+    if let Err(err) = state::mark_ok(&conn, &install_result.name, &engine_receipt) {
         let _ = state::mark_failed(&conn, &install_result.name);
         return Err(err.into());
     }
