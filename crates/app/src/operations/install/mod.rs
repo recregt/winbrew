@@ -160,7 +160,7 @@ pub fn run<O: InstallObserver>(
     let install_result = InstallResult {
         name: package.name,
         version: package_version,
-        install_dir: install_dir.to_string_lossy().to_string(),
+        install_dir: engine_receipt.install_dir.clone(),
     };
 
     if let Err(err) = state::mark_ok(&mut conn, &install_result.name, &engine_receipt) {

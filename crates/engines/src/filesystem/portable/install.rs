@@ -37,7 +37,11 @@ pub fn install(
 
     replace_directory(&stage_dir, install_dir)?;
 
-    Ok(EngineInstallReceipt::new(EngineKind::Portable, None))
+    Ok(EngineInstallReceipt::new(
+        EngineKind::Portable,
+        install_dir.to_string_lossy().into_owned(),
+        None,
+    ))
 }
 
 fn staging_dir_for(install_dir: &Path) -> PathBuf {

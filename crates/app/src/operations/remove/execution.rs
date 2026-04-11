@@ -4,7 +4,7 @@
 //! database and filesystem state accordingly. The exact removal strategy
 //! depends on the package engine:
 //!
-//! - MSIX packages are removed through the engine first and then cleaned from disk.
+//! - MSIX and MSI packages are removed through the engine first and then cleaned from disk.
 //! - Zip and portable packages are staged into a trash directory before the
 //!   database row is deleted so the install tree can be restored if metadata
 //!   removal fails.
@@ -65,7 +65,7 @@ fn execute_removal_with_conn(
     let engine_kind = plan.package.engine_kind;
 
     match engine_kind {
-        EngineKind::Msix => {
+        EngineKind::Msix | EngineKind::Msi => {
             engine_kind.remove(&plan.package)?;
 
             if install_dir.exists()

@@ -32,6 +32,7 @@ pub fn get_engine(installer: &CatalogInstaller) -> Result<EngineKind> {
 
 pub fn get_engine_kind(kind: InstallerType) -> Result<EngineKind> {
     match kind {
+        InstallerType::Msi => Ok(EngineKind::Msi),
         InstallerType::Msix => Ok(EngineKind::Msix),
         InstallerType::Zip => Ok(EngineKind::Zip),
         InstallerType::Portable => Ok(EngineKind::Portable),
@@ -65,6 +66,10 @@ mod tests {
 
     #[test]
     fn get_engine_kind_maps_supported_types() {
+        assert_eq!(
+            get_engine_kind(InstallerType::Msi).unwrap(),
+            EngineKind::Msi
+        );
         assert_eq!(
             get_engine_kind(InstallerType::Msix).unwrap(),
             EngineKind::Msix

@@ -16,7 +16,11 @@ pub fn install(download_path: &Path, install_dir: &Path) -> Result<EngineInstall
     extract_zip_archive(download_path, &stage_dir)?;
     replace_directory(&stage_dir, install_dir)?;
 
-    Ok(EngineInstallReceipt::new(EngineKind::Zip, None))
+    Ok(EngineInstallReceipt::new(
+        EngineKind::Zip,
+        install_dir.to_string_lossy().into_owned(),
+        None,
+    ))
 }
 
 #[cfg(test)]

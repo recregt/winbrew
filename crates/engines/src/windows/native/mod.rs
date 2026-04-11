@@ -1,4 +1,7 @@
 //! Windows-native installers live here.
 
-//! This namespace is reserved for MSI and similar installers that are not
-//! archive-extraction based.
+//! This namespace now hosts the MSI engine path. It is separated from archive
+//! extractors because MSI installation and removal are driven by the Windows
+//! Installer service rather than by file extraction.
+
+pub mod msi;

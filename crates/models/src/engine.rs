@@ -39,20 +39,31 @@ pub enum EngineMetadata {
 
 /// Completion record returned by an engine after installation.
 ///
-/// The receipt preserves the technical engine kind that executed the install
-/// plus any engine-specific metadata needed for future removal or repair.
+/// The receipt preserves the technical engine kind that executed the install,
+/// the final install directory reported by the engine, and any engine-specific
+/// metadata needed for future removal or repair.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EngineInstallReceipt {
     pub engine_kind: EngineKind,
+    pub install_dir: String,
     pub engine_metadata: Option<EngineMetadata>,
 }
 
 impl EngineInstallReceipt {
-    pub fn new(engine_kind: EngineKind, engine_metadata: Option<EngineMetadata>) -> Self {
+    pub fn new(
+        engine_kind: EngineKind,
+        install_dir: impl Into<String>,
+        engine_metadata: Option<EngineMetadata>,
+    ) -> Self {
         Self {
             engine_kind,
+            install_dir: install_dir.into(),
             engine_metadata,
         }
+    }
+
+    pub fn install_dir(&self) -> &str {
+        &self.install_dir
     }
 }
 

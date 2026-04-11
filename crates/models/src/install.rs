@@ -13,6 +13,7 @@ pub enum InstallFailureClass {
 pub struct InstallResult {
     pub name: String,
     pub version: String,
+    /// Final install directory reported by the engine after installation.
     pub install_dir: String,
 }
 
