@@ -8,71 +8,8 @@ use crate::AppContext;
 use super::scan;
 use crate::models::{DiagnosisResult, DiagnosisSeverity, HealthReport, Package};
 
-/// Builds a health report from the application context and the current install state.
-struct Reporter<'a> {
-    ctx: &'a AppContext,
-}
-
-impl<'a> Reporter<'a> {
-    /// Creates a reporter bound to a shared application context.
-    ///
-    /// The context provides resolved filesystem paths, UI settings, and CLI-derived
-    /// runtime flags used while assembling the report.
-    fn new(ctx: &'a AppContext) -> Self {
-        Self { ctx }
-    }
-
-    /// Collects the current health state into a [`HealthReport`].
-    ///
-    /// The collection flow performs three steps:
-    /// 1. Read the installed package inventory.
-    /// 2. Scan package install directories and orphaned package directories.
-    /// 3. Normalize and sort diagnostics so the UI can render a stable report.
-    ///
-    /// If package inventory access fails, the failure is converted into a synthetic
-    /// diagnosis so the report can still be returned with partial data.
-    fn collect(&self) -> Result<HealthReport> {
-        let paths = &self.ctx.paths;
-        let started_at = Instant::now();
-
-        let (packages, mut diagnostics) = collect_packages(scan::installed_packages());
-        let progress = (self.ctx.verbosity > 0).then(|| ProgressBar::new(packages.len() as u64));
-
-        diagnostics.extend(scan::scan_packages_with_progress(
-            &packages,
-            progress.as_ref(),
-        ));
-
-        diagnostics.extend(scan::scan_orphaned_install_dirs(&paths.packages, &packages));
-        diagnostics.sort_unstable_by(sort_diagnostics);
-
-        let error_count = diagnostics
-            .iter()
-            .filter(|diagnosis| matches!(diagnosis.severity, DiagnosisSeverity::Error))
-            .count();
-
-        Ok(HealthReport {
-            database_path: paths.db.to_display(),
-            database_exists: paths.db.exists(),
-            catalog_database_path: paths.catalog_db.to_display(),
-            catalog_database_exists: paths.catalog_db.exists(),
-            install_root_source: if self.ctx.root_from_env {
-                "env override".to_string()
-            } else {
-                "config:paths.root".to_string()
-            },
-            install_root: paths.root.to_display(),
-            install_root_exists: paths.root.exists(),
-            packages_dir: paths.packages.to_display(),
-            diagnostics,
-            scan_duration: started_at.elapsed(),
-            error_count,
-        })
-    }
-}
-
-trait PathDisplay {
-    fn to_display(&self) -> String;
+fn display_path(path: impl AsRef<Path>) -> String {
+    path.as_ref().to_string_lossy().into_owned()
 }
 
 fn sort_diagnostics(left: &DiagnosisResult, right: &DiagnosisResult) -> std::cmp::Ordering {
@@ -80,15 +17,6 @@ fn sort_diagnostics(left: &DiagnosisResult, right: &DiagnosisResult) -> std::cmp
         .cmp(&right.severity)
         .then_with(|| left.error_code.cmp(&right.error_code))
         .then_with(|| left.description.cmp(&right.description))
-}
-
-impl<T> PathDisplay for T
-where
-    T: AsRef<Path>,
-{
-    fn to_display(&self) -> String {
-        self.as_ref().to_string_lossy().into_owned()
-    }
 }
 
 fn collect_packages(packages_result: Result<Vec<Package>>) -> (Vec<Package>, Vec<DiagnosisResult>) {
@@ -107,7 +35,42 @@ fn collect_packages(packages_result: Result<Vec<Package>>) -> (Vec<Package>, Vec
 
 /// Convenience entry point for callers that need a one-shot health report.
 pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
-    Reporter::new(ctx).collect()
+    let paths = &ctx.paths;
+    let started_at = Instant::now();
+
+    let (packages, mut diagnostics) = collect_packages(scan::installed_packages());
+    let progress = (ctx.verbosity > 0).then(|| ProgressBar::new(packages.len() as u64));
+
+    diagnostics.extend(scan::scan_packages_with_progress(
+        &packages,
+        progress.as_ref(),
+    ));
+
+    diagnostics.extend(scan::scan_orphaned_install_dirs(&paths.packages, &packages));
+    diagnostics.sort_unstable_by(sort_diagnostics);
+
+    let error_count = diagnostics
+        .iter()
+        .filter(|diagnosis| matches!(diagnosis.severity, DiagnosisSeverity::Error))
+        .count();
+
+    Ok(HealthReport {
+        database_path: display_path(&paths.db),
+        database_exists: paths.db.exists(),
+        catalog_database_path: display_path(&paths.catalog_db),
+        catalog_database_exists: paths.catalog_db.exists(),
+        install_root_source: if ctx.root_from_env {
+            "env override".to_string()
+        } else {
+            "config:paths.root".to_string()
+        },
+        install_root: display_path(&paths.root),
+        install_root_exists: paths.root.exists(),
+        packages_dir: display_path(&paths.packages),
+        diagnostics,
+        scan_duration: started_at.elapsed(),
+        error_count,
+    })
 }
 
 #[cfg(test)]
