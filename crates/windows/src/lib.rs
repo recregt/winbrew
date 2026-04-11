@@ -1,11 +1,10 @@
 #![cfg(windows)]
 #![allow(missing_docs)]
 
-mod filesystem;
+mod deployment;
+mod fs;
 mod registry;
-mod uninstall;
 
-pub use filesystem::PathInfo;
-pub use filesystem::{create_extracted_file, inspect_path};
-pub use registry::{AppInfo, collect_installed_apps};
-pub use uninstall::{Hive, UninstallRoot, uninstall_roots};
+pub use deployment::{msix_install, msix_installed_package_full_name, msix_remove};
+pub use fs::{PathInfo, create_extracted_file, inspect_path};
+pub use registry::{AppInfo, Hive, UninstallRoot, collect_installed_apps, uninstall_roots};

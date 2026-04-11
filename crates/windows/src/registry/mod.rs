@@ -1,7 +1,9 @@
 use anyhow::Result;
 use regex::RegexBuilder;
 
-use crate::uninstall::uninstall_roots;
+mod uninstall;
+
+pub use uninstall::{Hive, UninstallRoot, uninstall_roots};
 
 /// Holds complete app info for display and filtering.
 #[derive(Debug, Eq, PartialEq)]
