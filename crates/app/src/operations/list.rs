@@ -69,6 +69,8 @@ mod tests {
             name: name.to_string(),
             version: version.to_string(),
             kind,
+            engine_kind: kind.into(),
+            engine_metadata: None,
             install_dir: install_dir.to_string(),
             msix_package_full_name: None,
             dependencies: Vec::new(),

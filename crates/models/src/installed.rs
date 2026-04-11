@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::engine::{EngineKind, EngineMetadata};
 use crate::installer::InstallerType;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
@@ -42,6 +43,8 @@ pub struct InstalledPackage {
     pub name: String,
     pub version: String,
     pub kind: InstallerType,
+    pub engine_kind: EngineKind,
+    pub engine_metadata: Option<EngineMetadata>,
     pub install_dir: String,
     pub msix_package_full_name: Option<String>,
     pub dependencies: Vec<String>,

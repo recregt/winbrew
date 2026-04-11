@@ -17,13 +17,15 @@ mod tests {
     use super::remove;
     use std::fs;
     use tempfile::tempdir;
-    use winbrew_models::{InstalledPackage, InstallerType, PackageStatus};
+    use winbrew_models::{EngineKind, InstalledPackage, InstallerType, PackageStatus};
 
     fn package(name: &str, install_dir: &std::path::Path) -> InstalledPackage {
         InstalledPackage {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             kind: InstallerType::Portable,
+            engine_kind: EngineKind::Portable,
+            engine_metadata: None,
             install_dir: install_dir.to_string_lossy().into_owned(),
             msix_package_full_name: None,
             dependencies: Vec::new(),

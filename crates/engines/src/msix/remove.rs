@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail};
 
-use winbrew_models::InstalledPackage as WinbrewPackage;
+use winbrew_models::{EngineMetadata, InstalledPackage as WinbrewPackage};
 
 #[cfg(windows)]
 use windows::ApplicationModel::Package;
@@ -20,7 +20,12 @@ pub fn remove(package: &WinbrewPackage) -> Result<()> {
     {
         let package_manager = PackageManager::new().context("failed to create package manager")?;
 
-        if let Some(package_full_name) = package.msix_package_full_name.as_deref() {
+        if let Some(package_full_name) = package
+            .engine_metadata
+            .as_ref()
+            .and_then(EngineMetadata::msix_package_full_name)
+            .or(package.msix_package_full_name.as_deref())
+        {
             package_manager
                 .RemovePackageAsync(&HSTRING::from(package_full_name))
                 .with_context(|| format!("failed to start uninstall for {package_full_name}"))?

@@ -8,6 +8,8 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
             name         TEXT PRIMARY KEY,
             version      TEXT NOT NULL,
             kind         TEXT NOT NULL,
+            engine_kind  TEXT,
+            engine_metadata TEXT,
             install_dir  TEXT NOT NULL,
             msix_package_full_name TEXT,
             dependencies TEXT NOT NULL DEFAULT '[]',
@@ -23,6 +25,16 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
             "ALTER TABLE installed_packages ADD COLUMN msix_package_full_name TEXT;",
         )
         .context("failed to add msix_package_full_name column")?;
+    }
+
+    if !installed_packages_has_column(conn, "engine_kind")? {
+        conn.execute_batch("ALTER TABLE installed_packages ADD COLUMN engine_kind TEXT;")
+            .context("failed to add engine_kind column")?;
+    }
+
+    if !installed_packages_has_column(conn, "engine_metadata")? {
+        conn.execute_batch("ALTER TABLE installed_packages ADD COLUMN engine_metadata TEXT;")
+            .context("failed to add engine_metadata column")?;
     }
 
     Ok(())

@@ -9,14 +9,9 @@ pub mod zip;
 use anyhow::Result;
 use std::path::Path;
 
-use winbrew_models::{CatalogInstaller, InstalledPackage, InstallerType};
+pub use winbrew_models::EngineKind;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EngineKind {
-    Msix,
-    Zip,
-    Portable,
-}
+use winbrew_models::{CatalogInstaller, InstalledPackage, InstallerType};
 
 pub trait PackageEngine {
     fn install(

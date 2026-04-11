@@ -13,7 +13,7 @@ use winbrew_cli::commands::doctor::{exit_error, format_duration, render_results,
 use winbrew_cli::commands::error::CommandError;
 use winbrew_cli::database::{self, Config};
 use winbrew_cli::models::{
-    DiagnosisResult, DiagnosisSeverity, HealthReport, InstalledPackage, InstallerType,
+    DiagnosisResult, DiagnosisSeverity, EngineKind, HealthReport, InstalledPackage, InstallerType,
     PackageStatus,
 };
 use winbrew_ui::{UiBuilder, UiSettings};
@@ -49,6 +49,8 @@ impl DoctorFixture {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             kind: InstallerType::Portable,
+            engine_kind: EngineKind::Portable,
+            engine_metadata: None,
             install_dir: install_dir.to_string_lossy().to_string(),
             msix_package_full_name: None,
             dependencies: Vec::new(),

@@ -5,13 +5,15 @@ use anyhow::Result;
 use common::db::{init_database, reset_installed_packages};
 use common::shared_root::test_root;
 use winbrew::database;
-use winbrew_models::{InstallerType, Package, PackageStatus};
+use winbrew_models::{EngineKind, EngineMetadata, InstallScope, InstallerType, Package, PackageStatus};
 
 fn sample_package(name: &str, status: PackageStatus) -> Package {
     Package {
         name: name.to_string(),
         version: "1.0.0".to_string(),
         kind: InstallerType::Portable,
+        engine_kind: EngineKind::Portable,
+        engine_metadata: None,
         install_dir: format!(r"C:\\winbrew\\packages\\{name}"),
         msix_package_full_name: Some(format!("{name}_1.0.0_x64__8wekyb3d8bbwe")),
         dependencies: vec!["dep-a".to_string(), "dep-b".to_string()],
@@ -36,11 +38,13 @@ fn package_crud_round_trip() -> Result<()> {
     assert_eq!(stored.name, package.name);
     assert_eq!(stored.version, package.version);
     assert_eq!(stored.kind, package.kind);
+    assert_eq!(stored.engine_kind, package.engine_kind);
     assert_eq!(stored.install_dir, package.install_dir);
     assert_eq!(
         stored.msix_package_full_name,
         package.msix_package_full_name
     );
+    assert_eq!(stored.engine_metadata, package.engine_metadata);
     assert_eq!(stored.dependencies, package.dependencies);
     assert_eq!(stored.status, PackageStatus::Installing);
 
@@ -70,6 +74,8 @@ fn update_status_and_msix_package_full_name_round_trip() -> Result<()> {
     reset_installed_packages(&conn)?;
     let mut package = sample_package("Contoso.Msix", PackageStatus::Installing);
     package.msix_package_full_name = None;
+    package.engine_kind = EngineKind::Msix;
+    package.kind = InstallerType::Msix;
 
     database::insert_package(&conn, &package)?;
 
@@ -78,6 +84,10 @@ fn update_status_and_msix_package_full_name_round_trip() -> Result<()> {
         &package.name,
         PackageStatus::Ok,
         Some("Contoso.Msix_1.0.0_x64__8wekyb3d8bbwe"),
+        Some(&EngineMetadata::msix(
+            "Contoso.Msix_1.0.0_x64__8wekyb3d8bbwe",
+            InstallScope::Installed,
+        )),
     )?;
 
     let stored = database::get_package(&conn, &package.name)?.expect("package should exist");
@@ -85,6 +95,14 @@ fn update_status_and_msix_package_full_name_round_trip() -> Result<()> {
     assert_eq!(
         stored.msix_package_full_name,
         Some("Contoso.Msix_1.0.0_x64__8wekyb3d8bbwe".to_string())
+    );
+    assert_eq!(stored.engine_kind, EngineKind::Msix);
+    assert_eq!(
+        stored.engine_metadata,
+        Some(EngineMetadata::msix(
+            "Contoso.Msix_1.0.0_x64__8wekyb3d8bbwe",
+            InstallScope::Installed,
+        ))
     );
 
     Ok(())

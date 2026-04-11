@@ -8,13 +8,15 @@ use std::fs;
 use std::path::Path;
 use winbrew::database;
 use winbrew::services::app::install::state;
-use winbrew_models::{InstallerType, Package, PackageStatus};
+use winbrew_models::{EngineKind, InstallerType, Package, PackageStatus};
 
 fn sample_package(name: &str, status: PackageStatus, install_dir: &Path) -> Package {
     Package {
         name: name.to_string(),
         version: "1.0.0".to_string(),
         kind: InstallerType::Portable,
+        engine_kind: EngineKind::Portable,
+        engine_metadata: None,
         install_dir: install_dir.to_string_lossy().into_owned(),
         msix_package_full_name: None,
         dependencies: Vec::new(),
@@ -102,12 +104,14 @@ fn mark_installing_and_mark_ok_update_status() -> Result<()> {
         "Contoso.Installing",
         "2.4.6",
         InstallerType::Portable,
+        EngineKind::Portable,
         &install_dir,
     )?;
 
     let stored = database::get_package(&conn, "Contoso.Installing")?
         .expect("package should exist after mark_installing");
     assert_eq!(stored.status, PackageStatus::Installing);
+    assert_eq!(stored.engine_kind, EngineKind::Portable);
     assert_eq!(stored.dependencies, Vec::<String>::new());
 
     state::mark_ok(&conn, "Contoso.Installing", None)?;
