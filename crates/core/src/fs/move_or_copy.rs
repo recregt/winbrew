@@ -6,10 +6,6 @@ use std::path::{Path, PathBuf};
 
 type BoxedResult<T> = std::result::Result<T, Box<FsError>>;
 
-#[cfg(windows)]
-const ERROR_NOT_SAME_DEVICE_CODE: i32 =
-    windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as i32;
-
 /// Replaces `source_dir` with `target_dir`, copying across volumes when rename
 /// is not available and rolling back the backup on failure.
 ///
@@ -181,15 +177,7 @@ fn copy_dir_all(source_dir: &Path, target_dir: &Path) -> BoxedResult<()> {
 }
 
 fn is_cross_device_error(err: &std::io::Error) -> bool {
-    #[cfg(windows)]
-    {
-        matches!(err.raw_os_error(), Some(ERROR_NOT_SAME_DEVICE_CODE))
-    }
-
-    #[cfg(not(windows))]
-    {
-        matches!(err.raw_os_error(), Some(libc::EXDEV))
-    }
+    matches!(err.kind(), ErrorKind::CrossesDevices)
 }
 
 #[cfg(windows)]
@@ -214,19 +202,8 @@ mod tests {
     use std::io::{self, ErrorKind};
     use tempfile::tempdir;
 
-    #[cfg(windows)]
-    use super::ERROR_NOT_SAME_DEVICE_CODE;
-
     fn cross_device_error() -> io::Error {
-        #[cfg(windows)]
-        {
-            io::Error::from_raw_os_error(ERROR_NOT_SAME_DEVICE_CODE)
-        }
-
-        #[cfg(not(windows))]
-        {
-            io::Error::from_raw_os_error(libc::EXDEV)
-        }
+        io::Error::new(ErrorKind::CrossesDevices, "simulated cross-device error")
     }
 
     #[test]

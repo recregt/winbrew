@@ -2480,7 +2480,6 @@ dependencies = [
  "anyhow",
  "chrono",
  "ctrlc",
- "libc",
  "md-5",
  "reqwest",
  "sha1 0.11.0",
@@ -2491,7 +2490,6 @@ dependencies = [
  "url",
  "winbrew-models",
  "winbrew-windows",
- "windows-sys 0.61.2",
  "zip",
 ]
 
