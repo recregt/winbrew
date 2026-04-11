@@ -15,7 +15,10 @@ use thiserror::Error;
 use crate::core::fs::cleanup_path;
 use crate::core::now;
 use crate::storage;
-use winbrew_models::{EngineInstallReceipt, EngineKind, InstallerType, Package, PackageStatus};
+use winbrew_models::{
+    EngineInstallReceipt, EngineKind, EngineMetadata, InstallerType, MsiInventoryReceipt, Package,
+    PackageStatus,
+};
 
 /// Errors raised while preparing or updating install state.
 #[derive(Debug, Error)]
@@ -146,20 +149,44 @@ pub fn mark_installing(
 /// including MSIX-specific package identity data when the engine was able to
 /// resolve it during install.
 pub fn mark_ok(
-    conn: &crate::storage::DbConnection,
+    conn: &mut crate::storage::DbConnection,
     name: &str,
     engine_receipt: &EngineInstallReceipt,
 ) -> Result<()> {
+    let installed_at = now();
+    let tx = conn
+        .transaction()
+        .map_err(|source| InstallStateError::DatabaseOperationFailed {
+            operation: "starting install commit transaction",
+            source: source.into(),
+        })?;
+
     storage::update_status_and_engine_metadata(
-        conn,
+        &tx,
         name,
         PackageStatus::Ok,
         engine_receipt.engine_metadata.as_ref(),
+        &installed_at,
     )
     .map_err(|source| InstallStateError::DatabaseOperationFailed {
         operation: "marking package as installed",
         source,
-    })
+    })?;
+
+    if let Some(receipt) = msi_inventory_receipt(name, engine_receipt.engine_metadata.as_ref()) {
+        storage::upsert_receipt(&tx, &receipt).map_err(|source| {
+            InstallStateError::DatabaseOperationFailed {
+                operation: "recording MSI receipt",
+                source,
+            }
+        })?;
+    }
+
+    tx.commit()
+        .map_err(|source| InstallStateError::DatabaseOperationFailed {
+            operation: "committing install state",
+            source: source.into(),
+        })
 }
 
 /// Mark a package as failed.
@@ -191,6 +218,27 @@ fn installing_package(
         install_dir: install_dir.to_string_lossy().into_owned(),
         dependencies: Vec::new(),
         status: PackageStatus::Installing,
+        // Provisional value for in-progress installs; mark_ok overwrites it with the final timestamp.
         installed_at: now(),
+    }
+}
+
+fn msi_inventory_receipt(
+    package_name: &str,
+    engine_metadata: Option<&EngineMetadata>,
+) -> Option<MsiInventoryReceipt> {
+    match engine_metadata? {
+        EngineMetadata::Msi {
+            product_code,
+            upgrade_code,
+            scope,
+            ..
+        } => Some(MsiInventoryReceipt {
+            package_name: package_name.to_string(),
+            product_code: product_code.clone(),
+            upgrade_code: upgrade_code.clone(),
+            scope: *scope,
+        }),
+        EngineMetadata::Msix { .. } => None,
     }
 }

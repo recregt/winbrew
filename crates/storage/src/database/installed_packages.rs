@@ -64,6 +64,7 @@ pub fn update_status_and_engine_metadata(
     name: &str,
     status: PackageStatus,
     engine_metadata: Option<&EngineMetadata>,
+    installed_at: &str,
 ) -> Result<()> {
     let engine_metadata = engine_metadata
         .map(serde_json::to_string)
@@ -74,9 +75,10 @@ pub fn update_status_and_engine_metadata(
         .execute(
             "UPDATE installed_packages
                 SET status = ?1,
-                    engine_metadata = ?2
-              WHERE name = ?3",
-            params![status.as_str(), engine_metadata, name],
+                    engine_metadata = ?2,
+                    installed_at = ?3
+              WHERE name = ?4",
+            params![status.as_str(), engine_metadata, installed_at, name],
         )
         .context("failed to update status and engine metadata")?;
 

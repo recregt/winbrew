@@ -110,7 +110,7 @@ pub fn run<O: InstallObserver>(
 
     let _temp_root_guard = TempRootGuard::new(temp_root.clone());
 
-    let conn = storage::get_conn()?;
+    let mut conn = storage::get_conn()?;
     state::prepare_install_target(&conn, &package.name, &install_dir)?;
     state::mark_installing(
         &conn,
@@ -163,7 +163,7 @@ pub fn run<O: InstallObserver>(
         install_dir: install_dir.to_string_lossy().to_string(),
     };
 
-    if let Err(err) = state::mark_ok(&conn, &install_result.name, &engine_receipt) {
+    if let Err(err) = state::mark_ok(&mut conn, &install_result.name, &engine_receipt) {
         let _ = state::mark_failed(&conn, &install_result.name);
         return Err(err.into());
     }
