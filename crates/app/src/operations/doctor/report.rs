@@ -1,5 +1,4 @@
 use anyhow::Result;
-use indicatif::ProgressBar;
 use std::path::Path;
 use std::time::Instant;
 
@@ -39,12 +38,8 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
     let started_at = Instant::now();
 
     let (packages, mut diagnostics) = collect_packages(scan::installed_packages());
-    let progress = (ctx.verbosity > 0).then(|| ProgressBar::new(packages.len() as u64));
 
-    diagnostics.extend(scan::scan_packages_with_progress(
-        &packages,
-        progress.as_ref(),
-    ));
+    diagnostics.extend(scan::scan_packages(&packages));
 
     diagnostics.extend(scan::scan_orphaned_install_dirs(&paths.packages, &packages));
     diagnostics.sort_unstable_by(sort_diagnostics);
