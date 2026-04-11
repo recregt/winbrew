@@ -36,7 +36,7 @@ pub use journal::{
 };
 pub use msi_inventory::{
     apply_snapshot, find_packages_by_normalized_path,
-    find_packages_by_normalized_registry_key_path, replace_snapshot, upsert_receipt,
+    find_packages_by_normalized_registry_key_path, get_snapshot, replace_snapshot, upsert_receipt,
 };
 
 thread_local! {

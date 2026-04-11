@@ -1,18 +1,21 @@
 //! Package and filesystem scanning for doctor diagnostics.
 //!
-//! The scan phase inspects installed package records and the directories they
-//! point at. It intentionally uses lightweight filesystem metadata checks so
-//! the doctor command can diagnose common state problems without launching or
-//! probing package binaries.
+//! The scan phase inspects installed package records, their directories, and
+//! persisted MSI inventory data. It intentionally uses lightweight filesystem
+//! metadata checks so the doctor command can diagnose common state problems
+//! without launching or probing package binaries.
 //!
 //! Two categories of diagnostics are produced here:
 //!
 //! - broken package records whose install paths are missing, invalid, or unreadable
+//! - MSI inventory files that are missing or no longer match their stored hashes
 //! - orphaned directories under the package root that no longer have a database record
 
 use anyhow::Result;
 
-use crate::models::{DiagnosisResult, DiagnosisSeverity, Package};
+use crate::core::hash::hash_file;
+use crate::core::{HashError, verify_hash};
+use crate::models::{DiagnosisResult, DiagnosisSeverity, EngineKind, Package};
 use crate::storage::database;
 use std::collections::HashSet;
 use std::fs;
@@ -119,6 +122,47 @@ pub(super) fn scan_packages(packages: &[Package]) -> Vec<DiagnosisResult> {
     sort_diagnoses(packages.iter().filter_map(check_package).collect())
 }
 
+/// Scan persisted MSI inventory data and report files that no longer match.
+pub(super) fn scan_msi_inventory(
+    conn: &crate::storage::DbConnection,
+    packages: &[Package],
+) -> Vec<DiagnosisResult> {
+    let mut diagnoses = Vec::new();
+
+    for pkg in packages
+        .iter()
+        .filter(|pkg| matches!(pkg.engine_kind, EngineKind::Msi))
+    {
+        let snapshot = match database::get_snapshot(conn, &pkg.name) {
+            Ok(Some(snapshot)) => snapshot,
+            Ok(None) => {
+                diagnoses.push(DiagnosisResult {
+                    error_code: "missing_msi_inventory_snapshot".to_string(),
+                    description: format!("{}: MSI inventory snapshot is missing", pkg.name),
+                    severity: DiagnosisSeverity::Error,
+                });
+                continue;
+            }
+            Err(err) => {
+                diagnoses.push(DiagnosisResult {
+                    error_code: "msi_inventory_unreadable".to_string(),
+                    description: format!("{}: MSI inventory is unreadable - {err}", pkg.name),
+                    severity: DiagnosisSeverity::Error,
+                });
+                continue;
+            }
+        };
+
+        for file in &snapshot.files {
+            if let Some(diagnosis) = diagnose_msi_file(pkg, file) {
+                diagnoses.push(diagnosis);
+            }
+        }
+    }
+
+    sort_diagnoses(diagnoses)
+}
+
 /// Scan the package root for directories that do not correspond to packages in the database.
 ///
 /// Orphaned directories are reported as warnings because they indicate stale
@@ -185,11 +229,102 @@ pub(super) fn scan_orphaned_install_dirs(
 
 /// Load the current installed package inventory from the database.
 ///
-/// The scan layer owns the database access here so the caller can treat the
-/// package inventory as just another input to report generation.
-pub(super) fn installed_packages() -> Result<Vec<Package>> {
-    let conn = database::get_conn()?;
-    database::list_packages(&conn)
+/// The caller owns the shared database connection so package scanning and MSI
+/// inventory scanning can reuse the same snapshot of the database state.
+pub(super) fn installed_packages(conn: &crate::storage::DbConnection) -> Result<Vec<Package>> {
+    database::list_packages(conn)
+}
+
+fn diagnose_msi_file(
+    pkg: &Package,
+    file: &crate::models::MsiFileRecord,
+) -> Option<DiagnosisResult> {
+    let path = Path::new(&file.path);
+
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(err) => {
+            return Some(diagnose_msi_file_error(pkg, file, err));
+        }
+    };
+
+    if !metadata.is_file() {
+        return Some(DiagnosisResult {
+            error_code: "msi_file_not_a_file".to_string(),
+            description: format!("{}: MSI file path is not a file ({})", pkg.name, file.path),
+            severity: DiagnosisSeverity::Error,
+        });
+    }
+
+    let (Some(hash_algorithm), Some(expected_hash)) =
+        (file.hash_algorithm, file.hash_hex.as_deref())
+    else {
+        return None;
+    };
+
+    let actual_hash = match hash_file(path, hash_algorithm) {
+        Ok(actual_hash) => actual_hash,
+        Err(err) => {
+            return Some(DiagnosisResult {
+                error_code: "msi_file_unreadable".to_string(),
+                description: format!(
+                    "{}: MSI file is unreadable for hashing ({}) - {}",
+                    pkg.name, file.path, err
+                ),
+                severity: DiagnosisSeverity::Error,
+            });
+        }
+    };
+
+    match verify_hash(expected_hash, actual_hash) {
+        Ok(()) => None,
+        Err(HashError::ChecksumMismatch { expected, actual }) => Some(DiagnosisResult {
+            error_code: "msi_file_hash_mismatch".to_string(),
+            description: format!(
+                "{}: MSI file hash mismatch for {} (expected {}, got {})",
+                pkg.name, file.path, expected, actual
+            ),
+            severity: DiagnosisSeverity::Error,
+        }),
+        Err(err) => Some(DiagnosisResult {
+            error_code: "msi_file_hash_unavailable".to_string(),
+            description: format!(
+                "{}: MSI file hash could not be verified for {} - {}",
+                pkg.name, file.path, err
+            ),
+            severity: DiagnosisSeverity::Error,
+        }),
+    }
+}
+
+fn diagnose_msi_file_error(
+    pkg: &Package,
+    file: &crate::models::MsiFileRecord,
+    err: std::io::Error,
+) -> DiagnosisResult {
+    let (error_code, description) = match err.kind() {
+        ErrorKind::NotFound => (
+            "missing_msi_file",
+            format!("{}: missing MSI file ({})", pkg.name, file.path),
+        ),
+        ErrorKind::PermissionDenied => (
+            "msi_file_permission_denied",
+            format!("{}: MSI file permission denied ({})", pkg.name, file.path),
+        ),
+        _ => (
+            "msi_file_unreadable",
+            format!(
+                "{}: MSI file is unreadable ({}) - {}",
+                pkg.name, file.path, err
+            ),
+        ),
+    };
+
+    DiagnosisResult {
+        error_code: error_code.to_string(),
+        description,
+        severity: DiagnosisSeverity::Error,
+    }
 }
 
 /// Sort diagnostics deterministically by code and description.
@@ -205,8 +340,16 @@ fn sort_diagnoses(mut diagnoses: Vec<DiagnosisResult>) -> Vec<DiagnosisResult> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::paths::resolved_paths;
     use crate::models::{InstallerType, PackageStatus};
+    use crate::storage;
+    use std::fs;
+    use std::path::Path;
     use tempfile::tempdir;
+    use winbrew_models::{
+        EngineKind, MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
+        MsiRegistryRecord, MsiShortcutRecord,
+    };
 
     fn sample_package(name: &str, install_dir: &std::path::Path) -> Package {
         Package {
@@ -219,6 +362,80 @@ mod tests {
             dependencies: Vec::new(),
             status: PackageStatus::Ok,
             installed_at: "2026-04-05T00:00:00Z".to_string(),
+        }
+    }
+
+    fn sample_msi_package(name: &str, install_dir: &std::path::Path) -> Package {
+        Package {
+            name: name.to_string(),
+            version: "1.0.0".to_string(),
+            kind: InstallerType::Msi,
+            engine_kind: EngineKind::Msi,
+            engine_metadata: None,
+            install_dir: install_dir.to_string_lossy().into_owned(),
+            dependencies: Vec::new(),
+            status: PackageStatus::Ok,
+            installed_at: "2026-04-05T00:00:00Z".to_string(),
+        }
+    }
+
+    fn init_storage(root: &Path) {
+        let packages = root.join("packages").to_string_lossy().into_owned();
+        let data = root.join("data").to_string_lossy().into_owned();
+        let logs = root.join("logs").to_string_lossy().into_owned();
+        let cache = root.join("cache").to_string_lossy().into_owned();
+        let paths = resolved_paths(root, &packages, &data, &logs, &cache);
+
+        storage::init(&paths).expect("storage should initialize");
+    }
+
+    fn sample_snapshot(
+        name: &str,
+        install_dir: &std::path::Path,
+        hash_hex: &str,
+    ) -> MsiInventorySnapshot {
+        let install_dir = install_dir
+            .to_string_lossy()
+            .replace('\\', "/")
+            .to_ascii_lowercase();
+
+        MsiInventorySnapshot {
+            receipt: MsiInventoryReceipt {
+                package_name: name.to_string(),
+                product_code: "{11111111-1111-1111-1111-111111111111}".to_string(),
+                upgrade_code: Some("{22222222-2222-2222-2222-222222222222}".to_string()),
+                scope: winbrew_models::InstallScope::Installed,
+            },
+            files: vec![MsiFileRecord {
+                package_name: name.to_string(),
+                path: format!("{install_dir}/bin/demo.exe"),
+                normalized_path: format!("{install_dir}/bin/demo.exe"),
+                hash_algorithm: Some(winbrew_models::HashAlgorithm::Sha256),
+                hash_hex: Some(hash_hex.to_string()),
+                is_config_file: false,
+            }],
+            registry_entries: vec![MsiRegistryRecord {
+                package_name: name.to_string(),
+                hive: "HKLM".to_string(),
+                key_path: "Software\\Demo".to_string(),
+                normalized_key_path: "software\\demo".to_string(),
+                value_name: "InstallPath".to_string(),
+                value_data: Some(install_dir.clone()),
+                previous_value: None,
+            }],
+            shortcuts: vec![MsiShortcutRecord {
+                package_name: name.to_string(),
+                path: format!("{install_dir}/Desktop/Demo.lnk"),
+                normalized_path: format!("{install_dir}/desktop/demo.lnk"),
+                target_path: Some(format!("{install_dir}/bin/demo.exe")),
+                normalized_target_path: Some(format!("{install_dir}/bin/demo.exe")),
+            }],
+            components: vec![MsiComponentRecord {
+                package_name: name.to_string(),
+                component_id: "COMPONENT-DEMO".to_string(),
+                path: Some(format!("{install_dir}/bin/demo.exe")),
+                normalized_path: Some(format!("{install_dir}/bin/demo.exe")),
+            }],
         }
     }
 
@@ -310,5 +527,62 @@ mod tests {
         assert_eq!(diagnoses[0].error_code, "orphan_install_directory");
         assert_eq!(diagnoses[0].severity, DiagnosisSeverity::Warning);
         assert!(diagnoses[0].description.contains("Contoso.Orphan"));
+    }
+
+    #[test]
+    fn scan_msi_inventory_detects_hash_mismatch() {
+        let root = tempdir().expect("temp root");
+        init_storage(root.path());
+
+        let install_dir = root.path().join("packages").join("Contoso.Msi");
+        let file_path = install_dir.join("bin").join("demo.exe");
+        fs::create_dir_all(file_path.parent().expect("file parent"))
+            .expect("install dir should be created");
+        fs::write(&file_path, b"abc").expect("payload should be written");
+
+        let package = sample_msi_package("Contoso.Msi", &install_dir);
+        let snapshot = sample_snapshot(
+            "Contoso.Msi",
+            &install_dir,
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        );
+
+        let mut conn = storage::get_conn().expect("database connection");
+        storage::insert_package(&conn, &package).expect("insert package");
+        storage::replace_snapshot(&mut conn, &snapshot).expect("replace snapshot");
+
+        let diagnoses = scan_msi_inventory(&conn, &[package]);
+
+        assert_eq!(diagnoses.len(), 1);
+        assert_eq!(diagnoses[0].error_code, "msi_file_hash_mismatch");
+        assert_eq!(diagnoses[0].severity, DiagnosisSeverity::Error);
+        assert!(diagnoses[0].description.contains("Contoso.Msi"));
+    }
+
+    #[test]
+    fn scan_msi_inventory_detects_missing_files() {
+        let root = tempdir().expect("temp root");
+        init_storage(root.path());
+
+        let install_dir = root.path().join("packages").join("Contoso.Msi");
+        fs::create_dir_all(&install_dir).expect("install dir should be created");
+
+        let package = sample_msi_package("Contoso.Msi", &install_dir);
+        let snapshot = sample_snapshot(
+            "Contoso.Msi",
+            &install_dir,
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        );
+
+        let mut conn = storage::get_conn().expect("database connection");
+        storage::insert_package(&conn, &package).expect("insert package");
+        storage::replace_snapshot(&mut conn, &snapshot).expect("replace snapshot");
+
+        let diagnoses = scan_msi_inventory(&conn, &[package]);
+
+        assert_eq!(diagnoses.len(), 1);
+        assert_eq!(diagnoses[0].error_code, "missing_msi_file");
+        assert_eq!(diagnoses[0].severity, DiagnosisSeverity::Error);
+        assert!(diagnoses[0].description.contains("Contoso.Msi"));
     }
 }
