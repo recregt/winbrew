@@ -1,0 +1,67 @@
+use anyhow::{Context, Result, bail};
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+
+use super::{DirectoryRow, path::select_msi_name};
+
+pub(super) fn resolve_directory_paths(
+    rows: &HashMap<String, DirectoryRow>,
+    install_root: &Path,
+) -> Result<HashMap<String, PathBuf>> {
+    let mut resolved = HashMap::new();
+    let mut visiting = HashSet::new();
+
+    for directory_id in rows.keys() {
+        let _ = resolve_directory_path(
+            directory_id,
+            rows,
+            &mut resolved,
+            &mut visiting,
+            install_root,
+        )?;
+    }
+
+    Ok(resolved)
+}
+
+fn resolve_directory_path(
+    directory_id: &str,
+    rows: &HashMap<String, DirectoryRow>,
+    resolved: &mut HashMap<String, PathBuf>,
+    visiting: &mut HashSet<String>,
+    install_root: &Path,
+) -> Result<PathBuf> {
+    if let Some(path) = resolved.get(directory_id) {
+        return Ok(path.clone());
+    }
+
+    if !visiting.insert(directory_id.to_string()) {
+        bail!("cycle detected in MSI Directory table at '{directory_id}'");
+    }
+
+    let row = rows
+        .get(directory_id)
+        .with_context(|| format!("missing MSI Directory row for '{directory_id}'"))?;
+
+    let base = match row.parent.as_deref() {
+        Some(parent) if !parent.is_empty() => {
+            resolve_directory_path(parent, rows, resolved, visiting, install_root)?
+        }
+        _ if directory_id.eq_ignore_ascii_case("TARGETDIR")
+            || directory_id.eq_ignore_ascii_case("SOURCEDIR") =>
+        {
+            install_root.to_path_buf()
+        }
+        _ => install_root.to_path_buf(),
+    };
+
+    let path = match select_msi_name(&row.default_dir) {
+        Some(segment) => base.join(segment),
+        None => base,
+    };
+
+    visiting.remove(directory_id);
+    resolved.insert(directory_id.to_string(), path.clone());
+
+    Ok(path)
+}
