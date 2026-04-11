@@ -26,11 +26,11 @@ pub trait PackageEngine {
     fn remove(&self, package: &InstalledPackage) -> Result<()>;
 }
 
-pub fn get_engine(installer: &CatalogInstaller) -> Result<EngineKind> {
+pub fn resolve_engine_for_installer(installer: &CatalogInstaller) -> Result<EngineKind> {
     registry::resolve_engine_kind_for_installer(installer)
 }
 
-pub fn get_engine_kind(kind: InstallerType) -> Result<EngineKind> {
+pub fn engine_kind_for_type(kind: InstallerType) -> Result<EngineKind> {
     match kind {
         InstallerType::Msi => Ok(EngineKind::Msi),
         InstallerType::Msix => Ok(EngineKind::Msix),
@@ -61,32 +61,33 @@ impl PackageEngine for EngineKind {
 
 #[cfg(test)]
 mod tests {
-    use super::{EngineKind, get_engine_kind};
+    use super::{EngineKind, engine_kind_for_type};
     use winbrew_models::InstallerType;
 
     #[test]
-    fn get_engine_kind_maps_supported_types() {
+    fn engine_kind_for_type_maps_supported_types() {
         assert_eq!(
-            get_engine_kind(InstallerType::Msi).unwrap(),
+            engine_kind_for_type(InstallerType::Msi).unwrap(),
             EngineKind::Msi
         );
         assert_eq!(
-            get_engine_kind(InstallerType::Msix).unwrap(),
+            engine_kind_for_type(InstallerType::Msix).unwrap(),
             EngineKind::Msix
         );
         assert_eq!(
-            get_engine_kind(InstallerType::Zip).unwrap(),
+            engine_kind_for_type(InstallerType::Zip).unwrap(),
             EngineKind::Zip
         );
         assert_eq!(
-            get_engine_kind(InstallerType::Portable).unwrap(),
+            engine_kind_for_type(InstallerType::Portable).unwrap(),
             EngineKind::Portable
         );
     }
 
     #[test]
-    fn get_engine_kind_rejects_exe() {
-        let err = get_engine_kind(InstallerType::Exe).expect_err("exe should not map to an engine");
+    fn engine_kind_for_type_rejects_exe() {
+        let err =
+            engine_kind_for_type(InstallerType::Exe).expect_err("exe should not map to an engine");
 
         assert!(err.to_string().contains("unsupported installer type 'exe'"));
     }

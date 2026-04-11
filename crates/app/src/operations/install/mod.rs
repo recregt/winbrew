@@ -98,7 +98,7 @@ pub fn run<O: InstallObserver>(
             observer.borrow_mut().choose_package(query, matches)
         })?;
     let installer = types::select_installer(&storage::get_installers(&catalog_conn, &package.id)?)?;
-    let engine = engines::get_engine(&installer)?;
+    let engine = engines::resolve_engine_for_installer(&installer)?;
     let package_version = package.version.to_string();
 
     let install_dir = ctx.paths.packages.join(&package.name);
