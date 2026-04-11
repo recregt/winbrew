@@ -7,6 +7,11 @@ use windows::Management::Deployment::PackageManager;
 #[cfg(windows)]
 use windows::core::HSTRING;
 
+/// Remove an installed MSIX package by its full package name.
+///
+/// The caller is expected to pass the exact full name stored in the install
+/// receipt. This keeps removal deterministic and avoids ambiguous package name
+/// lookups at uninstall time.
 pub fn remove(package_full_name: &str) -> Result<()> {
     #[cfg(not(windows))]
     {

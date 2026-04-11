@@ -8,13 +8,32 @@ use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 
 use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
 
+/// Metadata snapshot returned by [`inspect_path`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PathInfo {
+    /// `true` when the path points to a directory.
     pub is_directory: bool,
+    /// `true` when the path is marked as a reparse point.
     pub is_reparse_point: bool,
+    /// Number of hard links attached to the path entry.
     pub hard_link_count: u32,
 }
 
+/// Inspect a Windows filesystem path without following reparse points.
+///
+/// The helper opens the target with the Windows handle APIs, reads handle
+/// information, and returns the small metadata set WinBrew needs for extraction
+/// and cleanup decisions.
+///
+/// # Example
+///
+/// ```no_run
+/// use std::path::Path;
+/// use winbrew_windows::inspect_path;
+///
+/// let info = inspect_path(Path::new(r"C:\Temp\payload.msix")).unwrap();
+/// println!("dir={} reparse={} links={}", info.is_directory, info.is_reparse_point, info.hard_link_count);
+/// ```
 pub fn inspect_path(path: &Path) -> io::Result<PathInfo> {
     use std::mem::MaybeUninit;
     use std::os::windows::ffi::OsStrExt;
@@ -60,6 +79,20 @@ pub fn inspect_path(path: &Path) -> io::Result<PathInfo> {
     }
 }
 
+/// Create a new file for extraction, failing if the target already exists.
+///
+/// This helper is used by archive and package extraction code when the output
+/// path must be brand new. It keeps the file creation rules in one place and
+/// applies the Windows flag WinBrew expects for reparse-point-aware staging.
+///
+/// # Example
+///
+/// ```no_run
+/// use std::path::Path;
+/// use winbrew_windows::create_extracted_file;
+///
+/// let _file = create_extracted_file(Path::new(r"C:\Temp\extract\tool.exe")).unwrap();
+/// ```
 pub fn create_extracted_file(path: &Path) -> io::Result<fs::File> {
     OpenOptions::new()
         .write(true)
