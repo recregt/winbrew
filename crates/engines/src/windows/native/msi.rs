@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use winbrew_models::{
     EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope, InstalledPackage,
@@ -147,11 +147,17 @@ fn resolve_install_dir(
                     product_code = %snapshot.receipt.product_code,
                     requested_install_dir = %requested_install_dir.display(),
                     registry_install_location = %install_location,
+                    "MSI InstallLocation differs from the path used to build the scan snapshot"
+                );
+
+                debug!(
+                    package = package_name,
+                    product_code = %snapshot.receipt.product_code,
                     file_count = snapshot.files.len(),
                     registry_entry_count = snapshot.registry_entries.len(),
                     shortcut_count = snapshot.shortcuts.len(),
                     component_count = snapshot.components.len(),
-                    "MSI InstallLocation differs from the path used to build the scan snapshot"
+                    "MSI inventory details for InstallLocation mismatch"
                 );
             }
 
@@ -163,10 +169,16 @@ fn resolve_install_dir(
                 product_code = %snapshot.receipt.product_code,
                 requested_install_dir = %requested_install_dir.display(),
                 file_count = snapshot.files.len(),
+                "MSI InstallLocation was not published; using the requested install directory"
+            );
+
+            debug!(
+                package = package_name,
+                product_code = %snapshot.receipt.product_code,
                 registry_entry_count = snapshot.registry_entries.len(),
                 shortcut_count = snapshot.shortcuts.len(),
                 component_count = snapshot.components.len(),
-                "MSI InstallLocation was not published; using the requested install directory"
+                "MSI inventory details for missing InstallLocation"
             );
 
             requested_install_dir.to_path_buf()
