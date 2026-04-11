@@ -227,6 +227,9 @@ This avoids ambiguous package-name lookups during removal.
 inventory tables, and reconstructs the snapshot shape that WinBrew stores in
 SQLite.
 
+For the module-level design, responsibilities, and path-resolution rules, see
+[the detailed MSI scanner README](src/deployment/msi/README.md).
+
 The helper expects three inputs:
 
 - the MSI database file path

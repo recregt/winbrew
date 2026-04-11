@@ -1,4 +1,5 @@
 #![cfg(windows)]
+#![doc = include_str!("README.md")]
 
 use anyhow::Result;
 use std::path::Path;
