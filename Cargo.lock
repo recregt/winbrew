@@ -977,6 +977,7 @@ checksum = "25470f23803092da7d239834776d653104d551bc4d7eacaf31e6837854b8e9eb"
 dependencies = [
  "console",
  "portable-atomic",
+ "rayon",
  "unicode-width",
  "unit-prefix",
 ]

@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::models::{DiagnosisResult, DiagnosisSeverity, Package};
 use crate::storage::database;
-use indicatif::ProgressBar;
+use indicatif::{ParallelProgressIterator, ProgressBar};
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::fs;
@@ -68,21 +68,22 @@ pub fn scan_packages_with_progress(
     packages: &[Package],
     progress: Option<&ProgressBar>,
 ) -> Vec<DiagnosisResult> {
-    if let Some(progress) = progress {
-        progress.set_length(packages.len() as u64);
-        progress.set_message("Scanning packages");
-    }
+    let mut diagnoses: Vec<DiagnosisResult> = match progress {
+        Some(progress) => {
+            progress.set_length(packages.len() as u64);
+            progress.set_message("Scanning packages");
 
-    let mut diagnoses: Vec<_> = packages
-        .par_iter()
-        .filter_map(|pkg| {
-            let diagnosis = check_package(pkg);
-            if let Some(progress) = progress {
-                progress.inc(1);
-            }
-            diagnosis
-        })
-        .collect();
+            let diagnoses = packages
+                .par_iter()
+                .progress_with(progress.clone())
+                .filter_map(check_package)
+                .collect();
+
+            progress.finish_and_clear();
+            diagnoses
+        }
+        None => packages.par_iter().filter_map(check_package).collect(),
+    };
 
     diagnoses.sort_unstable_by(|left, right| {
         left.error_code
