@@ -4,7 +4,9 @@ use std::path::Path;
 use winbrew_core::network::is_zip_path;
 use winbrew_models::{CatalogInstaller, EngineInstallReceipt, InstalledPackage, InstallerType};
 
-use super::{EngineKind, msix, portable, zip};
+use super::EngineKind;
+use crate::filesystem::{archive::zip, portable};
+use crate::windows::package::msix;
 
 type InstallFn = fn(&CatalogInstaller, &Path, &Path, &str) -> Result<EngineInstallReceipt>;
 type RemoveFn = fn(&InstalledPackage) -> Result<()>;
