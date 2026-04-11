@@ -13,6 +13,7 @@ regex = "1.12"
 strum_macros = "0.28"
 url = "2"
 zip = "8"
+winbrew-core = { path = "../core" }
 winbrew-models = { path = "../models" }
 
 [target.'cfg(windows)'.dependencies]

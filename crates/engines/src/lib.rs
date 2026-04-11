@@ -1,4 +1,3 @@
-mod fs;
 mod network;
 mod registry;
 
