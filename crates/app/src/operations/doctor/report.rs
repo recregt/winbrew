@@ -33,13 +33,7 @@ impl<'a> Reporter<'a> {
         }
 
         diagnostics.extend(scan::scan_orphaned_install_dirs(&paths.packages, &packages));
-        diagnostics.sort_unstable_by(|left, right| {
-            right
-                .severity
-                .cmp(&left.severity)
-                .then_with(|| left.error_code.cmp(&right.error_code))
-                .then_with(|| left.description.cmp(&right.description))
-        });
+        diagnostics.sort_unstable_by(sort_diagnostics);
 
         let error_count = diagnostics
             .iter()
@@ -70,9 +64,19 @@ trait PathDisplay {
     fn to_display(&self) -> String;
 }
 
-impl PathDisplay for Path {
+fn sort_diagnostics(left: &DiagnosisResult, right: &DiagnosisResult) -> std::cmp::Ordering {
+    left.severity
+        .cmp(&right.severity)
+        .then_with(|| left.error_code.cmp(&right.error_code))
+        .then_with(|| left.description.cmp(&right.description))
+}
+
+impl<T> PathDisplay for T
+where
+    T: AsRef<Path>,
+{
     fn to_display(&self) -> String {
-        self.to_string_lossy().into_owned()
+        self.as_ref().to_string_lossy().into_owned()
     }
 }
 
@@ -96,8 +100,8 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
 
 #[cfg(test)]
 mod tests {
-    use super::collect_packages;
-    use crate::models::DiagnosisSeverity;
+    use super::{collect_packages, sort_diagnostics};
+    use crate::models::{DiagnosisResult, DiagnosisSeverity};
     use anyhow::anyhow;
 
     #[test]
@@ -109,5 +113,40 @@ mod tests {
         assert_eq!(diagnostics[0].error_code, "installed_packages_unavailable");
         assert_eq!(diagnostics[0].severity, DiagnosisSeverity::Error);
         assert!(diagnostics[0].description.contains("database unavailable"));
+    }
+
+    #[test]
+    fn sort_diagnostics_keeps_errors_before_warnings() {
+        let mut diagnostics = vec![
+            DiagnosisResult {
+                error_code: "warning_b".to_string(),
+                description: "warning".to_string(),
+                severity: DiagnosisSeverity::Warning,
+            },
+            DiagnosisResult {
+                error_code: "error_a".to_string(),
+                description: "error".to_string(),
+                severity: DiagnosisSeverity::Error,
+            },
+            DiagnosisResult {
+                error_code: "error_c".to_string(),
+                description: "error".to_string(),
+                severity: DiagnosisSeverity::Error,
+            },
+        ];
+
+        diagnostics.sort_unstable_by(sort_diagnostics);
+
+        assert_eq!(diagnostics[0].severity, DiagnosisSeverity::Error);
+        assert_eq!(diagnostics[1].severity, DiagnosisSeverity::Error);
+        assert_eq!(diagnostics[2].severity, DiagnosisSeverity::Warning);
+    }
+
+    #[test]
+    fn collect_packages_keeps_empty_package_lists_empty() {
+        let (packages, diagnostics) = collect_packages(Ok(Vec::new()));
+
+        assert!(packages.is_empty());
+        assert!(diagnostics.is_empty());
     }
 }
