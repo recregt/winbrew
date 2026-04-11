@@ -58,22 +58,26 @@ pub fn install(
 
     let install_dir = resolve_install_dir(&snapshot, install_dir, package_name);
 
+    let snapshot_receipt = snapshot.receipt.clone();
     let registry_keys = collect_registry_keys(&snapshot);
     let shortcuts = collect_shortcuts(&snapshot);
 
     let engine_metadata = Some(EngineMetadata::Msi {
-        product_code: snapshot.receipt.product_code,
-        upgrade_code: snapshot.receipt.upgrade_code,
-        scope: snapshot.receipt.scope,
+        product_code: snapshot_receipt.product_code,
+        upgrade_code: snapshot_receipt.upgrade_code,
+        scope: snapshot_receipt.scope,
         registry_keys,
         shortcuts,
     });
 
-    Ok(EngineInstallReceipt::new(
+    let mut receipt = EngineInstallReceipt::new(
         EngineKind::Msi,
         install_dir.to_string_lossy().into_owned(),
         engine_metadata,
-    ))
+    );
+    receipt.msi_inventory_snapshot = Some(snapshot);
+
+    Ok(receipt)
 }
 
 /// Remove an installed MSI package using the product code stored in metadata.

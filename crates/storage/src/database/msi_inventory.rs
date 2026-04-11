@@ -26,38 +26,44 @@ pub fn upsert_receipt(conn: &Connection, receipt: &MsiInventoryReceipt) -> Resul
     Ok(())
 }
 
-pub fn replace_snapshot(conn: &mut Connection, snapshot: &MsiInventorySnapshot) -> Result<()> {
-    let tx = conn
-        .transaction()
-        .context("failed to start MSI inventory transaction")?;
+pub fn apply_snapshot(conn: &Connection, snapshot: &MsiInventorySnapshot) -> Result<()> {
+    upsert_receipt(conn, &snapshot.receipt)?;
 
-    upsert_receipt(&tx, &snapshot.receipt)?;
-
-    tx.execute(
+    conn.execute(
         "DELETE FROM msi_files WHERE package_name = ?1",
         params![snapshot.receipt.package_name],
     )
     .context("failed to clear MSI file inventory")?;
-    tx.execute(
+    conn.execute(
         "DELETE FROM msi_registry_entries WHERE package_name = ?1",
         params![snapshot.receipt.package_name],
     )
     .context("failed to clear MSI registry inventory")?;
-    tx.execute(
+    conn.execute(
         "DELETE FROM msi_shortcuts WHERE package_name = ?1",
         params![snapshot.receipt.package_name],
     )
     .context("failed to clear MSI shortcut inventory")?;
-    tx.execute(
+    conn.execute(
         "DELETE FROM msi_components WHERE package_name = ?1",
         params![snapshot.receipt.package_name],
     )
     .context("failed to clear MSI component inventory")?;
 
-    insert_files(&tx, &snapshot.files)?;
-    insert_registry_entries(&tx, &snapshot.registry_entries)?;
-    insert_shortcuts(&tx, &snapshot.shortcuts)?;
-    insert_components(&tx, &snapshot.components)?;
+    insert_files(conn, &snapshot.files)?;
+    insert_registry_entries(conn, &snapshot.registry_entries)?;
+    insert_shortcuts(conn, &snapshot.shortcuts)?;
+    insert_components(conn, &snapshot.components)?;
+
+    Ok(())
+}
+
+pub fn replace_snapshot(conn: &mut Connection, snapshot: &MsiInventorySnapshot) -> Result<()> {
+    let tx = conn
+        .transaction()
+        .context("failed to start MSI inventory transaction")?;
+
+    apply_snapshot(&tx, snapshot)?;
 
     tx.commit()
         .context("failed to commit MSI inventory snapshot")?;
