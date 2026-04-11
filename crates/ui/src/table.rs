@@ -177,7 +177,6 @@ mod tests {
             engine_kind: EngineKind::Portable,
             engine_metadata: None,
             install_dir: "C:\\Apps\\Contoso".to_string(),
-            msix_package_full_name: None,
             dependencies: Vec::new(),
             status,
             installed_at: "2026-04-07T12:00:00Z".to_string(),

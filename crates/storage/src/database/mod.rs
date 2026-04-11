@@ -27,7 +27,7 @@ pub use config::{
 };
 pub use installed_packages::{
     PackageNotFoundError, delete_package, get_package, insert_package, list_installing_packages,
-    list_packages, update_status, update_status_and_msix_package_full_name,
+    list_packages, update_status, update_status_and_engine_metadata,
 };
 
 thread_local! {

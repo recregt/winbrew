@@ -37,13 +37,11 @@ pub fn install(
         fs::create_dir_all(install_dir)
             .with_context(|| format!("failed to create {}", install_dir.display()))?;
 
-        let engine_metadata = match installed_package_full_name(package_name) {
-            Ok(package_full_name) => Some(EngineMetadata::msix(
-                package_full_name,
-                InstallScope::Installed,
-            )),
-            Err(_) => None,
-        };
+        let package_full_name = installed_package_full_name(package_name)?;
+        let engine_metadata = Some(EngineMetadata::msix(
+            package_full_name,
+            InstallScope::Installed,
+        ));
 
         Ok(EngineInstallReceipt::new(EngineKind::Msix, engine_metadata))
     }

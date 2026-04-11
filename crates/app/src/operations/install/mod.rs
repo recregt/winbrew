@@ -135,9 +135,7 @@ pub fn run<O: InstallObserver>(
             on_start: |total_bytes| observer.borrow_mut().on_start(total_bytes),
             on_progress: |downloaded_bytes| observer.borrow_mut().on_progress(downloaded_bytes),
         }) {
-            Ok((engine_receipt, legacy_checksum_algorithms)) => {
-                (engine_receipt, legacy_checksum_algorithms)
-            }
+            Ok(result) => result,
             Err(err) => {
                 let install_error: InstallError = err.into();
 

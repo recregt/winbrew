@@ -150,11 +150,10 @@ pub fn mark_ok(
     name: &str,
     engine_receipt: &EngineInstallReceipt,
 ) -> Result<()> {
-    storage::update_status_and_msix_package_full_name(
+    storage::update_status_and_engine_metadata(
         conn,
         name,
         PackageStatus::Ok,
-        engine_receipt.msix_package_full_name(),
         engine_receipt.engine_metadata.as_ref(),
     )
     .map_err(|source| InstallStateError::DatabaseOperationFailed {
@@ -190,7 +189,6 @@ fn installing_package(
         engine_kind,
         engine_metadata: None,
         install_dir: install_dir.to_string_lossy().into_owned(),
-        msix_package_full_name: None,
         dependencies: Vec::new(),
         status: PackageStatus::Installing,
         installed_at: now(),

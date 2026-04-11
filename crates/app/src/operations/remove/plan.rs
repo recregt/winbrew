@@ -78,22 +78,21 @@ fn dependency_name(dep: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::removal_plan;
-    use crate::models::{InstallerType, Package, PackageStatus};
+    use crate::models::{EngineMetadata, InstallScope, InstallerType, Package, PackageStatus};
 
     fn package(
         name: &str,
         kind: InstallerType,
         install_dir: &str,
-        msix_package_full_name: Option<&str>,
+        engine_metadata: Option<EngineMetadata>,
     ) -> Package {
         Package {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             kind,
             engine_kind: kind.into(),
-            engine_metadata: None,
+            engine_metadata,
             install_dir: install_dir.to_string(),
-            msix_package_full_name: msix_package_full_name.map(ToOwned::to_owned),
             dependencies: Vec::new(),
             status: PackageStatus::Ok,
             installed_at: "2026-04-05T00:00:00Z".to_string(),
@@ -101,21 +100,27 @@ mod tests {
     }
 
     #[test]
-    fn removal_plan_preserves_msix_full_name() {
+    fn removal_plan_preserves_engine_metadata() {
         let plan = removal_plan(
             package(
                 "Contoso.App",
                 InstallerType::Msix,
                 r"C:\Packages\Contoso.App",
-                Some("Contoso.App_1.0.0_x64__8wekyb3d8bbwe"),
+                Some(EngineMetadata::msix(
+                    "Contoso.App_1.0.0_x64__8wekyb3d8bbwe",
+                    InstallScope::Installed,
+                )),
             ),
             vec!["Contoso.Consumer".to_string()],
         );
 
         assert_eq!(plan.package.name, "Contoso.App");
         assert_eq!(
-            plan.package.msix_package_full_name.as_deref(),
-            Some("Contoso.App_1.0.0_x64__8wekyb3d8bbwe")
+            plan.package.engine_metadata,
+            Some(EngineMetadata::msix(
+                "Contoso.App_1.0.0_x64__8wekyb3d8bbwe",
+                InstallScope::Installed,
+            ))
         );
         assert_eq!(plan.dependents, vec!["Contoso.Consumer".to_string()]);
     }
