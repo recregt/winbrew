@@ -130,7 +130,8 @@ mod tests {
     use std::io::{Result as IoResult, Write};
     use std::sync::{Arc, Mutex};
     use winbrew_models::{
-        CatalogPackage, InstalledPackage, InstallerType, PackageSource, PackageStatus, Version,
+        CatalogPackage, EngineKind, InstalledPackage, InstallerType, PackageSource, PackageStatus,
+        Version,
     };
 
     struct SharedBuffer {
@@ -173,6 +174,8 @@ mod tests {
             name: "Contoso App".to_string(),
             version: "1.2.3".to_string(),
             kind: InstallerType::Portable,
+            engine_kind: EngineKind::Portable,
+            engine_metadata: None,
             install_dir: "C:\\Apps\\Contoso".to_string(),
             msix_package_full_name: None,
             dependencies: Vec::new(),

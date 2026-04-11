@@ -20,6 +20,8 @@ fn sample_package(
         name: name.to_string(),
         version: "1.0.0".to_string(),
         kind,
+        engine_kind: kind.into(),
+        engine_metadata: None,
         install_dir: install_dir.to_string_lossy().into_owned(),
         msix_package_full_name: None,
         dependencies,

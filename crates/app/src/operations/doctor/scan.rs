@@ -213,6 +213,8 @@ mod tests {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             kind: InstallerType::Portable,
+            engine_kind: InstallerType::Portable.into(),
+            engine_metadata: None,
             install_dir: install_dir.to_string_lossy().into_owned(),
             msix_package_full_name: None,
             dependencies: Vec::new(),

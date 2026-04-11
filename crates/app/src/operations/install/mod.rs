@@ -27,6 +27,7 @@ use std::path::PathBuf;
 use crate::catalog;
 use crate::core::temp_workspace;
 use crate::engines;
+use crate::models::{EngineMetadata, InstallScope};
 use crate::storage;
 
 pub use crate::core::cancel;
@@ -117,6 +118,7 @@ pub fn run<O: InstallObserver>(
         package.name.clone(),
         package_version.clone(),
         installer.kind,
+        engine,
         &install_dir,
     )?;
 
@@ -160,7 +162,7 @@ pub fn run<O: InstallObserver>(
         install_dir: install_dir.to_string_lossy().to_string(),
     };
 
-    let msix_package_full_name = if engine == engines::EngineKind::Msix {
+    let engine_metadata = if engine == engines::EngineKind::Msix {
         match engines::msix::installed_package_full_name(&install_result.name) {
             Ok(full_name) => Some(full_name),
             Err(err) => {
@@ -172,11 +174,10 @@ pub fn run<O: InstallObserver>(
         None
     };
 
-    if let Err(err) = state::mark_ok(
-        &conn,
-        &install_result.name,
-        msix_package_full_name.as_deref(),
-    ) {
+    let engine_metadata = engine_metadata
+        .map(|package_full_name| EngineMetadata::msix(package_full_name, InstallScope::Installed));
+
+    if let Err(err) = state::mark_ok(&conn, &install_result.name, engine_metadata.as_ref()) {
         let _ = state::mark_failed(&conn, &install_result.name);
         return Err(err.into());
     }

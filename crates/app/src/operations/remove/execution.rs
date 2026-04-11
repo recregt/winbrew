@@ -18,7 +18,7 @@ use tracing::{debug, warn};
 
 use std::path::PathBuf;
 
-use crate::engines::{self, EngineKind, PackageEngine};
+use crate::engines::{EngineKind, PackageEngine};
 use crate::storage::database;
 
 use super::{RemovalError, RemovalPlan, Result};
@@ -61,14 +61,7 @@ fn execute_removal_with_conn(
     }
 
     let install_dir = PathBuf::from(&plan.package.install_dir);
-    let engine_kind = match engines::get_engine_kind(plan.package.kind) {
-        Ok(engine_kind) => engine_kind,
-        Err(_) => {
-            return Err(RemovalError::UnsupportedPackageType {
-                kind: plan.package.kind,
-            });
-        }
-    };
+    let engine_kind = plan.package.engine_kind;
 
     match engine_kind {
         EngineKind::Msix => {
@@ -116,6 +109,11 @@ fn execute_removal_with_conn(
             } else {
                 database::delete_package(conn, &plan.package.name)?;
             }
+        }
+        _ => {
+            return Err(RemovalError::UnsupportedPackageType {
+                kind: plan.package.kind,
+            });
         }
     }
 

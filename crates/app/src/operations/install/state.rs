@@ -15,7 +15,7 @@ use thiserror::Error;
 use crate::core::fs::cleanup_path;
 use crate::core::now;
 use crate::storage;
-use winbrew_models::{InstallerType, Package, PackageStatus};
+use winbrew_models::{EngineKind, EngineMetadata, InstallerType, Package, PackageStatus};
 
 /// Errors raised while preparing or updating install state.
 #[derive(Debug, Error)]
@@ -128,9 +128,10 @@ pub fn mark_installing(
     name: impl Into<String>,
     version: impl Into<String>,
     kind: InstallerType,
+    engine_kind: EngineKind,
     install_dir: &Path,
 ) -> Result<()> {
-    let package = installing_package(name, version, kind, install_dir);
+    let package = installing_package(name, version, kind, engine_kind, install_dir);
     storage::insert_package(conn, &package).map_err(|source| {
         InstallStateError::DatabaseOperationFailed {
             operation: "marking package as installing",
@@ -146,13 +147,14 @@ pub fn mark_installing(
 pub fn mark_ok(
     conn: &crate::storage::DbConnection,
     name: &str,
-    msix_package_full_name: Option<&str>,
+    engine_metadata: Option<&EngineMetadata>,
 ) -> Result<()> {
     storage::update_status_and_msix_package_full_name(
         conn,
         name,
         PackageStatus::Ok,
-        msix_package_full_name,
+        engine_metadata.and_then(EngineMetadata::msix_package_full_name),
+        engine_metadata,
     )
     .map_err(|source| InstallStateError::DatabaseOperationFailed {
         operation: "marking package as installed",
@@ -177,12 +179,15 @@ fn installing_package(
     name: impl Into<String>,
     version: impl Into<String>,
     kind: InstallerType,
+    engine_kind: EngineKind,
     install_dir: &Path,
 ) -> Package {
     Package {
         name: name.into(),
         version: version.into(),
         kind,
+        engine_kind,
+        engine_metadata: None,
         install_dir: install_dir.to_string_lossy().into_owned(),
         msix_package_full_name: None,
         dependencies: Vec::new(),
