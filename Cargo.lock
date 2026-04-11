@@ -2571,6 +2571,7 @@ dependencies = [
  "regex",
  "strum",
  "strum_macros",
+ "winbrew-models",
  "windows",
  "windows-sys 0.61.2",
  "winreg",

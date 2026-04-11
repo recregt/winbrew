@@ -12,6 +12,7 @@ This crate is responsible for the Windows-only boundary around three areas:
 - filesystem inspection and extraction helpers
 - registry enumeration for installed applications and uninstall roots
 - MSIX deployment helpers for install and remove flows
+- MSI inventory scanning for package databases and install trees
 
 The public API is intentionally exposed from `src/lib.rs` only. Internal module
 layout is not part of the contract and can change without breaking consumers.
@@ -27,6 +28,7 @@ layout is not part of the contract and can change without breaking consumers.
 | `msix_install` | Install an MSIX package from a downloaded file and return the installed package full name | engine install flow |
 | `msix_installed_package_full_name` | Resolve the installed full name for a package name or family name | MSIX receipt creation |
 | `msix_remove` | Remove an installed MSIX package by full package name | engine remove flow |
+| `msi_scan_inventory` | Scan an MSI database and reconstruct the inventory snapshot stored in SQLite | MSI install and repair flows |
 
 ## `src/lib.rs` root facade
 
@@ -42,7 +44,7 @@ mod deployment;
 mod fs;
 mod registry;
 
-pub use deployment::{msix_install, msix_installed_package_full_name, msix_remove};
+pub use deployment::{msi_scan_inventory, msix_install, msix_installed_package_full_name, msix_remove};
 pub use fs::{PathInfo, create_extracted_file, inspect_path};
 pub use registry::{AppInfo, Hive, UninstallRoot, collect_installed_apps, uninstall_roots};
 ```
@@ -216,6 +218,39 @@ Removal is the inverse of install:
 3. call `msix_remove`
 
 This avoids ambiguous package-name lookups during removal.
+
+## MSI inventory scanner
+
+### `msi_scan_inventory`
+
+`msi_scan_inventory` opens an MSI database in read-only mode, walks the standard
+inventory tables, and reconstructs the snapshot shape that WinBrew stores in
+SQLite.
+
+The helper expects three inputs:
+
+- the MSI database file path
+- the install root used to resolve directory and file paths
+- the package name and install scope that WinBrew should persist
+
+It is intentionally best-effort on path resolution. Directory trees, file keys,
+and shortcut targets are resolved when the MSI tables provide enough structure;
+otherwise the scanner keeps the raw database data conservative instead of
+inventing a path that might be wrong.
+
+```rust,no_run
+use std::path::Path;
+use winbrew_models::InstallScope;
+use winbrew_windows::msi_scan_inventory;
+
+let snapshot = msi_scan_inventory(
+  Path::new(r"C:\Temp\packages\Contoso.App.msi"),
+  Path::new(r"C:\Program Files\WinBrew\packages\Contoso.App"),
+  "Contoso.App",
+  InstallScope::Installed,
+)
+.unwrap();
+```
 
 ### 3. Inspect before extraction
 
