@@ -46,9 +46,6 @@ impl<'a> Reporter<'a> {
             &packages,
             progress.as_ref(),
         ));
-        if let Some(progress) = progress.as_ref() {
-            progress.finish_and_clear();
-        }
 
         diagnostics.extend(scan::scan_orphaned_install_dirs(&paths.packages, &packages));
         diagnostics.sort_unstable_by(sort_diagnostics);
