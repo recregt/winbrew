@@ -1,3 +1,18 @@
+//! Engine-specific package removal and filesystem cleanup.
+//!
+//! The execution phase consumes a precomputed [`RemovalPlan`] and mutates the
+//! database and filesystem state accordingly. The exact removal strategy
+//! depends on the package engine:
+//!
+//! - MSIX packages are removed through the engine first and then cleaned from disk.
+//! - Zip and portable packages are staged into a trash directory before the
+//!   database row is deleted so the install tree can be restored if metadata
+//!   removal fails.
+//!
+//! The functions here favor best-effort cleanup. Filesystem failures after the
+//! removal path has already made progress are logged when practical so the main
+//! removal outcome stays focused on whether the package was successfully removed.
+
 use anyhow::Context;
 use tracing::{debug, warn};
 
@@ -9,12 +24,21 @@ use crate::storage::database;
 use super::{RemovalError, RemovalPlan, Result};
 use crate::models::Package;
 
+/// Execute package removal using a fresh database connection.
+///
+/// This is the public execution entry point. It only acquires the database
+/// connection and then delegates the actual work to the shared removal engine.
 pub fn execute_removal(plan: &RemovalPlan, force: bool) -> Result<()> {
     let conn = database::get_conn()?;
 
     execute_removal_with_conn(plan, force, &conn)
 }
 
+/// Execute a removal plan with a caller-provided database connection.
+///
+/// This function enforces the removal policy, selects the correct engine kind,
+/// and applies the engine-specific cleanup path. When `force` is false, the
+/// presence of dependent packages blocks removal before any mutation happens.
 fn execute_removal_with_conn(
     plan: &RemovalPlan,
     force: bool,
@@ -26,6 +50,10 @@ fn execute_removal_with_conn(
     );
 
     if !force && !plan.dependents.is_empty() {
+        // Remove a package directory, database row, and any leftover staging artifacts.
+        // The helper is intentionally engine-agnostic. It handles the shared cleanup
+        // patterns used by both removal strategies and leaves the engine-specific work
+        // to the caller.
         return Err(RemovalError::DependentPackagesBlocked {
             name: plan.package.name.clone(),
             dependents: plan.dependents.join(", "),

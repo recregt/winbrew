@@ -1,8 +1,24 @@
+//! Removal planning and dependency analysis.
+//!
+//! The planning phase reads the package database, resolves the package to
+//! remove, and collects any installed packages that still depend on it. The
+//! resulting [`RemovalPlan`] is a snapshot of what the execution phase should
+//! remove, not a live view of the database.
+//!
+//! This split matters because the CLI wants to inspect the plan before it
+//! mutates anything. It can display dependents, ask for confirmation, and only
+//! then hand the plan to the execution layer.
+
 use crate::models::{Package, RemovalPlan};
 use crate::storage::database;
 
 use super::Result;
 
+/// Find installed packages that depend on the named package.
+///
+/// Dependency entries may include a version suffix in the form `name@version`.
+/// Only the package name is used for matching so the dependency check remains
+/// stable even if the dependency recorded a specific version.
 pub fn find_dependents(name: &str, conn: &database::DbConnection) -> Result<Vec<String>> {
     let mut dependents = database::list_packages(conn)?
         .into_iter()
@@ -22,6 +38,12 @@ pub fn find_dependents(name: &str, conn: &database::DbConnection) -> Result<Vec<
     Ok(dependents)
 }
 
+/// Build a removal plan for the named package.
+///
+/// The function loads the package record, gathers current dependents, and then
+/// returns a single immutable plan that can be inspected by the caller before
+/// removal starts. If the package does not exist, the database error is
+/// preserved so the CLI can report that the target package was not found.
 pub fn plan_removal(name: &str) -> Result<RemovalPlan> {
     let conn = database::get_conn()?;
     let pkg = database::get_package(&conn, name)?.ok_or_else(|| {
@@ -34,6 +56,10 @@ pub fn plan_removal(name: &str) -> Result<RemovalPlan> {
     Ok(removal_plan(pkg, dependents))
 }
 
+/// Construct a removal plan from an already loaded package and dependent list.
+///
+/// This helper keeps the public planning API focused on database access while
+/// still making the plan shape easy to test in isolation.
 fn removal_plan(pkg: Package, dependents: Vec<String>) -> RemovalPlan {
     RemovalPlan {
         package: pkg,
@@ -41,6 +67,10 @@ fn removal_plan(pkg: Package, dependents: Vec<String>) -> RemovalPlan {
     }
 }
 
+/// Extract the dependency package name from a stored dependency string.
+///
+/// Dependency records may carry a version suffix after `@`; only the package
+/// name participates in removal dependency matching.
 fn dependency_name(dep: &str) -> &str {
     dep.split_once('@').map_or(dep, |(name, _)| name)
 }
