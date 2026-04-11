@@ -15,7 +15,7 @@ winbrew-models = { path = "../models" }
 winbrew-storage = { path = "../storage" }
 winbrew-engines = { path = "../engines" }
 winbrew-ui = { path = "../ui" }
-indicatif = { version = "0.18", default-features = false, features = ["unicode-width"] }
+indicatif = { version = "0.18", default-features = false, features = ["rayon", "unicode-width"] }
 rayon = "1.11"
 serde_json = "1"
 thiserror = "2.0"
