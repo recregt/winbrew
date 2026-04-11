@@ -10,11 +10,10 @@
 //! caller receives any tolerated legacy checksum algorithms for reporting.
 
 use anyhow::Result;
-use std::fs;
 use std::path::Path;
 
 use crate::core::cancel::check;
-use crate::core::fs::finalize_temp_file;
+use crate::core::fs::{cleanup_path, finalize_temp_file};
 use crate::core::hash::{Hasher, hash_algorithm, normalize_hash, verify_hash};
 use crate::core::network::{build_client as network_build_client, download_url_to_temp_file};
 use crate::models::HashAlgorithm;
@@ -84,7 +83,7 @@ where
     })();
 
     if result.is_err() {
-        let _ = fs::remove_file(&temp_path);
+        let _ = cleanup_path(&temp_path);
     }
 
     result

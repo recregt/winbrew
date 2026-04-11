@@ -1,14 +1,14 @@
 //! Catalog refresh workflow for the CLI.
 
 use anyhow::{Context, Result};
-use std::fs::{self, File};
-use std::io::ErrorKind;
+use std::fs::File;
 use std::path::Path;
 
+use crate::core::fs::cleanup_path;
 use crate::core::fs::finalize_temp_file;
 use crate::core::hash::{hash_file, verify_hash};
 use crate::core::network::{Client, build_client, download_url_to_temp_file};
-use crate::core::paths::ResolvedPaths;
+use crate::core::paths::{ResolvedPaths, ensure_dirs_at};
 use crate::models::{CatalogMetadata, HashAlgorithm};
 
 const CATALOG_DIRECT_DOWNLOAD_URL: &str = "https://wb-assets.recregt.com/catalog.db";
@@ -28,7 +28,7 @@ where
         .parent()
         .context("failed to resolve catalog database directory")?;
 
-    fs::create_dir_all(catalog_dir).context("failed to create catalog database directory")?;
+    ensure_dirs_at(&paths.root).context("failed to create catalog directories")?;
 
     let catalog_temp_path = catalog_dir.join("catalog.db.download");
     let metadata_temp_path = catalog_dir.join("metadata.json.download");
@@ -48,18 +48,14 @@ where
         Ok(())
     })();
 
-    let _ = fs::remove_file(&catalog_temp_path);
-    let _ = fs::remove_file(&metadata_temp_path);
+    let _ = cleanup_path(&catalog_temp_path);
+    let _ = cleanup_path(&metadata_temp_path);
 
     result
 }
 
 fn clear_temp_file(path: &Path) -> Result<()> {
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(err).context("failed to clear previous catalog download"),
-    }
+    cleanup_path(path).context("failed to clear previous catalog download")
 }
 
 fn download_catalog_metadata_release(client: &Client, temp_path: &Path) -> Result<CatalogMetadata> {
