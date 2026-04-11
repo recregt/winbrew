@@ -28,15 +28,15 @@ pub use config::{
     PathsConfig, config_sections, config_set, config_unset, get_effective_value,
 };
 pub use installed_packages::{
-    PackageNotFoundError, delete_package, get_package, insert_package, list_installing_packages,
-    list_packages, update_status, update_status_and_engine_metadata,
+    PackageNotFoundError, commit_install, delete_package, get_package, insert_package,
+    list_installing_packages, list_packages, update_status, update_status_and_engine_metadata,
 };
 pub use journal::{
     FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader, JournalWriter,
 };
 pub use msi_inventory::{
-    find_packages_by_normalized_path, find_packages_by_normalized_registry_key_path,
-    replace_snapshot, upsert_receipt,
+    apply_snapshot, find_packages_by_normalized_path,
+    find_packages_by_normalized_registry_key_path, replace_snapshot, upsert_receipt,
 };
 
 thread_local! {

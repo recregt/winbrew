@@ -157,16 +157,16 @@ pub fn run<O: InstallObserver>(
         return Err(cancel::CancellationError.into());
     }
 
+    if let Err(err) = storage::commit_install(&mut conn, &package.name, &engine_receipt) {
+        let _ = state::mark_failed(&conn, &package.name);
+        return Err(err.into());
+    }
+
     let install_result = InstallResult {
         name: package.name,
         version: package_version,
         install_dir: engine_receipt.install_dir.clone(),
     };
-
-    if let Err(err) = state::mark_ok(&mut conn, &install_result.name, &engine_receipt) {
-        let _ = state::mark_failed(&conn, &install_result.name);
-        return Err(err.into());
-    }
 
     Ok(InstallOutcome {
         result: install_result,

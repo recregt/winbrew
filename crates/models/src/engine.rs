@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ModelError;
 use crate::installer::InstallerType;
+use crate::msi_inventory::MsiInventorySnapshot;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -41,11 +42,14 @@ pub enum EngineMetadata {
 ///
 /// The receipt preserves the technical engine kind that executed the install,
 /// the final install directory reported by the engine, and any engine-specific
-/// metadata needed for future removal or repair.
+/// metadata needed for future removal or repair. MSI engines may also attach
+/// a complete inventory snapshot for database persistence.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EngineInstallReceipt {
     pub engine_kind: EngineKind,
     pub install_dir: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msi_inventory_snapshot: Option<MsiInventorySnapshot>,
     pub engine_metadata: Option<EngineMetadata>,
 }
 
@@ -58,6 +62,7 @@ impl EngineInstallReceipt {
         Self {
             engine_kind,
             install_dir: install_dir.into(),
+            msi_inventory_snapshot: None,
             engine_metadata,
         }
     }

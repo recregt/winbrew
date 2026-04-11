@@ -15,10 +15,7 @@ use thiserror::Error;
 use crate::core::fs::cleanup_path;
 use crate::core::now;
 use crate::storage;
-use winbrew_models::{
-    EngineInstallReceipt, EngineKind, EngineMetadata, InstallerType, MsiInventoryReceipt, Package,
-    PackageStatus,
-};
+use winbrew_models::{EngineKind, InstallerType, Package, PackageStatus};
 
 /// Errors raised while preparing or updating install state.
 #[derive(Debug, Error)]
@@ -143,53 +140,6 @@ pub fn mark_installing(
     })
 }
 
-/// Mark a package as successfully installed.
-///
-/// The engine receipt carries any metadata needed for future removal or repair,
-/// including MSIX-specific package identity data and the final install
-/// directory reported by the engine after install completes.
-pub fn mark_ok(
-    conn: &mut crate::storage::DbConnection,
-    name: &str,
-    engine_receipt: &EngineInstallReceipt,
-) -> Result<()> {
-    let installed_at = now();
-    let tx = conn
-        .transaction()
-        .map_err(|source| InstallStateError::DatabaseOperationFailed {
-            operation: "starting install commit transaction",
-            source: source.into(),
-        })?;
-
-    storage::update_status_and_engine_metadata(
-        &tx,
-        name,
-        PackageStatus::Ok,
-        engine_receipt.engine_metadata.as_ref(),
-        engine_receipt.install_dir.as_str(),
-        &installed_at,
-    )
-    .map_err(|source| InstallStateError::DatabaseOperationFailed {
-        operation: "marking package as installed",
-        source,
-    })?;
-
-    if let Some(receipt) = msi_inventory_receipt(name, engine_receipt.engine_metadata.as_ref()) {
-        storage::upsert_receipt(&tx, &receipt).map_err(|source| {
-            InstallStateError::DatabaseOperationFailed {
-                operation: "recording MSI receipt",
-                source,
-            }
-        })?;
-    }
-
-    tx.commit()
-        .map_err(|source| InstallStateError::DatabaseOperationFailed {
-            operation: "committing install state",
-            source: source.into(),
-        })
-}
-
 /// Mark a package as failed.
 ///
 /// The outer install flow uses this during rollback to preserve the failure
@@ -219,27 +169,133 @@ fn installing_package(
         install_dir: install_dir.to_string_lossy().into_owned(),
         dependencies: Vec::new(),
         status: PackageStatus::Installing,
-        // Provisional value for in-progress installs; mark_ok overwrites it with the final timestamp.
+        // Provisional value for in-progress installs; storage::commit_install overwrites it.
         installed_at: now(),
     }
 }
 
-fn msi_inventory_receipt(
-    package_name: &str,
-    engine_metadata: Option<&EngineMetadata>,
-) -> Option<MsiInventoryReceipt> {
-    match engine_metadata? {
-        EngineMetadata::Msi {
-            product_code,
-            upgrade_code,
-            scope,
-            ..
-        } => Some(MsiInventoryReceipt {
-            package_name: package_name.to_string(),
-            product_code: product_code.clone(),
-            upgrade_code: upgrade_code.clone(),
-            scope: *scope,
-        }),
-        EngineMetadata::Msix { .. } => None,
+#[cfg(test)]
+mod tests {
+    use crate::core::paths::resolved_paths;
+    use crate::storage;
+    use std::path::Path;
+    use tempfile::tempdir;
+    use winbrew_models::{
+        EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope, InstallerType,
+        MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
+        MsiRegistryRecord, MsiShortcutRecord, Package, PackageStatus,
+    };
+
+    fn init_storage(root: &Path) {
+        let packages = root.join("packages").to_string_lossy().into_owned();
+        let data = root.join("data").to_string_lossy().into_owned();
+        let logs = root.join("logs").to_string_lossy().into_owned();
+        let cache = root.join("cache").to_string_lossy().into_owned();
+        let paths = resolved_paths(root, &packages, &data, &logs, &cache);
+
+        storage::init(&paths).expect("storage should initialize");
+    }
+
+    fn sample_package(name: &str, install_dir: &str) -> Package {
+        Package {
+            name: name.to_string(),
+            version: "1.0.0".to_string(),
+            kind: InstallerType::Msi,
+            engine_kind: EngineKind::Msi,
+            engine_metadata: None,
+            install_dir: install_dir.to_string(),
+            dependencies: Vec::new(),
+            status: PackageStatus::Installing,
+            installed_at: "2026-04-12T00:00:00Z".to_string(),
+        }
+    }
+
+    fn sample_snapshot(name: &str, install_dir: &str) -> MsiInventorySnapshot {
+        let normalized_install_dir = install_dir.replace('\\', "/").to_ascii_lowercase();
+
+        MsiInventorySnapshot {
+            receipt: MsiInventoryReceipt {
+                package_name: name.to_string(),
+                product_code: "{11111111-1111-1111-1111-111111111111}".to_string(),
+                upgrade_code: Some("{22222222-2222-2222-2222-222222222222}".to_string()),
+                scope: InstallScope::Installed,
+            },
+            files: vec![MsiFileRecord {
+                package_name: name.to_string(),
+                path: format!("{install_dir}/bin/demo.exe"),
+                normalized_path: format!("{normalized_install_dir}/bin/demo.exe"),
+                hash_algorithm: None,
+                hash_hex: None,
+                is_config_file: false,
+            }],
+            registry_entries: vec![MsiRegistryRecord {
+                package_name: name.to_string(),
+                hive: "HKLM".to_string(),
+                key_path: "Software\\Demo".to_string(),
+                normalized_key_path: "software\\demo".to_string(),
+                value_name: "InstallPath".to_string(),
+                value_data: Some(install_dir.to_string()),
+                previous_value: None,
+            }],
+            shortcuts: vec![MsiShortcutRecord {
+                package_name: name.to_string(),
+                path: format!("{install_dir}/Desktop/Demo.lnk"),
+                normalized_path: format!("{normalized_install_dir}/desktop/demo.lnk"),
+                target_path: Some(format!("{install_dir}/bin/demo.exe")),
+                normalized_target_path: Some(format!("{normalized_install_dir}/bin/demo.exe")),
+            }],
+            components: vec![MsiComponentRecord {
+                package_name: name.to_string(),
+                component_id: "COMPONENT-DEMO".to_string(),
+                path: Some(format!("{install_dir}/bin/demo.exe")),
+                normalized_path: Some(format!("{normalized_install_dir}/bin/demo.exe")),
+            }],
+        }
+    }
+
+    #[test]
+    fn commit_install_persists_msi_snapshot_transactionally() {
+        let root = tempdir().expect("temp root");
+        init_storage(root.path());
+
+        let package_name = "demo";
+        let install_dir = "C:/Tools/Actual";
+
+        let conn = storage::get_conn().expect("database connection should open");
+        storage::insert_package(&conn, &sample_package(package_name, "C:/Tools/Old"))
+            .expect("insert package");
+
+        let mut receipt = EngineInstallReceipt::new(
+            EngineKind::Msi,
+            install_dir.to_string(),
+            Some(EngineMetadata::Msi {
+                product_code: "{11111111-1111-1111-1111-111111111111}".to_string(),
+                upgrade_code: Some("{22222222-2222-2222-2222-222222222222}".to_string()),
+                scope: InstallScope::Installed,
+                registry_keys: vec!["HKLM\\Software\\Demo".to_string()],
+                shortcuts: vec!["C:/Users/Public/Desktop/Demo.lnk".to_string()],
+            }),
+        );
+        receipt.msi_inventory_snapshot = Some(sample_snapshot(package_name, install_dir));
+
+        let mut conn = conn;
+        storage::commit_install(&mut conn, package_name, &receipt).expect("commit package install");
+
+        let package = storage::get_package(&conn, package_name)
+            .expect("read package")
+            .expect("package should exist");
+
+        assert_eq!(package.status, PackageStatus::Ok);
+        assert_eq!(package.install_dir, install_dir);
+
+        let file_owners =
+            storage::find_packages_by_normalized_path(&conn, "c:/tools/actual/bin/demo.exe")
+                .expect("lookup file owners");
+        assert_eq!(file_owners, vec![package_name.to_string()]);
+
+        let registry_owners =
+            storage::find_packages_by_normalized_registry_key_path(&conn, "software\\demo")
+                .expect("lookup registry owners");
+        assert_eq!(registry_owners, vec![package_name.to_string()]);
     }
 }

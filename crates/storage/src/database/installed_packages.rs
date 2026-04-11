@@ -2,7 +2,10 @@ use anyhow::{Context, Result};
 use rusqlite::{Connection, Error as SqlError, OptionalExtension, params, types::Type};
 use thiserror::Error;
 
-use winbrew_models::{EngineKind, EngineMetadata, InstallerType, Package, PackageStatus};
+use crate::core::now;
+use winbrew_models::{
+    EngineInstallReceipt, EngineKind, EngineMetadata, InstallerType, Package, PackageStatus,
+};
 
 #[derive(Debug, Error)]
 #[error("package '{name}' not found")]
@@ -96,6 +99,34 @@ pub fn update_status_and_engine_metadata(
         }
         .into());
     }
+
+    Ok(())
+}
+
+pub fn commit_install(
+    conn: &mut crate::database::DbConnection,
+    name: &str,
+    engine_receipt: &EngineInstallReceipt,
+) -> Result<()> {
+    let installed_at = now();
+    let tx = conn
+        .transaction()
+        .context("failed to start install commit transaction")?;
+
+    update_status_and_engine_metadata(
+        &tx,
+        name,
+        PackageStatus::Ok,
+        engine_receipt.engine_metadata.as_ref(),
+        engine_receipt.install_dir.as_str(),
+        &installed_at,
+    )?;
+
+    if let Some(snapshot) = engine_receipt.msi_inventory_snapshot.as_ref() {
+        crate::database::apply_snapshot(&tx, snapshot)?;
+    }
+
+    tx.commit().context("failed to commit install state")?;
 
     Ok(())
 }
