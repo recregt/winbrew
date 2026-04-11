@@ -1,8 +1,11 @@
 mod registry;
 
-pub mod msix;
-pub mod portable;
-pub mod zip;
+pub mod filesystem;
+pub mod windows;
+
+pub use filesystem::archive::zip;
+pub use filesystem::portable;
+pub use windows::package::msix;
 
 use anyhow::Result;
 use std::path::Path;
