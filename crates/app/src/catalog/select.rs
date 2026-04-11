@@ -1,8 +1,21 @@
+//! Installer selection policy for catalog packages.
+//!
+//! Catalog packages can publish multiple installers for different architectures
+//! or package kinds. This module centralizes the ranking rules so callers do not
+//! need to replicate architecture fallback logic in command code.
+//!
+//! The selection order is intentionally simple and predictable:
+//!
+//! - prefer an installer that exactly matches the current architecture
+//! - fall back to `Architecture::Any` when no exact match exists
+//! - fall back to the first available installer if nothing else matches
+
 use winbrew_models::{Architecture, CatalogInstaller};
 
-/// Selects the best installer for the current architecture.
+/// Select the best installer for the current architecture.
 ///
-/// Prefers an exact architecture match, falls back to `Any`, then to the first available installer.
+/// The helper returns `None` when the catalog package has no installers. The
+/// caller is responsible for translating that into a user-facing install error.
 pub(crate) fn select_installer(installers: &[CatalogInstaller]) -> Option<CatalogInstaller> {
     let current_arch = Architecture::current();
 
