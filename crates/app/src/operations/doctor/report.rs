@@ -8,15 +8,33 @@ use crate::AppContext;
 use super::scan;
 use crate::models::{DiagnosisResult, DiagnosisSeverity, HealthReport, Package};
 
+/// Builds a health report from the application context and the current install state.
+///
+/// `Reporter` owns no data itself; it is a thin wrapper around [`AppContext`] so the
+/// doctor pipeline can read resolved paths, verbosity, and root provenance without
+/// threading those values through every helper function.
 pub struct Reporter<'a> {
     ctx: &'a AppContext,
 }
 
 impl<'a> Reporter<'a> {
+    /// Creates a reporter bound to a shared application context.
+    ///
+    /// The context provides resolved filesystem paths, UI settings, and CLI-derived
+    /// runtime flags used while assembling the report.
     pub fn new(ctx: &'a AppContext) -> Self {
         Self { ctx }
     }
 
+    /// Collects the current health state into a [`HealthReport`].
+    ///
+    /// The collection flow performs three steps:
+    /// 1. Read the installed package inventory.
+    /// 2. Scan package install directories and orphaned package directories.
+    /// 3. Normalize and sort diagnostics so the UI can render a stable report.
+    ///
+    /// If package inventory access fails, the failure is converted into a synthetic
+    /// diagnosis so the report can still be returned with partial data.
     pub fn collect(&self) -> Result<HealthReport> {
         let paths = &self.ctx.paths;
         let started_at = Instant::now();
@@ -94,6 +112,10 @@ fn collect_packages(packages_result: Result<Vec<Package>>) -> (Vec<Package>, Vec
     }
 }
 
+/// Convenience entry point for callers that need a one-shot health report.
+///
+/// This delegates to [`Reporter::collect`] so the caller does not need to manage the
+/// reporter wrapper directly.
 pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
     Reporter::new(ctx).collect()
 }
