@@ -10,10 +10,10 @@ use crate::{AppContext, Ui, app::doctor};
 /// When `json_output` is enabled, the report is written to stdout as JSON.
 /// When `warn_as_error` is enabled, warnings produce a non-zero exit code.
 pub fn run(ctx: &AppContext, json_output: bool, warn_as_error: bool) -> Result<()> {
-    let report = doctor::health_report(ctx)?;
-    let (errors, warnings) = split_diagnostics(&report);
-
     if json_output {
+        let report = doctor::health_report(ctx)?;
+        let (_, warnings) = split_diagnostics(&report);
+
         let mut stdout = io::stdout();
         write_json(&mut stdout, &report)?;
 
@@ -26,7 +26,11 @@ pub fn run(ctx: &AppContext, json_output: bool, warn_as_error: bool) -> Result<(
 
     let mut ui = Ui::new(ctx.ui);
     ui.page_title("System Health Check");
-    ui.info("Inspecting environment and installed packages...");
+    let report = ui.spinner("Inspecting environment and installed packages...", || {
+        doctor::health_report(ctx)
+    })?;
+    let (errors, warnings) = split_diagnostics(&report);
+
     ui.display_key_values(&report_summary(&report));
     ui.info("");
     render_results(&mut ui, &errors, &warnings);
