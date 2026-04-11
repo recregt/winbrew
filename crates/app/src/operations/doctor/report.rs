@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn sort_diagnostics_keeps_errors_before_warnings() {
-        let mut diagnostics = vec![
+        let mut diagnostics = [
             DiagnosisResult {
                 error_code: "warning_b".to_string(),
                 description: "warning".to_string(),

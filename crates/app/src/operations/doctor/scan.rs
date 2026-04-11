@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use std::collections::HashSet;
 use std::fs;
 use std::io::ErrorKind;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 fn diagnosis_result(
     error_code: &str,
@@ -18,6 +18,90 @@ fn diagnosis_result(
         error_code: error_code.to_string(),
         description,
         severity,
+    }
+}
+
+/// Controls how the configured scanner treats symbolic links.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum SymlinkPolicy {
+    Allow,
+    #[default]
+    Warn,
+    Deny,
+    Follow,
+}
+
+/// Configuration for the configurable package scanner.
+#[derive(Clone, Debug)]
+pub struct ScanConfig {
+    pub symlink_policy: SymlinkPolicy,
+    pub follow_canonical_paths: bool,
+}
+
+impl Default for ScanConfig {
+    fn default() -> Self {
+        Self {
+            symlink_policy: SymlinkPolicy::Warn,
+            follow_canonical_paths: true,
+        }
+    }
+}
+
+impl ScanConfig {
+    /// Creates a new builder for scan configuration.
+    pub fn builder() -> ScanConfigBuilder {
+        ScanConfigBuilder::default()
+    }
+}
+
+/// Builder for [`ScanConfig`].
+#[derive(Clone, Debug, Default)]
+pub struct ScanConfigBuilder {
+    config: ScanConfig,
+}
+
+impl ScanConfigBuilder {
+    /// Sets the symbolic link policy used by the configurable scanner.
+    pub fn with_symlink_policy(mut self, policy: SymlinkPolicy) -> Self {
+        self.config.symlink_policy = policy;
+        self
+    }
+
+    /// Enables or disables canonical path resolution before metadata checks.
+    pub fn follow_canonical_paths(mut self, enabled: bool) -> Self {
+        self.config.follow_canonical_paths = enabled;
+        self
+    }
+
+    /// Finalizes the builder and returns the scan configuration.
+    pub fn build(self) -> ScanConfig {
+        self.config
+    }
+}
+
+/// Configurable scanner wrapper for call sites that need security policy control.
+pub struct PackageScanner {
+    config: ScanConfig,
+}
+
+impl PackageScanner {
+    /// Creates a scanner from a prepared configuration.
+    pub fn new(config: ScanConfig) -> Self {
+        Self { config }
+    }
+
+    /// Scans packages without showing progress output.
+    pub fn scan(&self, packages: &[Package]) -> Vec<DiagnosisResult> {
+        scan_packages_configured(packages, &self.config, None)
+    }
+
+    /// Scans packages and advances the supplied progress bar.
+    pub fn scan_with_progress(
+        &self,
+        packages: &[Package],
+        progress: Option<&ProgressBar>,
+    ) -> Vec<DiagnosisResult> {
+        scan_packages_configured(packages, &self.config, progress)
     }
 }
 
@@ -35,6 +119,90 @@ fn validate_install_path(pkg: &Package) -> Option<DiagnosisResult> {
             "invalid_path_null_byte",
             format!(
                 "{}: path contains null byte ({})",
+                pkg.name, pkg.install_dir
+            ),
+            DiagnosisSeverity::Error,
+        ));
+    }
+
+    None
+}
+
+fn diagnose_symlink(
+    pkg: &Package,
+    install_dir: &Path,
+    policy: SymlinkPolicy,
+) -> Option<DiagnosisResult> {
+    let metadata = match fs::symlink_metadata(install_dir) {
+        Ok(metadata) => metadata,
+        Err(err) => return Some(diagnose_install_dir_error(pkg, err)),
+    };
+
+    if !metadata.file_type().is_symlink() {
+        return None;
+    }
+
+    match policy {
+        SymlinkPolicy::Allow | SymlinkPolicy::Follow => None,
+        SymlinkPolicy::Warn => Some(diagnosis_result(
+            "symlink_install_directory",
+            format!(
+                "{}: install directory is a symlink ({})",
+                pkg.name, pkg.install_dir
+            ),
+            DiagnosisSeverity::Warning,
+        )),
+        SymlinkPolicy::Deny => Some(diagnosis_result(
+            "symlink_install_directory_denied",
+            format!(
+                "{}: symlinks are not allowed ({})",
+                pkg.name, pkg.install_dir
+            ),
+            DiagnosisSeverity::Error,
+        )),
+    }
+}
+
+fn resolve_install_dir(
+    pkg: &Package,
+    install_dir: &Path,
+    follow_canonical_paths: bool,
+) -> Result<PathBuf, DiagnosisResult> {
+    if !follow_canonical_paths {
+        return Ok(install_dir.to_path_buf());
+    }
+
+    install_dir
+        .canonicalize()
+        .map_err(|err| diagnose_install_dir_error(pkg, err))
+}
+
+fn check_package_with_config(pkg: &Package, config: &ScanConfig) -> Option<DiagnosisResult> {
+    if let Some(diagnosis) = validate_install_path(pkg) {
+        return Some(diagnosis);
+    }
+
+    let install_dir = Path::new(&pkg.install_dir);
+
+    if let Some(diagnosis) = diagnose_symlink(pkg, install_dir, config.symlink_policy) {
+        return Some(diagnosis);
+    }
+
+    let install_dir = match resolve_install_dir(pkg, install_dir, config.follow_canonical_paths) {
+        Ok(path) => path,
+        Err(diagnosis) => return Some(diagnosis),
+    };
+
+    let metadata = match fs::metadata(&install_dir) {
+        Ok(metadata) => metadata,
+        Err(err) => return Some(diagnose_install_dir_error(pkg, err)),
+    };
+
+    if !metadata.is_dir() {
+        return Some(diagnosis_result(
+            "install_directory_not_a_directory",
+            format!(
+                "{}: install path is not a directory ({})",
                 pkg.name, pkg.install_dir
             ),
             DiagnosisSeverity::Error,
@@ -101,6 +269,35 @@ fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
 /// Scans the installed package list and returns diagnostics for broken package roots.
 pub fn scan_packages(packages: &[Package]) -> Vec<DiagnosisResult> {
     scan_packages_with_progress(packages, None)
+}
+
+/// Scans packages with a caller-provided security policy.
+pub fn scan_packages_configured(
+    packages: &[Package],
+    config: &ScanConfig,
+    progress: Option<&ProgressBar>,
+) -> Vec<DiagnosisResult> {
+    let diagnoses: Vec<DiagnosisResult> = match progress {
+        Some(progress) => {
+            progress.set_length(packages.len() as u64);
+            progress.set_message("Scanning packages");
+
+            let diagnoses = packages
+                .par_iter()
+                .progress_with(progress.clone())
+                .filter_map(|pkg| check_package_with_config(pkg, config))
+                .collect();
+
+            progress.finish_and_clear();
+            diagnoses
+        }
+        None => packages
+            .par_iter()
+            .filter_map(|pkg| check_package_with_config(pkg, config))
+            .collect(),
+    };
+
+    sort_diagnoses(diagnoses)
 }
 
 /// Scans installed packages and optionally advances a progress bar while doing so.
@@ -272,6 +469,28 @@ mod tests {
         assert_eq!(diagnosis.error_code, "install_directory_permission_denied");
         assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
         assert!(diagnosis.description.contains("Contoso.Denied"));
+    }
+
+    #[test]
+    fn scan_config_builder_sets_security_defaults() {
+        let config = ScanConfig::builder().build();
+
+        assert_eq!(config.symlink_policy, SymlinkPolicy::Warn);
+        assert!(config.follow_canonical_paths);
+    }
+
+    #[test]
+    fn configured_scanner_accepts_valid_package() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let valid_dir = temp_dir.path().join("valid");
+        std::fs::create_dir_all(&valid_dir).expect("valid dir should be created");
+
+        let packages = vec![sample_package("Contoso.Valid", &valid_dir)];
+        let scanner = PackageScanner::new(ScanConfig::builder().build());
+
+        let diagnoses = scanner.scan(&packages);
+
+        assert!(diagnoses.is_empty());
     }
 
     #[test]
