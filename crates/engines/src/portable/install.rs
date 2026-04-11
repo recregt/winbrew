@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::network::{installer_filename, is_zip_path};
 use winbrew_core::fs::{cleanup_path, extract_zip_archive, replace_directory};
+use winbrew_core::network::{installer_filename, is_zip_path};
 
 use winbrew_models::EngineInstallReceipt;
 use winbrew_models::EngineKind;

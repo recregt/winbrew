@@ -1,4 +1,3 @@
-mod network;
 mod registry;
 
 pub mod msix;
