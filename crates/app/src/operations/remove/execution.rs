@@ -18,6 +18,7 @@ use tracing::{debug, warn};
 
 use std::path::PathBuf;
 
+use crate::core::fs::cleanup_path;
 use crate::engines::{EngineKind, PackageEngine};
 use crate::storage::database;
 
@@ -68,7 +69,7 @@ fn execute_removal_with_conn(
             engine_kind.remove(&plan.package)?;
 
             if install_dir.exists()
-                && let Err(err) = std::fs::remove_dir_all(&install_dir)
+                && let Err(err) = cleanup_path(&install_dir)
             {
                 warn!(
                     "failed to remove package directory for {}: {err}",
@@ -82,10 +83,7 @@ fn execute_removal_with_conn(
             if install_dir.exists() {
                 let trash_dir = install_dir.with_extension("trash");
 
-                if trash_dir.exists() {
-                    std::fs::remove_dir_all(&trash_dir)
-                        .context("failed to clean up old trash directory")?;
-                }
+                cleanup_path(&trash_dir).context("failed to clean up old trash directory")?;
 
                 std::fs::rename(&install_dir, &trash_dir)
                     .context("failed to stage package for removal")?;
