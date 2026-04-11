@@ -94,6 +94,8 @@ fn portable_remove(package: &InstalledPackage) -> Result<()> {
     portable::remove::remove(package)
 }
 
+// Zip must appear before Portable: portable installers with a zip URL
+// are routed to the Zip engine by matches_zip_installer.
 const ENGINE_DESCRIPTORS: &[EngineDescriptor] = &[
     #[cfg(windows)]
     EngineDescriptor {
