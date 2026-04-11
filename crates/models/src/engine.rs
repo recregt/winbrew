@@ -37,6 +37,31 @@ pub enum EngineMetadata {
     },
 }
 
+/// Completion record returned by an engine after installation.
+///
+/// The receipt preserves the technical engine kind that executed the install
+/// plus any engine-specific metadata needed for future removal or repair.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EngineInstallReceipt {
+    pub engine_kind: EngineKind,
+    pub engine_metadata: Option<EngineMetadata>,
+}
+
+impl EngineInstallReceipt {
+    pub fn new(engine_kind: EngineKind, engine_metadata: Option<EngineMetadata>) -> Self {
+        Self {
+            engine_kind,
+            engine_metadata,
+        }
+    }
+
+    pub fn msix_package_full_name(&self) -> Option<&str> {
+        self.engine_metadata
+            .as_ref()
+            .and_then(EngineMetadata::msix_package_full_name)
+    }
+}
+
 impl EngineKind {
     pub fn as_str(self) -> &'static str {
         match self {

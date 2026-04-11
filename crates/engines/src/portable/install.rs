@@ -5,7 +5,15 @@ use std::path::{Path, PathBuf};
 use crate::fs::{cleanup_path, extract_zip_archive, replace_directory};
 use crate::network::{installer_filename, is_zip_path};
 
-pub fn install(download_path: &Path, install_dir: &Path, installer_url: &str) -> Result<()> {
+use winbrew_models::EngineInstallReceipt;
+use winbrew_models::EngineKind;
+
+pub fn install(
+    download_path: &Path,
+    install_dir: &Path,
+    installer_url: &str,
+    _package_name: &str,
+) -> Result<EngineInstallReceipt> {
     let stage_dir = staging_dir_for(install_dir);
 
     cleanup_path(&stage_dir)?;
@@ -29,7 +37,7 @@ pub fn install(download_path: &Path, install_dir: &Path, installer_url: &str) ->
 
     replace_directory(&stage_dir, install_dir)?;
 
-    Ok(())
+    Ok(EngineInstallReceipt::new(EngineKind::Portable, None))
 }
 
 fn staging_dir_for(install_dir: &Path) -> PathBuf {
@@ -67,6 +75,7 @@ mod tests {
             &download_path,
             &install_dir,
             "https://example.invalid/downloads/tool.exe",
+            "Contoso.Portable",
         )
         .expect("portable install");
 
@@ -95,6 +104,7 @@ mod tests {
             &download_path,
             &install_dir,
             "https://example.invalid/downloads/tool.zip?token=123#fragment",
+            "Contoso.PortableZip",
         )
         .expect("portable zip install");
 

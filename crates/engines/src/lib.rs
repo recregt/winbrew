@@ -9,7 +9,7 @@ pub mod zip;
 use anyhow::Result;
 use std::path::Path;
 
-pub use winbrew_models::EngineKind;
+pub use winbrew_models::{EngineInstallReceipt, EngineKind};
 
 use winbrew_models::{CatalogInstaller, InstalledPackage, InstallerType};
 
@@ -19,7 +19,8 @@ pub trait PackageEngine {
         installer: &CatalogInstaller,
         download_path: &Path,
         install_dir: &Path,
-    ) -> Result<()>;
+        package_name: &str,
+    ) -> Result<EngineInstallReceipt>;
 
     fn remove(&self, package: &InstalledPackage) -> Result<()>;
 }
@@ -46,8 +47,9 @@ impl PackageEngine for EngineKind {
         installer: &CatalogInstaller,
         download_path: &Path,
         install_dir: &Path,
-    ) -> Result<()> {
-        registry::install(*self, installer, download_path, install_dir)
+        package_name: &str,
+    ) -> Result<EngineInstallReceipt> {
+        registry::install(*self, installer, download_path, install_dir, package_name)
     }
 
     fn remove(&self, package: &InstalledPackage) -> Result<()> {

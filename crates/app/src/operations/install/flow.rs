@@ -16,7 +16,7 @@ use tracing::warn;
 use crate::core::fs::{backup_path_for, cleanup_path};
 use crate::core::network::installer_filename;
 use crate::engines::{EngineKind, PackageEngine};
-use crate::models::HashAlgorithm;
+use crate::models::{EngineInstallReceipt, HashAlgorithm};
 
 use super::download;
 use super::state;
@@ -78,6 +78,7 @@ where
     pub client: &'a crate::core::network::Client,
     pub engine: EngineKind,
     pub installer: &'a CatalogInstaller,
+    pub package_name: &'a str,
     pub temp_root: &'a Path,
     pub install_dir: &'a Path,
     pub ignore_checksum_security: bool,
@@ -94,12 +95,12 @@ where
 /// 3. Verify the hash strategy selected for the installer.
 /// 4. Invoke the engine-specific installation routine.
 ///
-/// The returned vector contains the legacy checksum algorithms that were
-/// accepted during download verification, allowing the caller to surface that
-/// detail in the final install result.
+/// The returned tuple contains the engine receipt plus the legacy checksum
+/// algorithms that were accepted during download verification, allowing the
+/// caller to persist engine-specific cleanup data without reconstructing it.
 pub(crate) fn perform_install<FStart, FProgress>(
     request: InstallRequest<'_, FStart, FProgress>,
-) -> Result<Vec<HashAlgorithm>>
+) -> Result<(EngineInstallReceipt, Vec<HashAlgorithm>)>
 where
     FStart: FnOnce(Option<u64>),
     FProgress: FnMut(u64),
@@ -108,6 +109,7 @@ where
         client,
         engine,
         installer,
+        package_name,
         temp_root,
         install_dir,
         ignore_checksum_security,
@@ -125,9 +127,9 @@ where
         on_progress,
     )?;
 
-    engine.install(installer, &download_path, install_dir)?;
+    let engine_receipt = engine.install(installer, &download_path, install_dir, package_name)?;
 
-    Ok(legacy_checksum_algorithms)
+    Ok((engine_receipt, legacy_checksum_algorithms))
 }
 
 fn cleanup_install_artifacts(install_dir: &Path) {

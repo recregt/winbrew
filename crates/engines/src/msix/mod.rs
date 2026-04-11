@@ -5,7 +5,13 @@ pub mod install {
     use anyhow::{Result, bail};
     use std::path::Path;
 
-    pub fn install(_download_path: &Path, _install_dir: &Path) -> Result<()> {
+    use winbrew_models::EngineInstallReceipt;
+
+    pub fn install(
+        _download_path: &Path,
+        _install_dir: &Path,
+        _package_name: &str,
+    ) -> Result<EngineInstallReceipt> {
         bail!("MSIX installation is only supported on Windows")
     }
 }

@@ -15,7 +15,7 @@ use thiserror::Error;
 use crate::core::fs::cleanup_path;
 use crate::core::now;
 use crate::storage;
-use winbrew_models::{EngineKind, EngineMetadata, InstallerType, Package, PackageStatus};
+use winbrew_models::{EngineInstallReceipt, EngineKind, InstallerType, Package, PackageStatus};
 
 /// Errors raised while preparing or updating install state.
 #[derive(Debug, Error)]
@@ -142,19 +142,20 @@ pub fn mark_installing(
 
 /// Mark a package as successfully installed.
 ///
-/// For MSIX packages, the caller may provide the installed package full name so
-/// it can be persisted alongside the final `Ok` status.
+/// The engine receipt carries any metadata needed for future removal or repair,
+/// including MSIX-specific package identity data when the engine was able to
+/// resolve it during install.
 pub fn mark_ok(
     conn: &crate::storage::DbConnection,
     name: &str,
-    engine_metadata: Option<&EngineMetadata>,
+    engine_receipt: &EngineInstallReceipt,
 ) -> Result<()> {
     storage::update_status_and_msix_package_full_name(
         conn,
         name,
         PackageStatus::Ok,
-        engine_metadata.and_then(EngineMetadata::msix_package_full_name),
-        engine_metadata,
+        engine_receipt.msix_package_full_name(),
+        engine_receipt.engine_metadata.as_ref(),
     )
     .map_err(|source| InstallStateError::DatabaseOperationFailed {
         operation: "marking package as installed",
