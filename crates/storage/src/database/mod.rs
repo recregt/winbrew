@@ -14,6 +14,7 @@ mod errors;
 mod installed_packages;
 mod journal;
 mod migration;
+mod msi_inventory;
 
 use self::connection::SqliteConnectionManager;
 
@@ -32,6 +33,10 @@ pub use installed_packages::{
 };
 pub use journal::{
     FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader, JournalWriter,
+};
+pub use msi_inventory::{
+    find_packages_by_normalized_path, find_packages_by_normalized_registry_key_path,
+    replace_snapshot, upsert_receipt,
 };
 
 thread_local! {
