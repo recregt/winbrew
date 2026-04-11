@@ -2507,7 +2507,6 @@ dependencies = [
  "winbrew-core",
  "winbrew-models",
  "winbrew-windows",
- "windows",
  "zip",
 ]
 
@@ -2574,6 +2573,7 @@ dependencies = [
  "regex",
  "strum",
  "strum_macros",
+ "windows",
  "windows-sys 0.61.2",
  "winreg",
 ]
