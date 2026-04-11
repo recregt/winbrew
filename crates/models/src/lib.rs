@@ -12,6 +12,7 @@ pub mod info;
 pub mod install;
 pub mod installed;
 pub mod installer;
+pub mod msi_inventory;
 pub mod package;
 pub mod package_ref;
 pub mod query;
@@ -34,6 +35,10 @@ pub use info::InfoReport;
 pub use install::{InstallFailureClass, InstallOutcome, InstallResult};
 pub use installed::{InstalledPackage, InstalledPackage as Package, PackageStatus};
 pub use installer::{Architecture, Installer, InstallerType};
+pub use msi_inventory::{
+    MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
+    MsiRegistryRecord, MsiShortcutRecord,
+};
 pub use package::{PackageKind, PackageSource};
 pub use package_ref::{PackageId, PackageRef};
 pub use query::PackageQuery;
