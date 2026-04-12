@@ -131,6 +131,23 @@ pub fn commit_install(
     Ok(())
 }
 
+pub fn replay_committed_journal(
+    conn: &mut Connection,
+    journal: &crate::database::CommittedJournalPackage,
+) -> Result<()> {
+    let tx = conn
+        .transaction()
+        .context("failed to start journal replay transaction")?;
+
+    let _ = delete_package(&tx, &journal.package.name)?;
+    insert_package(&tx, &journal.package)?;
+
+    tx.commit()
+        .context("failed to commit journal replay transaction")?;
+
+    Ok(())
+}
+
 pub fn get_package(conn: &Connection, name: &str) -> Result<Option<Package>> {
     let mut stmt = conn.prepare(
         "SELECT name, version, kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at
@@ -225,9 +242,12 @@ fn row_to_package(row: &rusqlite::Row) -> std::result::Result<Package, SqlError>
 
 #[cfg(test)]
 mod tests {
-    use super::{get_package, insert_package, update_status_and_engine_metadata};
+    use super::{
+        get_package, insert_package, replay_committed_journal, update_status_and_engine_metadata,
+    };
     use crate::database::migration;
     use rusqlite::Connection;
+    use std::path::PathBuf;
     use winbrew_models::{
         EngineKind, EngineMetadata, InstallScope, InstalledPackage, InstallerType, PackageStatus,
     };
@@ -292,5 +312,37 @@ mod tests {
                 shortcuts: vec!["C:/Users/Public/Desktop/Demo.lnk".to_string()],
             }
         );
+    }
+
+    #[test]
+    fn replay_committed_journal_replaces_existing_package() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory database");
+        migration::migrate(&conn).expect("run migration");
+
+        let package_name = "demo";
+        insert_package(&conn, &sample_package(package_name)).expect("insert original package");
+
+        let replay_package = InstalledPackage {
+            install_dir: "C:/Tools/Replayed".to_string(),
+            status: PackageStatus::Ok,
+            installed_at: "2026-04-12T01:00:00Z".to_string(),
+            ..sample_package(package_name)
+        };
+
+        let replay = crate::database::CommittedJournalPackage {
+            journal_path: PathBuf::from("C:/tmp/journal.jsonl"),
+            entries: Vec::new(),
+            package: replay_package,
+        };
+
+        replay_committed_journal(&mut conn, &replay).expect("replay committed journal");
+
+        let package = get_package(&conn, package_name)
+            .expect("read replayed package")
+            .expect("package should exist");
+
+        assert_eq!(package.install_dir, "C:/Tools/Replayed");
+        assert_eq!(package.status, PackageStatus::Ok);
+        assert_eq!(package.installed_at, "2026-04-12T01:00:00Z");
     }
 }

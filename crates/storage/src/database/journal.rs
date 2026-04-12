@@ -1,10 +1,15 @@
 use anyhow::{Context, Result};
+use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
+
+use winbrew_models::{
+    EngineKind, EngineMetadata, InstallerType, ModelError, Package, PackageStatus,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -104,9 +109,18 @@ impl fmt::Display for FileHash {
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum JournalEntry {
     Metadata {
+        #[serde(default)]
         package_id: String,
+        #[serde(default)]
         version: String,
+        #[serde(default)]
         engine: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        install_dir: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        dependencies: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        engine_metadata: Option<EngineMetadata>,
     },
     FsCreate {
         path: String,
@@ -130,7 +144,10 @@ pub enum JournalEntry {
         id: String,
         path: Option<String>,
     },
-    Commit,
+    Commit {
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        installed_at: String,
+    },
 }
 
 #[derive(Debug)]
@@ -271,7 +288,7 @@ impl JournalReader {
                 }
             })?;
 
-            commit_seen |= matches!(entry, JournalEntry::Commit);
+            commit_seen |= matches!(entry, JournalEntry::Commit { .. });
             entries.push(entry);
         }
 
@@ -285,13 +302,183 @@ impl JournalReader {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct CommittedJournalPackage {
+    pub journal_path: PathBuf,
+    pub entries: Vec<JournalEntry>,
+    pub package: Package,
+}
+
+#[derive(Debug, Error)]
+pub enum JournalReplayError {
+    #[error("failed to enumerate committed journals under {root}")]
+    Enumerate {
+        root: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error(transparent)]
+    Read(#[from] JournalReadError),
+
+    #[error("journal at {path} is missing metadata")]
+    MissingMetadata { path: PathBuf },
+
+    #[error("journal at {path} is missing commit marker")]
+    MissingCommit { path: PathBuf },
+
+    #[error("journal at {path} is missing required field {field}")]
+    MissingField { path: PathBuf, field: &'static str },
+
+    #[error("journal at {path} has invalid engine kind '{engine}'")]
+    InvalidEngineKind {
+        path: PathBuf,
+        engine: String,
+        #[source]
+        source: ModelError,
+    },
+}
+
+pub fn committed_journal_paths(root: &Path) -> Result<Vec<PathBuf>, JournalReplayError> {
+    let pkgdb_dir = winbrew_core::pkgdb_dir_at(root);
+
+    if !pkgdb_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut journal_paths = Vec::new();
+
+    for entry in fs::read_dir(&pkgdb_dir).map_err(|source| JournalReplayError::Enumerate {
+        root: pkgdb_dir.clone(),
+        source,
+    })? {
+        let entry = entry.map_err(|source| JournalReplayError::Enumerate {
+            root: pkgdb_dir.clone(),
+            source,
+        })?;
+
+        let journal_path = entry.path().join("journal.jsonl");
+        if journal_path.is_file() && JournalReader::read_committed(&journal_path).is_ok() {
+            journal_paths.push(journal_path);
+        }
+    }
+
+    journal_paths.sort();
+    Ok(journal_paths)
+}
+
+pub fn read_committed_package_journal(
+    path: &Path,
+) -> Result<CommittedJournalPackage, JournalReplayError> {
+    let entries = JournalReader::read_committed(path)?;
+
+    let (package_id, version, engine, install_dir, dependencies, engine_metadata) = entries
+        .iter()
+        .find_map(|entry| match entry {
+            JournalEntry::Metadata {
+                package_id,
+                version,
+                engine,
+                install_dir,
+                dependencies,
+                engine_metadata,
+            } => Some((
+                package_id.as_str(),
+                version.as_str(),
+                engine.as_str(),
+                install_dir.as_str(),
+                dependencies.clone(),
+                engine_metadata.clone(),
+            )),
+            _ => None,
+        })
+        .ok_or_else(|| JournalReplayError::MissingMetadata {
+            path: path.to_path_buf(),
+        })?;
+
+    if package_id.is_empty() {
+        return Err(JournalReplayError::MissingField {
+            path: path.to_path_buf(),
+            field: "package_id",
+        });
+    }
+
+    if version.is_empty() {
+        return Err(JournalReplayError::MissingField {
+            path: path.to_path_buf(),
+            field: "version",
+        });
+    }
+
+    if engine.is_empty() {
+        return Err(JournalReplayError::MissingField {
+            path: path.to_path_buf(),
+            field: "engine",
+        });
+    }
+
+    if install_dir.is_empty() {
+        return Err(JournalReplayError::MissingField {
+            path: path.to_path_buf(),
+            field: "install_dir",
+        });
+    }
+
+    let engine_kind =
+        EngineKind::from_str(engine).map_err(|source| JournalReplayError::InvalidEngineKind {
+            path: path.to_path_buf(),
+            engine: engine.to_string(),
+            source,
+        })?;
+
+    let installed_at = entries
+        .iter()
+        .rev()
+        .find_map(|entry| match entry {
+            JournalEntry::Commit { installed_at } => Some(installed_at.as_str()),
+            _ => None,
+        })
+        .ok_or_else(|| JournalReplayError::MissingCommit {
+            path: path.to_path_buf(),
+        })?;
+
+    if installed_at.is_empty() {
+        return Err(JournalReplayError::MissingField {
+            path: path.to_path_buf(),
+            field: "installed_at",
+        });
+    }
+
+    let package = Package {
+        name: package_id.to_string(),
+        version: version.to_string(),
+        kind: InstallerType::from(engine_kind),
+        engine_kind,
+        engine_metadata,
+        install_dir: install_dir.to_string(),
+        dependencies,
+        status: PackageStatus::Ok,
+        installed_at: installed_at.to_string(),
+    };
+
+    Ok(CommittedJournalPackage {
+        journal_path: path.to_path_buf(),
+        entries,
+        package,
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader, JournalWriter};
+    use super::{
+        FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader, JournalWriter,
+        committed_journal_paths, read_committed_package_journal,
+    };
     use std::fs;
     use std::path::PathBuf;
     use std::process;
     use std::time::{SystemTime, UNIX_EPOCH};
+    use winbrew_models::InstallerType;
 
     fn temp_root() -> PathBuf {
         let unique_id = SystemTime::now()
@@ -305,19 +492,29 @@ mod tests {
         ))
     }
 
+    fn metadata_entry() -> JournalEntry {
+        JournalEntry::Metadata {
+            package_id: "winget/Contoso.App".to_string(),
+            version: "1.0.0".to_string(),
+            engine: "msi".to_string(),
+            install_dir: r"C:\winbrew\apps\Contoso.App".to_string(),
+            dependencies: vec!["winget/Contoso.Shared".to_string()],
+            engine_metadata: None,
+        }
+    }
+
+    fn commit_entry() -> JournalEntry {
+        JournalEntry::Commit {
+            installed_at: "2024-01-01T00:00:00Z".to_string(),
+        }
+    }
     #[test]
     fn journal_entries_are_written_as_jsonl() {
         let root = temp_root();
         let mut writer = JournalWriter::open_for_package(&root, "winget/Contoso.App", "1.0.0")
             .expect("open journal");
 
-        writer
-            .append(&JournalEntry::Metadata {
-                package_id: "winget/Contoso.App".to_string(),
-                version: "1.0.0".to_string(),
-                engine: "msi".to_string(),
-            })
-            .expect("write metadata");
+        writer.append(&metadata_entry()).expect("write metadata");
         writer
             .append(&JournalEntry::FsCreate {
                 path: r"C:\winbrew\apps\Contoso.App\app.exe".to_string(),
@@ -335,7 +532,7 @@ mod tests {
                 previous_value: None,
             })
             .expect("write reg set");
-        writer.append(&JournalEntry::Commit).expect("write commit");
+        writer.append(&commit_entry()).expect("write commit");
         writer.flush().expect("flush journal");
 
         let contents = fs::read_to_string(writer.path()).expect("read journal");
@@ -356,7 +553,7 @@ mod tests {
         ));
         assert!(matches!(
             serde_json::from_str::<JournalEntry>(lines[3]).expect("parse commit"),
-            JournalEntry::Commit
+            JournalEntry::Commit { .. }
         ));
     }
 
@@ -366,13 +563,7 @@ mod tests {
         let mut writer = JournalWriter::open_for_package(&root, "winget/Contoso.App", "1.0.0")
             .expect("open journal");
 
-        writer
-            .append(&JournalEntry::Metadata {
-                package_id: "winget/Contoso.App".to_string(),
-                version: "1.0.0".to_string(),
-                engine: "msi".to_string(),
-            })
-            .expect("write metadata");
+        writer.append(&metadata_entry()).expect("write metadata");
         writer.flush().expect("flush journal");
 
         let err =
@@ -387,13 +578,9 @@ mod tests {
         let mut writer = JournalWriter::open_for_package(&root, "winget/Contoso.App", "1.0.0")
             .expect("open journal");
 
-        writer.append(&JournalEntry::Commit).expect("write commit");
+        writer.append(&commit_entry()).expect("write commit");
         writer
-            .append(&JournalEntry::Metadata {
-                package_id: "winget/Contoso.App".to_string(),
-                version: "1.0.0".to_string(),
-                engine: "msi".to_string(),
-            })
+            .append(&metadata_entry())
             .expect("write trailing metadata");
         writer.flush().expect("flush journal");
 
@@ -438,13 +625,13 @@ mod tests {
         let mut writer = JournalWriter::open_for_package(&root, "winget/Contoso.App", "1.0.0")
             .expect("open journal");
 
-        writer.append(&JournalEntry::Commit).expect("write commit");
+        writer.append(&commit_entry()).expect("write commit");
         writer.flush().expect("flush journal");
 
         let entries = JournalReader::read_committed(writer.path())
             .expect("commit-only journal should be accepted");
 
-        assert_eq!(entries, vec![JournalEntry::Commit]);
+        assert_eq!(entries, vec![commit_entry()]);
     }
 
     #[test]
@@ -474,7 +661,7 @@ mod tests {
         let mut writer = JournalWriter::open_for_package(&root, "winget/Contoso.App", "1.0.0")
             .expect("open journal");
 
-        writer.append(&JournalEntry::Commit).expect("write commit");
+        writer.append(&commit_entry()).expect("write commit");
         writer.flush().expect("flush journal");
         let journal_path = writer.path().to_path_buf();
         drop(writer);
@@ -492,35 +679,19 @@ mod tests {
         let mut writer = JournalWriter::open_for_package(&root, "winget/Contoso.App", "1.0.0")
             .expect("open journal");
 
-        writer
-            .append(&JournalEntry::Metadata {
-                package_id: "winget/Contoso.App".to_string(),
-                version: "1.0.0".to_string(),
-                engine: "msi".to_string(),
-            })
-            .expect("write metadata");
+        writer.append(&metadata_entry()).expect("write metadata");
         writer.flush().expect("flush journal");
         let journal_path = writer.path().to_path_buf();
         drop(writer);
 
         let mut resumed = JournalWriter::open_for_package(&root, "winget/Contoso.App", "1.0.0")
             .expect("resume incomplete journal");
-        resumed.append(&JournalEntry::Commit).expect("write commit");
+        resumed.append(&commit_entry()).expect("write commit");
         resumed.flush().expect("flush resumed journal");
 
         let parsed = JournalReader::read_committed(&journal_path).expect("read committed journal");
 
-        assert_eq!(
-            parsed,
-            vec![
-                JournalEntry::Metadata {
-                    package_id: "winget/Contoso.App".to_string(),
-                    version: "1.0.0".to_string(),
-                    engine: "msi".to_string(),
-                },
-                JournalEntry::Commit,
-            ]
-        );
+        assert_eq!(parsed, vec![metadata_entry(), commit_entry(),]);
     }
 
     #[test]
@@ -530,11 +701,7 @@ mod tests {
             .expect("open journal");
 
         let original = vec![
-            JournalEntry::Metadata {
-                package_id: "winget/Contoso.App".to_string(),
-                version: "1.0.0".to_string(),
-                engine: "msi".to_string(),
-            },
+            metadata_entry(),
             JournalEntry::FsCreate {
                 path: r"C:\winbrew\apps\Contoso.App\app.exe".to_string(),
                 hash: Some(FileHash::new(
@@ -546,7 +713,7 @@ mod tests {
                 path: r"C:\winbrew\apps\Contoso.App\old.exe".to_string(),
                 hash: None,
             },
-            JournalEntry::Commit,
+            commit_entry(),
         ];
 
         for entry in &original {
@@ -557,6 +724,71 @@ mod tests {
         let parsed = JournalReader::read_committed(writer.path()).expect("read journal");
 
         assert_eq!(parsed, original);
+    }
+
+    #[test]
+    fn committed_journal_paths_returns_only_committed_journals() {
+        let root = temp_root();
+
+        let mut committed =
+            JournalWriter::open_for_package(&root, "winget/Contoso.Committed", "1.0.0")
+                .expect("open committed journal");
+        committed
+            .append(&JournalEntry::Metadata {
+                package_id: "winget/Contoso.Committed".to_string(),
+                version: "1.0.0".to_string(),
+                engine: "msi".to_string(),
+                install_dir: r"C:\winbrew\apps\Contoso.Committed".to_string(),
+                dependencies: Vec::new(),
+                engine_metadata: None,
+            })
+            .expect("write committed metadata");
+        committed.append(&commit_entry()).expect("write commit");
+        committed.flush().expect("flush committed journal");
+
+        let mut incomplete =
+            JournalWriter::open_for_package(&root, "winget/Contoso.Incomplete", "1.0.0")
+                .expect("open incomplete journal");
+        incomplete
+            .append(&JournalEntry::Metadata {
+                package_id: "winget/Contoso.Incomplete".to_string(),
+                version: "1.0.0".to_string(),
+                engine: "msi".to_string(),
+                install_dir: r"C:\winbrew\apps\Contoso.Incomplete".to_string(),
+                dependencies: Vec::new(),
+                engine_metadata: None,
+            })
+            .expect("write incomplete metadata");
+        incomplete.flush().expect("flush incomplete journal");
+
+        let journal_paths = committed_journal_paths(&root).expect("enumerate committed journals");
+
+        assert_eq!(journal_paths, vec![committed.path().to_path_buf()]);
+    }
+
+    #[test]
+    fn read_committed_package_journal_parses_snapshot() {
+        let root = temp_root();
+        let mut writer = JournalWriter::open_for_package(&root, "winget/Contoso.App", "1.0.0")
+            .expect("open journal");
+
+        writer.append(&metadata_entry()).expect("write metadata");
+        writer.append(&commit_entry()).expect("write commit");
+        writer.flush().expect("flush journal");
+
+        let replay = read_committed_package_journal(writer.path()).expect("parse replay journal");
+
+        assert_eq!(replay.journal_path, writer.path());
+        assert_eq!(replay.entries.len(), 2);
+        assert_eq!(replay.package.name, "winget/Contoso.App");
+        assert_eq!(replay.package.version, "1.0.0");
+        assert_eq!(replay.package.kind, InstallerType::Msi);
+        assert_eq!(replay.package.install_dir, r"C:\winbrew\apps\Contoso.App");
+        assert_eq!(
+            replay.package.dependencies,
+            vec!["winget/Contoso.Shared".to_string()]
+        );
+        assert_eq!(replay.package.installed_at, "2024-01-01T00:00:00Z");
     }
 
     #[test]
