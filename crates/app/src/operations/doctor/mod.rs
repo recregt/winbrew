@@ -18,8 +18,3 @@ mod report;
 mod scan;
 
 pub use report::health_report;
-#[allow(unused_imports)]
-pub(super) use scan::{
-    OrphanInstallScan, PackageJournalScan, installed_packages, scan_msi_inventory,
-    scan_orphaned_install_dirs, scan_package_journals, scan_packages,
-};
