@@ -5,9 +5,9 @@ use crate::app::doctor;
 use crate::app::install::InstallObserver;
 use crate::app::models::CatalogPackage;
 use crate::app::repair::{self, FileRestoreResolution, RepairPlan};
-use crate::{AppContext, Ui};
+use crate::{CommandContext, Ui};
 
-pub fn run(ctx: &AppContext, yes: bool) -> Result<()> {
+pub fn run(ctx: &CommandContext, yes: bool) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);
     ui.page_title("Repair");
 
@@ -134,7 +134,7 @@ fn run_orphan_cleanup_group<W: Write>(
 
 fn run_file_restore_group<W: Write>(
     ui: &mut Ui<W>,
-    ctx: &AppContext,
+    ctx: &CommandContext,
     plan: &RepairPlan,
 ) -> Result<usize> {
     if plan.file_restore_packages.is_empty() {
@@ -231,7 +231,7 @@ fn run_file_restore_group<W: Write>(
 
 fn run_reinstall_group<W: Write>(
     ui: &mut Ui<W>,
-    ctx: &AppContext,
+    ctx: &CommandContext,
     package_names: &[String],
 ) -> Result<usize> {
     if package_names.is_empty() {

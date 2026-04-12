@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::AppContext;
+use crate::CommandContext;
 use crate::cli::Command;
 
 pub mod config;
@@ -15,7 +15,11 @@ pub mod search;
 pub mod update;
 pub mod version;
 
-pub fn run(command: Command, ctx: &AppContext, config: &mut crate::database::Config) -> Result<()> {
+pub fn run(
+    command: Command,
+    ctx: &CommandContext,
+    config: &mut crate::database::Config,
+) -> Result<()> {
     match command {
         Command::List { query } => list::run(ctx, &query),
         Command::Install {

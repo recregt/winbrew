@@ -1,8 +1,8 @@
 use anyhow::Result;
 
-use crate::{AppContext, Ui, app::info};
+use crate::{CommandContext, Ui, app::info};
 
-pub fn run(ctx: &AppContext) -> Result<()> {
+pub fn run(ctx: &CommandContext) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);
     ui.page_title("System Information");
 

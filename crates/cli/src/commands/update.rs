@@ -1,8 +1,8 @@
 use anyhow::Result;
 
-use crate::{AppContext, Ui, app::update};
+use crate::{CommandContext, Ui, app::update};
 
-pub fn run(ctx: &AppContext) -> Result<()> {
+pub fn run(ctx: &CommandContext) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);
     ui.page_title("Update Package Catalog");
 

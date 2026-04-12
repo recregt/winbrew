@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tempfile::TempDir;
-use winbrew_cli::AppContext;
+use winbrew_cli::CommandContext;
 use winbrew_cli::app::doctor::health_report;
 use winbrew_cli::commands::doctor::{exit_error, format_duration, render_results, write_json};
 use winbrew_cli::commands::error::CommandError;
@@ -20,7 +20,7 @@ use winbrew_ui::{UiBuilder, UiSettings};
 
 struct DoctorFixture {
     root: TempDir,
-    ctx: AppContext,
+    ctx: CommandContext,
 }
 
 impl DoctorFixture {
@@ -30,7 +30,7 @@ impl DoctorFixture {
         std::fs::create_dir_all(root.path().join("packages")).expect("packages dir should exist");
 
         let config = Config::load_at(root.path()).expect("config should load");
-        let ctx = AppContext::from_config(&config).expect("context should build");
+        let ctx = CommandContext::from_config(&config).expect("context should build");
 
         Self { root, ctx }
     }

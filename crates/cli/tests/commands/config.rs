@@ -4,7 +4,7 @@ mod common;
 use std::path::Path;
 
 use tempfile::TempDir;
-use winbrew_cli::AppContext;
+use winbrew_cli::CommandContext;
 use winbrew_cli::app::doctor::health_report;
 use winbrew_cli::app::report::runtime_report;
 use winbrew_cli::cli::ConfigCommand;
@@ -14,7 +14,7 @@ use winbrew_cli::database::Config;
 struct ConfigFixture {
     root: TempDir,
     config: Config,
-    ctx: AppContext,
+    ctx: CommandContext,
 }
 
 impl ConfigFixture {
@@ -24,7 +24,7 @@ impl ConfigFixture {
         std::fs::create_dir_all(root.path().join("packages")).expect("packages dir should exist");
 
         let config = Config::load_at(root.path()).expect("config should load");
-        let ctx = AppContext::from_config(&config).expect("context should build");
+        let ctx = CommandContext::from_config(&config).expect("context should build");
 
         Self { root, config, ctx }
     }
@@ -67,7 +67,7 @@ fn removed_network_config_keys_are_rejected() {
 #[test]
 fn runtime_report_builds_expected_sections() {
     let config = Config::default();
-    let ctx = AppContext::from_config(&config).expect("context should build");
+    let ctx = CommandContext::from_config(&config).expect("context should build");
     let report = runtime_report(&ctx.sections, &ctx.paths).expect("report should build");
 
     assert_eq!(report.sections.len(), 2);

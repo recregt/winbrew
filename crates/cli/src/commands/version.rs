@@ -1,8 +1,8 @@
 use anyhow::Result;
 
-use crate::{AppContext, app::version};
+use crate::{CommandContext, app::version};
 
-pub fn run(_ctx: &AppContext) -> Result<()> {
+pub fn run(_ctx: &CommandContext) -> Result<()> {
     println!("{}", version::version_string());
     Ok(())
 }

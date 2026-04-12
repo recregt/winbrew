@@ -7,9 +7,9 @@ use crate::app::install::InstallError;
 use crate::app::install::InstallObserver;
 use crate::commands::error::{cancelled, reported_with_hint};
 use crate::models::{CatalogPackage, PackageRef};
-use crate::{AppContext, Ui};
+use crate::{CommandContext, Ui};
 
-pub fn run(ctx: &AppContext, query: &[String], ignore_checksum_security: bool) -> Result<()> {
+pub fn run(ctx: &CommandContext, query: &[String], ignore_checksum_security: bool) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);
     ui.page_title("Install Package");
 

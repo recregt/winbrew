@@ -1,6 +1,7 @@
 #![cfg(windows)]
 
 use anyhow::Result;
+use std::ops::{Deref, DerefMut};
 
 pub mod cli;
 pub mod commands;
@@ -16,9 +17,45 @@ pub use winbrew_ui::{Ui, UiSettings};
 
 pub use app::AppContext;
 
+#[derive(Debug, Clone)]
+pub struct CommandContext {
+    pub app: AppContext,
+    pub ui: UiSettings,
+}
+
+impl CommandContext {
+    pub fn from_config(config: &database::Config) -> Result<Self> {
+        Self::from_config_with_verbosity(config, 0)
+    }
+
+    pub fn from_config_with_verbosity(config: &database::Config, verbosity: u8) -> Result<Self> {
+        Ok(Self {
+            app: AppContext::from_config_with_verbosity(config, verbosity)?,
+            ui: UiSettings {
+                color_enabled: config.core.color,
+                default_yes: config.core.default_yes,
+            },
+        })
+    }
+}
+
+impl Deref for CommandContext {
+    type Target = AppContext;
+
+    fn deref(&self) -> &Self::Target {
+        &self.app
+    }
+}
+
+impl DerefMut for CommandContext {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.app
+    }
+}
+
 pub fn run_app(command: crate::cli::Command, verbosity: u8) -> Result<()> {
     let mut config = database::Config::load_current()?;
-    let ctx = AppContext::from_config_with_verbosity(&config, verbosity)?;
+    let ctx = CommandContext::from_config_with_verbosity(&config, verbosity)?;
 
     bootstrap::logging::init(&ctx.paths.logs, &ctx.log_level, &ctx.file_log_level)?;
     database::init(&ctx.paths)?;
