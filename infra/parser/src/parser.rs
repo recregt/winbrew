@@ -1,9 +1,9 @@
 use winbrew_models::{
-    Architecture, CatalogInstaller, CatalogPackage, InstallerType, PackageSource,
-    RawFetchedInstaller, RawFetchedPackage, ScoopStreamEnvelope, Version,
+    Architecture, CatalogInstaller, CatalogPackage, InstallerType, PackageSource, Version,
 };
 
 use crate::error::ParserError;
+use crate::raw::{RawFetchedInstaller, RawFetchedPackage, ScoopStreamEnvelope};
 
 #[derive(Debug, Clone)]
 pub struct ParsedPackage {
@@ -81,9 +81,8 @@ fn validate_envelope(envelope: ScoopStreamEnvelope) -> Result<RawFetchedPackage,
 mod tests {
     use super::{parse_package, parse_packages_json};
     use crate::error::ParserError;
-    use winbrew_models::{
-        Architecture, InstallerType, PackageSource, RawFetchedInstaller, RawFetchedPackage,
-    };
+    use crate::raw::{RawFetchedInstaller, RawFetchedPackage};
+    use winbrew_models::{Architecture, InstallerType, PackageSource};
 
     #[test]
     fn parses_fetched_package_into_shared_models() {
