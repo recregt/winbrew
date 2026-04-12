@@ -1,5 +1,9 @@
+use std::env;
+use std::ffi::OsString;
+
 use clap::Parser;
 use winbrew_cli::cli::{Cli, Command, ConfigCommand};
+use winbrew_cli::run_app;
 
 #[test]
 fn parse_list() {
@@ -221,4 +225,42 @@ fn parse_doctor_warn_as_error() {
             warn_as_error: true,
         }
     );
+}
+
+#[test]
+fn run_app_version_smoke_test() {
+    let temp_root = tempfile::tempdir().expect("temp root");
+    let _env_guard = EnvOverrideGuard::set("WINBREW_PATHS_ROOT", temp_root.path().as_os_str());
+
+    run_app(Command::Version, 0).expect("run_app should succeed");
+}
+
+struct EnvOverrideGuard {
+    key: &'static str,
+    previous: Option<OsString>,
+}
+
+impl EnvOverrideGuard {
+    fn set(key: &'static str, value: &std::ffi::OsStr) -> Self {
+        let previous = env::var_os(key);
+        unsafe {
+            env::set_var(key, value);
+        }
+
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvOverrideGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = &self.previous {
+            unsafe {
+                env::set_var(self.key, previous);
+            }
+        } else {
+            unsafe {
+                env::remove_var(self.key);
+            }
+        }
+    }
 }
