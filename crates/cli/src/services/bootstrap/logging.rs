@@ -1,3 +1,10 @@
+//! One-time tracing and log-sink initialization for the CLI process.
+//!
+//! The CLI initializes logging before database startup and command dispatch so
+//! any later failure, including bootstrap cleanup failures, can be written to
+//! both the terminal and the rotating log file. This module intentionally keeps
+//! the global tracing subscriber setup isolated from the rest of startup.
+
 use anyhow::{Context, Result};
 use std::path::Path;
 use std::sync::OnceLock;
@@ -6,6 +13,13 @@ use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 static LOG_GUARD: OnceLock<tracing_appender::non_blocking::WorkerGuard> = OnceLock::new();
 static LOG_INIT: OnceLock<()> = OnceLock::new();
 
+/// Initialize the process-wide tracing subscriber and log file sink.
+/// The function is idempotent: the first successful call installs the global
+/// subscriber, creates the log directory if needed, and keeps the file writer
+/// guard alive for the remainder of the process. Subsequent calls are no-ops.
+/// `log_level` controls the console filter, while `file_log_level` controls the
+/// file sink. Both are parsed through `EnvFilter`, so the configuration accepts
+/// standard tracing filter syntax rather than a bespoke log-level enum.
 pub fn init(log_dir: &Path, log_level: &str, file_log_level: &str) -> Result<()> {
     if LOG_INIT.get().is_some() {
         return Ok(());
