@@ -89,24 +89,12 @@ pub fn packages_dir_at(root: &Path) -> PathBuf {
     root.join("packages")
 }
 
-pub fn package_install_dir_at(root: &Path, package_name: &str) -> PathBuf {
-    packages_dir_at(root).join(package_name)
-}
-
 pub fn data_dir_at(root: &Path) -> PathBuf {
     root.join("data")
 }
 
 pub fn pkgdb_dir_at(root: &Path) -> PathBuf {
     data_dir_at(root).join("pkgdb")
-}
-
-pub fn package_logs_dir_at(root: &Path) -> PathBuf {
-    log_dir_at(root).join("packages")
-}
-
-pub fn shims_dir_at(root: &Path) -> PathBuf {
-    root.join("shims")
 }
 
 pub fn db_dir_at(root: &Path) -> PathBuf {
@@ -144,20 +132,8 @@ pub fn package_journal_key(package_id: &str, version: &str) -> String {
     key
 }
 
-pub fn package_journal_dir_at(root: &Path, package_key: &str) -> PathBuf {
-    pkgdb_dir_at(root).join(package_key)
-}
-
-pub fn package_log_dir_at(root: &Path, package_key: &str) -> PathBuf {
-    package_logs_dir_at(root).join(package_key)
-}
-
-pub fn package_shim_dir_at(root: &Path, package_key: &str) -> PathBuf {
-    shims_dir_at(root).join(package_key)
-}
-
 pub fn package_journal_file_at(root: &Path, package_key: &str) -> PathBuf {
-    package_journal_dir_at(root, package_key).join("journal.jsonl")
+    pkgdb_dir_at(root).join(package_key).join("journal.jsonl")
 }
 
 fn cache_filename(name: &str, version: &str, ext: &str) -> String {
@@ -277,9 +253,8 @@ fn version_hash(version: &str) -> String {
 mod tests {
     use super::{
         cache_dir_at, catalog_db_at, config_file_at, data_dir_at, db_path_at, ensure_dirs_at,
-        log_dir_at, log_file_at, package_install_dir_at, package_journal_file_at,
-        package_journal_key, package_log_dir_at, package_logs_dir_at, package_shim_dir_at,
-        packages_dir_at, pkgdb_dir_at, resolved_paths, shims_dir_at,
+        log_dir_at, log_file_at, package_journal_file_at, package_journal_key, packages_dir_at,
+        pkgdb_dir_at, resolved_paths,
     };
     use sha2::{Digest, Sha256};
     use tempfile::tempdir;
@@ -336,21 +311,21 @@ mod tests {
         assert_eq!(paths.packages, packages_dir_at(root.path()));
         assert_eq!(
             paths.package_install_dir("Contoso.App"),
-            package_install_dir_at(root.path(), "Contoso.App")
+            paths.packages.join("Contoso.App")
         );
         assert_eq!(paths.data, data_dir_at(root.path()));
         assert_eq!(paths.logs, log_dir_at(root.path()));
-        assert_eq!(paths.package_logs, package_logs_dir_at(root.path()));
+        assert_eq!(paths.package_logs, paths.logs.join("packages"));
         assert_eq!(paths.cache, cache_dir_at(root.path()));
         assert_eq!(paths.pkgdb, pkgdb_dir_at(root.path()));
-        assert_eq!(paths.shims, shims_dir_at(root.path()));
+        assert_eq!(paths.shims, root.path().join("shims"));
         assert_eq!(paths.db, db_path_at(root.path()));
         assert_eq!(paths.catalog_db, catalog_db_at(root.path()));
         assert_eq!(paths.config, config_file_at(root.path()));
         assert_eq!(paths.log, log_file_at(root.path()));
         assert_eq!(
             paths.package_journal_dir(&package_key),
-            pkgdb_dir_at(root.path()).join(&package_key)
+            paths.pkgdb.join(&package_key)
         );
         assert_eq!(
             paths.package_journal_file(&package_key),
@@ -358,11 +333,11 @@ mod tests {
         );
         assert_eq!(
             paths.package_log_dir(&package_key),
-            package_log_dir_at(root.path(), &package_key)
+            paths.package_logs.join(&package_key)
         );
         assert_eq!(
             paths.package_shim_dir(&package_key),
-            package_shim_dir_at(root.path(), &package_key)
+            paths.shims.join(&package_key)
         );
     }
 
