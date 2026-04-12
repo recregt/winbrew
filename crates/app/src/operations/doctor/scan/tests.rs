@@ -1,7 +1,9 @@
-use super::*;
 use crate::core::paths::resolved_paths;
-use crate::models::{InstallerType, PackageStatus, RecoveryActionGroup, RecoveryIssueKind};
-use crate::storage;
+use crate::models::{
+    DiagnosisSeverity, InstallerType, Package, PackageStatus, RecoveryActionGroup,
+    RecoveryIssueKind,
+};
+use crate::storage::{self, database};
 use std::fs;
 use std::path::Path;
 use tempfile::tempdir;
@@ -104,7 +106,7 @@ fn diagnosis_result_check_package_detects_missing_directory() {
     let missing_dir = temp_dir.path().join("missing");
     let package = sample_package("Contoso.Missing", &missing_dir);
 
-    let diagnosis = check_package(&package).expect("missing dir should diagnose");
+    let diagnosis = super::package::check_package(&package).expect("missing dir should diagnose");
 
     assert_eq!(diagnosis.error_code, "missing_install_directory");
     assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
@@ -118,7 +120,7 @@ fn diagnosis_result_check_package_detects_non_directory_path() {
     std::fs::write(&file_path, b"binary").expect("file should be created");
     let package = sample_package("Contoso.File", &file_path);
 
-    let diagnosis = check_package(&package).expect("file path should diagnose");
+    let diagnosis = super::package::check_package(&package).expect("file path should diagnose");
 
     assert_eq!(diagnosis.error_code, "install_directory_not_a_directory");
     assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
@@ -129,7 +131,7 @@ fn diagnosis_result_check_package_detects_non_directory_path() {
 fn diagnosis_result_check_package_rejects_empty_install_path() {
     let package = sample_package("Contoso.Empty", Path::new(""));
 
-    let diagnosis = check_package(&package).expect("empty path should diagnose");
+    let diagnosis = super::package::check_package(&package).expect("empty path should diagnose");
 
     assert_eq!(diagnosis.error_code, "empty_install_path");
     assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
@@ -140,7 +142,7 @@ fn diagnose_install_dir_error_maps_permission_denied() {
     let package = sample_package("Contoso.Denied", Path::new("C:/deny"));
     let error = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
 
-    let diagnosis = diagnose_install_dir_error(&package, error);
+    let diagnosis = super::package::diagnose_install_dir_error(&package, error);
 
     assert_eq!(diagnosis.error_code, "install_directory_permission_denied");
     assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
@@ -159,7 +161,7 @@ fn scan_packages_sorts_diagnoses_by_error_code() {
         sample_package("Beta.Missing", &temp_dir.path().join("missing-beta")),
     ];
 
-    let diagnoses = scan_packages(&packages);
+    let diagnoses = super::scan_packages(&packages);
 
     assert_eq!(diagnoses.len(), 2);
     assert_eq!(diagnoses[0].error_code, "missing_install_directory");
@@ -180,7 +182,7 @@ fn scan_orphaned_install_dirs_detects_directories_without_packages() {
         &packages_root.join("Contoso.Known"),
     )];
 
-    let scan = scan_orphaned_install_dirs(&packages_root, &packages);
+    let scan = super::scan_orphaned_install_dirs(&packages_root, &packages);
 
     assert_eq!(scan.diagnostics.len(), 1);
     assert_eq!(scan.diagnostics[0].error_code, "orphan_install_directory");
@@ -219,7 +221,7 @@ fn scan_msi_inventory_detects_hash_mismatch() {
     storage::insert_package(&conn, &package).expect("insert package");
     storage::replace_snapshot(&mut conn, &snapshot).expect("replace snapshot");
 
-    let diagnoses = scan_msi_inventory(&conn, &[package]);
+    let diagnoses = super::scan_msi_inventory(&conn, &[package]);
 
     assert_eq!(diagnoses.len(), 1);
     assert_eq!(diagnoses[0].error_code, "msi_file_hash_mismatch");
@@ -246,7 +248,7 @@ fn scan_msi_inventory_detects_missing_files() {
     storage::insert_package(&conn, &package).expect("insert package");
     storage::replace_snapshot(&mut conn, &snapshot).expect("replace snapshot");
 
-    let diagnoses = scan_msi_inventory(&conn, &[package]);
+    let diagnoses = super::scan_msi_inventory(&conn, &[package]);
 
     assert_eq!(diagnoses.len(), 1);
     assert_eq!(diagnoses[0].error_code, "missing_msi_file");
@@ -273,7 +275,7 @@ fn scan_package_journals_detects_incomplete_journal() {
         .expect("write metadata");
     writer.flush().expect("flush journal");
 
-    let scan = scan_package_journals(root.path(), &[]);
+    let scan = super::scan_package_journals(root.path(), &[]);
 
     assert_eq!(scan.diagnostics.len(), 1);
     assert_eq!(scan.diagnostics[0].error_code, "incomplete_package_journal");
@@ -311,7 +313,7 @@ fn scan_package_journals_detects_orphan_committed_journal() {
     writer.flush().expect("flush journal");
     let journal_path = writer.path().to_path_buf();
 
-    let scan = scan_package_journals(root.path(), &[]);
+    let scan = super::scan_package_journals(root.path(), &[]);
 
     assert_eq!(scan.diagnostics.len(), 1);
     assert_eq!(scan.diagnostics[0].error_code, "orphan_package_journal");
@@ -362,7 +364,7 @@ fn scan_package_journals_tracks_trailing_journal_replay_target() {
     writer.flush().expect("flush journal");
     let journal_path = writer.path().to_path_buf();
 
-    let scan = scan_package_journals(root.path(), &[]);
+    let scan = super::scan_package_journals(root.path(), &[]);
 
     assert_eq!(scan.diagnostics.len(), 1);
     assert_eq!(scan.diagnostics[0].error_code, "trailing_package_journal");

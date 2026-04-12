@@ -11,9 +11,9 @@ mod msi;
 mod orphan;
 mod package;
 
-pub(crate) struct PackageJournalScan {
-    pub diagnostics: Vec<DiagnosisResult>,
-    pub recovery_findings: Vec<RecoveryFinding>,
+pub(super) struct PackageJournalScan {
+    pub(super) diagnostics: Vec<DiagnosisResult>,
+    pub(super) recovery_findings: Vec<RecoveryFinding>,
 }
 
 impl PackageJournalScan {
@@ -37,9 +37,9 @@ impl PackageJournalScan {
     }
 }
 
-pub(crate) struct OrphanInstallScan {
-    pub diagnostics: Vec<DiagnosisResult>,
-    pub recovery_findings: Vec<RecoveryFinding>,
+pub(super) struct OrphanInstallScan {
+    pub(super) diagnostics: Vec<DiagnosisResult>,
+    pub(super) recovery_findings: Vec<RecoveryFinding>,
 }
 
 impl OrphanInstallScan {
@@ -74,44 +74,14 @@ impl OrphanInstallScan {
     }
 }
 
-pub(crate) fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
-    package::check_package(pkg)
-}
-
-#[allow(dead_code)]
-pub(crate) fn diagnose_install_dir_error(pkg: &Package, err: std::io::Error) -> DiagnosisResult {
-    package::diagnose_install_dir_error(pkg, err)
-}
-
-#[allow(dead_code)]
-pub(crate) fn validate_install_path(pkg: &Package) -> Option<DiagnosisResult> {
-    package::validate_install_path(pkg)
-}
-
-pub(crate) fn diagnose_msi_file(
-    pkg: &Package,
-    file: &crate::models::MsiFileRecord,
-) -> Option<DiagnosisResult> {
-    msi::diagnose_msi_file(pkg, file)
-}
-
-#[allow(dead_code)]
-pub(crate) fn diagnose_msi_file_error(
-    pkg: &Package,
-    file: &crate::models::MsiFileRecord,
-    err: std::io::Error,
-) -> DiagnosisResult {
-    msi::diagnose_msi_file_error(pkg, file, err)
-}
-
-pub(crate) fn scan_package_journals(
+pub(super) fn scan_package_journals(
     root: &std::path::Path,
     packages: &[Package],
 ) -> PackageJournalScan {
     journal::scan_package_journals(root, packages)
 }
 
-pub(crate) fn scan_orphaned_install_dirs(
+pub(super) fn scan_orphaned_install_dirs(
     packages_root: &std::path::Path,
     packages: &[Package],
 ) -> OrphanInstallScan {
@@ -119,12 +89,12 @@ pub(crate) fn scan_orphaned_install_dirs(
 }
 
 /// Scan installed packages and return diagnostics for broken install roots.
-pub(crate) fn scan_packages(packages: &[Package]) -> Vec<DiagnosisResult> {
-    sort_diagnoses(packages.iter().filter_map(check_package).collect())
+pub(super) fn scan_packages(packages: &[Package]) -> Vec<DiagnosisResult> {
+    sort_diagnoses(packages.iter().filter_map(package::check_package).collect())
 }
 
 /// Scan persisted MSI inventory data and report files that no longer match.
-pub(crate) fn scan_msi_inventory(
+pub(super) fn scan_msi_inventory(
     conn: &crate::storage::DbConnection,
     packages: &[Package],
 ) -> Vec<DiagnosisResult> {
@@ -155,7 +125,7 @@ pub(crate) fn scan_msi_inventory(
         };
 
         for file in &snapshot.files {
-            if let Some(diagnosis) = diagnose_msi_file(pkg, file) {
+            if let Some(diagnosis) = msi::diagnose_msi_file(pkg, file) {
                 diagnoses.push(diagnosis);
             }
         }
@@ -168,7 +138,7 @@ pub(crate) fn scan_msi_inventory(
 ///
 /// The caller owns the shared database connection so package scanning and MSI
 /// inventory scanning can reuse the same snapshot of the database state.
-pub(crate) fn installed_packages(conn: &crate::storage::DbConnection) -> Result<Vec<Package>> {
+pub(super) fn installed_packages(conn: &crate::storage::DbConnection) -> Result<Vec<Package>> {
     database::list_packages(conn)
 }
 
