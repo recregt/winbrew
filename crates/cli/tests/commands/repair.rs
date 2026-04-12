@@ -1,13 +1,23 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+use anyhow::Result;
+use mockito::Server;
+use rusqlite::{Connection, params};
+use std::fs;
+use std::io::{Cursor, Write};
 use std::path::Path;
 
 use tempfile::TempDir;
 use winbrew_cli::AppContext;
 use winbrew_cli::app::repair;
 use winbrew_cli::database::{self, Config};
-use winbrew_cli::models::{EngineKind, InstalledPackage, InstallerType, PackageStatus};
+use winbrew_cli::models::{
+    EngineKind, HashAlgorithm, InstalledPackage, InstallerType, PackageStatus,
+};
+use winbrew_core::Hasher;
+use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 struct RepairFixture {
     root: TempDir,
@@ -51,6 +61,74 @@ impl RepairFixture {
 
         database::insert_package(&conn, &package).expect("package should insert");
     }
+}
+
+fn create_dummy_zip_bytes() -> Result<Vec<u8>> {
+    let buffer = Cursor::new(Vec::new());
+    let mut writer = ZipWriter::new(buffer);
+    writer.start_file("bin/tool.exe", SimpleFileOptions::default())?;
+    writer.write_all(b"zip-binary")?;
+    let buffer = writer.finish()?;
+    Ok(buffer.into_inner())
+}
+
+fn digest_hex(algorithm: HashAlgorithm, bytes: &[u8]) -> String {
+    let mut hasher = Hasher::new(algorithm);
+    hasher.update(bytes);
+    let digest = hasher.finalize();
+
+    digest.iter().map(|byte| format!("{:02x}", byte)).collect()
+}
+
+fn sha512_hex(bytes: &[u8]) -> String {
+    digest_hex(HashAlgorithm::Sha512, bytes)
+}
+
+fn create_catalog_db_with_hash(
+    path: &Path,
+    package_name: &str,
+    installer_url: &str,
+    hash: &str,
+) -> Result<()> {
+    let conn = Connection::open(path)?;
+
+    conn.execute_batch(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tests/fixtures/catalog_schema.sql"
+    )))?;
+
+    conn.execute("DELETE FROM catalog_installers", [])?;
+    conn.execute("DELETE FROM catalog_packages", [])?;
+
+    let package_id = format!("winget/{}", package_name.replace(' ', "."));
+
+    conn.execute(
+        r#"
+        INSERT INTO catalog_packages (
+            id, name, version, description, homepage, license, publisher
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "#,
+        params![
+            package_id.clone(),
+            package_name,
+            "1.0.0",
+            Some("Synthetic package for isolated repair testing"),
+            Option::<String>::None,
+            Option::<String>::None,
+            Some("Winbrew Ltd."),
+        ],
+    )?;
+
+    conn.execute(
+        r#"
+        INSERT INTO catalog_installers (
+            package_id, url, hash, arch, type
+        ) VALUES (?1, ?2, ?3, ?4, ?5)
+        "#,
+        params![package_id, installer_url, hash, "", "zip"],
+    )?;
+
+    Ok(())
 }
 
 #[test]
@@ -113,4 +191,66 @@ fn repair_removes_orphan_install_directory() {
     repair::run(&fixture.ctx, true).expect("repair should succeed");
 
     assert!(!orphan_dir.exists());
+}
+
+#[test]
+fn repair_reinstalls_missing_package_from_catalog() -> Result<()> {
+    let fixture = RepairFixture::new();
+    let package_name = "Winbrew Repair Zip";
+    let install_dir = fixture.root_path().join("packages").join(package_name);
+
+    let zip_bytes = create_dummy_zip_bytes()?;
+    let sha512_hash = sha512_hex(&zip_bytes);
+
+    let mut server = Server::new();
+    let installer_url = format!("{}/repair.zip", server.url());
+    let download_mock = server
+        .mock("GET", "/repair.zip")
+        .with_status(200)
+        .with_body(zip_bytes)
+        .expect(1)
+        .create();
+
+    let catalog_db_dir = fixture.root_path().join("data").join("db");
+    fs::create_dir_all(&catalog_db_dir)?;
+    create_catalog_db_with_hash(
+        &catalog_db_dir.join("catalog.db"),
+        package_name,
+        &installer_url,
+        &sha512_hash,
+    )?;
+
+    let conn = database::get_conn().expect("database connection should open");
+    let package = InstalledPackage {
+        name: package_name.to_string(),
+        version: "0.9.0".to_string(),
+        kind: InstallerType::Zip,
+        engine_kind: EngineKind::Zip,
+        engine_metadata: None,
+        install_dir: install_dir.to_string_lossy().to_string(),
+        dependencies: Vec::new(),
+        status: PackageStatus::Ok,
+        installed_at: "2026-04-01T00:00:00Z".to_string(),
+    };
+
+    database::insert_package(&conn, &package).expect("package should insert");
+
+    repair::run(&fixture.ctx, true).expect("repair should succeed");
+
+    let conn = database::get_conn().expect("database connection should open");
+    let package = database::get_package(&conn, package_name)
+        .expect("read package")
+        .expect("package should exist");
+
+    assert_eq!(package.version, "1.0.0");
+    assert_eq!(package.kind, InstallerType::Zip);
+    assert_eq!(package.engine_kind, EngineKind::Zip);
+    assert_eq!(
+        package.install_dir,
+        install_dir.to_string_lossy().to_string()
+    );
+    assert!(install_dir.join("bin").join("tool.exe").exists());
+    download_mock.assert();
+
+    Ok(())
 }

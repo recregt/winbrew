@@ -22,6 +22,12 @@ tempfile = "3"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["ansi", "env-filter", "fmt", "registry", "std"] }
 
+[dev-dependencies]
+mockito = "1"
+rusqlite = { version = "0.39", default-features = false, features = ["bundled", "modern_sqlite", "unlock_notify"] }
+winbrew-core = { path = "../core" }
+zip = "8"
+
 [[test]]
 name = "cli_tests"
 path = "tests/cli.rs"
