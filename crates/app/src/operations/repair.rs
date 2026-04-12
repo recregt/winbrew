@@ -1,4 +1,5 @@
-//! Recovery repair workflow for replaying committed journals into SQLite.
+//! Recovery repair workflow for replaying committed journals, cleaning orphans,
+//! and handling high-risk recovery candidates.
 
 use anyhow::{Context, Result};
 use std::fs;
@@ -13,11 +14,11 @@ use crate::operations::remove;
 use crate::storage::database;
 use winbrew_ui::Ui;
 
-/// Replay journal recovery candidates into SQLite.
+/// Apply recovery candidates from the doctor report.
 ///
-/// This is the low-risk repair path described by the recovery policy. It asks
-/// doctor for replayable recovery findings, then replays only the committed
-/// journal targets that doctor has classified as journal-replay candidates.
+/// This path starts with the low-risk journal replay and orphan cleanup groups,
+/// then handles high-risk file restore and reinstall candidates one package at
+/// a time behind explicit confirmation.
 pub fn run(ctx: &AppContext, yes: bool) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);
     ui.page_title("Repair");
