@@ -89,6 +89,10 @@ pub fn packages_dir_at(root: &Path) -> PathBuf {
     root.join("packages")
 }
 
+pub fn package_install_dir_at(root: &Path, package_name: &str) -> PathBuf {
+    packages_dir_at(root).join(package_name)
+}
+
 pub fn data_dir_at(root: &Path) -> PathBuf {
     root.join("data")
 }
@@ -206,6 +210,10 @@ pub fn resolved_paths(
 }
 
 impl ResolvedPaths {
+    pub fn package_install_dir(&self, package_name: &str) -> PathBuf {
+        self.packages.join(package_name)
+    }
+
     pub fn package_journal_dir(&self, package_key: &str) -> PathBuf {
         self.pkgdb.join(package_key)
     }
@@ -269,9 +277,9 @@ fn version_hash(version: &str) -> String {
 mod tests {
     use super::{
         cache_dir_at, catalog_db_at, config_file_at, data_dir_at, db_path_at, ensure_dirs_at,
-        log_dir_at, log_file_at, package_journal_file_at, package_journal_key, package_log_dir_at,
-        package_logs_dir_at, package_shim_dir_at, packages_dir_at, pkgdb_dir_at, resolved_paths,
-        shims_dir_at,
+        log_dir_at, log_file_at, package_install_dir_at, package_journal_file_at,
+        package_journal_key, package_log_dir_at, package_logs_dir_at, package_shim_dir_at,
+        packages_dir_at, pkgdb_dir_at, resolved_paths, shims_dir_at,
     };
     use sha2::{Digest, Sha256};
     use tempfile::tempdir;
@@ -326,6 +334,10 @@ mod tests {
 
         assert_eq!(paths.root, root.path());
         assert_eq!(paths.packages, packages_dir_at(root.path()));
+        assert_eq!(
+            paths.package_install_dir("Contoso.App"),
+            package_install_dir_at(root.path(), "Contoso.App")
+        );
         assert_eq!(paths.data, data_dir_at(root.path()));
         assert_eq!(paths.logs, log_dir_at(root.path()));
         assert_eq!(paths.package_logs, package_logs_dir_at(root.path()));

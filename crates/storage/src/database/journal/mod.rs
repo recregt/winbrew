@@ -154,9 +154,11 @@ pub enum JournalEntry {
 mod tests {
     use super::{FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader, JournalWriter};
     use std::fs;
+    use std::path::Path;
     use std::path::PathBuf;
     use std::process;
     use std::time::{SystemTime, UNIX_EPOCH};
+    use winbrew_core::{ResolvedPaths, package_journal_key, resolved_paths};
     use winbrew_models::InstallerType;
 
     fn temp_root() -> PathBuf {
@@ -169,6 +171,15 @@ mod tests {
             "winbrew-storage-journal-{}-{unique_id}",
             process::id()
         ))
+    }
+
+    fn resolved_root_paths(root: &Path) -> ResolvedPaths {
+        let packages = root.join("packages").to_string_lossy().into_owned();
+        let data = root.join("data").to_string_lossy().into_owned();
+        let logs = root.join("logs").to_string_lossy().into_owned();
+        let cache = root.join("cache").to_string_lossy().into_owned();
+
+        resolved_paths(root, &packages, &data, &logs, &cache)
     }
 
     fn metadata_entry() -> JournalEntry {
@@ -235,6 +246,18 @@ mod tests {
             serde_json::from_str::<JournalEntry>(lines[3]).expect("parse commit"),
             JournalEntry::Commit { .. }
         ));
+    }
+
+    #[test]
+    fn journal_entries_are_written_under_resolved_paths() {
+        let root = temp_root();
+        let paths = resolved_root_paths(&root);
+        let package_key = package_journal_key("winget/Contoso.App", "1.0.0");
+
+        let writer = JournalWriter::open_for_package_in(&paths, "winget/Contoso.App", "1.0.0")
+            .expect("open journal");
+
+        assert_eq!(writer.path(), paths.package_journal_file(&package_key));
     }
 
     #[test]
@@ -433,6 +456,7 @@ mod tests {
     #[test]
     fn committed_journal_paths_returns_only_committed_journals() {
         let root = temp_root();
+        let paths = resolved_root_paths(&root);
 
         let mut committed =
             JournalWriter::open_for_package(&root, "winget/Contoso.Committed", "1.0.0")
@@ -466,7 +490,7 @@ mod tests {
         incomplete.flush().expect("flush incomplete journal");
 
         let journal_paths =
-            JournalReader::committed_paths(&root).expect("enumerate committed journals");
+            JournalReader::committed_paths_in(&paths).expect("enumerate committed journals");
 
         assert_eq!(journal_paths, vec![committed.path().to_path_buf()]);
     }

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use super::{JournalEntry, JournalReadError, JournalReader};
+use winbrew_core::ResolvedPaths;
 use winbrew_models::{EngineKind, InstallerType, ModelError, Package, PackageStatus};
 
 #[derive(Debug, Clone)]
@@ -46,7 +47,11 @@ pub enum JournalReplayError {
 
 impl JournalReader {
     pub fn committed_paths(root: &Path) -> Result<Vec<PathBuf>, JournalReplayError> {
-        enumerate_committed_journals(root)
+        enumerate_committed_journals(&winbrew_core::pkgdb_dir_at(root))
+    }
+
+    pub fn committed_paths_in(paths: &ResolvedPaths) -> Result<Vec<PathBuf>, JournalReplayError> {
+        enumerate_committed_journals(&paths.pkgdb)
     }
 
     pub fn read_committed_package(
@@ -62,21 +67,19 @@ impl JournalReader {
     }
 }
 
-fn enumerate_committed_journals(root: &Path) -> Result<Vec<PathBuf>, JournalReplayError> {
-    let pkgdb_dir = winbrew_core::pkgdb_dir_at(root);
-
+fn enumerate_committed_journals(pkgdb_dir: &Path) -> Result<Vec<PathBuf>, JournalReplayError> {
     if !pkgdb_dir.exists() {
         return Ok(Vec::new());
     }
 
     let mut journal_paths = Vec::new();
 
-    for entry in fs::read_dir(&pkgdb_dir).map_err(|source| JournalReplayError::Enumerate {
-        root: pkgdb_dir.clone(),
+    for entry in fs::read_dir(pkgdb_dir).map_err(|source| JournalReplayError::Enumerate {
+        root: pkgdb_dir.to_path_buf(),
         source,
     })? {
         let entry = entry.map_err(|source| JournalReplayError::Enumerate {
-            root: pkgdb_dir.clone(),
+            root: pkgdb_dir.to_path_buf(),
             source,
         })?;
 

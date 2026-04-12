@@ -4,6 +4,7 @@ use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use super::{JournalEntry, JournalReadError, JournalReader};
+use winbrew_core::ResolvedPaths;
 
 #[derive(Debug)]
 pub struct JournalWriter {
@@ -16,6 +17,21 @@ impl JournalWriter {
         let package_key = winbrew_core::package_journal_key(package_id, version);
         let journal_path = winbrew_core::package_journal_file_at(root, &package_key);
 
+        Self::open_at(journal_path)
+    }
+
+    pub fn open_for_package_in(
+        paths: &ResolvedPaths,
+        package_id: &str,
+        version: &str,
+    ) -> Result<Self> {
+        let package_key = winbrew_core::package_journal_key(package_id, version);
+        let journal_path = paths.package_journal_file(&package_key);
+
+        Self::open_at(journal_path)
+    }
+
+    fn open_at(journal_path: PathBuf) -> Result<Self> {
         if let Some(parent) = journal_path.parent() {
             fs::create_dir_all(parent)
                 .with_context(|| format!("failed to create {}", parent.display()))?;
