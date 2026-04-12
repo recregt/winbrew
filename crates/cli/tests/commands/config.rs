@@ -4,9 +4,9 @@ mod common;
 use std::path::Path;
 
 use tempfile::TempDir;
+use winbrew_app::doctor::health_report;
+use winbrew_app::report::runtime_report;
 use winbrew_cli::CommandContext;
-use winbrew_cli::app::doctor::health_report;
-use winbrew_cli::app::report::runtime_report;
 use winbrew_cli::cli::ConfigCommand;
 use winbrew_cli::commands::{config as config_command, error::CommandError};
 use winbrew_cli::database::Config;
