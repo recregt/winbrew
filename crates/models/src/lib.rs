@@ -17,23 +17,25 @@ pub mod query;
 pub mod raw;
 pub mod remove;
 pub mod reporting;
+pub mod shared;
 pub mod validation;
 pub mod version;
 
 /// Grouped namespace for the major model families.
 pub mod domains {
     pub mod shared {
-        pub use crate::{
-            BucketName, CatalogId, ConfigSection, ConfigValue, ConfigValueSource, HashAlgorithm,
-            ModelError, PackageName, Validate, Version,
+        pub use crate::shared::{
+            ConfigSection, ConfigValue, ConfigValueSource, HashAlgorithm, ModelError, Validate,
+            Version,
         };
+        pub use crate::{BucketName, CatalogId, PackageName};
     }
 
     pub mod package {
-        pub use crate::{
-            Dependency, Package, PackageKind, PackageQuery, PackageRef, PackageSource,
+        pub use crate::PackageName;
+        pub use crate::package::{
+            Dependency, Package, PackageId, PackageKind, PackageQuery, PackageRef, PackageSource,
         };
-        pub use crate::{PackageId, PackageName};
     }
 
     pub mod catalog {
