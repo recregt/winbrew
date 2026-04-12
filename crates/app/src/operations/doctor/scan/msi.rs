@@ -3,7 +3,35 @@ use std::path::Path;
 
 use crate::core::hash::hash_file;
 use crate::core::{HashError, verify_hash};
-use crate::models::{DiagnosisResult, DiagnosisSeverity, Package};
+use crate::models::{DiagnosisResult, DiagnosisSeverity, Package, RecoveryFinding};
+
+use super::{sort_diagnoses, sort_recovery_findings};
+
+pub(crate) struct MsiInventoryScan {
+    pub(crate) diagnostics: Vec<DiagnosisResult>,
+    pub(crate) recovery_findings: Vec<RecoveryFinding>,
+}
+
+impl MsiInventoryScan {
+    fn new() -> Self {
+        Self {
+            diagnostics: Vec::new(),
+            recovery_findings: Vec::new(),
+        }
+    }
+
+    fn push(&mut self, diagnosis: DiagnosisResult, target_path: Option<&Path>) {
+        if let Some(finding) = RecoveryFinding::from_diagnosis(&diagnosis) {
+            let finding = match target_path {
+                Some(target_path) => finding.with_target_path(target_path.to_string_lossy()),
+                None => finding,
+            };
+            self.recovery_findings.push(finding);
+        }
+
+        self.diagnostics.push(diagnosis);
+    }
+}
 
 /// Verify a single MSI file against the stored inventory snapshot.
 pub(super) fn diagnose_msi_file(
@@ -99,10 +127,62 @@ fn diagnose_msi_file_error(
     }
 }
 
+pub(crate) fn scan_msi_inventory(
+    conn: &crate::storage::DbConnection,
+    packages: &[Package],
+) -> MsiInventoryScan {
+    let mut scan = MsiInventoryScan::new();
+
+    for pkg in packages
+        .iter()
+        .filter(|pkg| matches!(pkg.engine_kind, crate::models::EngineKind::Msi))
+    {
+        let snapshot = match crate::storage::database::get_snapshot(conn, &pkg.name) {
+            Ok(Some(snapshot)) => snapshot,
+            Ok(None) => {
+                scan.push(
+                    DiagnosisResult {
+                        error_code: "missing_msi_inventory_snapshot".to_string(),
+                        description: format!("{}: MSI inventory snapshot is missing", pkg.name),
+                        severity: DiagnosisSeverity::Error,
+                    },
+                    None,
+                );
+                continue;
+            }
+            Err(err) => {
+                scan.push(
+                    DiagnosisResult {
+                        error_code: "msi_inventory_unreadable".to_string(),
+                        description: format!("{}: MSI inventory is unreadable - {err}", pkg.name),
+                        severity: DiagnosisSeverity::Error,
+                    },
+                    None,
+                );
+                continue;
+            }
+        };
+
+        for file in &snapshot.files {
+            if let Some(diagnosis) = diagnose_msi_file(pkg, file) {
+                scan.push(diagnosis, Some(Path::new(&file.path)));
+            }
+        }
+    }
+
+    scan.diagnostics = sort_diagnoses(scan.diagnostics);
+    scan.recovery_findings
+        .sort_unstable_by(sort_recovery_findings);
+
+    scan
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{EngineKind, InstallerType, PackageStatus};
+    use crate::models::{
+        EngineKind, InstallerType, PackageStatus, RecoveryActionGroup, RecoveryIssueKind,
+    };
     use tempfile::tempdir;
 
     fn sample_package(name: &str, install_dir: &std::path::Path) -> Package {
@@ -157,5 +237,50 @@ mod tests {
         assert_eq!(denied.severity, crate::models::DiagnosisSeverity::Error);
         assert!(not_found.description.contains("Contoso.Msi"));
         assert!(denied.description.contains("Contoso.Msi"));
+    }
+
+    #[test]
+    fn scan_msi_inventory_attaches_file_restore_targets() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let package = sample_package("Contoso.Msi", temp_dir.path());
+        let file = crate::models::MsiFileRecord {
+            package_name: "Contoso.Msi".to_string(),
+            path: temp_dir
+                .path()
+                .join("missing.exe")
+                .to_string_lossy()
+                .into_owned(),
+            normalized_path: temp_dir
+                .path()
+                .join("missing.exe")
+                .to_string_lossy()
+                .into_owned(),
+            hash_algorithm: Some(winbrew_models::HashAlgorithm::Sha256),
+            hash_hex: Some("00".repeat(32)),
+            is_config_file: false,
+        };
+
+        let scan = MsiInventoryScan::new();
+        let mut scan = scan;
+        let diagnosis = diagnose_msi_file_error(
+            &package,
+            &file,
+            std::io::Error::from(std::io::ErrorKind::NotFound),
+        );
+        scan.push(diagnosis, Some(Path::new(&file.path)));
+
+        assert_eq!(scan.recovery_findings.len(), 1);
+        assert_eq!(
+            scan.recovery_findings[0].action_group,
+            Some(RecoveryActionGroup::FileRestore)
+        );
+        assert_eq!(
+            scan.recovery_findings[0].issue_kind,
+            RecoveryIssueKind::DiskDrift
+        );
+        assert_eq!(
+            scan.recovery_findings[0].target_path.as_deref(),
+            Some(file.path.as_str())
+        );
     }
 }

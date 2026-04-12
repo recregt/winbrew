@@ -112,11 +112,20 @@ fn scan_packages_sorts_diagnoses_by_error_code() {
         sample_package("Beta.Missing", &temp_dir.path().join("missing-beta")),
     ];
 
-    let diagnoses = super::scan_packages(&packages);
+    let scan = super::scan_packages(&packages);
 
-    assert_eq!(diagnoses.len(), 2);
-    assert_eq!(diagnoses[0].error_code, "missing_install_directory");
-    assert_eq!(diagnoses[1].error_code, "missing_install_directory");
+    assert_eq!(scan.diagnostics.len(), 2);
+    assert_eq!(scan.diagnostics[0].error_code, "missing_install_directory");
+    assert_eq!(scan.diagnostics[1].error_code, "missing_install_directory");
+    assert_eq!(scan.recovery_findings.len(), 2);
+    assert_eq!(
+        scan.recovery_findings[0].action_group,
+        Some(RecoveryActionGroup::Reinstall)
+    );
+    assert_eq!(
+        scan.recovery_findings[1].action_group,
+        Some(RecoveryActionGroup::Reinstall)
+    );
 }
 
 #[test]
@@ -144,9 +153,10 @@ fn scan_orphaned_install_dirs_detects_directories_without_packages() {
         scan.recovery_findings[0].action_group,
         Some(RecoveryActionGroup::OrphanCleanup)
     );
+    let orphan_path = orphan_dir.to_string_lossy().to_string();
     assert_eq!(
         scan.recovery_findings[0].target_path.as_deref(),
-        Some(orphan_dir.to_string_lossy().as_ref())
+        Some(orphan_path.as_str())
     );
 }
 
@@ -172,12 +182,22 @@ fn scan_msi_inventory_detects_hash_mismatch() {
     storage::insert_package(&conn, &package).expect("insert package");
     storage::replace_snapshot(&mut conn, &snapshot).expect("replace snapshot");
 
-    let diagnoses = super::scan_msi_inventory(&conn, &[package]);
+    let scan = super::scan_msi_inventory(&conn, &[package]);
 
-    assert_eq!(diagnoses.len(), 1);
-    assert_eq!(diagnoses[0].error_code, "msi_file_hash_mismatch");
-    assert_eq!(diagnoses[0].severity, DiagnosisSeverity::Error);
-    assert!(diagnoses[0].description.contains("Contoso.Msi"));
+    assert_eq!(scan.diagnostics.len(), 1);
+    assert_eq!(scan.diagnostics[0].error_code, "msi_file_hash_mismatch");
+    assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Error);
+    assert!(scan.diagnostics[0].description.contains("Contoso.Msi"));
+    assert_eq!(scan.recovery_findings.len(), 1);
+    assert_eq!(
+        scan.recovery_findings[0].action_group,
+        Some(RecoveryActionGroup::FileRestore)
+    );
+    let expected_file_path = file_path.to_string_lossy().to_string();
+    assert_eq!(
+        scan.recovery_findings[0].target_path.as_deref(),
+        Some(expected_file_path.as_str())
+    );
 }
 
 #[test]
@@ -199,12 +219,26 @@ fn scan_msi_inventory_detects_missing_files() {
     storage::insert_package(&conn, &package).expect("insert package");
     storage::replace_snapshot(&mut conn, &snapshot).expect("replace snapshot");
 
-    let diagnoses = super::scan_msi_inventory(&conn, &[package]);
+    let scan = super::scan_msi_inventory(&conn, &[package]);
 
-    assert_eq!(diagnoses.len(), 1);
-    assert_eq!(diagnoses[0].error_code, "missing_msi_file");
-    assert_eq!(diagnoses[0].severity, DiagnosisSeverity::Error);
-    assert!(diagnoses[0].description.contains("Contoso.Msi"));
+    assert_eq!(scan.diagnostics.len(), 1);
+    assert_eq!(scan.diagnostics[0].error_code, "missing_msi_file");
+    assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Error);
+    assert!(scan.diagnostics[0].description.contains("Contoso.Msi"));
+    assert_eq!(scan.recovery_findings.len(), 1);
+    assert_eq!(
+        scan.recovery_findings[0].action_group,
+        Some(RecoveryActionGroup::FileRestore)
+    );
+    let expected_file_path = install_dir
+        .join("bin")
+        .join("demo.exe")
+        .to_string_lossy()
+        .to_string();
+    assert_eq!(
+        scan.recovery_findings[0].target_path.as_deref(),
+        Some(expected_file_path.as_str())
+    );
 }
 
 #[test]
@@ -278,9 +312,10 @@ fn scan_package_journals_detects_orphan_committed_journal() {
         scan.recovery_findings[0].action_group,
         Some(RecoveryActionGroup::JournalReplay)
     );
+    let journal_path_string = journal_path.to_string_lossy().to_string();
     assert_eq!(
         scan.recovery_findings[0].target_path.as_deref(),
-        Some(journal_path.to_string_lossy().as_ref())
+        Some(journal_path_string.as_str())
     );
 }
 
@@ -329,8 +364,9 @@ fn scan_package_journals_tracks_trailing_journal_replay_target() {
         scan.recovery_findings[0].action_group,
         Some(RecoveryActionGroup::JournalReplay)
     );
+    let journal_path_string = journal_path.to_string_lossy().to_string();
     assert_eq!(
         scan.recovery_findings[0].target_path.as_deref(),
-        Some(journal_path.to_string_lossy().as_ref())
+        Some(journal_path_string.as_str())
     );
 }

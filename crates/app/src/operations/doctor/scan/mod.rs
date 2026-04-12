@@ -1,15 +1,14 @@
-use anyhow::Result;
-
 use crate::models::{
-    DiagnosisResult, DiagnosisSeverity, EngineKind, Package, RecoveryActionGroup, RecoveryFinding,
-    RecoveryIssueKind,
+    DiagnosisResult, DiagnosisSeverity, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind,
 };
-use crate::storage::database;
 
 mod journal;
 mod msi;
 mod orphan;
 mod package;
+
+pub(super) use msi::{MsiInventoryScan, scan_msi_inventory};
+pub(super) use package::{PackageInstallScan, installed_packages, scan_packages};
 
 pub(super) struct PackageJournalScan {
     pub(super) diagnostics: Vec<DiagnosisResult>,
@@ -76,70 +75,16 @@ impl OrphanInstallScan {
 
 pub(super) fn scan_package_journals(
     root: &std::path::Path,
-    packages: &[Package],
+    packages: &[crate::models::Package],
 ) -> PackageJournalScan {
     journal::scan_package_journals(root, packages)
 }
 
 pub(super) fn scan_orphaned_install_dirs(
     packages_root: &std::path::Path,
-    packages: &[Package],
+    packages: &[crate::models::Package],
 ) -> OrphanInstallScan {
     orphan::scan_orphaned_install_dirs(packages_root, packages)
-}
-
-/// Scan installed packages and return diagnostics for broken install roots.
-pub(super) fn scan_packages(packages: &[Package]) -> Vec<DiagnosisResult> {
-    sort_diagnoses(packages.iter().filter_map(package::check_package).collect())
-}
-
-/// Scan persisted MSI inventory data and report files that no longer match.
-pub(super) fn scan_msi_inventory(
-    conn: &crate::storage::DbConnection,
-    packages: &[Package],
-) -> Vec<DiagnosisResult> {
-    let mut diagnoses = Vec::new();
-
-    for pkg in packages
-        .iter()
-        .filter(|pkg| matches!(pkg.engine_kind, EngineKind::Msi))
-    {
-        let snapshot = match database::get_snapshot(conn, &pkg.name) {
-            Ok(Some(snapshot)) => snapshot,
-            Ok(None) => {
-                diagnoses.push(DiagnosisResult {
-                    error_code: "missing_msi_inventory_snapshot".to_string(),
-                    description: format!("{}: MSI inventory snapshot is missing", pkg.name),
-                    severity: DiagnosisSeverity::Error,
-                });
-                continue;
-            }
-            Err(err) => {
-                diagnoses.push(DiagnosisResult {
-                    error_code: "msi_inventory_unreadable".to_string(),
-                    description: format!("{}: MSI inventory is unreadable - {err}", pkg.name),
-                    severity: DiagnosisSeverity::Error,
-                });
-                continue;
-            }
-        };
-
-        for file in &snapshot.files {
-            if let Some(diagnosis) = msi::diagnose_msi_file(pkg, file) {
-                diagnoses.push(diagnosis);
-            }
-        }
-    }
-
-    sort_diagnoses(diagnoses)
-}
-
-/// Load the current installed package inventory from the database.
-///
-/// The caller owns the shared database connection so package scanning and MSI
-/// inventory scanning can reuse the same snapshot of the database state.
-pub(super) fn installed_packages(conn: &crate::storage::DbConnection) -> Result<Vec<Package>> {
-    database::list_packages(conn)
 }
 
 /// Sort diagnostics deterministically by code and description.
