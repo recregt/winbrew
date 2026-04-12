@@ -1,14 +1,18 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::core::paths::ResolvedPaths;
 use crate::models::{DiagnosisResult, DiagnosisSeverity, Package};
 use crate::storage::database;
 
 use super::{PackageJournalScan, sort_diagnoses, sort_recovery_findings};
 
 /// Scan package journal files under `data/pkgdb` and report recovery issues.
-pub(super) fn scan_package_journals(root: &Path, packages: &[Package]) -> PackageJournalScan {
-    let pkgdb_root = crate::core::pkgdb_dir_at(root);
+pub(super) fn scan_package_journals(
+    paths: &ResolvedPaths,
+    packages: &[Package],
+) -> PackageJournalScan {
+    let pkgdb_root = paths.pkgdb.clone();
 
     if !pkgdb_root.exists() {
         return PackageJournalScan::new();

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static TEMP_ROOT_SUFFIX: AtomicUsize = AtomicUsize::new(0);
@@ -17,6 +17,13 @@ pub fn temp_root_prefix(name: &str, version: &str) -> String {
 
 pub fn temp_root_base() -> PathBuf {
     std::env::temp_dir().join("winbrew")
+}
+
+pub fn is_temp_root_for(name: &str, version: &str, path: &Path) -> bool {
+    path.file_name()
+        .and_then(|value| value.to_str())
+        .map(|file_name| file_name.starts_with(&temp_root_prefix(name, version)))
+        .unwrap_or(false)
 }
 
 fn temp_root_name(name: &str, version: &str) -> String {

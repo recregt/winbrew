@@ -50,6 +50,15 @@ fn init_storage(root: &Path) {
     storage::init(&paths).expect("storage should initialize");
 }
 
+fn resolved_root_paths(root: &Path) -> crate::core::paths::ResolvedPaths {
+    let packages = root.join("packages").to_string_lossy().into_owned();
+    let data = root.join("data").to_string_lossy().into_owned();
+    let logs = root.join("logs").to_string_lossy().into_owned();
+    let cache = root.join("cache").to_string_lossy().into_owned();
+
+    resolved_paths(root, &packages, &data, &logs, &cache)
+}
+
 fn sample_snapshot(
     name: &str,
     install_dir: &std::path::Path,
@@ -244,6 +253,7 @@ fn scan_msi_inventory_detects_missing_files() {
 #[test]
 fn scan_package_journals_detects_incomplete_journal() {
     let root = tempdir().expect("temp root");
+    let paths = resolved_root_paths(root.path());
 
     let mut writer =
         database::JournalWriter::open_for_package(root.path(), "Contoso.Recover", "1.0.0")
@@ -260,7 +270,7 @@ fn scan_package_journals_detects_incomplete_journal() {
         .expect("write metadata");
     writer.flush().expect("flush journal");
 
-    let scan = super::scan_package_journals(root.path(), &[]);
+    let scan = super::scan_package_journals(&paths, &[]);
 
     assert_eq!(scan.diagnostics.len(), 1);
     assert_eq!(scan.diagnostics[0].error_code, "incomplete_package_journal");
@@ -276,6 +286,7 @@ fn scan_package_journals_detects_incomplete_journal() {
 #[test]
 fn scan_package_journals_detects_orphan_committed_journal() {
     let root = tempdir().expect("temp root");
+    let paths = resolved_root_paths(root.path());
 
     let mut writer =
         database::JournalWriter::open_for_package(root.path(), "Contoso.Orphan", "1.0.0")
@@ -298,7 +309,7 @@ fn scan_package_journals_detects_orphan_committed_journal() {
     writer.flush().expect("flush journal");
     let journal_path = writer.path().to_path_buf();
 
-    let scan = super::scan_package_journals(root.path(), &[]);
+    let scan = super::scan_package_journals(&paths, &[]);
 
     assert_eq!(scan.diagnostics.len(), 1);
     assert_eq!(scan.diagnostics[0].error_code, "orphan_package_journal");
@@ -322,6 +333,7 @@ fn scan_package_journals_detects_orphan_committed_journal() {
 #[test]
 fn scan_package_journals_tracks_trailing_journal_replay_target() {
     let root = tempdir().expect("temp root");
+    let paths = resolved_root_paths(root.path());
 
     let mut writer =
         database::JournalWriter::open_for_package(root.path(), "Contoso.Trailing", "1.0.0")
@@ -350,7 +362,7 @@ fn scan_package_journals_tracks_trailing_journal_replay_target() {
     writer.flush().expect("flush journal");
     let journal_path = writer.path().to_path_buf();
 
-    let scan = super::scan_package_journals(root.path(), &[]);
+    let scan = super::scan_package_journals(&paths, &[]);
 
     assert_eq!(scan.diagnostics.len(), 1);
     assert_eq!(scan.diagnostics[0].error_code, "trailing_package_journal");
