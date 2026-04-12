@@ -434,14 +434,24 @@ fn diagnose_committed_journal(
     entries: &[database::JournalEntry],
     packages: &HashMap<&str, &Package>,
 ) -> Vec<DiagnosisResult> {
-    let Some((package_id, version, engine)) = entries.iter().find_map(|entry| match entry {
-        database::JournalEntry::Metadata {
-            package_id,
-            version,
-            engine,
-        } => Some((package_id.as_str(), version.as_str(), engine.as_str())),
-        _ => None,
-    }) else {
+    let Some((package_id, version, engine, install_dir)) =
+        entries.iter().find_map(|entry| match entry {
+            database::JournalEntry::Metadata {
+                package_id,
+                version,
+                engine,
+                install_dir,
+                dependencies: _,
+                engine_metadata: _,
+            } => Some((
+                package_id.as_str(),
+                version.as_str(),
+                engine.as_str(),
+                install_dir.as_str(),
+            )),
+            _ => None,
+        })
+    else {
         return vec![DiagnosisResult {
             error_code: "missing_journal_metadata".to_string(),
             description: format!(
@@ -463,7 +473,10 @@ fn diagnose_committed_journal(
         }];
     };
 
-    if package.version != version || !package.engine_kind.as_str().eq_ignore_ascii_case(engine) {
+    if package.version != version
+        || !package.engine_kind.as_str().eq_ignore_ascii_case(engine)
+        || package.install_dir != install_dir
+    {
         return vec![DiagnosisResult {
             error_code: "stale_package_journal".to_string(),
             description: format!(
@@ -750,6 +763,9 @@ mod tests {
                 package_id: "Contoso.Recover".to_string(),
                 version: "1.0.0".to_string(),
                 engine: "msi".to_string(),
+                install_dir: r"C:\winbrew\apps\Contoso.Recover".to_string(),
+                dependencies: Vec::new(),
+                engine_metadata: None,
             })
             .expect("write metadata");
         writer.flush().expect("flush journal");
@@ -773,10 +789,15 @@ mod tests {
                 package_id: "Contoso.Orphan".to_string(),
                 version: "1.0.0".to_string(),
                 engine: "msi".to_string(),
+                install_dir: r"C:\winbrew\apps\Contoso.Orphan".to_string(),
+                dependencies: Vec::new(),
+                engine_metadata: None,
             })
             .expect("write metadata");
         writer
-            .append(&database::JournalEntry::Commit)
+            .append(&database::JournalEntry::Commit {
+                installed_at: "2026-04-12T00:00:00Z".to_string(),
+            })
             .expect("write commit");
         writer.flush().expect("flush journal");
 

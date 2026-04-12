@@ -1,6 +1,7 @@
 use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 
+use crate::engine::EngineKind;
 use crate::error::ModelError;
 use crate::validation::{Validate, ensure_hash, ensure_http_url};
 
@@ -126,5 +127,17 @@ impl core::fmt::Display for InstallerType {
 impl From<InstallerType> for String {
     fn from(value: InstallerType) -> Self {
         value.to_string()
+    }
+}
+
+impl From<EngineKind> for InstallerType {
+    fn from(value: EngineKind) -> Self {
+        match value {
+            EngineKind::Msix => Self::Msix,
+            EngineKind::Zip => Self::Zip,
+            EngineKind::Portable => Self::Portable,
+            EngineKind::Msi => Self::Msi,
+            EngineKind::NativeExe => Self::Exe,
+        }
     }
 }

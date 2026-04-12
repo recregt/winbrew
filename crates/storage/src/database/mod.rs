@@ -29,10 +29,12 @@ pub use config::{
 };
 pub use installed_packages::{
     PackageNotFoundError, commit_install, delete_package, get_package, insert_package,
-    list_installing_packages, list_packages, update_status, update_status_and_engine_metadata,
+    list_installing_packages, list_packages, replay_committed_journal, update_status,
+    update_status_and_engine_metadata,
 };
 pub use journal::{
-    FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader, JournalWriter,
+    CommittedJournalPackage, FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader,
+    JournalReplayError, JournalWriter, committed_journal_paths, read_committed_package_journal,
 };
 pub use msi_inventory::{
     apply_snapshot, find_packages_by_normalized_path,
