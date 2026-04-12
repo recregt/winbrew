@@ -44,7 +44,19 @@ pub enum JournalReplayError {
     },
 }
 
-pub fn committed_journal_paths(root: &Path) -> Result<Vec<PathBuf>, JournalReplayError> {
+impl JournalReader {
+    pub fn committed_paths(root: &Path) -> Result<Vec<PathBuf>, JournalReplayError> {
+        enumerate_committed_journals(root)
+    }
+
+    pub fn read_committed_package(
+        path: &Path,
+    ) -> Result<CommittedJournalPackage, JournalReplayError> {
+        parse_committed_package_journal(path)
+    }
+}
+
+fn enumerate_committed_journals(root: &Path) -> Result<Vec<PathBuf>, JournalReplayError> {
     let pkgdb_dir = winbrew_core::pkgdb_dir_at(root);
 
     if !pkgdb_dir.exists() {
@@ -72,7 +84,7 @@ pub fn committed_journal_paths(root: &Path) -> Result<Vec<PathBuf>, JournalRepla
     Ok(journal_paths)
 }
 
-pub fn read_committed_package_journal(
+fn parse_committed_package_journal(
     path: &Path,
 ) -> Result<CommittedJournalPackage, JournalReplayError> {
     let entries = JournalReader::read_committed(path)?;

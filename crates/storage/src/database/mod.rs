@@ -34,7 +34,7 @@ pub use installed_packages::{
 };
 pub use journal::{
     CommittedJournalPackage, FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader,
-    JournalReplayError, JournalWriter, committed_journal_paths, read_committed_package_journal,
+    JournalReplayError, JournalWriter,
 };
 pub use msi_inventory::{
     apply_snapshot, find_packages_by_normalized_path,
