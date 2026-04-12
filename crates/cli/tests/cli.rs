@@ -108,6 +108,13 @@ fn parse_remove_with_force() {
 }
 
 #[test]
+fn parse_repair_with_yes() {
+    let cli = Cli::parse_from(["brew", "repair", "--yes"]);
+
+    assert_eq!(cli.command, Command::Repair { yes: true });
+}
+
+#[test]
 fn parse_config_list() {
     let cli = Cli::parse_from(["brew", "config", "list"]);
 

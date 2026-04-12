@@ -9,6 +9,6 @@ mod catalog;
 pub mod operations;
 
 pub use operations::{
-    AppContext, config, context, doctor, info, install, list, remove, report, search, update,
-    version,
+    AppContext, config, context, doctor, info, install, list, remove, repair, report, search,
+    update, version,
 };
