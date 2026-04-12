@@ -4,27 +4,32 @@ use anyhow::{Context, Result};
 use std::path::PathBuf;
 
 use crate::AppContext;
+use crate::doctor;
+use crate::models::{HealthReport, RecoveryActionGroup};
 use crate::storage::database;
 use winbrew_ui::Ui;
 
-/// Replay all committed journals under the current install root into SQLite.
+/// Replay journal recovery candidates into SQLite.
 ///
-/// This is the low-risk repair path described by the recovery policy. It is
-/// intentionally journal-first: only committed journals are replayed, and each
-/// replay is applied through the storage transaction boundary so repeated runs
-/// converge on the same database state.
+/// This is the low-risk repair path described by the recovery policy. It asks
+/// doctor for replayable recovery findings, then replays only the committed
+/// journal targets that doctor has classified as journal-replay candidates.
 pub fn run(ctx: &AppContext, yes: bool) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);
     ui.page_title("Repair");
 
-    let journal_paths = database::JournalReader::committed_paths(&ctx.paths.root)?;
+    let report = ui.spinner("Inspecting recovery findings...", || {
+        doctor::health_report(ctx)
+    })?;
+    let journal_paths = journal_replay_paths(&report);
+
     if journal_paths.is_empty() {
-        ui.success("No committed journals found to replay.");
+        ui.success("No replayable journal findings were found.");
         return Ok(());
     }
 
     ui.info(format!(
-        "Found {} committed journal(s) available for replay.",
+        "Found {} committed journal replay candidate(s).",
         journal_paths.len()
     ));
 
@@ -70,4 +75,17 @@ pub(crate) fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usi
     }
 
     Ok(replayed)
+}
+
+fn journal_replay_paths(report: &HealthReport) -> Vec<PathBuf> {
+    let mut journal_paths = report
+        .recovery_findings
+        .iter()
+        .filter(|finding| finding.action_group == Some(RecoveryActionGroup::JournalReplay))
+        .filter_map(|finding| finding.target_path.as_ref().map(PathBuf::from))
+        .collect::<Vec<_>>();
+
+    journal_paths.sort();
+    journal_paths.dedup();
+    journal_paths
 }

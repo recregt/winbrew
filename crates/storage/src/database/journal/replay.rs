@@ -52,7 +52,13 @@ impl JournalReader {
     pub fn read_committed_package(
         path: &Path,
     ) -> Result<CommittedJournalPackage, JournalReplayError> {
-        parse_committed_package_journal(path)
+        let entries = match JournalReader::read_committed(path) {
+            Ok(entries) => entries,
+            Err(JournalReadError::TrailingEntries { .. }) => read_committed_prefix(path)?,
+            Err(err) => return Err(err.into()),
+        };
+
+        parse_committed_package_journal(path, entries)
     }
 }
 
@@ -86,9 +92,8 @@ fn enumerate_committed_journals(root: &Path) -> Result<Vec<PathBuf>, JournalRepl
 
 fn parse_committed_package_journal(
     path: &Path,
+    entries: Vec<JournalEntry>,
 ) -> Result<CommittedJournalPackage, JournalReplayError> {
-    let entries = JournalReader::read_committed(path)?;
-
     let (package_id, version, engine, install_dir, dependencies, engine_metadata) = entries
         .iter()
         .find_map(|entry| match entry {
@@ -183,4 +188,51 @@ fn parse_committed_package_journal(
         entries,
         package,
     })
+}
+
+fn read_committed_prefix(path: &Path) -> Result<Vec<JournalEntry>, JournalReadError> {
+    let contents = fs::read_to_string(path).map_err(|source| JournalReadError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+
+    let lines = contents
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+
+    if lines.is_empty() {
+        return Err(JournalReadError::Incomplete {
+            path: path.to_path_buf(),
+        });
+    }
+
+    let mut entries = Vec::with_capacity(lines.len());
+    let mut commit_seen = false;
+
+    for (index, line) in lines.iter().enumerate() {
+        if commit_seen {
+            break;
+        }
+
+        let entry = serde_json::from_str::<JournalEntry>(line).map_err(|source| {
+            JournalReadError::MalformedLine {
+                path: path.to_path_buf(),
+                line: index + 1,
+                source,
+            }
+        })?;
+
+        commit_seen |= matches!(entry, JournalEntry::Commit { .. });
+        entries.push(entry);
+    }
+
+    if !commit_seen {
+        return Err(JournalReadError::Incomplete {
+            path: path.to_path_buf(),
+        });
+    }
+
+    Ok(entries)
 }
