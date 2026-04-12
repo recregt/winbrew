@@ -29,6 +29,8 @@ pub struct RecoveryFinding {
     pub action_group: Option<RecoveryActionGroup>,
     pub description: String,
     pub severity: crate::diagnostics::DiagnosisSeverity,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_path: Option<String>,
 }
 
 impl RecoveryFinding {
@@ -74,7 +76,13 @@ impl RecoveryFinding {
             action_group,
             description: diagnosis.description.clone(),
             severity: diagnosis.severity,
+            target_path: None,
         })
+    }
+
+    pub fn with_target_path(mut self, target_path: impl Into<String>) -> Self {
+        self.target_path = Some(target_path.into());
+        self
     }
 }
 

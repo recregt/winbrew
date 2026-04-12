@@ -15,12 +15,38 @@ use anyhow::Result;
 
 use crate::core::hash::hash_file;
 use crate::core::{HashError, verify_hash};
-use crate::models::{DiagnosisResult, DiagnosisSeverity, EngineKind, Package};
+use crate::models::{DiagnosisResult, DiagnosisSeverity, EngineKind, Package, RecoveryFinding};
 use crate::storage::database;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
+
+pub(super) struct PackageJournalScan {
+    pub diagnostics: Vec<DiagnosisResult>,
+    pub recovery_findings: Vec<RecoveryFinding>,
+}
+
+impl PackageJournalScan {
+    fn new() -> Self {
+        Self {
+            diagnostics: Vec::new(),
+            recovery_findings: Vec::new(),
+        }
+    }
+
+    fn push(&mut self, diagnosis: DiagnosisResult, target_path: Option<&Path>) {
+        if let Some(finding) = RecoveryFinding::from_diagnosis(&diagnosis) {
+            let finding = match target_path {
+                Some(target_path) => finding.with_target_path(target_path.to_string_lossy()),
+                None => finding,
+            };
+            self.recovery_findings.push(finding);
+        }
+
+        self.diagnostics.push(diagnosis);
+    }
+}
 
 /// Validate the install path string stored on a package record.
 ///
@@ -164,11 +190,11 @@ pub(super) fn scan_msi_inventory(
 }
 
 /// Scan package journal files under `data/pkgdb` and report recovery issues.
-pub(super) fn scan_package_journals(root: &Path, packages: &[Package]) -> Vec<DiagnosisResult> {
+pub(super) fn scan_package_journals(root: &Path, packages: &[Package]) -> PackageJournalScan {
     let pkgdb_root = crate::core::pkgdb_dir_at(root);
 
     if !pkgdb_root.exists() {
-        return Vec::new();
+        return PackageJournalScan::new();
     }
 
     let package_lookup: HashMap<&str, &Package> = packages
@@ -180,21 +206,26 @@ pub(super) fn scan_package_journals(root: &Path, packages: &[Package]) -> Vec<Di
         Ok(entries) => entries,
         Err(err) => {
             if err.kind() == ErrorKind::NotFound {
-                return Vec::new();
+                return PackageJournalScan::new();
             }
 
-            return vec![DiagnosisResult {
-                error_code: "pkgdb_unreadable".to_string(),
-                description: format!(
-                    "pkgdb root: unreadable journal directory ({}) - {err}",
-                    pkgdb_root.to_string_lossy()
-                ),
-                severity: DiagnosisSeverity::Error,
-            }];
+            let mut result = PackageJournalScan::new();
+            result.push(
+                DiagnosisResult {
+                    error_code: "pkgdb_unreadable".to_string(),
+                    description: format!(
+                        "pkgdb root: unreadable journal directory ({}) - {err}",
+                        pkgdb_root.to_string_lossy()
+                    ),
+                    severity: DiagnosisSeverity::Error,
+                },
+                None,
+            );
+            return result;
         }
     };
 
-    let mut diagnoses = Vec::new();
+    let mut result = PackageJournalScan::new();
 
     for entry in entries.flatten() {
         let file_type = match entry.file_type() {
@@ -213,56 +244,73 @@ pub(super) fn scan_package_journals(root: &Path, packages: &[Package]) -> Vec<Di
 
         match database::JournalReader::read_committed(&journal_path) {
             Ok(entries) => {
-                diagnoses.extend(diagnose_committed_journal(
-                    &journal_path,
-                    &entries,
-                    &package_lookup,
-                ));
+                for diagnosis in
+                    diagnose_committed_journal(&journal_path, &entries, &package_lookup)
+                {
+                    result.push(diagnosis, Some(&journal_path));
+                }
             }
             Err(database::JournalReadError::Incomplete { .. }) => {
-                diagnoses.push(DiagnosisResult {
-                    error_code: "incomplete_package_journal".to_string(),
-                    description: format!(
-                        "{}: incomplete recovery journal",
-                        journal_path.to_string_lossy()
-                    ),
-                    severity: DiagnosisSeverity::Error,
-                });
+                result.push(
+                    DiagnosisResult {
+                        error_code: "incomplete_package_journal".to_string(),
+                        description: format!(
+                            "{}: incomplete recovery journal",
+                            journal_path.to_string_lossy()
+                        ),
+                        severity: DiagnosisSeverity::Error,
+                    },
+                    None,
+                );
             }
             Err(database::JournalReadError::Read { .. }) => {
-                diagnoses.push(DiagnosisResult {
-                    error_code: "unreadable_package_journal".to_string(),
-                    description: format!(
-                        "{}: recovery journal is unreadable",
-                        journal_path.to_string_lossy()
-                    ),
-                    severity: DiagnosisSeverity::Error,
-                });
+                result.push(
+                    DiagnosisResult {
+                        error_code: "unreadable_package_journal".to_string(),
+                        description: format!(
+                            "{}: recovery journal is unreadable",
+                            journal_path.to_string_lossy()
+                        ),
+                        severity: DiagnosisSeverity::Error,
+                    },
+                    None,
+                );
             }
             Err(database::JournalReadError::MalformedLine { line, .. }) => {
-                diagnoses.push(DiagnosisResult {
-                    error_code: "malformed_package_journal".to_string(),
-                    description: format!(
-                        "{}: recovery journal has malformed line {line}",
-                        journal_path.to_string_lossy()
-                    ),
-                    severity: DiagnosisSeverity::Error,
-                });
+                result.push(
+                    DiagnosisResult {
+                        error_code: "malformed_package_journal".to_string(),
+                        description: format!(
+                            "{}: recovery journal has malformed line {line}",
+                            journal_path.to_string_lossy()
+                        ),
+                        severity: DiagnosisSeverity::Error,
+                    },
+                    None,
+                );
             }
             Err(database::JournalReadError::TrailingEntries { line, .. }) => {
-                diagnoses.push(DiagnosisResult {
-                    error_code: "trailing_package_journal".to_string(),
-                    description: format!(
-                        "{}: recovery journal has trailing entries after commit on line {line}",
-                        journal_path.to_string_lossy()
-                    ),
-                    severity: DiagnosisSeverity::Error,
-                });
+                result.push(
+                    DiagnosisResult {
+                        error_code: "trailing_package_journal".to_string(),
+                        description: format!(
+                            "{}: recovery journal has trailing entries after commit on line {line}",
+                            journal_path.to_string_lossy()
+                        ),
+                        severity: DiagnosisSeverity::Error,
+                    },
+                    Some(&journal_path),
+                );
             }
         }
     }
 
-    sort_diagnoses(diagnoses)
+    result.diagnostics = sort_diagnoses(result.diagnostics);
+    result
+        .recovery_findings
+        .sort_unstable_by(sort_recovery_findings);
+
+    result
 }
 
 /// Scan the package root for directories that do not correspond to packages in the database.
@@ -502,11 +550,19 @@ fn sort_diagnoses(mut diagnoses: Vec<DiagnosisResult>) -> Vec<DiagnosisResult> {
     diagnoses
 }
 
+fn sort_recovery_findings(left: &RecoveryFinding, right: &RecoveryFinding) -> std::cmp::Ordering {
+    left.severity
+        .cmp(&right.severity)
+        .then_with(|| left.error_code.cmp(&right.error_code))
+        .then_with(|| left.target_path.cmp(&right.target_path))
+        .then_with(|| left.description.cmp(&right.description))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::core::paths::resolved_paths;
-    use crate::models::{InstallerType, PackageStatus};
+    use crate::models::{InstallerType, PackageStatus, RecoveryActionGroup, RecoveryIssueKind};
     use crate::storage;
     use std::fs;
     use std::path::Path;
@@ -770,11 +826,17 @@ mod tests {
             .expect("write metadata");
         writer.flush().expect("flush journal");
 
-        let diagnoses = scan_package_journals(root.path(), &[]);
+        let scan = scan_package_journals(root.path(), &[]);
 
-        assert_eq!(diagnoses.len(), 1);
-        assert_eq!(diagnoses[0].error_code, "incomplete_package_journal");
-        assert_eq!(diagnoses[0].severity, DiagnosisSeverity::Error);
+        assert_eq!(scan.diagnostics.len(), 1);
+        assert_eq!(scan.diagnostics[0].error_code, "incomplete_package_journal");
+        assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Error);
+        assert_eq!(scan.recovery_findings.len(), 1);
+        assert_eq!(
+            scan.recovery_findings[0].issue_kind,
+            RecoveryIssueKind::RecoveryTrailMissing
+        );
+        assert!(scan.recovery_findings[0].target_path.is_none());
     }
 
     #[test]
@@ -800,11 +862,76 @@ mod tests {
             })
             .expect("write commit");
         writer.flush().expect("flush journal");
+        let journal_path = writer.path().to_path_buf();
 
-        let diagnoses = scan_package_journals(root.path(), &[]);
+        let scan = scan_package_journals(root.path(), &[]);
 
-        assert_eq!(diagnoses.len(), 1);
-        assert_eq!(diagnoses[0].error_code, "orphan_package_journal");
-        assert_eq!(diagnoses[0].severity, DiagnosisSeverity::Warning);
+        assert_eq!(scan.diagnostics.len(), 1);
+        assert_eq!(scan.diagnostics[0].error_code, "orphan_package_journal");
+        assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Warning);
+        assert_eq!(scan.recovery_findings.len(), 1);
+        assert_eq!(
+            scan.recovery_findings[0].issue_kind,
+            RecoveryIssueKind::IncompleteInstall
+        );
+        assert_eq!(
+            scan.recovery_findings[0].action_group,
+            Some(RecoveryActionGroup::JournalReplay)
+        );
+        assert_eq!(
+            scan.recovery_findings[0].target_path.as_deref(),
+            Some(journal_path.to_string_lossy().as_ref())
+        );
+    }
+
+    #[test]
+    fn scan_package_journals_tracks_trailing_journal_replay_target() {
+        let root = tempdir().expect("temp root");
+
+        let mut writer =
+            database::JournalWriter::open_for_package(root.path(), "Contoso.Trailing", "1.0.0")
+                .expect("open journal");
+        writer
+            .append(&database::JournalEntry::Metadata {
+                package_id: "Contoso.Trailing".to_string(),
+                version: "1.0.0".to_string(),
+                engine: "msi".to_string(),
+                install_dir: r"C:\winbrew\apps\Contoso.Trailing".to_string(),
+                dependencies: Vec::new(),
+                engine_metadata: None,
+            })
+            .expect("write metadata");
+        writer
+            .append(&database::JournalEntry::Commit {
+                installed_at: "2026-04-12T00:00:00Z".to_string(),
+            })
+            .expect("write commit");
+        writer
+            .append(&database::JournalEntry::FsCreate {
+                path: r"C:\winbrew\apps\Contoso.Trailing\payload.exe".to_string(),
+                hash: None,
+            })
+            .expect("write trailing entry");
+        writer.flush().expect("flush journal");
+        let journal_path = writer.path().to_path_buf();
+
+        let scan = scan_package_journals(root.path(), &[]);
+
+        assert_eq!(scan.diagnostics.len(), 1);
+        assert_eq!(scan.diagnostics[0].error_code, "trailing_package_journal");
+        assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Error);
+        assert_eq!(scan.recovery_findings.len(), 1);
+        assert_eq!(
+            scan.recovery_findings[0].issue_kind,
+            RecoveryIssueKind::Conflict
+        );
+        assert_eq!(
+            scan.recovery_findings[0].action_group,
+            Some(RecoveryActionGroup::JournalReplay)
+        );
+        assert_eq!(
+            scan.recovery_findings[0].target_path.as_deref(),
+            Some(journal_path.to_string_lossy().as_ref())
+        );
     }
 }

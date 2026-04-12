@@ -285,6 +285,31 @@ mod tests {
     }
 
     #[test]
+    fn read_committed_package_journal_ignores_trailing_entries() {
+        let root = temp_root();
+        let mut writer = JournalWriter::open_for_package(&root, "winget/Contoso.App", "1.0.0")
+            .expect("open journal");
+
+        writer.append(&metadata_entry()).expect("write metadata");
+        writer.append(&commit_entry()).expect("write commit");
+        writer
+            .append(&JournalEntry::FsCreate {
+                path: r"C:\winbrew\apps\Contoso.App\payload.exe".to_string(),
+                hash: None,
+            })
+            .expect("write trailing entry");
+        writer.flush().expect("flush journal");
+
+        let replay = JournalReader::read_committed_package(writer.path())
+            .expect("parse replay journal with trailing entries");
+
+        assert_eq!(replay.journal_path, writer.path());
+        assert_eq!(replay.entries, vec![metadata_entry(), commit_entry()]);
+        assert_eq!(replay.package.name, "winget/Contoso.App");
+        assert_eq!(replay.package.version, "1.0.0");
+    }
+
+    #[test]
     fn journal_reader_rejects_whitespace_only_file() {
         let root = temp_root();
         let writer = JournalWriter::open_for_package(&root, "winget/Contoso.App", "1.0.0")

@@ -73,14 +73,20 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
     let conn = database::get_conn()?;
 
     let (packages, mut diagnostics) = collect_packages(scan::installed_packages(&conn));
+    let scan::PackageJournalScan {
+        diagnostics: journal_diagnostics,
+        recovery_findings: journal_recovery_findings,
+    } = scan::scan_package_journals(&paths.root, &packages);
 
     diagnostics.extend(scan::scan_packages(&packages));
     diagnostics.extend(scan::scan_msi_inventory(&conn, &packages));
-    diagnostics.extend(scan::scan_package_journals(&paths.root, &packages));
-
     diagnostics.extend(scan::scan_orphaned_install_dirs(&paths.packages, &packages));
     diagnostics.sort_unstable_by(sort_diagnostics);
-    let recovery_findings = collect_recovery_findings(&diagnostics);
+    let mut recovery_findings = collect_recovery_findings(&diagnostics);
+
+    diagnostics.extend(journal_diagnostics);
+    diagnostics.sort_unstable_by(sort_diagnostics);
+    recovery_findings.extend(journal_recovery_findings);
 
     let error_count = diagnostics
         .iter()
