@@ -1,7 +1,7 @@
 use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 
-use crate::Installer;
+use crate::install::Installer;
 use crate::shared::validation::{Validate, ensure_non_empty};
 use crate::shared::{ModelError, Version};
 
@@ -136,8 +136,8 @@ impl From<PackageKind> for String {
 #[cfg(test)]
 mod tests {
     use super::{Package, PackageKind, PackageSource};
+    use crate::install::{Architecture, Installer, InstallerType};
     use crate::shared::Version;
-    use crate::{Architecture, Installer, InstallerType};
     use core::str::FromStr;
 
     #[test]

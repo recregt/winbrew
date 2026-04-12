@@ -1,4 +1,4 @@
-use crate::InstalledPackage;
+use crate::install::InstalledPackage;
 
 #[derive(Debug, Clone)]
 pub struct RemovalPlan {

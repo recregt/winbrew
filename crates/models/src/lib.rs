@@ -21,25 +21,25 @@ pub mod domains {
     }
 
     pub mod package {
-        pub use crate::PackageName;
         pub use crate::package::{
             Dependency, Package, PackageId, PackageKind, PackageQuery, PackageRef, PackageSource,
         };
+        pub use crate::shared::PackageName;
     }
 
     pub mod catalog {
-        pub use crate::{
+        pub use crate::catalog::{
             CatalogInstaller, CatalogMetadata, CatalogPackage, RawCatalogInstaller,
             RawCatalogPackage,
         };
     }
 
     pub mod installed {
-        pub use crate::{InstalledPackage, PackageStatus};
+        pub use crate::install::{InstalledPackage, PackageStatus};
     }
 
     pub mod install {
-        pub use crate::{
+        pub use crate::install::{
             Architecture, EngineInstallReceipt, EngineKind, EngineMetadata, InstallFailureClass,
             InstallOutcome, InstallResult, InstallScope, Installer, InstallerType, RemovalPlan,
         };
@@ -53,7 +53,7 @@ pub mod domains {
     }
 
     pub mod inventory {
-        pub use crate::{
+        pub use crate::msi_inventory::{
             MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
             MsiRegistryRecord, MsiShortcutRecord,
         };

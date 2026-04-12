@@ -69,8 +69,8 @@ impl TryFrom<RawCatalogInstaller> for CatalogInstaller {
 mod tests {
     use super::{CatalogInstaller, CatalogPackage};
     use crate::catalog::raw::{RawCatalogInstaller, RawCatalogPackage};
+    use crate::install::{Architecture, InstallerType};
     use crate::package::PackageSource;
-    use crate::{Architecture, InstallerType};
 
     #[test]
     fn raw_catalog_package_converts_and_derives_source() {

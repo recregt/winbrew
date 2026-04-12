@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::InstallScope;
+use crate::install::InstallScope;
 use crate::shared::HashAlgorithm;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
