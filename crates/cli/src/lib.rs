@@ -19,8 +19,8 @@ pub use winbrew_ui::{Ui, UiSettings};
 
 #[derive(Debug, Clone)]
 pub struct CommandContext {
-    pub app: AppContext,
-    pub ui: UiSettings,
+    app: AppContext,
+    ui: UiSettings,
 }
 
 impl CommandContext {
@@ -36,6 +36,10 @@ impl CommandContext {
                 default_yes: config.core.default_yes,
             },
         })
+    }
+
+    pub fn ui_settings(&self) -> UiSettings {
+        self.ui
     }
 }
 

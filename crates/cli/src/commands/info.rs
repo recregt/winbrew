@@ -3,7 +3,7 @@ use anyhow::Result;
 use crate::{CommandContext, Ui, app::info};
 
 pub fn run(ctx: &CommandContext) -> Result<()> {
-    let mut ui = Ui::new(ctx.ui);
+    let mut ui = Ui::new(ctx.ui_settings());
     ui.page_title("System Information");
 
     let report = info::collect(&ctx.sections, &ctx.paths)?;

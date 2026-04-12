@@ -13,7 +13,7 @@ use crate::{CommandContext, Ui, app::config};
 
 /// Dispatches a `config` subcommand to the appropriate handler.
 pub fn run(ctx: &CommandContext, config: &mut Config, command: ConfigCommand) -> Result<()> {
-    let mut ui = Ui::new(ctx.ui);
+    let mut ui = Ui::new(ctx.ui_settings());
     ui.page_title("Configuration");
 
     match command {

@@ -3,7 +3,7 @@ use anyhow::Result;
 use crate::{CommandContext, Ui, app::search};
 
 pub fn run(ctx: &CommandContext, query: &[String]) -> Result<()> {
-    let mut ui = Ui::new(ctx.ui);
+    let mut ui = Ui::new(ctx.ui_settings());
     ui.page_title("Package Catalog");
 
     let query_text = query.join(" ");

@@ -10,7 +10,7 @@ use crate::models::{CatalogPackage, PackageRef};
 use crate::{CommandContext, Ui};
 
 pub fn run(ctx: &CommandContext, query: &[String], ignore_checksum_security: bool) -> Result<()> {
-    let mut ui = Ui::new(ctx.ui);
+    let mut ui = Ui::new(ctx.ui_settings());
     ui.page_title("Install Package");
 
     let query_text = query.join(" ").trim().to_owned();

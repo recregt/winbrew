@@ -24,7 +24,7 @@ pub fn run(ctx: &CommandContext, json_output: bool, warn_as_error: bool) -> Resu
         return Ok(());
     }
 
-    let mut ui = Ui::new(ctx.ui);
+    let mut ui = Ui::new(ctx.ui_settings());
     ui.page_title("System Health Check");
     let report = ui.spinner("Inspecting environment and installed packages...", || {
         doctor::health_report(ctx)

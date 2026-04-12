@@ -8,7 +8,7 @@ use crate::app::repair::{self, FileRestoreResolution, RepairPlan};
 use crate::{CommandContext, Ui};
 
 pub fn run(ctx: &CommandContext, yes: bool) -> Result<()> {
-    let mut ui = Ui::new(ctx.ui);
+    let mut ui = Ui::new(ctx.ui_settings());
     ui.page_title("Repair");
 
     let report = ui.spinner("Inspecting recovery findings...", || {

@@ -3,7 +3,7 @@ use anyhow::Result;
 use crate::{CommandContext, Ui, app::update};
 
 pub fn run(ctx: &CommandContext) -> Result<()> {
-    let mut ui = Ui::new(ctx.ui);
+    let mut ui = Ui::new(ctx.ui_settings());
     ui.page_title("Update Package Catalog");
 
     let progress = ui.progress_bar();
