@@ -56,9 +56,10 @@ fn collect_packages(packages_result: Result<Vec<Package>>) -> (Vec<Package>, Vec
 /// Build a full health report for the current application context.
 ///
 /// The function snapshots the current paths, collects installed packages,
-/// scans package directories, sorts the resulting diagnostics, and computes a
-/// final error count. The returned report is intentionally pre-rendered with
-/// display-friendly paths so the caller can present it directly.
+/// scans package directories, journal recovery data, and MSI inventory, then
+/// sorts the resulting diagnostics and computes a final error count. The
+/// returned report is intentionally pre-rendered with display-friendly paths
+/// so the caller can present it directly.
 pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
     let paths = &ctx.paths;
     let started_at = Instant::now();
@@ -68,6 +69,7 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
 
     diagnostics.extend(scan::scan_packages(&packages));
     diagnostics.extend(scan::scan_msi_inventory(&conn, &packages));
+    diagnostics.extend(scan::scan_package_journals(&paths.root, &packages));
 
     diagnostics.extend(scan::scan_orphaned_install_dirs(&paths.packages, &packages));
     diagnostics.sort_unstable_by(sort_diagnostics);
