@@ -9,7 +9,7 @@
 //! The pipeline is intentionally narrow:
 //!
 //! - `report` assembles the final report structure and summary counts.
-//! - `scan` inspects installed package records, package directories, MSI inventory snapshots, and recovery journals.
+//! - `scan` is split into `package`, `msi`, `journal`, and `orphan` helpers so recovery policy logic can evolve independently.
 //!
 //! CLI code owns any interactive presentation around the report, including the
 //! spinner and terminal formatting. The app layer only returns structured data.
@@ -18,3 +18,8 @@ mod report;
 mod scan;
 
 pub use report::health_report;
+#[allow(unused_imports)]
+pub(super) use scan::{
+    OrphanInstallScan, PackageJournalScan, installed_packages, scan_msi_inventory,
+    scan_orphaned_install_dirs, scan_package_journals, scan_packages,
+};
