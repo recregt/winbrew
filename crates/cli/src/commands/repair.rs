@@ -13,9 +13,9 @@ pub fn run(ctx: &CommandContext, yes: bool) -> Result<()> {
     ui.page_title("Repair");
 
     let report = ui.spinner("Inspecting recovery findings...", || {
-        doctor::health_report(ctx)
+        doctor::health_report(ctx.app())
     })?;
-    let plan = repair::build_repair_plan(&report, &ctx.paths.packages);
+    let plan = repair::build_repair_plan(&report, &ctx.app().paths.packages);
 
     if plan.is_empty() {
         ui.success("No supported recovery actions were found.");
@@ -214,7 +214,7 @@ fn run_file_restore_group<W: Write>(
                     format!("Reinstalling {}...", target.catalog_package.name),
                     || {
                         let mut observer = NoopInstallObserver;
-                        repair::reinstall_package(ctx, &target.catalog_package, &mut observer)
+                        repair::reinstall_package(ctx.app(), &target.catalog_package, &mut observer)
                     },
                 )?;
 
@@ -264,7 +264,7 @@ fn run_reinstall_group<W: Write>(
 
         let outcome = ui.spinner(format!("Reinstalling {}...", catalog_package.name), || {
             let mut observer = NoopInstallObserver;
-            repair::reinstall_package(ctx, &catalog_package, &mut observer)
+            repair::reinstall_package(ctx.app(), &catalog_package, &mut observer)
         })?;
 
         ui.success(format!(

@@ -12,7 +12,7 @@ use winbrew_ui::Ui;
 /// When `warn_as_error` is enabled, warnings produce a non-zero exit code.
 pub fn run(ctx: &CommandContext, json_output: bool, warn_as_error: bool) -> Result<()> {
     if json_output {
-        let report = doctor::health_report(ctx)?;
+        let report = doctor::health_report(ctx.app())?;
         let (_, warnings) = split_diagnostics(&report);
 
         let mut stdout = io::stdout();
@@ -28,7 +28,7 @@ pub fn run(ctx: &CommandContext, json_output: bool, warn_as_error: bool) -> Resu
     let mut ui = ctx.ui();
     ui.page_title("System Health Check");
     let report = ui.spinner("Inspecting environment and installed packages...", || {
-        doctor::health_report(ctx)
+        doctor::health_report(ctx.app())
     })?;
     let (errors, warnings) = split_diagnostics(&report);
 

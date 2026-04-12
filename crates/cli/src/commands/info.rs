@@ -6,7 +6,7 @@ pub fn run(ctx: &CommandContext) -> Result<()> {
     let mut ui = ctx.ui();
     ui.page_title("System Information");
 
-    let report = info::collect(&ctx.sections, &ctx.paths)?;
+    let report = info::collect(&ctx.app().sections, &ctx.app().paths)?;
     ui.notice(format!("Version: {}", report.version));
 
     for section in report.runtime.sections {

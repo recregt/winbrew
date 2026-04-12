@@ -2,7 +2,6 @@
 
 use anyhow::Result;
 use std::io;
-use std::ops::Deref;
 
 pub mod cli;
 pub mod commands;
@@ -42,12 +41,8 @@ impl CommandContext {
     pub fn ui(&self) -> Ui<io::Stdout> {
         Ui::new(self.ui)
     }
-}
 
-impl Deref for CommandContext {
-    type Target = AppContext;
-
-    fn deref(&self) -> &Self::Target {
+    pub fn app(&self) -> &AppContext {
         &self.app
     }
 }
@@ -56,8 +51,12 @@ pub fn run_app(command: crate::cli::Command, verbosity: u8) -> Result<()> {
     let mut config = database::Config::load_current()?;
     let ctx = CommandContext::from_config_with_verbosity(&config, verbosity)?;
 
-    bootstrap::logging::init(&ctx.paths.logs, &ctx.log_level, &ctx.file_log_level)?;
-    database::init(&ctx.paths)?;
+    bootstrap::logging::init(
+        &ctx.app().paths.logs,
+        &ctx.app().log_level,
+        &ctx.app().file_log_level,
+    )?;
+    database::init(&ctx.app().paths)?;
     bootstrap::init_runtime()?;
 
     run(command, &ctx, &mut config)

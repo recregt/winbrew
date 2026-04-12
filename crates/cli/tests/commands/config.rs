@@ -68,7 +68,8 @@ fn removed_network_config_keys_are_rejected() {
 fn runtime_report_builds_expected_sections() {
     let config = Config::default();
     let ctx = CommandContext::from_config(&config).expect("context should build");
-    let report = runtime_report(&ctx.sections, &ctx.paths).expect("report should build");
+    let report =
+        runtime_report(&ctx.app().sections, &ctx.app().paths).expect("report should build");
 
     assert_eq!(report.sections.len(), 2);
     assert_eq!(report.sections[0].title, "Paths");
@@ -97,7 +98,7 @@ fn runtime_report_builds_expected_sections() {
 #[test]
 fn health_report_uses_config_root_source() {
     let fixture = ConfigFixture::new();
-    let report = health_report(&fixture.ctx).expect("health report should build");
+    let report = health_report(fixture.ctx.app()).expect("health report should build");
 
     assert_eq!(report.install_root_source, "config:paths.root");
     assert_eq!(
