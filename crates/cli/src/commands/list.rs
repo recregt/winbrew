@@ -3,7 +3,7 @@ use anyhow::Result;
 use crate::{CommandContext, Ui, app::list};
 
 pub fn run(ctx: &CommandContext, query: &[String]) -> Result<()> {
-    let mut ui = Ui::new(ctx.ui);
+    let mut ui = Ui::new(ctx.ui_settings());
     ui.page_title("Installed Packages");
 
     let query_text = (!query.is_empty()).then(|| query.join(" "));
