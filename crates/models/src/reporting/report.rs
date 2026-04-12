@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize, Serializer};
 use std::time::Duration;
 
-use crate::diagnostics::DiagnosisResult;
+use super::diagnostics::DiagnosisResult;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -28,7 +28,7 @@ pub struct RecoveryFinding {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action_group: Option<RecoveryActionGroup>,
     pub description: String,
-    pub severity: crate::diagnostics::DiagnosisSeverity,
+    pub severity: super::diagnostics::DiagnosisSeverity,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_path: Option<String>,
 }
