@@ -1,9 +1,9 @@
 use anyhow::Result;
 
 use crate::commands::error::reported_with_hint;
-use crate::{AppContext, Ui, app::remove};
+use crate::{CommandContext, Ui, app::remove};
 
-pub fn run(ctx: &AppContext, name: &str, yes: bool, force: bool) -> Result<()> {
+pub fn run(ctx: &CommandContext, name: &str, yes: bool, force: bool) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);
     ui.page_title("Remove Package");
 

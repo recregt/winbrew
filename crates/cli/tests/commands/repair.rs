@@ -9,7 +9,7 @@ use std::io::{Cursor, Write};
 use std::path::Path;
 
 use tempfile::TempDir;
-use winbrew_cli::AppContext;
+use winbrew_cli::CommandContext;
 use winbrew_cli::commands::repair;
 use winbrew_cli::database::{self, Config};
 use winbrew_cli::models::{
@@ -21,7 +21,7 @@ use zip::write::SimpleFileOptions;
 
 struct RepairFixture {
     root: TempDir,
-    ctx: AppContext,
+    ctx: CommandContext,
 }
 
 impl RepairFixture {
@@ -33,7 +33,7 @@ impl RepairFixture {
         let config = Config::load_at(root.path()).expect("config should load");
         let mut config = config;
         config.core.default_yes = true;
-        let ctx = AppContext::from_config(&config).expect("context should build");
+        let ctx = CommandContext::from_config(&config).expect("context should build");
 
         Self { root, ctx }
     }

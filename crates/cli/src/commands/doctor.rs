@@ -3,13 +3,13 @@ use std::io::{self, Write};
 
 use crate::commands::error::CommandError;
 use crate::models::{DiagnosisResult, DiagnosisSeverity, HealthReport};
-use crate::{AppContext, Ui, app::doctor};
+use crate::{CommandContext, Ui, app::doctor};
 
 /// Runs the system health check command.
 ///
 /// When `json_output` is enabled, the report is written to stdout as JSON.
 /// When `warn_as_error` is enabled, warnings produce a non-zero exit code.
-pub fn run(ctx: &AppContext, json_output: bool, warn_as_error: bool) -> Result<()> {
+pub fn run(ctx: &CommandContext, json_output: bool, warn_as_error: bool) -> Result<()> {
     if json_output {
         let report = doctor::health_report(ctx)?;
         let (_, warnings) = split_diagnostics(&report);

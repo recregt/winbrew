@@ -1,8 +1,8 @@
 use anyhow::Result;
 
-use crate::{AppContext, Ui, app::list};
+use crate::{CommandContext, Ui, app::list};
 
-pub fn run(ctx: &AppContext, query: &[String]) -> Result<()> {
+pub fn run(ctx: &CommandContext, query: &[String]) -> Result<()> {
     let mut ui = Ui::new(ctx.ui);
     ui.page_title("Installed Packages");
 

@@ -1,15 +1,13 @@
 use crate::core::paths::ResolvedPaths;
 use crate::models::ConfigSection;
 use std::sync::Arc;
-use winbrew_ui::UiSettings;
 
 /// Runtime context for the application.
 ///
-/// This contains configuration, paths, UI settings, and logging setup
-/// that all commands need to operate.
+/// This contains configuration, paths, and logging setup that all commands
+/// need to operate.
 #[derive(Debug, Clone)]
 pub struct AppContext {
-    pub ui: UiSettings,
     pub paths: ResolvedPaths,
     pub sections: Vec<ConfigSection>,
     pub root_from_env: bool,
@@ -31,10 +29,6 @@ impl AppContext {
         let sections = config.effective_sections()?.into_iter().collect();
 
         Ok(Self {
-            ui: UiSettings {
-                color_enabled: config.core.color,
-                default_yes: config.core.default_yes,
-            },
             paths,
             sections,
             root_from_env: config.env.root_override().is_some(),

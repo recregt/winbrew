@@ -2540,7 +2540,6 @@ dependencies = [
  "winbrew-engines",
  "winbrew-models",
  "winbrew-storage",
- "winbrew-ui",
 ]
 
 [[package]]
