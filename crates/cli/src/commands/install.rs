@@ -2,15 +2,16 @@ use anyhow::Result;
 use indicatif::ProgressBar;
 use std::io;
 
+use crate::CommandContext;
 use crate::app::install;
 use crate::app::install::InstallError;
 use crate::app::install::InstallObserver;
 use crate::commands::error::{cancelled, reported_with_hint};
 use crate::models::{CatalogPackage, PackageRef};
-use crate::{CommandContext, Ui};
+use winbrew_ui::Ui;
 
 pub fn run(ctx: &CommandContext, query: &[String], ignore_checksum_security: bool) -> Result<()> {
-    let mut ui = Ui::new(ctx.ui_settings());
+    let mut ui = ctx.ui();
     ui.page_title("Install Package");
 
     let query_text = query.join(" ").trim().to_owned();

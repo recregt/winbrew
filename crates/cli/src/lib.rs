@@ -1,13 +1,15 @@
 #![cfg(windows)]
 
 use anyhow::Result;
-use std::ops::{Deref, DerefMut};
+use std::io;
+use std::ops::Deref;
 
 pub mod cli;
 pub mod commands;
 pub mod services;
 
 use winbrew_app::AppContext;
+use winbrew_ui::{Ui, UiSettings};
 
 use crate::commands::run;
 use crate::services::bootstrap;
@@ -15,7 +17,6 @@ use crate::services::bootstrap;
 pub(crate) use winbrew_app as app;
 pub use winbrew_app::core::cancel;
 pub use winbrew_app::{core, engines, models, storage as database};
-pub use winbrew_ui::{Ui, UiSettings};
 
 #[derive(Debug, Clone)]
 pub struct CommandContext {
@@ -38,8 +39,8 @@ impl CommandContext {
         })
     }
 
-    pub fn ui_settings(&self) -> UiSettings {
-        self.ui
+    pub fn ui(&self) -> Ui<io::Stdout> {
+        Ui::new(self.ui)
     }
 }
 
@@ -48,12 +49,6 @@ impl Deref for CommandContext {
 
     fn deref(&self) -> &Self::Target {
         &self.app
-    }
-}
-
-impl DerefMut for CommandContext {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.app
     }
 }
 

@@ -9,11 +9,12 @@ use std::io::Write;
 use crate::cli::ConfigCommand;
 use crate::commands::error::reported;
 use crate::database::Config;
-use crate::{CommandContext, Ui, app::config};
+use crate::{CommandContext, app::config};
+use winbrew_ui::Ui;
 
 /// Dispatches a `config` subcommand to the appropriate handler.
 pub fn run(ctx: &CommandContext, config: &mut Config, command: ConfigCommand) -> Result<()> {
-    let mut ui = Ui::new(ctx.ui_settings());
+    let mut ui = ctx.ui();
     ui.page_title("Configuration");
 
     match command {

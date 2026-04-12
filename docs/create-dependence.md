@@ -29,15 +29,15 @@ The current startup path is:
 
 1. `crates/bin/src/main.rs` parses CLI arguments and calls `winbrew_cli::run_app`.
 2. `crates/cli/src/lib.rs` loads configuration, builds the CLI command context, initializes logging and the database, then dispatches the command.
-3. `CommandContext` wraps `AppContext` plus `UiSettings`.
-4. Command handlers construct `Ui` locally from `ctx.ui` and call into app helpers.
+3. `CommandContext` wraps `AppContext` plus `UiSettings` and can construct `Ui` for command handlers.
+4. Command handlers obtain `Ui` from `ctx.ui()` and call into app helpers.
 5. App helpers stay UI-free and can call storage/core/network helpers as needed.
 
 The important ownership rule is simple:
 
 - `AppContext` belongs to `winbrew-app`.
-- `UiSettings` belongs to `winbrew-cli`.
 - `Ui` belongs to `winbrew-ui`.
+- `UiSettings` belongs to `winbrew-ui` and is stored inside the CLI-owned `CommandContext` wrapper.
 - `CommandContext` is a CLI-owned wrapper that combines the app context and presentation settings.
 
 ## Ownership Rules
@@ -68,7 +68,6 @@ The CLI crate owns presentation and orchestration.
 It may construct:
 
 - `CommandContext`
-- `UiSettings`
 - `Ui`
 - command-level observers and adapters
 - confirmation flow and package-selection flow
@@ -103,6 +102,7 @@ These crates should expose factory helpers for their own resources, but they sho
 | --- | --- | --- | --- | --- | --- |
 | `AppContext::from_config_with_verbosity` | `winbrew-app` | `database::Config`, verbosity | `AppContext` | CLI boot wiring, tests | App-owned runtime context only |
 | `CommandContext::from_config_with_verbosity` | `winbrew-cli` | `database::Config`, verbosity | `CommandContext` | CLI boot wiring, CLI tests | CLI-owned wrapper around app context and UI settings |
+| `CommandContext::ui` | `winbrew-cli` | internal UI settings | `Ui` | CLI command handlers | CLI-owned presentation factory |
 | `Ui::new` / `UiBuilder::new` | `winbrew-ui` | `UiSettings` | `Ui` | CLI command handlers | Presentation only |
 | `install::download::build_client` | `winbrew-app` via `winbrew-core` network helper | user agent, network config | HTTP client | install and repair flows | Infrastructure helper, not UI-aware |
 | `temp_workspace::build_temp_root` | `winbrew-core` | package name, version | temp path | install and repair flows | Shared infrastructure helper |
@@ -195,7 +195,7 @@ Rules:
 
 - `AppContext` should remain UI-free.
 - `CommandContext` should be the only CLI-facing wrapper for `AppContext` plus `UiSettings`.
-- `winbrew-cli` should not re-export app internals that would let callers bypass the ownership model.
+- `winbrew-cli` should not re-export app internals or presentation types that would let callers bypass the ownership model.
 - creator helpers should stay close to the layer that owns the resource they create.
 - if a helper starts making presentation decisions, move that decision back up to CLI.
 
@@ -221,9 +221,9 @@ When auditing or changing this area, follow these steps:
 ## Verification Checklist
 
 - `crates/app` does not depend on `winbrew-ui`
-- `UiSettings` is only owned by `winbrew-cli` and `winbrew-ui`
+- `UiSettings` is not re-exported from `winbrew-cli` and remains a `winbrew-ui` type stored inside `CommandContext`
 - `CommandContext` is the CLI envelope around `AppContext`
-- command handlers create `Ui` locally
+- command handlers obtain `Ui` from `CommandContext`
 - infrastructure builders stay in their owning crates
 - tests reflect the same boundary as production code
 
