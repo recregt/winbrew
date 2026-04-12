@@ -8,10 +8,7 @@ mod replay;
 mod writer;
 
 pub use reader::{JournalReadError, JournalReader};
-pub use replay::{
-    CommittedJournalPackage, JournalReplayError, committed_journal_paths,
-    read_committed_package_journal,
-};
+pub use replay::{CommittedJournalPackage, JournalReplayError};
 pub use writer::JournalWriter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -155,10 +152,7 @@ pub enum JournalEntry {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader, JournalWriter,
-        committed_journal_paths, read_committed_package_journal,
-    };
+    use super::{FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader, JournalWriter};
     use std::fs;
     use std::path::PathBuf;
     use std::process;
@@ -446,7 +440,8 @@ mod tests {
             .expect("write incomplete metadata");
         incomplete.flush().expect("flush incomplete journal");
 
-        let journal_paths = committed_journal_paths(&root).expect("enumerate committed journals");
+        let journal_paths =
+            JournalReader::committed_paths(&root).expect("enumerate committed journals");
 
         assert_eq!(journal_paths, vec![committed.path().to_path_buf()]);
     }
@@ -461,7 +456,8 @@ mod tests {
         writer.append(&commit_entry()).expect("write commit");
         writer.flush().expect("flush journal");
 
-        let replay = read_committed_package_journal(writer.path()).expect("parse replay journal");
+        let replay =
+            JournalReader::read_committed_package(writer.path()).expect("parse replay journal");
 
         assert_eq!(replay.journal_path, writer.path());
         assert_eq!(replay.entries.len(), 2);
