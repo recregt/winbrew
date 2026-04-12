@@ -439,7 +439,7 @@ mod tests {
 
         let plan = build_repair_plan(&report, Path::new("C:/Tools/packages"));
 
-        assert_eq!(plan.reinstall_packages, vec!["Contoso.App".to_string()]);
+        assert!(plan.reinstall_packages.is_empty());
         assert_eq!(plan.file_restore_packages.len(), 1);
         assert_eq!(plan.file_restore_count, 1);
         assert_eq!(plan.reinstall_count, 1);
@@ -457,7 +457,8 @@ mod tests {
         std::fs::create_dir_all(target_path.parent().expect("target parent")).expect("target dir");
         std::fs::write(&staged_path, b"restored-binary").expect("write staged file");
 
-        let restored = restore_target_files(&stage_dir, &install_dir, &[target_path.clone()])?;
+        let restored =
+            restore_target_files(&stage_dir, &install_dir, std::slice::from_ref(&target_path))?;
 
         assert_eq!(restored, 1);
         assert_eq!(

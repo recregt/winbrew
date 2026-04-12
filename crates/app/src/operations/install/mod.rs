@@ -101,7 +101,7 @@ pub fn run<O: InstallObserver>(
     let engine = engines::resolve_engine_for_installer(&installer)?;
     let package_version = package.version.to_string();
 
-    let install_dir = ctx.paths.packages.join(&package.name);
+    let install_dir = ctx.paths.package_install_dir(&package.name);
     let temp_root = temp_workspace::build_temp_root(&package.name, &package_version);
     let install_root = install_root_from_package_dir(&install_dir);
 

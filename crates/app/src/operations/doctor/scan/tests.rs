@@ -202,7 +202,10 @@ fn scan_msi_inventory_detects_hash_mismatch() {
         scan.recovery_findings[0].action_group,
         Some(RecoveryActionGroup::FileRestore)
     );
-    let expected_file_path = file_path.to_string_lossy().to_string();
+    let expected_file_path = file_path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
     assert_eq!(
         scan.recovery_findings[0].target_path.as_deref(),
         Some(expected_file_path.as_str())
@@ -243,7 +246,8 @@ fn scan_msi_inventory_detects_missing_files() {
         .join("bin")
         .join("demo.exe")
         .to_string_lossy()
-        .to_string();
+        .replace('\\', "/")
+        .to_ascii_lowercase();
     assert_eq!(
         scan.recovery_findings[0].target_path.as_deref(),
         Some(expected_file_path.as_str())
