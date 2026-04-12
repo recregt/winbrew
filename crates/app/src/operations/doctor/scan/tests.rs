@@ -101,55 +101,6 @@ fn sample_snapshot(
 }
 
 #[test]
-fn diagnosis_result_check_package_detects_missing_directory() {
-    let temp_dir = tempdir().expect("temp dir should be created");
-    let missing_dir = temp_dir.path().join("missing");
-    let package = sample_package("Contoso.Missing", &missing_dir);
-
-    let diagnosis = super::package::check_package(&package).expect("missing dir should diagnose");
-
-    assert_eq!(diagnosis.error_code, "missing_install_directory");
-    assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
-    assert!(diagnosis.description.contains("Contoso.Missing"));
-}
-
-#[test]
-fn diagnosis_result_check_package_detects_non_directory_path() {
-    let temp_dir = tempdir().expect("temp dir should be created");
-    let file_path = temp_dir.path().join("not-a-dir.txt");
-    std::fs::write(&file_path, b"binary").expect("file should be created");
-    let package = sample_package("Contoso.File", &file_path);
-
-    let diagnosis = super::package::check_package(&package).expect("file path should diagnose");
-
-    assert_eq!(diagnosis.error_code, "install_directory_not_a_directory");
-    assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
-    assert!(diagnosis.description.contains("Contoso.File"));
-}
-
-#[test]
-fn diagnosis_result_check_package_rejects_empty_install_path() {
-    let package = sample_package("Contoso.Empty", Path::new(""));
-
-    let diagnosis = super::package::check_package(&package).expect("empty path should diagnose");
-
-    assert_eq!(diagnosis.error_code, "empty_install_path");
-    assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
-}
-
-#[test]
-fn diagnose_install_dir_error_maps_permission_denied() {
-    let package = sample_package("Contoso.Denied", Path::new("C:/deny"));
-    let error = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
-
-    let diagnosis = super::package::diagnose_install_dir_error(&package, error);
-
-    assert_eq!(diagnosis.error_code, "install_directory_permission_denied");
-    assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
-    assert!(diagnosis.description.contains("Contoso.Denied"));
-}
-
-#[test]
 fn scan_packages_sorts_diagnoses_by_error_code() {
     let temp_dir = tempdir().expect("temp dir should be created");
     let valid_dir = temp_dir.path().join("valid");

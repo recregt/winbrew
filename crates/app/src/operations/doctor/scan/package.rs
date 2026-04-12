@@ -8,7 +8,7 @@ use crate::models::{DiagnosisResult, DiagnosisSeverity, Package};
 /// The doctor scan treats empty paths and paths containing a null byte as
 /// immediate configuration errors because they cannot represent a valid
 /// filesystem location on Windows.
-pub(super) fn validate_install_path(pkg: &Package) -> Option<DiagnosisResult> {
+fn validate_install_path(pkg: &Package) -> Option<DiagnosisResult> {
     if pkg.install_dir.trim().is_empty() {
         return Some(DiagnosisResult {
             error_code: "empty_install_path".to_string(),
@@ -35,7 +35,7 @@ pub(super) fn validate_install_path(pkg: &Package) -> Option<DiagnosisResult> {
 ///
 /// The error code depends on the error kind so the final report can distinguish
 /// missing directories, permission problems, and generic unreadable paths.
-pub(super) fn diagnose_install_dir_error(pkg: &Package, err: std::io::Error) -> DiagnosisResult {
+fn diagnose_install_dir_error(pkg: &Package, err: std::io::Error) -> DiagnosisResult {
     let (error_code, description) = match err.kind() {
         ErrorKind::NotFound => (
             "missing_install_directory",
@@ -96,4 +96,75 @@ pub(super) fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{InstallerType, PackageStatus};
+    use std::path::Path;
+    use tempfile::tempdir;
+
+    fn sample_package(name: &str, install_dir: &std::path::Path) -> Package {
+        Package {
+            name: name.to_string(),
+            version: "1.0.0".to_string(),
+            kind: InstallerType::Portable,
+            engine_kind: InstallerType::Portable.into(),
+            engine_metadata: None,
+            install_dir: install_dir.to_string_lossy().into_owned(),
+            dependencies: Vec::new(),
+            status: PackageStatus::Ok,
+            installed_at: "2026-04-05T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn check_package_detects_missing_directory() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let missing_dir = temp_dir.path().join("missing");
+        let package = sample_package("Contoso.Missing", &missing_dir);
+
+        let diagnosis = check_package(&package).expect("missing dir should diagnose");
+
+        assert_eq!(diagnosis.error_code, "missing_install_directory");
+        assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
+        assert!(diagnosis.description.contains("Contoso.Missing"));
+    }
+
+    #[test]
+    fn check_package_detects_non_directory_path() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let file_path = temp_dir.path().join("not-a-dir.txt");
+        std::fs::write(&file_path, b"binary").expect("file should be created");
+        let package = sample_package("Contoso.File", &file_path);
+
+        let diagnosis = check_package(&package).expect("file path should diagnose");
+
+        assert_eq!(diagnosis.error_code, "install_directory_not_a_directory");
+        assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
+        assert!(diagnosis.description.contains("Contoso.File"));
+    }
+
+    #[test]
+    fn check_package_rejects_empty_install_path() {
+        let package = sample_package("Contoso.Empty", Path::new(""));
+
+        let diagnosis = check_package(&package).expect("empty path should diagnose");
+
+        assert_eq!(diagnosis.error_code, "empty_install_path");
+        assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
+    }
+
+    #[test]
+    fn diagnose_install_dir_error_maps_permission_denied() {
+        let package = sample_package("Contoso.Denied", Path::new("C:/deny"));
+        let error = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+
+        let diagnosis = diagnose_install_dir_error(&package, error);
+
+        assert_eq!(diagnosis.error_code, "install_directory_permission_denied");
+        assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
+        assert!(diagnosis.description.contains("Contoso.Denied"));
+    }
 }

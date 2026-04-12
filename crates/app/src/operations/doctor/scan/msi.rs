@@ -69,7 +69,7 @@ pub(super) fn diagnose_msi_file(
 }
 
 /// Translate a filesystem metadata failure into an MSI file diagnosis.
-pub(super) fn diagnose_msi_file_error(
+fn diagnose_msi_file_error(
     pkg: &Package,
     file: &crate::models::MsiFileRecord,
     err: std::io::Error,
@@ -96,5 +96,66 @@ pub(super) fn diagnose_msi_file_error(
         error_code: error_code.to_string(),
         description,
         severity: DiagnosisSeverity::Error,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{EngineKind, InstallerType, PackageStatus};
+    use tempfile::tempdir;
+
+    fn sample_package(name: &str, install_dir: &std::path::Path) -> Package {
+        Package {
+            name: name.to_string(),
+            version: "1.0.0".to_string(),
+            kind: InstallerType::Msi,
+            engine_kind: EngineKind::Msi,
+            engine_metadata: None,
+            install_dir: install_dir.to_string_lossy().into_owned(),
+            dependencies: Vec::new(),
+            status: PackageStatus::Ok,
+            installed_at: "2026-04-05T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn diagnose_msi_file_error_maps_missing_and_permission_denied() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let package = sample_package("Contoso.Msi", temp_dir.path());
+        let file = crate::models::MsiFileRecord {
+            package_name: "Contoso.Msi".to_string(),
+            path: temp_dir
+                .path()
+                .join("missing.exe")
+                .to_string_lossy()
+                .into_owned(),
+            normalized_path: temp_dir
+                .path()
+                .join("missing.exe")
+                .to_string_lossy()
+                .into_owned(),
+            hash_algorithm: Some(winbrew_models::HashAlgorithm::Sha256),
+            hash_hex: Some("00".repeat(32)),
+            is_config_file: false,
+        };
+
+        let not_found = diagnose_msi_file_error(
+            &package,
+            &file,
+            std::io::Error::from(std::io::ErrorKind::NotFound),
+        );
+        let denied = diagnose_msi_file_error(
+            &package,
+            &file,
+            std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+        );
+
+        assert_eq!(not_found.error_code, "missing_msi_file");
+        assert_eq!(denied.error_code, "msi_file_permission_denied");
+        assert_eq!(not_found.severity, crate::models::DiagnosisSeverity::Error);
+        assert_eq!(denied.severity, crate::models::DiagnosisSeverity::Error);
+        assert!(not_found.description.contains("Contoso.Msi"));
+        assert!(denied.description.contains("Contoso.Msi"));
     }
 }
