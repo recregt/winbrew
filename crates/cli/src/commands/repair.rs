@@ -1,14 +1,15 @@
 use anyhow::Result;
 use std::io::Write;
 
+use crate::CommandContext;
 use crate::app::doctor;
 use crate::app::install::InstallObserver;
 use crate::app::models::CatalogPackage;
 use crate::app::repair::{self, FileRestoreResolution, RepairPlan};
-use crate::{CommandContext, Ui};
+use winbrew_ui::Ui;
 
 pub fn run(ctx: &CommandContext, yes: bool) -> Result<()> {
-    let mut ui = Ui::new(ctx.ui_settings());
+    let mut ui = ctx.ui();
     ui.page_title("Repair");
 
     let report = ui.spinner("Inspecting recovery findings...", || {

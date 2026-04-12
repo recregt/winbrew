@@ -3,7 +3,8 @@ use std::io::{self, Write};
 
 use crate::commands::error::CommandError;
 use crate::models::{DiagnosisResult, DiagnosisSeverity, HealthReport};
-use crate::{CommandContext, Ui, app::doctor};
+use crate::{CommandContext, app::doctor};
+use winbrew_ui::Ui;
 
 /// Runs the system health check command.
 ///
@@ -24,7 +25,7 @@ pub fn run(ctx: &CommandContext, json_output: bool, warn_as_error: bool) -> Resu
         return Ok(());
     }
 
-    let mut ui = Ui::new(ctx.ui_settings());
+    let mut ui = ctx.ui();
     ui.page_title("System Health Check");
     let report = ui.spinner("Inspecting environment and installed packages...", || {
         doctor::health_report(ctx)

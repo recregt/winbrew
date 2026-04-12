@@ -1,9 +1,9 @@
 use anyhow::Result;
 
-use crate::{CommandContext, Ui, app::info};
+use crate::{CommandContext, app::info};
 
 pub fn run(ctx: &CommandContext) -> Result<()> {
-    let mut ui = Ui::new(ctx.ui_settings());
+    let mut ui = ctx.ui();
     ui.page_title("System Information");
 
     let report = info::collect(&ctx.sections, &ctx.paths)?;

@@ -1,10 +1,11 @@
 use anyhow::Result;
 
 use crate::commands::error::reported_with_hint;
-use crate::{CommandContext, Ui, app::remove};
+use crate::{CommandContext, app::remove};
+use winbrew_ui::Ui;
 
 pub fn run(ctx: &CommandContext, name: &str, yes: bool, force: bool) -> Result<()> {
-    let mut ui = Ui::new(ctx.ui_settings());
+    let mut ui = ctx.ui();
     ui.page_title("Remove Package");
 
     ui.info(format!("Assessing impact for {name}..."));
