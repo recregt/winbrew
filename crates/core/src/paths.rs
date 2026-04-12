@@ -9,11 +9,76 @@ pub struct ResolvedPaths {
     pub packages: PathBuf,
     pub data: PathBuf,
     pub logs: PathBuf,
+    pub package_logs: PathBuf,
     pub cache: PathBuf,
+    pub pkgdb: PathBuf,
+    pub shims: PathBuf,
     pub db: PathBuf,
     pub catalog_db: PathBuf,
     pub config: PathBuf,
     pub log: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+struct ManagedRootLayout {
+    root: PathBuf,
+    packages: PathBuf,
+    data: PathBuf,
+    logs: PathBuf,
+    package_logs: PathBuf,
+    cache: PathBuf,
+    pkgdb: PathBuf,
+    shims: PathBuf,
+    db: PathBuf,
+    catalog_db: PathBuf,
+    config: PathBuf,
+    log: PathBuf,
+}
+
+impl ManagedRootLayout {
+    fn resolve(root: &Path, packages: &str, data: &str, logs: &str, cache: &str) -> Self {
+        let root = PathBuf::from(root);
+        let packages = resolve_template(&root, packages);
+        let data = resolve_template(&root, data);
+        let logs = resolve_template(&root, logs);
+        let cache = resolve_template(&root, cache);
+        let pkgdb = data.join("pkgdb");
+        let package_logs = logs.join("packages");
+        let shims = root.join("shims");
+        let db = data.join("db");
+
+        Self {
+            catalog_db: db.join("catalog.db"),
+            config: data.join("winbrew.toml"),
+            db: db.join("winbrew.db"),
+            log: logs.join("winbrew.log"),
+            package_logs,
+            packages,
+            pkgdb,
+            root,
+            cache,
+            data,
+            logs,
+            shims,
+        }
+    }
+
+    fn into_resolved_paths(self) -> ResolvedPaths {
+        ResolvedPaths {
+            root: self.root,
+            packages: self.packages,
+            data: self.data,
+            logs: self.logs,
+            package_logs: self.package_logs,
+            cache: self.cache,
+            pkgdb: self.pkgdb,
+            shims: self.shims,
+            db: self.db,
+            catalog_db: self.catalog_db,
+            config: self.config,
+            log: self.log,
+        }
+    }
 }
 
 pub fn config_file_at(root: &Path) -> PathBuf {
@@ -30,6 +95,14 @@ pub fn data_dir_at(root: &Path) -> PathBuf {
 
 pub fn pkgdb_dir_at(root: &Path) -> PathBuf {
     data_dir_at(root).join("pkgdb")
+}
+
+pub fn package_logs_dir_at(root: &Path) -> PathBuf {
+    log_dir_at(root).join("packages")
+}
+
+pub fn shims_dir_at(root: &Path) -> PathBuf {
+    root.join("shims")
 }
 
 pub fn db_dir_at(root: &Path) -> PathBuf {
@@ -69,6 +142,14 @@ pub fn package_journal_key(package_id: &str, version: &str) -> String {
 
 pub fn package_journal_dir_at(root: &Path, package_key: &str) -> PathBuf {
     pkgdb_dir_at(root).join(package_key)
+}
+
+pub fn package_log_dir_at(root: &Path, package_key: &str) -> PathBuf {
+    package_logs_dir_at(root).join(package_key)
+}
+
+pub fn package_shim_dir_at(root: &Path, package_key: &str) -> PathBuf {
+    shims_dir_at(root).join(package_key)
 }
 
 pub fn package_journal_file_at(root: &Path, package_key: &str) -> PathBuf {
@@ -121,21 +202,24 @@ pub fn resolved_paths(
     logs: &str,
     cache: &str,
 ) -> ResolvedPaths {
-    let root = PathBuf::from(root);
-    let data = resolve_template(&root, data);
-    let logs = resolve_template(&root, logs);
-    let db = data.join("db");
+    ManagedRootLayout::resolve(root, packages, data, logs, cache).into_resolved_paths()
+}
 
-    ResolvedPaths {
-        packages: resolve_template(&root, packages),
-        cache: resolve_template(&root, cache),
-        db: db.join("winbrew.db"),
-        catalog_db: db.join("catalog.db"),
-        config: data.join("winbrew.toml"),
-        log: logs.join("winbrew.log"),
-        root,
-        data,
-        logs,
+impl ResolvedPaths {
+    pub fn package_journal_dir(&self, package_key: &str) -> PathBuf {
+        self.pkgdb.join(package_key)
+    }
+
+    pub fn package_journal_file(&self, package_key: &str) -> PathBuf {
+        self.package_journal_dir(package_key).join("journal.jsonl")
+    }
+
+    pub fn package_log_dir(&self, package_key: &str) -> PathBuf {
+        self.package_logs.join(package_key)
+    }
+
+    pub fn package_shim_dir(&self, package_key: &str) -> PathBuf {
+        self.shims.join(package_key)
     }
 }
 
@@ -183,7 +267,12 @@ fn version_hash(version: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_dirs_at, package_journal_file_at, package_journal_key, pkgdb_dir_at};
+    use super::{
+        cache_dir_at, catalog_db_at, config_file_at, data_dir_at, db_path_at, ensure_dirs_at,
+        log_dir_at, log_file_at, package_journal_file_at, package_journal_key, package_log_dir_at,
+        package_logs_dir_at, package_shim_dir_at, packages_dir_at, pkgdb_dir_at, resolved_paths,
+        shims_dir_at,
+    };
     use sha2::{Digest, Sha256};
     use tempfile::tempdir;
 
@@ -220,6 +309,48 @@ mod tests {
             pkgdb_dir_at(root.path())
                 .join(&package_key)
                 .join("journal.jsonl")
+        );
+    }
+
+    #[test]
+    fn resolved_paths_derive_managed_layout_and_package_scopes() {
+        let root = tempdir().expect("temp dir");
+        let package_key = package_journal_key("winget/Contoso.App", "1.0.0");
+        let paths = resolved_paths(
+            root.path(),
+            "${root}\\packages",
+            "${root}\\data",
+            "${root}\\data\\logs",
+            "${root}\\data\\cache",
+        );
+
+        assert_eq!(paths.root, root.path());
+        assert_eq!(paths.packages, packages_dir_at(root.path()));
+        assert_eq!(paths.data, data_dir_at(root.path()));
+        assert_eq!(paths.logs, log_dir_at(root.path()));
+        assert_eq!(paths.package_logs, package_logs_dir_at(root.path()));
+        assert_eq!(paths.cache, cache_dir_at(root.path()));
+        assert_eq!(paths.pkgdb, pkgdb_dir_at(root.path()));
+        assert_eq!(paths.shims, shims_dir_at(root.path()));
+        assert_eq!(paths.db, db_path_at(root.path()));
+        assert_eq!(paths.catalog_db, catalog_db_at(root.path()));
+        assert_eq!(paths.config, config_file_at(root.path()));
+        assert_eq!(paths.log, log_file_at(root.path()));
+        assert_eq!(
+            paths.package_journal_dir(&package_key),
+            pkgdb_dir_at(root.path()).join(&package_key)
+        );
+        assert_eq!(
+            paths.package_journal_file(&package_key),
+            package_journal_file_at(root.path(), &package_key)
+        );
+        assert_eq!(
+            paths.package_log_dir(&package_key),
+            package_log_dir_at(root.path(), &package_key)
+        );
+        assert_eq!(
+            paths.package_shim_dir(&package_key),
+            package_shim_dir_at(root.path(), &package_key)
         );
     }
 
