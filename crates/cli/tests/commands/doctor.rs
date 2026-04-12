@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tempfile::TempDir;
+use winbrew_app::doctor::health_report;
 use winbrew_cli::CommandContext;
-use winbrew_cli::app::doctor::health_report;
 use winbrew_cli::commands::doctor::{exit_error, format_duration, render_results, write_json};
 use winbrew_cli::commands::error::CommandError;
 use winbrew_cli::database::{self, Config};
