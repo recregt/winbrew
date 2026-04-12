@@ -25,7 +25,7 @@ use tracing::warn;
 use crate::core::fs::cleanup_path;
 use crate::core::temp_workspace::{is_temp_root_for, temp_root_base};
 use crate::database;
-use crate::models::{Package, PackageStatus};
+use crate::models::{InstalledPackage, PackageStatus};
 
 /// Find stale `Installing` rows and reconcile them with the filesystem.
 /// The current database connection is obtained from the process-wide storage
@@ -43,7 +43,7 @@ pub fn cleanup_stale_installations() -> Result<()> {
     Ok(())
 }
 
-fn cleanup_stale_installation(conn: &crate::database::DbConnection, package: &Package) {
+fn cleanup_stale_installation(conn: &crate::database::DbConnection, package: &InstalledPackage) {
     if let Err(err) = database::update_status(conn, &package.name, PackageStatus::Failed) {
         warn!(package = %package.name, error = %err, "failed to mark stale install as failed");
     }
@@ -89,12 +89,16 @@ mod tests {
     use super::cleanup_stale_installations;
     use crate::core::temp_workspace;
     use crate::database;
-    use crate::models::{InstallerType, Package, PackageStatus};
+    use crate::models::{InstalledPackage, InstallerType, PackageStatus};
     use std::fs;
     use tempfile::tempdir;
 
-    fn sample_package(name: &str, version: &str, install_dir: &std::path::Path) -> Package {
-        Package {
+    fn sample_package(
+        name: &str,
+        version: &str,
+        install_dir: &std::path::Path,
+    ) -> InstalledPackage {
+        InstalledPackage {
             name: name.to_string(),
             version: version.to_string(),
             kind: InstallerType::Portable,

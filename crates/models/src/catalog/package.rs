@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::installer::{Architecture, InstallerType};
 use crate::package::PackageSource;
 use crate::shared::CatalogId;
 use crate::shared::validation::{Validate, ensure_hash, ensure_http_url, ensure_non_empty};
 use crate::shared::{ModelError, Version};
+use crate::{Architecture, InstallerType};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogPackage {
@@ -74,9 +74,9 @@ impl Validate for CatalogInstaller {
 #[cfg(test)]
 mod tests {
     use super::{CatalogInstaller, CatalogPackage};
-    use crate::installer::{Architecture, InstallerType};
     use crate::package::PackageSource;
     use crate::shared::Version;
+    use crate::{Architecture, InstallerType};
 
     #[test]
     fn rejects_source_mismatch() {

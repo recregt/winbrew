@@ -23,7 +23,7 @@ use crate::engines::{EngineKind, PackageEngine};
 use crate::storage::database;
 
 use super::{RemovalError, RemovalPlan, Result};
-use crate::models::Package;
+use crate::models::InstalledPackage;
 
 /// Execute package removal using a fresh database connection.
 ///
@@ -88,7 +88,7 @@ fn execute_removal_with_conn(
                 std::fs::rename(&install_dir, &trash_dir)
                     .context("failed to stage package for removal")?;
 
-                let trash_package = Package {
+                let trash_package = InstalledPackage {
                     install_dir: trash_dir.to_string_lossy().into_owned(),
                     ..plan.package.clone()
                 };

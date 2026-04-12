@@ -1,21 +1,10 @@
 pub mod catalog;
-pub mod catalog_metadata;
 pub mod config;
-pub mod conversion;
-pub mod dependency;
-pub mod engine;
 pub mod error;
 pub mod hash;
-pub mod identifiers;
 pub mod install;
-pub mod installed;
-pub mod installer;
 pub mod msi_inventory;
 pub mod package;
-pub mod package_ref;
-pub mod query;
-pub mod raw;
-pub mod remove;
 pub mod reporting;
 pub mod shared;
 pub mod validation;
@@ -71,29 +60,26 @@ pub mod domains {
     }
 }
 
-pub use catalog::{CatalogInstaller, CatalogPackage, RawCatalogInstaller, RawCatalogPackage};
-pub use catalog_metadata::CatalogMetadata;
+pub use catalog::{
+    CatalogInstaller, CatalogMetadata, CatalogPackage, RawCatalogInstaller, RawCatalogPackage,
+};
 pub use config::{ConfigSection, ConfigValue, ConfigValueSource};
-pub use dependency::Dependency;
-pub use engine::{EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope};
 pub use error::ModelError;
 pub use hash::HashAlgorithm;
-pub use identifiers::{BucketName, CatalogId, PackageName};
-pub use install::{InstallFailureClass, InstallOutcome, InstallResult};
-pub use installed::{InstalledPackage, InstalledPackage as Package, PackageStatus};
-pub use installer::{Architecture, Installer, InstallerType};
+pub use install::{
+    Architecture, EngineInstallReceipt, EngineKind, EngineMetadata, InstallFailureClass,
+    InstallOutcome, InstallResult, InstallScope, InstalledPackage, Installer, InstallerType,
+    PackageStatus, RemovalPlan,
+};
 pub use msi_inventory::{
     MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
     MsiRegistryRecord, MsiShortcutRecord,
 };
-pub use package::{PackageKind, PackageSource};
-pub use package_ref::{PackageId, PackageRef};
-pub use query::PackageQuery;
-pub use raw::{RawFetchedInstaller, RawFetchedPackage, ScoopStreamEnvelope};
-pub use remove::RemovalPlan;
+pub use package::{Dependency, PackageId, PackageKind, PackageQuery, PackageRef, PackageSource};
 pub use reporting::{
     DiagnosisResult, DiagnosisSeverity, HealthReport, InfoReport, RecoveryActionGroup,
     RecoveryFinding, RecoveryIssueKind, ReportSection, RuntimeReport,
 };
+pub use shared::{BucketName, CatalogId, PackageName};
 pub use validation::Validate;
 pub use version::Version;

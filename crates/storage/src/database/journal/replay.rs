@@ -6,13 +6,13 @@ use thiserror::Error;
 
 use super::{JournalEntry, JournalReadError, JournalReader};
 use winbrew_core::ResolvedPaths;
-use winbrew_models::{EngineKind, InstallerType, ModelError, Package, PackageStatus};
+use winbrew_models::{EngineKind, InstalledPackage, InstallerType, ModelError, PackageStatus};
 
 #[derive(Debug, Clone)]
 pub struct CommittedJournalPackage {
     pub journal_path: PathBuf,
     pub entries: Vec<JournalEntry>,
-    pub package: Package,
+    pub package: InstalledPackage,
 }
 
 #[derive(Debug, Error)]
@@ -174,7 +174,7 @@ fn parse_committed_package_journal(
         });
     }
 
-    let package = Package {
+    let package = InstalledPackage {
         name: package_id.to_string(),
         version: version.to_string(),
         kind: InstallerType::from(engine_kind),

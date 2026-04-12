@@ -9,7 +9,7 @@
 //! mutates anything. It can display dependents, ask for confirmation, and only
 //! then hand the plan to the execution layer.
 
-use crate::models::{Package, RemovalPlan};
+use crate::models::{InstalledPackage, RemovalPlan};
 use crate::storage::database;
 
 use super::Result;
@@ -60,7 +60,7 @@ pub fn plan_removal(name: &str) -> Result<RemovalPlan> {
 ///
 /// This helper keeps the public planning API focused on database access while
 /// still making the plan shape easy to test in isolation.
-fn removal_plan(pkg: Package, dependents: Vec<String>) -> RemovalPlan {
+fn removal_plan(pkg: InstalledPackage, dependents: Vec<String>) -> RemovalPlan {
     RemovalPlan {
         package: pkg,
         dependents,
@@ -78,15 +78,17 @@ fn dependency_name(dep: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::removal_plan;
-    use crate::models::{EngineMetadata, InstallScope, InstallerType, Package, PackageStatus};
+    use crate::models::{
+        EngineMetadata, InstallScope, InstalledPackage, InstallerType, PackageStatus,
+    };
 
     fn package(
         name: &str,
         kind: InstallerType,
         install_dir: &str,
         engine_metadata: Option<EngineMetadata>,
-    ) -> Package {
-        Package {
+    ) -> InstalledPackage {
+        InstalledPackage {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             kind,

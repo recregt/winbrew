@@ -12,7 +12,7 @@ use crate::catalog;
 use crate::core::{fs::cleanup_path, temp_workspace};
 use crate::engines::{self, EngineKind};
 use crate::models::{
-    CatalogInstaller, CatalogPackage, HealthReport, Package, PackageId, PackageRef,
+    CatalogInstaller, CatalogPackage, HealthReport, InstalledPackage, PackageId, PackageRef,
     RecoveryActionGroup,
 };
 use crate::operations::install::{self, InstallObserver};
@@ -49,7 +49,7 @@ pub struct ResolvedFileRestoreTarget {
     pub package: CatalogPackage,
     pub installer: CatalogInstaller,
     pub engine: EngineKind,
-    pub installed_package: Package,
+    pub installed_package: InstalledPackage,
 }
 
 #[derive(Debug, Clone)]

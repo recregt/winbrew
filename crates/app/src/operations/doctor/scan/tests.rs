@@ -1,6 +1,6 @@
 use crate::core::paths::resolved_paths;
 use crate::models::{
-    DiagnosisSeverity, InstallerType, Package, PackageStatus, RecoveryActionGroup,
+    DiagnosisSeverity, InstalledPackage, InstallerType, PackageStatus, RecoveryActionGroup,
     RecoveryIssueKind,
 };
 use crate::storage::{self, database};
@@ -12,8 +12,8 @@ use winbrew_models::{
     MsiRegistryRecord, MsiShortcutRecord,
 };
 
-fn sample_package(name: &str, install_dir: &std::path::Path) -> Package {
-    Package {
+fn sample_package(name: &str, install_dir: &std::path::Path) -> InstalledPackage {
+    InstalledPackage {
         name: name.to_string(),
         version: "1.0.0".to_string(),
         kind: InstallerType::Portable,
@@ -26,8 +26,8 @@ fn sample_package(name: &str, install_dir: &std::path::Path) -> Package {
     }
 }
 
-fn sample_msi_package(name: &str, install_dir: &std::path::Path) -> Package {
-    Package {
+fn sample_msi_package(name: &str, install_dir: &std::path::Path) -> InstalledPackage {
+    InstalledPackage {
         name: name.to_string(),
         version: "1.0.0".to_string(),
         kind: InstallerType::Msi,
