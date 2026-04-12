@@ -1,10 +1,10 @@
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags};
-use winbrew_models::RawFetchedPackage;
 
 use crate::error::ParserError;
 use crate::parser::{ParsedPackage, parse_package};
+use crate::raw::RawFetchedPackage;
 
 const QUERY: &str = r#"
 SELECT
