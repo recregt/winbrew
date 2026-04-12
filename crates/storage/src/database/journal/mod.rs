@@ -1,15 +1,18 @@
-use anyhow::{Context, Result};
-use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::fs::{self, File, OpenOptions};
-use std::io::{BufWriter, Write};
-use std::path::{Path, PathBuf};
-use thiserror::Error;
 
-use winbrew_models::{
-    EngineKind, EngineMetadata, InstallerType, ModelError, Package, PackageStatus,
+use winbrew_models::EngineMetadata;
+
+mod reader;
+mod replay;
+mod writer;
+
+pub use reader::{JournalReadError, JournalReader};
+pub use replay::{
+    CommittedJournalPackage, JournalReplayError, committed_journal_paths,
+    read_committed_package_journal,
 };
+pub use writer::JournalWriter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -150,324 +153,6 @@ pub enum JournalEntry {
     },
 }
 
-#[derive(Debug)]
-pub struct JournalWriter {
-    path: PathBuf,
-    writer: BufWriter<File>,
-}
-
-impl JournalWriter {
-    pub fn open_for_package(root: &Path, package_id: &str, version: &str) -> Result<Self> {
-        let package_key = winbrew_core::package_journal_key(package_id, version);
-        let journal_path = winbrew_core::package_journal_file_at(root, &package_key);
-
-        if let Some(parent) = journal_path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("failed to create {}", parent.display()))?;
-        }
-
-        if journal_path.exists() {
-            match JournalReader::read_committed(&journal_path) {
-                Ok(_) => {
-                    anyhow::bail!(
-                        "journal at {} is already committed — use a new version or remove it first",
-                        journal_path.display()
-                    );
-                }
-                Err(JournalReadError::Incomplete { .. }) => {}
-                Err(JournalReadError::Read { .. }) => {}
-                Err(_) => {
-                    anyhow::bail!(
-                        "journal at {} is in an unexpected state",
-                        journal_path.display()
-                    );
-                }
-            }
-        }
-
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&journal_path)
-            .with_context(|| format!("failed to open {}", journal_path.display()))?;
-
-        Ok(Self {
-            path: journal_path,
-            writer: BufWriter::new(file),
-        })
-    }
-
-    pub fn append(&mut self, entry: &JournalEntry) -> Result<()> {
-        serde_json::to_writer(&mut self.writer, entry)
-            .context("failed to serialize journal entry")?;
-        self.writer
-            .write_all(b"\n")
-            .context("failed to write journal entry delimiter")?;
-
-        Ok(())
-    }
-
-    pub fn flush(&mut self) -> Result<()> {
-        self.writer
-            .flush()
-            .context("failed to flush journal writer")
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl Drop for JournalWriter {
-    fn drop(&mut self) {
-        let _ = self.writer.flush();
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum JournalReadError {
-    #[error("failed to read journal at {path}")]
-    Read {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-
-    #[error("journal at {path} is incomplete")]
-    Incomplete { path: PathBuf },
-
-    #[error("journal at {path} is malformed on line {line}")]
-    MalformedLine {
-        path: PathBuf,
-        line: usize,
-        #[source]
-        source: serde_json::Error,
-    },
-
-    #[error("journal at {path} has trailing entries after Commit on line {line}")]
-    TrailingEntries { path: PathBuf, line: usize },
-}
-
-pub struct JournalReader;
-
-impl JournalReader {
-    pub fn read_committed(path: &Path) -> std::result::Result<Vec<JournalEntry>, JournalReadError> {
-        let contents = fs::read_to_string(path).map_err(|source| JournalReadError::Read {
-            path: path.to_path_buf(),
-            source,
-        })?;
-
-        let lines = contents
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .collect::<Vec<_>>();
-
-        if lines.is_empty() {
-            return Err(JournalReadError::Incomplete {
-                path: path.to_path_buf(),
-            });
-        }
-
-        let mut entries = Vec::with_capacity(lines.len());
-        let mut commit_seen = false;
-
-        for (index, line) in lines.iter().enumerate() {
-            if commit_seen {
-                return Err(JournalReadError::TrailingEntries {
-                    path: path.to_path_buf(),
-                    line: index + 1,
-                });
-            }
-
-            let entry = serde_json::from_str::<JournalEntry>(line).map_err(|source| {
-                JournalReadError::MalformedLine {
-                    path: path.to_path_buf(),
-                    line: index + 1,
-                    source,
-                }
-            })?;
-
-            commit_seen |= matches!(entry, JournalEntry::Commit { .. });
-            entries.push(entry);
-        }
-
-        if !commit_seen {
-            return Err(JournalReadError::Incomplete {
-                path: path.to_path_buf(),
-            });
-        }
-
-        Ok(entries)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct CommittedJournalPackage {
-    pub journal_path: PathBuf,
-    pub entries: Vec<JournalEntry>,
-    pub package: Package,
-}
-
-#[derive(Debug, Error)]
-pub enum JournalReplayError {
-    #[error("failed to enumerate committed journals under {root}")]
-    Enumerate {
-        root: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-
-    #[error(transparent)]
-    Read(#[from] JournalReadError),
-
-    #[error("journal at {path} is missing metadata")]
-    MissingMetadata { path: PathBuf },
-
-    #[error("journal at {path} is missing commit marker")]
-    MissingCommit { path: PathBuf },
-
-    #[error("journal at {path} is missing required field {field}")]
-    MissingField { path: PathBuf, field: &'static str },
-
-    #[error("journal at {path} has invalid engine kind '{engine}'")]
-    InvalidEngineKind {
-        path: PathBuf,
-        engine: String,
-        #[source]
-        source: ModelError,
-    },
-}
-
-pub fn committed_journal_paths(root: &Path) -> Result<Vec<PathBuf>, JournalReplayError> {
-    let pkgdb_dir = winbrew_core::pkgdb_dir_at(root);
-
-    if !pkgdb_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut journal_paths = Vec::new();
-
-    for entry in fs::read_dir(&pkgdb_dir).map_err(|source| JournalReplayError::Enumerate {
-        root: pkgdb_dir.clone(),
-        source,
-    })? {
-        let entry = entry.map_err(|source| JournalReplayError::Enumerate {
-            root: pkgdb_dir.clone(),
-            source,
-        })?;
-
-        let journal_path = entry.path().join("journal.jsonl");
-        if journal_path.is_file() && JournalReader::read_committed(&journal_path).is_ok() {
-            journal_paths.push(journal_path);
-        }
-    }
-
-    journal_paths.sort();
-    Ok(journal_paths)
-}
-
-pub fn read_committed_package_journal(
-    path: &Path,
-) -> Result<CommittedJournalPackage, JournalReplayError> {
-    let entries = JournalReader::read_committed(path)?;
-
-    let (package_id, version, engine, install_dir, dependencies, engine_metadata) = entries
-        .iter()
-        .find_map(|entry| match entry {
-            JournalEntry::Metadata {
-                package_id,
-                version,
-                engine,
-                install_dir,
-                dependencies,
-                engine_metadata,
-            } => Some((
-                package_id.as_str(),
-                version.as_str(),
-                engine.as_str(),
-                install_dir.as_str(),
-                dependencies.clone(),
-                engine_metadata.clone(),
-            )),
-            _ => None,
-        })
-        .ok_or_else(|| JournalReplayError::MissingMetadata {
-            path: path.to_path_buf(),
-        })?;
-
-    if package_id.is_empty() {
-        return Err(JournalReplayError::MissingField {
-            path: path.to_path_buf(),
-            field: "package_id",
-        });
-    }
-
-    if version.is_empty() {
-        return Err(JournalReplayError::MissingField {
-            path: path.to_path_buf(),
-            field: "version",
-        });
-    }
-
-    if engine.is_empty() {
-        return Err(JournalReplayError::MissingField {
-            path: path.to_path_buf(),
-            field: "engine",
-        });
-    }
-
-    if install_dir.is_empty() {
-        return Err(JournalReplayError::MissingField {
-            path: path.to_path_buf(),
-            field: "install_dir",
-        });
-    }
-
-    let engine_kind =
-        EngineKind::from_str(engine).map_err(|source| JournalReplayError::InvalidEngineKind {
-            path: path.to_path_buf(),
-            engine: engine.to_string(),
-            source,
-        })?;
-
-    let installed_at = entries
-        .iter()
-        .rev()
-        .find_map(|entry| match entry {
-            JournalEntry::Commit { installed_at } => Some(installed_at.as_str()),
-            _ => None,
-        })
-        .ok_or_else(|| JournalReplayError::MissingCommit {
-            path: path.to_path_buf(),
-        })?;
-
-    if installed_at.is_empty() {
-        return Err(JournalReplayError::MissingField {
-            path: path.to_path_buf(),
-            field: "installed_at",
-        });
-    }
-
-    let package = Package {
-        name: package_id.to_string(),
-        version: version.to_string(),
-        kind: InstallerType::from(engine_kind),
-        engine_kind,
-        engine_metadata,
-        install_dir: install_dir.to_string(),
-        dependencies,
-        status: PackageStatus::Ok,
-        installed_at: installed_at.to_string(),
-    };
-
-    Ok(CommittedJournalPackage {
-        journal_path: path.to_path_buf(),
-        entries,
-        package,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
@@ -508,6 +193,7 @@ mod tests {
             installed_at: "2024-01-01T00:00:00Z".to_string(),
         }
     }
+
     #[test]
     fn journal_entries_are_written_as_jsonl() {
         let root = temp_root();
@@ -618,7 +304,6 @@ mod tests {
         assert!(matches!(err, JournalReadError::Incomplete { .. }));
     }
 
-    // Metadata is not required here; doctor or replay code can validate it separately.
     #[test]
     fn journal_reader_accepts_commit_only() {
         let root = temp_root();
