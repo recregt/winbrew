@@ -71,6 +71,10 @@ fn report_summary(report: &HealthReport) -> Vec<(String, String)> {
             "Scan duration".to_string(),
             format_duration(report.scan_duration),
         ),
+        (
+            "Recovery findings".to_string(),
+            report.recovery_findings.len().to_string(),
+        ),
         ("Error count".to_string(), report.error_count.to_string()),
         (
             "Total findings".to_string(),

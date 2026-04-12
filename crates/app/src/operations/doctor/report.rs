@@ -13,7 +13,7 @@ use crate::AppContext;
 use crate::storage::database;
 
 use super::scan;
-use crate::models::{DiagnosisResult, DiagnosisSeverity, HealthReport, Package};
+use crate::models::{DiagnosisResult, DiagnosisSeverity, HealthReport, Package, RecoveryFinding};
 
 /// Convert a path into the display string used in the final report.
 ///
@@ -53,6 +53,13 @@ fn collect_packages(packages_result: Result<Vec<Package>>) -> (Vec<Package>, Vec
     }
 }
 
+fn collect_recovery_findings(diagnostics: &[DiagnosisResult]) -> Vec<RecoveryFinding> {
+    diagnostics
+        .iter()
+        .filter_map(RecoveryFinding::from_diagnosis)
+        .collect()
+}
+
 /// Build a full health report for the current application context.
 ///
 /// The function snapshots the current paths, collects installed packages,
@@ -73,6 +80,7 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
 
     diagnostics.extend(scan::scan_orphaned_install_dirs(&paths.packages, &packages));
     diagnostics.sort_unstable_by(sort_diagnostics);
+    let recovery_findings = collect_recovery_findings(&diagnostics);
 
     let error_count = diagnostics
         .iter()
@@ -93,6 +101,7 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
         install_root_exists: paths.root.exists(),
         packages_dir: display_path(&paths.packages),
         diagnostics,
+        recovery_findings,
         scan_duration: started_at.elapsed(),
         error_count,
     })
@@ -100,8 +109,10 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
 
 #[cfg(test)]
 mod tests {
-    use super::{collect_packages, sort_diagnostics};
-    use crate::models::{DiagnosisResult, DiagnosisSeverity};
+    use super::{collect_packages, collect_recovery_findings, sort_diagnostics};
+    use crate::models::{
+        DiagnosisResult, DiagnosisSeverity, RecoveryActionGroup, RecoveryIssueKind,
+    };
     use anyhow::anyhow;
 
     #[test]
@@ -148,5 +159,25 @@ mod tests {
 
         assert!(packages.is_empty());
         assert!(diagnostics.is_empty());
+    }
+
+    #[test]
+    fn collect_recovery_findings_maps_policy_issues() {
+        let diagnostics = vec![DiagnosisResult {
+            error_code: "stale_package_journal".to_string(),
+            description: "Contoso.App: recovery journal does not match installed package"
+                .to_string(),
+            severity: DiagnosisSeverity::Error,
+        }];
+
+        let findings = collect_recovery_findings(&diagnostics);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].issue_kind, RecoveryIssueKind::Conflict);
+        assert_eq!(
+            findings[0].action_group,
+            Some(RecoveryActionGroup::JournalReplay)
+        );
+        assert_eq!(findings[0].severity, DiagnosisSeverity::Error);
     }
 }
