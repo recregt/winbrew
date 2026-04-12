@@ -30,7 +30,7 @@ The current startup path is:
 1. `crates/bin/src/main.rs` parses CLI arguments and calls `winbrew_cli::run_app`.
 2. `crates/cli/src/lib.rs` loads configuration, builds the CLI command context, initializes logging and the database, then dispatches the command.
 3. `CommandContext` wraps `AppContext` plus `UiSettings` and can construct `Ui` for command handlers.
-4. Command handlers obtain `Ui` from `ctx.ui()` and call into app helpers.
+4. Command handlers obtain `Ui` from `ctx.ui()` and explicit app state from `ctx.app()`.
 5. App helpers stay UI-free and can call storage/core/network helpers as needed.
 
 The important ownership rule is simple:
@@ -224,6 +224,7 @@ When auditing or changing this area, follow these steps:
 - `UiSettings` is not re-exported from `winbrew-cli` and remains a `winbrew-ui` type stored inside `CommandContext`
 - `CommandContext` is the CLI envelope around `AppContext`
 - command handlers obtain `Ui` from `CommandContext`
+- command handlers access app state through `CommandContext::app()`
 - infrastructure builders stay in their owning crates
 - tests reflect the same boundary as production code
 

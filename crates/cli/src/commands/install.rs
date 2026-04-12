@@ -31,7 +31,12 @@ pub fn run(ctx: &CommandContext, query: &[String], ignore_checksum_security: boo
             progress: &progress,
         };
 
-        install::run(ctx, package_ref, ignore_checksum_security, &mut observer)
+        install::run(
+            ctx.app(),
+            package_ref,
+            ignore_checksum_security,
+            &mut observer,
+        )
     };
 
     progress.finish_and_clear();

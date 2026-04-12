@@ -9,7 +9,7 @@ pub fn run(ctx: &CommandContext) -> Result<()> {
     let progress = ui.progress_bar();
 
     let result = update::refresh_catalog(
-        &ctx.paths,
+        &ctx.app().paths,
         |total_bytes| {
             if let Some(total_bytes) = total_bytes {
                 progress.set_length(total_bytes);

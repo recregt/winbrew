@@ -284,7 +284,7 @@ fn exit_error_uses_distinct_codes_for_errors_and_warnings() {
 #[test]
 fn doctor_reports_healthy_installation() {
     let fixture = DoctorFixture::new();
-    let report = health_report(&fixture.ctx).expect("health report should build");
+    let report = health_report(fixture.ctx.app()).expect("health report should build");
 
     assert_eq!(report.install_root_source, "config:paths.root");
     assert_eq!(
@@ -302,7 +302,7 @@ fn doctor_reports_orphan_directories_as_warnings() {
     std::fs::create_dir_all(fixture.package_install_dir("Contoso.Orphan"))
         .expect("orphan dir should be created");
 
-    let report = health_report(&fixture.ctx).expect("health report should build");
+    let report = health_report(fixture.ctx.app()).expect("health report should build");
 
     assert_eq!(report.error_count, 0);
     assert_eq!(report.diagnostics.len(), 1);
@@ -316,7 +316,7 @@ fn doctor_reports_missing_install_dirs_as_errors() {
 
     fixture.insert_installed_package("Contoso.Missing", &fixture.root_path().join("missing"));
 
-    let report = health_report(&fixture.ctx).expect("health report should build");
+    let report = health_report(fixture.ctx.app()).expect("health report should build");
 
     assert_eq!(report.error_count, 1);
     assert_eq!(report.diagnostics.len(), 1);
