@@ -33,3 +33,7 @@ path = "tests/commands/config.rs"
 [[test]]
 name = "doctor_tests"
 path = "tests/commands/doctor.rs"
+
+[[test]]
+name = "repair_tests"
+path = "tests/commands/repair.rs"

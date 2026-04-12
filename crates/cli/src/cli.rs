@@ -72,6 +72,13 @@ pub enum Command {
         force: bool,
     },
 
+    /// Replay committed journals into the local database
+    Repair {
+        /// Proceed without prompting for confirmation
+        #[arg(long, short = 'y', help_heading = "Safety")]
+        yes: bool,
+    },
+
     /// Get or set winbrew configuration values
     Config {
         #[command(subcommand)]

@@ -5,6 +5,7 @@ pub mod info;
 pub mod install;
 pub mod list;
 pub mod remove;
+pub mod repair;
 pub mod report;
 pub mod search;
 pub mod update;
