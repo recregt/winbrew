@@ -1,7 +1,21 @@
-//! Bootstrap-only cleanup for incomplete installs.
+//! Startup-only cleanup for interrupted installs.
 //!
-//! This module mutates install state during startup to recover from interrupted
-//! installs. It is not a general-purpose service and should remain bootstrap-only.
+//! When the CLI starts, it needs to reconcile any package rows that were left
+//! in the `Installing` state by a previous crash or forced termination. That
+//! recovery is performed here, before command dispatch begins, so later command
+//! handlers see a coherent view of the database and filesystem.
+//!
+//! The responsibilities in this module are intentionally narrow:
+//!
+//! - read the current set of installing packages from the database;
+//! - mark each stale package as failed so it no longer looks active;
+//! - remove the package's installation directory if it is still present;
+//! - remove any temp-workspace directories that belong to the interrupted
+//!   install.
+//!
+//! Nothing in this module is meant to be called as a general-purpose repair
+//! API. It is a startup repair mechanism that depends on the database and the
+//! core filesystem cleanup helpers already being available.
 
 use anyhow::Result;
 use std::fs;
@@ -13,6 +27,11 @@ use crate::core::temp_workspace::{temp_root_base, temp_root_prefix};
 use crate::database;
 use crate::models::{Package, PackageStatus};
 
+/// Find stale `Installing` rows and reconcile them with the filesystem.
+/// The current database connection is obtained from the process-wide storage
+/// layer, which means the caller must have already initialized the database for
+/// the active configuration. Each stale package is handled independently so one
+/// cleanup failure does not prevent the rest of the recovery pass from running.
 pub fn cleanup_stale_installations() -> Result<()> {
     let conn = database::get_conn()?;
     let stale_packages = database::list_installing_packages(&conn)?;
