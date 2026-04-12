@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use tracing::warn;
 
 use crate::core::fs::cleanup_path;
-use crate::core::temp_workspace::{temp_root_base, temp_root_prefix};
+use crate::core::temp_workspace::{is_temp_root_for, temp_root_base};
 use crate::database;
 use crate::models::{Package, PackageStatus};
 
@@ -60,7 +60,6 @@ fn cleanup_install_dir(install_dir: &Path, package_name: &str) {
 }
 
 fn cleanup_temp_roots(name: &str, version: &str) {
-    let prefix = temp_root_prefix(name, version);
     let temp_root_base = temp_root_base();
 
     if !temp_root_base.exists() {
@@ -77,12 +76,7 @@ fn cleanup_temp_roots(name: &str, version: &str) {
 
     for entry in entries.flatten() {
         let path = entry.path();
-        let file_name = match path.file_name().and_then(|value| value.to_str()) {
-            Some(file_name) => file_name,
-            None => continue,
-        };
-
-        if file_name.starts_with(&prefix)
+        if is_temp_root_for(name, version, &path)
             && let Err(err) = cleanup_path(&path)
         {
             warn!(package = name, path = %path.display(), error = %err, "failed to clean stale temp root");

@@ -95,7 +95,7 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
     let scan::PackageJournalScan {
         diagnostics: journal_diagnostics,
         recovery_findings: journal_recovery_findings,
-    } = scan::scan_package_journals(&paths.root, &packages);
+    } = scan::scan_package_journals(paths, &packages);
 
     diagnostics.extend(package_diagnostics);
     diagnostics.extend(msi_diagnostics);
