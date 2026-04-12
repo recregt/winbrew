@@ -10,7 +10,7 @@ use std::path::Path;
 
 use tempfile::TempDir;
 use winbrew_cli::AppContext;
-use winbrew_cli::app::repair;
+use winbrew_cli::commands::repair;
 use winbrew_cli::database::{self, Config};
 use winbrew_cli::models::{
     EngineKind, HashAlgorithm, InstalledPackage, InstallerType, PackageStatus,
@@ -31,6 +31,8 @@ impl RepairFixture {
         std::fs::create_dir_all(root.path().join("packages")).expect("packages dir should exist");
 
         let config = Config::load_at(root.path()).expect("config should load");
+        let mut config = config;
+        config.core.default_yes = true;
         let ctx = AppContext::from_config(&config).expect("context should build");
 
         Self { root, ctx }
