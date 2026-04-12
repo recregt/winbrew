@@ -44,6 +44,9 @@ pub use package_ref::{PackageId, PackageRef};
 pub use query::PackageQuery;
 pub use raw::{RawFetchedInstaller, RawFetchedPackage, ScoopStreamEnvelope};
 pub use remove::RemovalPlan;
-pub use report::{HealthReport, ReportSection, RuntimeReport};
+pub use report::{
+    HealthReport, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind, ReportSection,
+    RuntimeReport,
+};
 pub use validation::Validate;
 pub use version::Version;

@@ -14,7 +14,7 @@ use winbrew_cli::commands::error::CommandError;
 use winbrew_cli::database::{self, Config};
 use winbrew_cli::models::{
     DiagnosisResult, DiagnosisSeverity, EngineKind, HealthReport, InstalledPackage, InstallerType,
-    PackageStatus,
+    PackageStatus, RecoveryFinding,
 };
 use winbrew_ui::{UiBuilder, UiSettings};
 
@@ -108,6 +108,7 @@ fn sample_report(diagnostics: Vec<DiagnosisResult>) -> HealthReport {
         install_root_exists: true,
         packages_dir: "C:\\Users\\Test\\AppData\\Local\\winbrew\\packages".to_string(),
         diagnostics,
+        recovery_findings: Vec::<RecoveryFinding>::new(),
         scan_duration: Duration::from_millis(1_234),
         error_count,
     }
