@@ -1,7 +1,38 @@
 use std::io::ErrorKind;
 use std::path::Path;
 
-use crate::models::{DiagnosisResult, DiagnosisSeverity, Package};
+use anyhow::Result;
+
+use crate::models::{DiagnosisResult, DiagnosisSeverity, Package, RecoveryFinding};
+use crate::storage::database;
+
+use super::{sort_diagnoses, sort_recovery_findings};
+
+pub(crate) struct PackageInstallScan {
+    pub(crate) diagnostics: Vec<DiagnosisResult>,
+    pub(crate) recovery_findings: Vec<RecoveryFinding>,
+}
+
+impl PackageInstallScan {
+    fn new() -> Self {
+        Self {
+            diagnostics: Vec::new(),
+            recovery_findings: Vec::new(),
+        }
+    }
+
+    fn push(&mut self, diagnosis: DiagnosisResult, target_path: Option<&Path>) {
+        if let Some(finding) = RecoveryFinding::from_diagnosis(&diagnosis) {
+            let finding = match target_path {
+                Some(target_path) => finding.with_target_path(target_path.to_string_lossy()),
+                None => finding,
+            };
+            self.recovery_findings.push(finding);
+        }
+
+        self.diagnostics.push(diagnosis);
+    }
+}
 
 /// Validate the install path string stored on a package record.
 ///
@@ -98,10 +129,30 @@ pub(super) fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
     None
 }
 
+pub(crate) fn scan_packages(packages: &[Package]) -> PackageInstallScan {
+    let mut scan = PackageInstallScan::new();
+
+    for pkg in packages {
+        if let Some(diagnosis) = check_package(pkg) {
+            scan.push(diagnosis, Some(Path::new(&pkg.install_dir)));
+        }
+    }
+
+    scan.diagnostics = sort_diagnoses(scan.diagnostics);
+    scan.recovery_findings
+        .sort_unstable_by(sort_recovery_findings);
+
+    scan
+}
+
+pub(crate) fn installed_packages(conn: &crate::storage::DbConnection) -> Result<Vec<Package>> {
+    database::list_packages(conn)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{InstallerType, PackageStatus};
+    use crate::models::{InstallerType, PackageStatus, RecoveryActionGroup, RecoveryIssueKind};
     use std::path::Path;
     use tempfile::tempdir;
 
@@ -166,5 +217,30 @@ mod tests {
         assert_eq!(diagnosis.error_code, "install_directory_permission_denied");
         assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
         assert!(diagnosis.description.contains("Contoso.Denied"));
+    }
+
+    #[test]
+    fn scan_packages_attaches_reinstall_targets() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let missing_dir = temp_dir.path().join("missing");
+        let package = sample_package("Contoso.Missing", &missing_dir);
+        let missing_dir_string = missing_dir.to_string_lossy().to_string();
+
+        let scan = scan_packages(&[package]);
+
+        assert_eq!(scan.diagnostics.len(), 1);
+        assert_eq!(scan.recovery_findings.len(), 1);
+        assert_eq!(
+            scan.recovery_findings[0].action_group,
+            Some(RecoveryActionGroup::Reinstall)
+        );
+        assert_eq!(
+            scan.recovery_findings[0].issue_kind,
+            RecoveryIssueKind::DiskDrift
+        );
+        assert_eq!(
+            scan.recovery_findings[0].target_path.as_deref(),
+            Some(missing_dir_string.as_str())
+        );
     }
 }

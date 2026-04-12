@@ -82,20 +82,30 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
     let conn = database::get_conn()?;
 
     let (packages, mut diagnostics) = collect_packages(scan::installed_packages(&conn));
+    let mut recovery_findings = collect_recovery_findings(&diagnostics);
     let orphan_scan = scan::scan_orphaned_install_dirs(&paths.packages, &packages);
+    let scan::PackageInstallScan {
+        diagnostics: package_diagnostics,
+        recovery_findings: package_recovery_findings,
+    } = scan::scan_packages(&packages);
+    let scan::MsiInventoryScan {
+        diagnostics: msi_diagnostics,
+        recovery_findings: msi_recovery_findings,
+    } = scan::scan_msi_inventory(&conn, &packages);
     let scan::PackageJournalScan {
         diagnostics: journal_diagnostics,
         recovery_findings: journal_recovery_findings,
     } = scan::scan_package_journals(&paths.root, &packages);
 
-    diagnostics.extend(scan::scan_packages(&packages));
-    diagnostics.extend(scan::scan_msi_inventory(&conn, &packages));
+    diagnostics.extend(package_diagnostics);
+    diagnostics.extend(msi_diagnostics);
     diagnostics.sort_unstable_by(sort_diagnostics);
-    let mut recovery_findings = collect_recovery_findings(&diagnostics);
 
     diagnostics.extend(orphan_scan.diagnostics);
     diagnostics.extend(journal_diagnostics);
     diagnostics.sort_unstable_by(sort_diagnostics);
+    recovery_findings.extend(package_recovery_findings);
+    recovery_findings.extend(msi_recovery_findings);
     recovery_findings.extend(orphan_scan.recovery_findings);
     recovery_findings.extend(journal_recovery_findings);
     recovery_findings.sort_unstable_by(sort_recovery_findings);
