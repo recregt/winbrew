@@ -24,11 +24,11 @@ pub mod version;
 /// Grouped namespace for the major model families.
 pub mod domains {
     pub mod shared {
+        pub use crate::shared::{BucketName, CatalogId, PackageName};
         pub use crate::shared::{
             ConfigSection, ConfigValue, ConfigValueSource, HashAlgorithm, ModelError, Validate,
             Version,
         };
-        pub use crate::{BucketName, CatalogId, PackageName};
     }
 
     pub mod package {
