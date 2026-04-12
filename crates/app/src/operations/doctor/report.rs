@@ -60,6 +60,15 @@ fn collect_recovery_findings(diagnostics: &[DiagnosisResult]) -> Vec<RecoveryFin
         .collect()
 }
 
+fn sort_recovery_findings(left: &RecoveryFinding, right: &RecoveryFinding) -> std::cmp::Ordering {
+    left.action_group
+        .cmp(&right.action_group)
+        .then_with(|| left.severity.cmp(&right.severity))
+        .then_with(|| left.error_code.cmp(&right.error_code))
+        .then_with(|| left.target_path.cmp(&right.target_path))
+        .then_with(|| left.description.cmp(&right.description))
+}
+
 /// Build a full health report for the current application context.
 ///
 /// The function snapshots the current paths, collects installed packages,
@@ -73,6 +82,7 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
     let conn = database::get_conn()?;
 
     let (packages, mut diagnostics) = collect_packages(scan::installed_packages(&conn));
+    let orphan_scan = scan::scan_orphaned_install_dirs(&paths.packages, &packages);
     let scan::PackageJournalScan {
         diagnostics: journal_diagnostics,
         recovery_findings: journal_recovery_findings,
@@ -80,13 +90,15 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
 
     diagnostics.extend(scan::scan_packages(&packages));
     diagnostics.extend(scan::scan_msi_inventory(&conn, &packages));
-    diagnostics.extend(scan::scan_orphaned_install_dirs(&paths.packages, &packages));
     diagnostics.sort_unstable_by(sort_diagnostics);
     let mut recovery_findings = collect_recovery_findings(&diagnostics);
 
+    diagnostics.extend(orphan_scan.diagnostics);
     diagnostics.extend(journal_diagnostics);
     diagnostics.sort_unstable_by(sort_diagnostics);
+    recovery_findings.extend(orphan_scan.recovery_findings);
     recovery_findings.extend(journal_recovery_findings);
+    recovery_findings.sort_unstable_by(sort_recovery_findings);
 
     let error_count = diagnostics
         .iter()

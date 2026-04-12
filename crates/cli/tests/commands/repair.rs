@@ -101,3 +101,16 @@ fn repair_replays_committed_journal_into_database() {
     assert_eq!(package.status, PackageStatus::Ok);
     assert_eq!(package.installed_at, "2026-04-12T00:00:00Z");
 }
+
+#[test]
+fn repair_removes_orphan_install_directory() {
+    let fixture = RepairFixture::new();
+    let orphan_dir = fixture.root_path().join("packages").join("Contoso.Orphan");
+    std::fs::create_dir_all(&orphan_dir).expect("orphan dir should exist");
+
+    assert!(orphan_dir.exists());
+
+    repair::run(&fixture.ctx, true).expect("repair should succeed");
+
+    assert!(!orphan_dir.exists());
+}

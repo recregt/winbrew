@@ -15,7 +15,10 @@ use anyhow::Result;
 
 use crate::core::hash::hash_file;
 use crate::core::{HashError, verify_hash};
-use crate::models::{DiagnosisResult, DiagnosisSeverity, EngineKind, Package, RecoveryFinding};
+use crate::models::{
+    DiagnosisResult, DiagnosisSeverity, EngineKind, Package, RecoveryActionGroup, RecoveryFinding,
+    RecoveryIssueKind,
+};
 use crate::storage::database;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -45,6 +48,43 @@ impl PackageJournalScan {
         }
 
         self.diagnostics.push(diagnosis);
+    }
+}
+
+pub(super) struct OrphanInstallScan {
+    pub diagnostics: Vec<DiagnosisResult>,
+    pub recovery_findings: Vec<RecoveryFinding>,
+}
+
+impl OrphanInstallScan {
+    fn new() -> Self {
+        Self {
+            diagnostics: Vec::new(),
+            recovery_findings: Vec::new(),
+        }
+    }
+
+    fn push(&mut self, package_name: &str, path: &Path) {
+        let description = format!(
+            "{}: orphan install directory ({})",
+            package_name,
+            path.to_string_lossy()
+        );
+
+        self.diagnostics.push(DiagnosisResult {
+            error_code: "orphan_install_directory".to_string(),
+            description: description.clone(),
+            severity: DiagnosisSeverity::Warning,
+        });
+
+        self.recovery_findings.push(RecoveryFinding {
+            error_code: "orphan_install_directory".to_string(),
+            issue_kind: RecoveryIssueKind::IncompleteInstall,
+            action_group: Some(RecoveryActionGroup::OrphanCleanup),
+            description,
+            severity: DiagnosisSeverity::Warning,
+            target_path: Some(path.to_string_lossy().into_owned()),
+        });
     }
 }
 
@@ -322,25 +362,27 @@ pub(super) fn scan_package_journals(root: &Path, packages: &[Package]) -> Packag
 pub(super) fn scan_orphaned_install_dirs(
     packages_root: &Path,
     packages: &[Package],
-) -> Vec<DiagnosisResult> {
+) -> OrphanInstallScan {
     let mut known_packages = HashSet::with_capacity(packages.len());
     known_packages.extend(packages.iter().map(|pkg| pkg.name.as_str()));
 
     let entries = match fs::read_dir(packages_root) {
         Ok(entries) => entries,
         Err(err) => {
-            return vec![DiagnosisResult {
+            let mut result = OrphanInstallScan::new();
+            result.diagnostics.push(DiagnosisResult {
                 error_code: "packages_root_unreadable".to_string(),
                 description: format!(
                     "packages root: unreadable packages directory ({}) - {err}",
                     packages_root.to_string_lossy()
                 ),
                 severity: DiagnosisSeverity::Error,
-            }];
+            });
+            return result;
         }
     };
 
-    let mut diagnoses = Vec::new();
+    let mut result = OrphanInstallScan::new();
 
     for entry in entries.flatten() {
         let file_type = match entry.file_type() {
@@ -363,18 +405,15 @@ pub(super) fn scan_orphaned_install_dirs(
             continue;
         }
 
-        diagnoses.push(DiagnosisResult {
-            error_code: "orphan_install_directory".to_string(),
-            description: format!(
-                "{}: orphan install directory ({})",
-                package_name,
-                path.to_string_lossy()
-            ),
-            severity: DiagnosisSeverity::Warning,
-        });
+        result.push(package_name, &path);
     }
 
-    sort_diagnoses(diagnoses)
+    result.diagnostics = sort_diagnoses(result.diagnostics);
+    result
+        .recovery_findings
+        .sort_unstable_by(sort_recovery_findings);
+
+    result
 }
 
 /// Load the current installed package inventory from the database.
@@ -742,12 +781,21 @@ mod tests {
             &packages_root.join("Contoso.Known"),
         )];
 
-        let diagnoses = scan_orphaned_install_dirs(&packages_root, &packages);
+        let scan = scan_orphaned_install_dirs(&packages_root, &packages);
 
-        assert_eq!(diagnoses.len(), 1);
-        assert_eq!(diagnoses[0].error_code, "orphan_install_directory");
-        assert_eq!(diagnoses[0].severity, DiagnosisSeverity::Warning);
-        assert!(diagnoses[0].description.contains("Contoso.Orphan"));
+        assert_eq!(scan.diagnostics.len(), 1);
+        assert_eq!(scan.diagnostics[0].error_code, "orphan_install_directory");
+        assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Warning);
+        assert!(scan.diagnostics[0].description.contains("Contoso.Orphan"));
+        assert_eq!(scan.recovery_findings.len(), 1);
+        assert_eq!(
+            scan.recovery_findings[0].action_group,
+            Some(RecoveryActionGroup::OrphanCleanup)
+        );
+        assert_eq!(
+            scan.recovery_findings[0].target_path.as_deref(),
+            Some(orphan_dir.to_string_lossy().as_ref())
+        );
     }
 
     #[test]
