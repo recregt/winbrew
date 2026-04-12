@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::identifiers::CatalogId;
 use crate::installer::{Architecture, InstallerType};
 use crate::package::PackageSource;
+use crate::shared::CatalogId;
 use crate::shared::validation::{Validate, ensure_hash, ensure_http_url, ensure_non_empty};
 use crate::shared::{ModelError, Version};
 

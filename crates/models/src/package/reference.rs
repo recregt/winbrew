@@ -4,8 +4,8 @@ use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ModelError;
-use crate::identifiers::{BucketName, PackageName};
 use crate::shared::validation::{Validate, ensure_non_empty};
+use crate::shared::{BucketName, PackageName};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PackageRef {
@@ -141,7 +141,7 @@ fn invalid_package_id(input: &str) -> ModelError {
 #[cfg(test)]
 mod tests {
     use super::{BucketName, PackageId, PackageRef};
-    use crate::identifiers::PackageName;
+    use crate::shared::PackageName;
 
     #[test]
     fn parses_package_name() {
