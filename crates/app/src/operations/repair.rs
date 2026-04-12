@@ -143,11 +143,22 @@ pub fn resolve_repair_catalog_package<FChoose>(
 where
     FChoose: FnMut(&str, &[CatalogPackage]) -> Result<usize>,
 {
+    let catalog_conn = crate::storage::get_catalog_conn()?;
+    resolve_repair_catalog_package_with_conn(&catalog_conn, package_name, choose_package)
+}
+
+fn resolve_repair_catalog_package_with_conn<FChoose>(
+    catalog_conn: &crate::storage::DbConnection,
+    package_name: &str,
+    choose_package: FChoose,
+) -> Result<CatalogPackage>
+where
+    FChoose: FnMut(&str, &[CatalogPackage]) -> Result<usize>,
+{
     let package_ref = PackageRef::parse(package_name)
         .with_context(|| format!("failed to parse package reference '{package_name}'"))?;
-    let catalog_conn = crate::storage::get_catalog_conn()?;
 
-    catalog::resolve_catalog_package_ref(&catalog_conn, &package_ref, choose_package)
+    catalog::resolve_catalog_package_ref(catalog_conn, &package_ref, choose_package)
 }
 
 /// Resolve a file-restore target and decide whether reinstall is required.
@@ -158,15 +169,12 @@ pub fn resolve_file_restore_target<FChoose>(
 where
     FChoose: FnMut(&str, &[CatalogPackage]) -> Result<usize>,
 {
-    let package = resolve_repair_catalog_package(package_name, choose_package)?;
     let catalog_conn = crate::storage::get_catalog_conn()?;
     let conn = database::get_conn()?;
+    let package =
+        resolve_repair_catalog_package_with_conn(&catalog_conn, package_name, choose_package)?;
     let installed_package = database::get_package(&conn, package_name)?
         .with_context(|| format!("package '{package_name}' is not installed"))?;
-
-    let installers = crate::storage::get_installers(&catalog_conn, &package.id)?;
-    let installer = install::types::select_installer(&installers)?;
-    let engine = engines::resolve_engine_for_installer(&installer)?;
 
     if installed_package.version != package.version.to_string() {
         return Ok(FileRestoreResolution::Reinstall(Box::new(
@@ -176,6 +184,10 @@ where
             },
         )));
     }
+
+    let installers = crate::storage::get_installers(&catalog_conn, &package.id)?;
+    let installer = install::types::select_installer(&installers)?;
+    let engine = engines::resolve_engine_for_installer(&installer)?;
 
     Ok(FileRestoreResolution::Restore(Box::new(
         ResolvedFileRestoreTarget {
