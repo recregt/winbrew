@@ -42,9 +42,8 @@ pub use network::{
 pub use paths::{
     ResolvedPaths, cache_dir_at, cache_file_at, catalog_db_at, config_file_at, data_dir_at,
     db_dir_at, db_path_at, ensure_dirs_at, ensure_install_dirs_at, install_root_from_package_dir,
-    log_dir_at, log_file_at, package_install_dir_at, package_journal_dir_at,
-    package_journal_file_at, package_journal_key, package_log_dir_at, package_logs_dir_at,
-    package_shim_dir_at, pkgdb_dir_at, resolve_template, resolved_paths, shims_dir_at,
+    log_dir_at, log_file_at, package_journal_file_at, package_journal_key, pkgdb_dir_at,
+    resolve_template, resolved_paths,
 };
 pub use temp_workspace::{build_temp_root, temp_root_base, temp_root_prefix};
 pub use time::{now, now_ms};
