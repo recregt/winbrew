@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::models::{DiagnosisResult, DiagnosisSeverity, Package};
+use crate::models::{DiagnosisResult, DiagnosisSeverity, InstalledPackage};
 
 use super::{OrphanInstallScan, sort_diagnoses, sort_recovery_findings};
 
@@ -13,7 +13,7 @@ use super::{OrphanInstallScan, sort_diagnoses, sort_recovery_findings};
 /// caller can surface the storage problem directly.
 pub(super) fn scan_orphaned_install_dirs(
     packages_root: &Path,
-    packages: &[Package],
+    packages: &[InstalledPackage],
 ) -> OrphanInstallScan {
     let mut known_packages = HashSet::with_capacity(packages.len());
     known_packages.extend(packages.iter().map(|pkg| pkg.name.as_str()));

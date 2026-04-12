@@ -3,7 +3,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use crate::models::{DiagnosisResult, DiagnosisSeverity, Package, RecoveryFinding};
+use crate::models::{DiagnosisResult, DiagnosisSeverity, InstalledPackage, RecoveryFinding};
 use crate::storage::database;
 
 use super::{sort_diagnoses, sort_recovery_findings};
@@ -39,7 +39,7 @@ impl PackageInstallScan {
 /// The doctor scan treats empty paths and paths containing a null byte as
 /// immediate configuration errors because they cannot represent a valid
 /// filesystem location on Windows.
-fn validate_install_path(pkg: &Package) -> Option<DiagnosisResult> {
+fn validate_install_path(pkg: &InstalledPackage) -> Option<DiagnosisResult> {
     if pkg.install_dir.trim().is_empty() {
         return Some(DiagnosisResult {
             error_code: "empty_install_path".to_string(),
@@ -66,7 +66,7 @@ fn validate_install_path(pkg: &Package) -> Option<DiagnosisResult> {
 ///
 /// The error code depends on the error kind so the final report can distinguish
 /// missing directories, permission problems, and generic unreadable paths.
-fn diagnose_install_dir_error(pkg: &Package, err: std::io::Error) -> DiagnosisResult {
+fn diagnose_install_dir_error(pkg: &InstalledPackage, err: std::io::Error) -> DiagnosisResult {
     let (error_code, description) = match err.kind() {
         ErrorKind::NotFound => (
             "missing_install_directory",
@@ -103,7 +103,7 @@ fn diagnose_install_dir_error(pkg: &Package, err: std::io::Error) -> DiagnosisRe
 /// The scan is intentionally metadata-only: it validates the stored path string,
 /// checks that the directory exists, and confirms that the path is actually a
 /// directory. Anything else is turned into a diagnosis instead of a hard error.
-pub(super) fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
+pub(super) fn check_package(pkg: &InstalledPackage) -> Option<DiagnosisResult> {
     if let Some(diagnosis) = validate_install_path(pkg) {
         return Some(diagnosis);
     }
@@ -129,7 +129,7 @@ pub(super) fn check_package(pkg: &Package) -> Option<DiagnosisResult> {
     None
 }
 
-pub(crate) fn scan_packages(packages: &[Package]) -> PackageInstallScan {
+pub(crate) fn scan_packages(packages: &[InstalledPackage]) -> PackageInstallScan {
     let mut scan = PackageInstallScan::new();
 
     for pkg in packages {
@@ -145,7 +145,9 @@ pub(crate) fn scan_packages(packages: &[Package]) -> PackageInstallScan {
     scan
 }
 
-pub(crate) fn installed_packages(conn: &crate::storage::DbConnection) -> Result<Vec<Package>> {
+pub(crate) fn installed_packages(
+    conn: &crate::storage::DbConnection,
+) -> Result<Vec<InstalledPackage>> {
     database::list_packages(conn)
 }
 
@@ -156,8 +158,8 @@ mod tests {
     use std::path::Path;
     use tempfile::tempdir;
 
-    fn sample_package(name: &str, install_dir: &std::path::Path) -> Package {
-        Package {
+    fn sample_package(name: &str, install_dir: &std::path::Path) -> InstalledPackage {
+        InstalledPackage {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             kind: InstallerType::Portable,

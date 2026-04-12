@@ -75,14 +75,14 @@ impl OrphanInstallScan {
 
 pub(super) fn scan_package_journals(
     paths: &crate::core::paths::ResolvedPaths,
-    packages: &[crate::models::Package],
+    packages: &[crate::models::InstalledPackage],
 ) -> PackageJournalScan {
     journal::scan_package_journals(paths, packages)
 }
 
 pub(super) fn scan_orphaned_install_dirs(
     packages_root: &std::path::Path,
-    packages: &[crate::models::Package],
+    packages: &[crate::models::InstalledPackage],
 ) -> OrphanInstallScan {
     orphan::scan_orphaned_install_dirs(packages_root, packages)
 }

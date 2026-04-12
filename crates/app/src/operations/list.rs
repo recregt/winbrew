@@ -1,9 +1,9 @@
 use anyhow::Result;
 
-use crate::models::{Package, PackageQuery};
+use crate::models::{InstalledPackage, PackageQuery};
 use crate::storage::database;
 
-pub fn list_packages(query: Option<&str>) -> Result<Vec<Package>> {
+pub fn list_packages(query: Option<&str>) -> Result<Vec<InstalledPackage>> {
     let conn = database::get_conn()?;
     let packages = database::list_packages(&conn)?;
 
@@ -19,7 +19,7 @@ pub fn list_packages(query: Option<&str>) -> Result<Vec<Package>> {
     })
 }
 
-fn filter_packages(packages: Vec<Package>, query: &str) -> Vec<Package> {
+fn filter_packages(packages: Vec<InstalledPackage>, query: &str) -> Vec<InstalledPackage> {
     let normalized_query = normalize(query);
 
     packages
@@ -28,7 +28,7 @@ fn filter_packages(packages: Vec<Package>, query: &str) -> Vec<Package> {
         .collect()
 }
 
-fn package_matches(pkg: &Package, query: &str) -> bool {
+fn package_matches(pkg: &InstalledPackage, query: &str) -> bool {
     let haystack = [
         pkg.name.as_str(),
         pkg.version.as_str(),
@@ -62,10 +62,15 @@ fn normalize(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{filter_packages, normalize};
-    use crate::models::{InstallerType, Package, PackageStatus};
+    use crate::models::{InstalledPackage, InstallerType, PackageStatus};
 
-    fn package(name: &str, version: &str, kind: InstallerType, install_dir: &str) -> Package {
-        Package {
+    fn package(
+        name: &str,
+        version: &str,
+        kind: InstallerType,
+        install_dir: &str,
+    ) -> InstalledPackage {
+        InstalledPackage {
             name: name.to_string(),
             version: version.to_string(),
             kind,

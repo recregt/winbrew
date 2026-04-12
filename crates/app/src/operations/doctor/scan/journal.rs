@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::core::paths::ResolvedPaths;
-use crate::models::{DiagnosisResult, DiagnosisSeverity, Package};
+use crate::models::{DiagnosisResult, DiagnosisSeverity, InstalledPackage};
 use crate::storage::database;
 
 use super::{PackageJournalScan, sort_diagnoses, sort_recovery_findings};
@@ -10,7 +10,7 @@ use super::{PackageJournalScan, sort_diagnoses, sort_recovery_findings};
 /// Scan package journal files under `data/pkgdb` and report recovery issues.
 pub(super) fn scan_package_journals(
     paths: &ResolvedPaths,
-    packages: &[Package],
+    packages: &[InstalledPackage],
 ) -> PackageJournalScan {
     let pkgdb_root = paths.pkgdb.clone();
 
@@ -18,7 +18,7 @@ pub(super) fn scan_package_journals(
         return PackageJournalScan::new();
     }
 
-    let package_lookup: HashMap<&str, &Package> = packages
+    let package_lookup: HashMap<&str, &InstalledPackage> = packages
         .iter()
         .map(|package| (package.name.as_str(), package))
         .collect();
@@ -137,7 +137,7 @@ pub(super) fn scan_package_journals(
 fn diagnose_committed_journal(
     journal_path: &Path,
     entries: &[database::JournalEntry],
-    packages: &HashMap<&str, &Package>,
+    packages: &HashMap<&str, &InstalledPackage>,
 ) -> Vec<DiagnosisResult> {
     let Some((package_id, version, engine, install_dir)) =
         entries.iter().find_map(|entry| match entry {

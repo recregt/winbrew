@@ -1,7 +1,7 @@
-use crate::Package;
+use crate::InstalledPackage;
 
 #[derive(Debug, Clone)]
 pub struct RemovalPlan {
-    pub package: Package,
+    pub package: InstalledPackage,
     pub dependents: Vec<String>,
 }

@@ -4,7 +4,8 @@ use thiserror::Error;
 
 use crate::core::now;
 use winbrew_models::{
-    EngineInstallReceipt, EngineKind, EngineMetadata, InstallerType, Package, PackageStatus,
+    EngineInstallReceipt, EngineKind, EngineMetadata, InstalledPackage, InstallerType,
+    PackageStatus,
 };
 
 #[derive(Debug, Error)]
@@ -13,7 +14,7 @@ pub struct PackageNotFoundError {
     pub name: String,
 }
 
-pub fn insert_package(conn: &Connection, pkg: &Package) -> Result<()> {
+pub fn insert_package(conn: &Connection, pkg: &InstalledPackage) -> Result<()> {
     let deps =
         serde_json::to_string(&pkg.dependencies).context("failed to serialize dependencies")?;
     let engine_metadata = pkg
@@ -148,7 +149,7 @@ pub fn replay_committed_journal(
     Ok(())
 }
 
-pub fn get_package(conn: &Connection, name: &str) -> Result<Option<Package>> {
+pub fn get_package(conn: &Connection, name: &str) -> Result<Option<InstalledPackage>> {
     let mut stmt = conn.prepare(
         "SELECT name, version, kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at
             FROM installed_packages WHERE name = ?1",
@@ -159,7 +160,7 @@ pub fn get_package(conn: &Connection, name: &str) -> Result<Option<Package>> {
         .context("failed to query package")
 }
 
-pub fn list_packages(conn: &Connection) -> Result<Vec<Package>> {
+pub fn list_packages(conn: &Connection) -> Result<Vec<InstalledPackage>> {
     let mut stmt = conn.prepare(
         // Returns only packages that completed successfully.
         "SELECT name, version, kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at
@@ -167,20 +168,20 @@ pub fn list_packages(conn: &Connection) -> Result<Vec<Package>> {
          ORDER BY name ASC",
     )?;
 
-    stmt.query_map([], |row| Ok(row_to_package(row)))?
-        .map(|row| row?.context("failed to read row"))
+    stmt.query_map([], row_to_package)?
+        .map(|row| row.context("failed to read row"))
         .collect()
 }
 
-pub fn list_installing_packages(conn: &Connection) -> Result<Vec<Package>> {
+pub fn list_installing_packages(conn: &Connection) -> Result<Vec<InstalledPackage>> {
     let mut stmt = conn.prepare(
         "SELECT name, version, kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at
             FROM installed_packages WHERE status = 'installing'
          ORDER BY installed_at ASC, name ASC",
     )?;
 
-    stmt.query_map([], |row| Ok(row_to_package(row)))?
-        .map(|row| row?.context("failed to read row"))
+    stmt.query_map([], row_to_package)?
+        .map(|row| row.context("failed to read row"))
         .collect()
 }
 
@@ -195,7 +196,7 @@ pub fn delete_package(conn: &Connection, name: &str) -> Result<bool> {
     Ok(affected > 0)
 }
 
-fn row_to_package(row: &rusqlite::Row) -> std::result::Result<Package, SqlError> {
+fn row_to_package(row: &rusqlite::Row) -> std::result::Result<InstalledPackage, SqlError> {
     const COL_KIND: usize = 2;
     const COL_ENGINE_KIND: usize = 3;
     const COL_ENGINE_METADATA: usize = 4;
@@ -227,7 +228,7 @@ fn row_to_package(row: &rusqlite::Row) -> std::result::Result<Package, SqlError>
         .parse::<PackageStatus>()
         .map_err(|err| SqlError::FromSqlConversionFailure(COL_STATUS, Type::Text, Box::new(err)))?;
 
-    Ok(Package {
+    Ok(InstalledPackage {
         name: row.get("name")?,
         version: row.get("version")?,
         kind,

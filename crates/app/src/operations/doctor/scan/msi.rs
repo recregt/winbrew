@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::core::hash::hash_file;
 use crate::core::{HashError, verify_hash};
-use crate::models::{DiagnosisResult, DiagnosisSeverity, Package, RecoveryFinding};
+use crate::models::{DiagnosisResult, DiagnosisSeverity, InstalledPackage, RecoveryFinding};
 
 use super::{sort_diagnoses, sort_recovery_findings};
 
@@ -35,7 +35,7 @@ impl MsiInventoryScan {
 
 /// Verify a single MSI file against the stored inventory snapshot.
 pub(super) fn diagnose_msi_file(
-    pkg: &Package,
+    pkg: &InstalledPackage,
     file: &crate::models::MsiFileRecord,
 ) -> Option<DiagnosisResult> {
     let path = Path::new(&file.path);
@@ -98,7 +98,7 @@ pub(super) fn diagnose_msi_file(
 
 /// Translate a filesystem metadata failure into an MSI file diagnosis.
 fn diagnose_msi_file_error(
-    pkg: &Package,
+    pkg: &InstalledPackage,
     file: &crate::models::MsiFileRecord,
     err: std::io::Error,
 ) -> DiagnosisResult {
@@ -129,7 +129,7 @@ fn diagnose_msi_file_error(
 
 pub(crate) fn scan_msi_inventory(
     conn: &crate::storage::DbConnection,
-    packages: &[Package],
+    packages: &[InstalledPackage],
 ) -> MsiInventoryScan {
     let mut scan = MsiInventoryScan::new();
 
@@ -185,8 +185,8 @@ mod tests {
     };
     use tempfile::tempdir;
 
-    fn sample_package(name: &str, install_dir: &std::path::Path) -> Package {
-        Package {
+    fn sample_package(name: &str, install_dir: &std::path::Path) -> InstalledPackage {
+        InstalledPackage {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             kind: InstallerType::Msi,

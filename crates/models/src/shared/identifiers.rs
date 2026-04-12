@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::ModelError;
 use super::validation::{Validate, ensure_non_empty};
-use crate::package_ref::PackageId;
+use crate::package::PackageId;
 
 macro_rules! define_string_newtype {
     (

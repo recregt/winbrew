@@ -15,7 +15,7 @@ use thiserror::Error;
 use crate::core::fs::cleanup_path;
 use crate::core::now;
 use crate::storage;
-use winbrew_models::{EngineKind, InstallerType, Package, PackageStatus};
+use winbrew_models::{EngineKind, InstalledPackage, InstallerType, PackageStatus};
 
 /// Errors raised while preparing or updating install state.
 #[derive(Debug, Error)]
@@ -159,8 +159,8 @@ fn installing_package(
     kind: InstallerType,
     engine_kind: EngineKind,
     install_dir: &Path,
-) -> Package {
-    Package {
+) -> InstalledPackage {
+    InstalledPackage {
         name: name.into(),
         version: version.into(),
         kind,
@@ -181,9 +181,9 @@ mod tests {
     use std::path::Path;
     use tempfile::tempdir;
     use winbrew_models::{
-        EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope, InstallerType,
-        MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
-        MsiRegistryRecord, MsiShortcutRecord, Package, PackageStatus,
+        EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope, InstalledPackage,
+        InstallerType, MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt,
+        MsiInventorySnapshot, MsiRegistryRecord, MsiShortcutRecord, PackageStatus,
     };
 
     fn init_storage(root: &Path) {
@@ -196,8 +196,8 @@ mod tests {
         storage::init(&paths).expect("storage should initialize");
     }
 
-    fn sample_package(name: &str, install_dir: &str) -> Package {
-        Package {
+    fn sample_package(name: &str, install_dir: &str) -> InstalledPackage {
+        InstalledPackage {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             kind: InstallerType::Msi,

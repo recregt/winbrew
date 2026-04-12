@@ -13,7 +13,9 @@ use crate::AppContext;
 use crate::storage::database;
 
 use super::scan;
-use crate::models::{DiagnosisResult, DiagnosisSeverity, HealthReport, Package, RecoveryFinding};
+use crate::models::{
+    DiagnosisResult, DiagnosisSeverity, HealthReport, InstalledPackage, RecoveryFinding,
+};
 
 /// Convert a path into the display string used in the final report.
 ///
@@ -39,7 +41,9 @@ fn sort_diagnostics(left: &DiagnosisResult, right: &DiagnosisResult) -> std::cmp
 /// A database lookup failure should not prevent the doctor report from being
 /// generated. Instead, the function returns an empty package list plus a single
 /// error diagnostic that explains why package inventory is unavailable.
-fn collect_packages(packages_result: Result<Vec<Package>>) -> (Vec<Package>, Vec<DiagnosisResult>) {
+fn collect_packages(
+    packages_result: Result<Vec<InstalledPackage>>,
+) -> (Vec<InstalledPackage>, Vec<DiagnosisResult>) {
     match packages_result {
         Ok(packages) => (packages, Vec::new()),
         Err(err) => (
