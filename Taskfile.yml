@@ -50,6 +50,13 @@ tasks:
     cmds:
       - cargo doc --locked --workspace --no-deps
 
+  ci:docs:
+    desc: Run Rust doc checks for the full workspace
+    env:
+      RUSTDOCFLAGS: -D warnings
+    cmds:
+      - cargo doc --locked --workspace --document-private-items --no-deps
+
   ci:smoke:
     desc: Build and smoke-test the CLI
     cmds:
@@ -65,8 +72,13 @@ tasks:
     cmds:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-go.ps1 -Module publisher
 
+  ci:parser:
+    desc: Run Rust CI checks for the catalog parser
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-rust-parser.ps1
+
   ci:rust:
-    desc: Run Rust CI checks for the catalog parser bundle and CLI
+    desc: Run Rust CI checks for the CLI and binary
     cmds:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-rust.ps1
 
@@ -75,6 +87,8 @@ tasks:
     cmds:
       - task: ci:go:crawler
       - task: ci:go:publisher
+      - task: ci:parser
+      - task: ci:docs
       - task: ci:rust
       - task: ci:smoke
 
