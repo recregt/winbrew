@@ -52,7 +52,7 @@ mod tests {
     }
 
     #[test]
-    fn classifies_raw_payloads_as_portable() {
+    fn classifies_non_archive_payloads_as_raw() {
         assert_eq!(
             classify_payload("https://example.invalid/tool.exe"),
             PayloadKind::Raw
