@@ -188,6 +188,7 @@ fn parse_committed_package_journal(
         name: package_id.to_string(),
         version: version.to_string(),
         kind: InstallerType::from(engine_kind),
+        deployment_kind: InstallerType::from(engine_kind).deployment_kind(),
         engine_kind,
         engine_metadata,
         install_dir: install_dir.to_string(),

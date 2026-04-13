@@ -193,6 +193,7 @@ impl InstalledPackageBuilder {
             name: self.name,
             version: self.version,
             kind: self.kind,
+            deployment_kind: self.kind.deployment_kind(),
             engine_kind: EngineKind::from(self.kind),
             engine_metadata: self.engine_metadata,
             install_dir: install_dir.to_string_lossy().to_string(),

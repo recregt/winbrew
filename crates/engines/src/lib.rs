@@ -41,16 +41,7 @@ pub fn resolve_engine_for_installer(installer: &CatalogInstaller) -> Result<Engi
 }
 
 pub fn engine_kind_for_type(kind: InstallerType) -> Result<EngineKind> {
-    match kind {
-        InstallerType::Msi => Ok(EngineKind::Msi),
-        InstallerType::Msix => Ok(EngineKind::Msix),
-        InstallerType::Zip => Ok(EngineKind::Zip),
-        InstallerType::Portable => Ok(EngineKind::Portable),
-        other => Err(anyhow::anyhow!(
-            "unsupported installer type '{}'",
-            other.as_str()
-        )),
-    }
+    Ok(EngineKind::from_installer_type(kind))
 }
 
 impl PackageEngine for EngineKind {
@@ -81,8 +72,16 @@ mod tests {
             EngineKind::Msi
         );
         assert_eq!(
+            engine_kind_for_type(InstallerType::Appx).unwrap(),
+            EngineKind::Msix
+        );
+        assert_eq!(
             engine_kind_for_type(InstallerType::Msix).unwrap(),
             EngineKind::Msix
+        );
+        assert_eq!(
+            engine_kind_for_type(InstallerType::Wix).unwrap(),
+            EngineKind::Msi
         );
         assert_eq!(
             engine_kind_for_type(InstallerType::Zip).unwrap(),
@@ -92,13 +91,17 @@ mod tests {
             engine_kind_for_type(InstallerType::Portable).unwrap(),
             EngineKind::Portable
         );
+        assert_eq!(
+            engine_kind_for_type(InstallerType::Exe).unwrap(),
+            EngineKind::NativeExe
+        );
     }
 
     #[test]
-    fn engine_kind_for_type_rejects_exe() {
-        let err =
-            engine_kind_for_type(InstallerType::Exe).expect_err("exe should not map to an engine");
-
-        assert!(err.to_string().contains("unsupported installer type 'exe'"));
+    fn engine_kind_for_type_recognizes_native_exe_family() {
+        assert_eq!(
+            engine_kind_for_type(InstallerType::Inno).unwrap(),
+            EngineKind::NativeExe
+        );
     }
 }

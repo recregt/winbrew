@@ -177,6 +177,7 @@ mod tests {
             name: "Contoso App".to_string(),
             version: "1.2.3".to_string(),
             kind: InstallerType::Portable,
+            deployment_kind: InstallerType::Portable.deployment_kind(),
             engine_kind: EngineKind::Portable,
             engine_metadata: None,
             install_dir: "C:\\Apps\\Contoso".to_string(),

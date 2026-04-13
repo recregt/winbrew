@@ -26,12 +26,12 @@ struct EngineDescriptor {
 }
 
 fn matches_msix_installer(installer: &CatalogInstaller) -> bool {
-    installer.kind == InstallerType::Msix
+    installer.kind.is_windows_package()
 }
 
 #[cfg(windows)]
 fn matches_msi_installer(installer: &CatalogInstaller) -> bool {
-    installer.kind == InstallerType::Msi
+    installer.kind.is_msi_family()
 }
 
 fn matches_archive_installer(installer: &CatalogInstaller) -> bool {

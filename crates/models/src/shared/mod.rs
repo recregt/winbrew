@@ -9,12 +9,14 @@
 //!
 //! - `config`: configuration sections and value provenance
 //! - `error`: the canonical `ModelError` used by parse and validation code
+//! - `deployment`: deployment outcome metadata shared by install and reporting code
 //! - `hash`: checksum algorithm metadata and legacy algorithm detection
 //! - `identifiers`: strongly typed package/catalog identifiers
 //! - `validation`: the shared `Validate` trait and helper functions
 //! - `version`: semver-backed version parsing and normalization
 
 pub mod config;
+pub mod deployment;
 pub mod error;
 pub mod hash;
 pub mod identifiers;
@@ -22,6 +24,7 @@ pub mod validation;
 pub mod version;
 
 pub use config::{ConfigSection, ConfigValue, ConfigValueSource};
+pub use deployment::DeploymentKind;
 pub use error::ModelError;
 pub use hash::HashAlgorithm;
 pub use identifiers::{BucketName, CatalogId, PackageName};
