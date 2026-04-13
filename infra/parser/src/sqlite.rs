@@ -28,8 +28,8 @@ ON CONFLICT(package_id) DO UPDATE SET
 const DELETE_INSTALLERS: &str = "DELETE FROM catalog_installers WHERE package_id = ?1";
 
 const INSTALLER_INSERT: &str = r#"
-INSERT INTO catalog_installers(package_id, url, hash, arch, type)
-VALUES (?1, ?2, ?3, ?4, ?5)
+INSERT INTO catalog_installers(package_id, url, hash, arch, type, nested_kind)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
 "#;
 
 const SCHEMA: &str = r#"
@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS catalog_installers (
     hash        TEXT NOT NULL,
     arch        TEXT NOT NULL DEFAULT '',
     type        TEXT NOT NULL DEFAULT '',
+    nested_kind TEXT,
     UNIQUE(package_id, url, hash, arch, type)
 );
 
@@ -154,6 +155,11 @@ impl CatalogWriter {
                 .then(left.hash.cmp(&right.hash))
                 .then(left.arch.as_str().cmp(right.arch.as_str()))
                 .then(left.kind.as_str().cmp(right.kind.as_str()))
+                .then(
+                    left.nested_kind
+                        .map(|kind| kind.as_str())
+                        .cmp(&right.nested_kind.map(|kind| kind.as_str())),
+                )
         });
 
         for installer in installers {
@@ -163,6 +169,7 @@ impl CatalogWriter {
                 installer.hash.as_str(),
                 installer.arch.to_string(),
                 installer.kind.to_string(),
+                installer.nested_kind.map(|kind| kind.as_str()),
             ])?;
         }
 

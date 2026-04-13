@@ -18,6 +18,7 @@ use crate::storage;
 use winbrew_models::domains::install::EngineKind;
 use winbrew_models::domains::install::InstallerType;
 use winbrew_models::domains::installed::{InstalledPackage, PackageStatus};
+use winbrew_models::domains::shared::DeploymentKind;
 
 /// Errors raised while preparing or updating install state.
 #[derive(Debug, Error)]
@@ -130,10 +131,18 @@ pub fn mark_installing(
     name: impl Into<String>,
     version: impl Into<String>,
     kind: InstallerType,
+    deployment_kind: DeploymentKind,
     engine_kind: EngineKind,
     install_dir: &Path,
 ) -> Result<()> {
-    let package = installing_package(name, version, kind, engine_kind, install_dir);
+    let package = installing_package(
+        name,
+        version,
+        kind,
+        deployment_kind,
+        engine_kind,
+        install_dir,
+    );
     storage::insert_package(conn, &package).map_err(|source| {
         InstallStateError::DatabaseOperationFailed {
             operation: "marking package as installing",
@@ -159,6 +168,7 @@ fn installing_package(
     name: impl Into<String>,
     version: impl Into<String>,
     kind: InstallerType,
+    deployment_kind: DeploymentKind,
     engine_kind: EngineKind,
     install_dir: &Path,
 ) -> InstalledPackage {
@@ -166,7 +176,7 @@ fn installing_package(
         name: name.into(),
         version: version.into(),
         kind,
-        deployment_kind: kind.deployment_kind(),
+        deployment_kind,
         engine_kind,
         engine_metadata: None,
         install_dir: install_dir.to_string_lossy().into_owned(),

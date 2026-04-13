@@ -44,6 +44,9 @@ pub struct CatalogInstaller {
     pub arch: Architecture,
     /// Installer format.
     pub kind: InstallerType,
+    /// Nested installer format when the installer contains an archive payload.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nested_kind: Option<InstallerType>,
 }
 
 impl CatalogPackage {
@@ -125,9 +128,46 @@ mod tests {
             hash: String::default(),
             arch: Architecture::Any,
             kind: InstallerType::Portable,
+            nested_kind: None,
         };
 
         assert!(installer.validate().is_ok());
+    }
+
+    #[test]
+    fn catalog_installer_nested_kind_round_trips_through_serde() {
+        let installer = CatalogInstaller {
+            package_id: "winget/Contoso.App".into(),
+            url: "https://example.test/app.zip".to_string(),
+            hash: "sha256:deadbeef".to_string(),
+            arch: Architecture::Any,
+            kind: InstallerType::Zip,
+            nested_kind: Some(InstallerType::Msi),
+        };
+
+        let json = serde_json::to_string(&installer).expect("installer should serialize");
+        assert!(json.contains("\"nested_kind\":\"msi\""));
+
+        let restored: CatalogInstaller =
+            serde_json::from_str(&json).expect("installer should deserialize");
+
+        assert_eq!(restored.nested_kind, Some(InstallerType::Msi));
+    }
+
+    #[test]
+    fn catalog_installer_defaults_missing_nested_kind_on_deserialize() {
+        let json = r#"{
+            "package_id":"winget/Contoso.App",
+            "url":"https://example.test/app.exe",
+            "hash":"sha256:deadbeef",
+            "arch":"any",
+            "kind":"portable"
+        }"#;
+
+        let installer: CatalogInstaller =
+            serde_json::from_str(json).expect("installer should deserialize");
+
+        assert_eq!(installer.nested_kind, None);
     }
 
     #[test]

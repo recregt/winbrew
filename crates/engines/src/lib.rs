@@ -19,6 +19,7 @@ use anyhow::Result;
 use std::path::Path;
 
 pub use winbrew_models::install::engine::{EngineInstallReceipt, EngineKind};
+pub use winbrew_models::shared::DeploymentKind;
 
 use winbrew_models::catalog::package::CatalogInstaller;
 use winbrew_models::install::installed::InstalledPackage;
@@ -38,6 +39,10 @@ pub trait PackageEngine {
 
 pub fn resolve_engine_for_installer(installer: &CatalogInstaller) -> Result<EngineKind> {
     registry::resolve_engine_kind_for_installer(installer)
+}
+
+pub fn resolve_deployment_kind(installer: &CatalogInstaller) -> DeploymentKind {
+    registry::resolve_deployment_kind(installer)
 }
 
 pub fn engine_kind_for_type(kind: InstallerType) -> Result<EngineKind> {
@@ -62,8 +67,20 @@ impl PackageEngine for EngineKind {
 
 #[cfg(test)]
 mod tests {
-    use super::{EngineKind, engine_kind_for_type};
+    use super::{DeploymentKind, EngineKind, engine_kind_for_type, resolve_deployment_kind};
+    use winbrew_models::catalog::package::CatalogInstaller;
     use winbrew_models::install::installer::InstallerType;
+
+    fn installer(kind: InstallerType, nested_kind: Option<InstallerType>) -> CatalogInstaller {
+        CatalogInstaller {
+            package_id: "Contoso.App".into(),
+            url: "https://example.invalid/app.zip".to_string(),
+            hash: "hash".to_string(),
+            arch: "x64".parse().expect("arch should parse"),
+            kind,
+            nested_kind,
+        }
+    }
 
     #[test]
     fn engine_kind_for_type_maps_supported_types() {
@@ -102,6 +119,16 @@ mod tests {
         assert_eq!(
             engine_kind_for_type(InstallerType::Inno).unwrap(),
             EngineKind::NativeExe
+        );
+    }
+
+    #[test]
+    fn resolve_deployment_kind_uses_nested_installer_type_for_archives() {
+        let installer = installer(InstallerType::Zip, Some(InstallerType::Msi));
+
+        assert_eq!(
+            resolve_deployment_kind(&installer),
+            DeploymentKind::Installed
         );
     }
 }

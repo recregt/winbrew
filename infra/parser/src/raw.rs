@@ -39,6 +39,12 @@ pub struct RawFetchedInstaller {
     pub arch: String,
     #[serde(rename = "type")]
     pub kind: String,
+    #[serde(
+        rename = "NestedInstallerType",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub nested_kind: Option<String>,
 }
 
 impl ScoopStreamEnvelope {
@@ -94,6 +100,7 @@ mod tests {
                     hash: "sha256:deadbeef".to_string(),
                     arch: "x64".to_string(),
                     kind: "portable".to_string(),
+                    nested_kind: None,
                 }],
             },
         };
@@ -126,5 +133,21 @@ mod tests {
             err.to_string()
                 .contains("unsupported scoop stream schema version")
         );
+    }
+
+    #[test]
+    fn deserializes_winget_nested_installer_type_field() {
+        let installer: RawFetchedInstaller = serde_json::from_str(
+            r#"{
+                "url": "https://example.invalid/app.zip",
+                "hash": "sha256:deadbeef",
+                "arch": "x64",
+                "type": "zip",
+                "NestedInstallerType": "msi"
+            }"#,
+        )
+        .expect("installer should deserialize");
+
+        assert_eq!(installer.nested_kind.as_deref(), Some("msi"));
     }
 }

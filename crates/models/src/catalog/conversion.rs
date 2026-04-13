@@ -64,6 +64,7 @@ impl TryFrom<RawCatalogInstaller> for CatalogInstaller {
             hash: raw.hash,
             arch: raw.arch.parse()?,
             kind: raw.kind.parse()?,
+            nested_kind: raw.nested_kind.map(|kind| kind.parse()).transpose()?,
         };
 
         installer.validate()?;
@@ -105,6 +106,7 @@ mod tests {
             hash: String::default(),
             arch: String::default(),
             kind: "portable".to_string(),
+            nested_kind: Some("msi".to_string()),
         };
 
         let converted =
@@ -112,5 +114,6 @@ mod tests {
 
         assert_eq!(converted.arch, Architecture::Any);
         assert_eq!(converted.kind, InstallerType::Portable);
+        assert_eq!(converted.nested_kind, Some(InstallerType::Msi));
     }
 }

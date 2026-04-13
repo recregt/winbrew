@@ -104,6 +104,7 @@ pub fn run<O: InstallObserver>(
     let install_dir = ctx.paths.package_install_dir(&package.name);
     let temp_root = temp_workspace::build_temp_root(&package.name, &package_version);
     let install_root = install_root_from_package_dir(&install_dir);
+    let deployment_kind = engines::resolve_deployment_kind(&installer);
 
     ensure_install_dirs_at(&install_root)?;
     fs::create_dir_all(&temp_root)?;
@@ -117,6 +118,7 @@ pub fn run<O: InstallObserver>(
         package.name.clone(),
         package_version.clone(),
         installer.kind,
+        deployment_kind,
         engine,
         &install_dir,
     )?;

@@ -36,4 +36,7 @@ pub struct RawCatalogInstaller {
     pub arch: String,
     /// Raw installer kind string.
     pub kind: String,
+    /// Raw nested installer kind string when the installer is archive-shaped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nested_kind: Option<String>,
 }
