@@ -19,6 +19,10 @@ Use it when you want to answer one of these questions:
 - [Managed Paths Policy](managed-paths-policy.md) for the owned directory tree.
 - [Recovery Policy](recovery-policy.md) for journal, SQLite, and disk authority.
 
+## Engine Strategy
+
+- [Engine Roadmap and Ownership](engines.md) for supported package types, ownership boundaries, and journal strategy.
+
 ## Workspace Architecture
 
 - [winbrew-models](../crates/models/src/lib.rs) for typed model contracts.
@@ -46,8 +50,9 @@ Use it when you want to answer one of these questions:
 ## Reading Order
 
 1. Read the README for the user-facing summary.
-2. Read `docs/create-dependence.md` for ownership and wiring.
-3. Read the policy docs for runtime contracts.
-4. Read the crate-level docs for the layer you plan to change.
+2. Read `docs/engines.md` for package-type ownership and engine routing.
+3. Read `docs/create-dependence.md` for ownership and wiring.
+4. Read the policy docs for runtime contracts.
+5. Read the crate-level docs for the layer you plan to change.
 
 The docs are intentionally split by responsibility. If a page starts to repeat another page, the repeated material should usually move to the more specific owner.

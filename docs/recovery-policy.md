@@ -4,6 +4,8 @@ This document defines how doctor and future repair tooling decide between SQLite
 
 The goal is to keep one clear rule set for rebuilding package state, classifying conflicts, and deciding when to ask the user for confirmation.
 
+Engine-specific evidence placement and journal payload conventions are documented in [Engine Roadmap and Ownership](engines.md). This page stays focused on recovery authority and repair policy.
+
 ## 1. Authority Hierarchy
 
 The system uses different sources of truth for different jobs:
@@ -89,6 +91,7 @@ This means:
 - Missing journals reduce recoverability, but they do not prove that a package is broken.
 - `recovery trail missing` is a Warning in the current policy.
 - If we later make journal retention mandatory for all supported installs, the same diagnostic should be promoted to Error without changing the underlying classification.
+- The per-package journal shape and package-type evidence details are defined in [Engine Roadmap and Ownership](engines.md).
 
 Implementation consequence:
 
