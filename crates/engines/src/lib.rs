@@ -1,3 +1,10 @@
+//! Engine dispatch and platform-specific installers for WinBrew.
+//!
+//! `winbrew-engines` maps installer metadata to execution backends and owns
+//! the filesystem and Windows-specific install/remove implementations. The
+//! crate stays focused on engine selection, engine receipts, and platform
+//! adapters so the app layer can orchestrate without embedding OS details.
+
 mod registry;
 
 pub mod filesystem;

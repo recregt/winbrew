@@ -1,3 +1,10 @@
+//! Workflow layer for WinBrew.
+//!
+//! `winbrew-app` owns the business-level orchestration for install, update,
+//! doctor, repair, and related command flows. It sits between the CLI
+//! presentation layer and the lower-level core, storage, engines, and models
+//! crates, so it can keep execution logic reusable in tests and other callers.
+
 #![cfg(windows)]
 
 pub use winbrew_core as core;

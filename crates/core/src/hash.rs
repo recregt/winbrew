@@ -1,3 +1,9 @@
+//! Hashing primitives and checksum policy for download and inventory flows.
+//!
+//! This module keeps the algorithm mapping, streaming hash wrapper, and
+//! checksum error vocabulary together so callers can validate installer and
+//! catalog payloads without re-implementing algorithm handling.
+
 use md5::Md5;
 use sha1::Sha1;
 use sha2::{Digest, Sha256, Sha512};
@@ -7,6 +13,7 @@ use std::path::Path;
 use thiserror::Error;
 use winbrew_models::shared::hash::HashAlgorithm;
 
+/// Errors produced while calculating or validating checksums.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum HashError {
     #[error("checksum mismatch for installer: expected {expected}, got {actual}")]
@@ -18,6 +25,7 @@ pub enum HashError {
 
 pub type Result<T> = std::result::Result<T, HashError>;
 
+/// Streaming hash wrapper over the supported checksum algorithms.
 #[derive(Debug)]
 pub enum Hasher {
     Md5(Md5),
@@ -55,6 +63,7 @@ impl Hasher {
     }
 }
 
+/// Detect the checksum algorithm referenced by a hash string.
 pub fn hash_algorithm(value: &str) -> Option<HashAlgorithm> {
     let normalized = normalize_hash(value);
 
