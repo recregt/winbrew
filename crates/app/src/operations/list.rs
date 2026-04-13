@@ -34,6 +34,7 @@ fn package_matches(pkg: &InstalledPackage, query: &str) -> bool {
         pkg.name.as_str(),
         pkg.version.as_str(),
         pkg.kind.as_str(),
+        pkg.deployment_kind.as_str(),
         pkg.install_dir.as_str(),
     ]
     .into_iter()
@@ -115,5 +116,20 @@ mod tests {
 
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].name, "Contoso App");
+    }
+
+    #[test]
+    fn filter_packages_matches_deployment_kind_terms() {
+        let packages = vec![package(
+            "Contoso Archive",
+            "1.0.0",
+            InstallerType::Zip,
+            r"C:\Packages\Contoso.Archive",
+        )];
+
+        let matches = filter_packages(packages, "portable");
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].name, "Contoso Archive");
     }
 }
