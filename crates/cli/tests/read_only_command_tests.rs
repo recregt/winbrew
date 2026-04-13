@@ -2,53 +2,47 @@ mod common;
 
 use std::fs;
 
+use rusqlite::Connection;
 use tempfile::TempDir;
 use winbrew_app::version;
-use winbrew_cli::database;
-use winbrew_cli::models::domains::install::{EngineKind, InstallerType};
-use winbrew_cli::models::domains::installed::{InstalledPackage, PackageStatus};
+use winbrew_cli::database::{self};
+use winbrew_cli::models::domains::install::InstallerType;
+use winbrew_cli::models::domains::installed::PackageStatus;
 
 struct ReadOnlyFixture {
     root: TempDir,
+    db_path: std::path::PathBuf,
 }
 
 impl ReadOnlyFixture {
     fn new() -> Self {
         let root = common::test_root();
-        common::init_database(root.path()).expect("database should initialize");
+        let config = common::init_database(root.path()).expect("database should initialize");
         fs::create_dir_all(root.path().join("packages")).expect("packages dir should exist");
 
-        Self { root }
+        let resolved_paths = config.resolved_paths();
+
+        Self {
+            root,
+            db_path: resolved_paths.db,
+        }
+    }
+
+    fn conn(&self) -> Connection {
+        Connection::open(&self.db_path).expect("database connection should open")
     }
 
     fn insert_package(&self, name: &str) {
-        let conn = database::get_conn().expect("database connection should open");
-        let package = InstalledPackage {
-            name: name.to_string(),
-            version: "1.2.3".to_string(),
-            kind: InstallerType::Portable,
-            engine_kind: EngineKind::Portable,
-            engine_metadata: None,
-            install_dir: self
-                .root
-                .path()
-                .join("packages")
-                .join(name)
-                .to_string_lossy()
-                .to_string(),
-            dependencies: Vec::new(),
-            status: PackageStatus::Ok,
-            installed_at: "2026-04-12T00:00:00Z".to_string(),
-        };
+        let install_dir = self.root.path().join("packages").join(name);
+        let conn = self.conn();
+        let package = common::InstalledPackageBuilder::new(name)
+            .version("1.2.3")
+            .kind(InstallerType::Portable)
+            .status(PackageStatus::Ok)
+            .build(&install_dir);
 
         database::insert_package(&conn, &package).expect("package should insert");
     }
-}
-
-fn output_text(output: &std::process::Output) -> String {
-    let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
-    text.push_str(&String::from_utf8_lossy(&output.stderr));
-    text
 }
 
 #[test]
@@ -57,24 +51,25 @@ fn read_only_commands_cover_cli_views() {
     fixture.insert_package("Contoso App");
 
     let list_output = common::run_winbrew(fixture.root.path(), &["list"]);
-    assert!(list_output.status.success(), "list should succeed");
-    let list_text = output_text(&list_output);
-    assert!(list_text.contains("Contoso App"));
-    assert!(list_text.contains("Total: 1 package(s) installed."));
+    common::assert_success(&list_output, "list command");
+    common::assert_output_contains_all(
+        &list_output,
+        &["Contoso App", "Total: 1 package(s) installed."],
+    );
 
     let search_output = common::run_winbrew(fixture.root.path(), &["search", "contoso"]);
-    assert!(search_output.status.success(), "search should succeed");
-    let search_text = output_text(&search_output);
-    assert!(search_text.contains("Package catalog not available. Run `winbrew update` first."));
+    common::assert_success(&search_output, "search command");
+    common::assert_output_contains(
+        &search_output,
+        "Package catalog not available. Run `winbrew update` first.",
+    );
 
     let info_output = common::run_winbrew(fixture.root.path(), &["info"]);
-    assert!(info_output.status.success(), "info should succeed");
-    let info_text = output_text(&info_output);
-    assert!(info_text.contains("Version:"));
-    assert!(info_text.contains("Runtime settings displayed."));
+    common::assert_success(&info_output, "info command");
+    common::assert_output_contains_all(&info_output, &["Version:", "Runtime settings displayed."]);
 
     let version_output = common::run_winbrew(fixture.root.path(), &["version"]);
-    assert!(version_output.status.success(), "version should succeed");
+    common::assert_success(&version_output, "version command");
     let version_text = String::from_utf8(version_output.stdout).expect("stdout should be utf-8");
     assert_eq!(version_text.trim(), version::version_string());
 }
