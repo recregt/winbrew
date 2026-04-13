@@ -1,7 +1,6 @@
 use anyhow::{Result, anyhow};
 use std::path::Path;
 
-use winbrew_core::network::is_zip_path;
 use winbrew_models::catalog::package::CatalogInstaller;
 use winbrew_models::install::engine::EngineInstallReceipt;
 use winbrew_models::install::installed::InstalledPackage;
@@ -9,6 +8,7 @@ use winbrew_models::install::installer::InstallerType;
 
 use super::EngineKind;
 use crate::filesystem::{archive::zip, portable};
+use crate::payload::{PortablePayloadKind, classify_portable_payload};
 use crate::windows::package::msix;
 
 #[cfg(windows)]
@@ -36,11 +36,18 @@ fn matches_msi_installer(installer: &CatalogInstaller) -> bool {
 
 fn matches_zip_installer(installer: &CatalogInstaller) -> bool {
     installer.kind == InstallerType::Zip
-        || (installer.kind == InstallerType::Portable && is_zip_path(&installer.url))
+        || matches!(
+            classify_portable_payload(&installer.url),
+            PortablePayloadKind::ZipArchive
+        )
 }
 
 fn matches_portable_installer(installer: &CatalogInstaller) -> bool {
     installer.kind == InstallerType::Portable
+        && matches!(
+            classify_portable_payload(&installer.url),
+            PortablePayloadKind::Raw
+        )
 }
 
 fn msix_install(
@@ -72,12 +79,12 @@ fn zip_install(
 }
 
 fn portable_install(
-    installer: &CatalogInstaller,
+    _installer: &CatalogInstaller,
     download_path: &Path,
     install_dir: &Path,
     package_name: &str,
 ) -> Result<EngineInstallReceipt> {
-    portable::install::install(download_path, install_dir, &installer.url, package_name)
+    portable::install::install(download_path, install_dir, package_name)
 }
 
 fn msix_remove(package: &InstalledPackage) -> Result<()> {
@@ -130,6 +137,17 @@ const ENGINE_DESCRIPTORS: &[EngineDescriptor] = &[
 pub(crate) fn resolve_engine_kind_for_installer(
     installer: &CatalogInstaller,
 ) -> Result<EngineKind> {
+    if installer.kind == InstallerType::Portable
+        && let PortablePayloadKind::UnsupportedArchive { format } =
+            classify_portable_payload(&installer.url)
+    {
+        return Err(anyhow!(
+            "unsupported portable archive format '{}': '{}'",
+            format,
+            installer.url
+        ));
+    }
+
     ENGINE_DESCRIPTORS
         .iter()
         .find(|descriptor| (descriptor.matches_installer)(installer))
@@ -188,6 +206,32 @@ mod tests {
         .expect("engine should resolve");
 
         assert_eq!(engine, EngineKind::Zip);
+    }
+
+    #[test]
+    fn resolve_installer_routes_raw_portable_payloads_to_portable() {
+        let engine = resolve_engine_kind_for_installer(&installer(
+            InstallerType::Portable,
+            "https://example.invalid/tool.exe",
+        ))
+        .expect("engine should resolve");
+
+        assert_eq!(engine, EngineKind::Portable);
+    }
+
+    #[test]
+    fn resolve_installer_rejects_portable_archive_payloads() {
+        let error = resolve_engine_kind_for_installer(&installer(
+            InstallerType::Portable,
+            "https://example.invalid/tool.tar.gz",
+        ))
+        .expect_err("portable archive should be rejected");
+
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported portable archive format")
+        );
     }
 
     #[test]
