@@ -6,10 +6,11 @@ use rusqlite::{Connection, params};
 use std::fs;
 use std::io::{Cursor, Write};
 use std::path::Path;
+use std::path::PathBuf;
 use tempfile::TempDir;
-use winbrew_cli::database::{self};
+use winbrew_cli::database;
 use winbrew_cli::models::domains::install::InstallerType;
-use winbrew_cli::models::domains::installed::{InstalledPackage, PackageStatus};
+use winbrew_cli::models::domains::installed::PackageStatus;
 use winbrew_cli::models::shared::hash::HashAlgorithm;
 use winbrew_core::hash::Hasher;
 use zip::ZipWriter;
@@ -17,19 +18,35 @@ use zip::write::SimpleFileOptions;
 
 struct BinaryFixture {
     root: TempDir,
+    db_path: PathBuf,
+    catalog_db_path: PathBuf,
 }
 
 impl BinaryFixture {
     fn new() -> Self {
         let root = common::test_root();
-        common::init_database(root.path()).expect("database should initialize");
+        let config = common::init_database(root.path()).expect("database should initialize");
         fs::create_dir_all(root.path().join("packages")).expect("packages dir should exist");
 
-        Self { root }
+        let resolved_paths = config.resolved_paths();
+
+        Self {
+            root,
+            db_path: resolved_paths.db,
+            catalog_db_path: resolved_paths.catalog_db,
+        }
     }
 
     fn path(&self) -> &Path {
         self.root.path()
+    }
+
+    fn conn(&self) -> Connection {
+        Connection::open(&self.db_path).expect("database connection should open")
+    }
+
+    fn catalog_conn(&self) -> Connection {
+        Connection::open(&self.catalog_db_path).expect("catalog database should open")
     }
 
     fn run(&self, args: &[&str]) -> std::process::Output {
@@ -41,18 +58,12 @@ impl BinaryFixture {
         fs::create_dir_all(&install_dir).expect("install dir should exist");
         fs::write(install_dir.join("tool.exe"), b"payload").expect("install file should exist");
 
-        let conn = database::get_conn().expect("database connection should open");
-        let package = InstalledPackage {
-            name: name.to_string(),
-            version: version.to_string(),
-            kind,
-            engine_kind: kind.into(),
-            engine_metadata: None,
-            install_dir: install_dir.to_string_lossy().to_string(),
-            dependencies: Vec::new(),
-            status: PackageStatus::Ok,
-            installed_at: "2026-04-12T00:00:00Z".to_string(),
-        };
+        let conn = self.conn();
+        let package = common::InstalledPackageBuilder::new(name)
+            .version(version)
+            .kind(kind)
+            .status(PackageStatus::Ok)
+            .build(&install_dir);
 
         database::insert_package(&conn, &package).expect("package should insert");
         install_dir
@@ -64,10 +75,11 @@ impl BinaryFixture {
         installer_url: &str,
         hash: &str,
     ) -> Result<()> {
-        let catalog_db_dir = self.path().join("data").join("db");
-        fs::create_dir_all(&catalog_db_dir)?;
+        if let Some(parent) = self.catalog_db_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
 
-        let conn = Connection::open(catalog_db_dir.join("catalog.db"))?;
+        let conn = self.catalog_conn();
         conn.execute_batch(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../tests/fixtures/catalog_schema.sql"
@@ -76,7 +88,7 @@ impl BinaryFixture {
         conn.execute("DELETE FROM catalog_installers", [])?;
         conn.execute("DELETE FROM catalog_packages", [])?;
 
-        let package_id = format!("winget/{}", package_name.replace(' ', "."));
+        let package_id = common::catalog_package_id(package_name);
 
         conn.execute(
             r#"
@@ -129,12 +141,6 @@ fn sha512_hex(bytes: &[u8]) -> String {
     digest_hex(HashAlgorithm::Sha512, bytes)
 }
 
-fn output_text(output: &std::process::Output) -> String {
-    let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
-    text.push_str(&String::from_utf8_lossy(&output.stderr));
-    text
-}
-
 #[test]
 fn install_runs_through_the_binary() -> Result<()> {
     let fixture = BinaryFixture::new();
@@ -154,12 +160,11 @@ fn install_runs_through_the_binary() -> Result<()> {
 
     let output = fixture.run(&["install", package_name]);
 
-    assert!(output.status.success(), "install should succeed");
-    let text = output_text(&output);
-    assert!(text.contains("Installed Winbrew Test Zip 1.0.0 into"));
+    common::assert_success(&output, "install command");
+    common::assert_output_contains(&output, "Installed Winbrew Test Zip 1.0.0 into");
     download_mock.assert();
 
-    let conn = database::get_conn().expect("database connection should open");
+    let conn = fixture.conn();
     let stored =
         database::get_package(&conn, package_name)?.expect("package should be marked as installed");
     assert_eq!(stored.status, PackageStatus::Ok);
@@ -185,12 +190,11 @@ fn remove_runs_through_the_binary() {
 
     let output = fixture.run(&["remove", package_name, "--yes"]);
 
-    assert!(output.status.success(), "remove should succeed");
-    let text = output_text(&output);
-    assert!(text.contains("Successfully removed Contoso.App."));
+    common::assert_success(&output, "remove command");
+    common::assert_output_contains(&output, "Successfully removed Contoso.App.");
     assert!(!install_dir.exists());
 
-    let conn = database::get_conn().expect("database connection should open");
+    let conn = fixture.conn();
     assert!(
         database::get_package(&conn, package_name)
             .expect("query should succeed")

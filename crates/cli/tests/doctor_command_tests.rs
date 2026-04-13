@@ -5,14 +5,14 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use rusqlite::Connection;
 use tempfile::TempDir;
 use winbrew_app::doctor::health_report;
 use winbrew_cli::CommandContext;
 use winbrew_cli::commands::doctor::{exit_error, format_duration, render_results, write_json};
 use winbrew_cli::commands::error::CommandError;
-use winbrew_cli::database::{self, Config};
-use winbrew_cli::models::domains::install::{EngineKind, InstallerType};
-use winbrew_cli::models::domains::installed::{InstalledPackage, PackageStatus};
+use winbrew_cli::database::{self};
+use winbrew_cli::models::domains::install::InstallerType;
 use winbrew_cli::models::domains::reporting::{
     DiagnosisResult, DiagnosisSeverity, HealthReport, RecoveryFinding,
 };
@@ -20,38 +20,40 @@ use winbrew_ui::{UiBuilder, UiSettings};
 
 struct DoctorFixture {
     root: TempDir,
+    db_path: PathBuf,
     ctx: CommandContext,
 }
 
 impl DoctorFixture {
     fn new() -> Self {
         let root = common::test_root();
-        common::init_database(root.path()).expect("database should initialize");
+        let config = common::init_database(root.path()).expect("database should initialize");
         std::fs::create_dir_all(root.path().join("packages")).expect("packages dir should exist");
 
-        let config = Config::load_at(root.path()).expect("config should load");
+        let resolved_paths = config.resolved_paths();
         let ctx = CommandContext::from_config(&config).expect("context should build");
 
-        Self { root, ctx }
+        Self {
+            root,
+            db_path: resolved_paths.db,
+            ctx,
+        }
     }
 
     fn package_install_dir(&self, name: &str) -> PathBuf {
         self.root.path().join("packages").join(name)
     }
 
+    fn conn(&self) -> Connection {
+        Connection::open(&self.db_path).expect("database connection should open")
+    }
+
     fn insert_installed_package(&self, name: &str, install_dir: &Path) {
-        let conn = database::get_conn().expect("database connection should open");
-        let package = InstalledPackage {
-            name: name.to_string(),
-            version: "1.0.0".to_string(),
-            kind: InstallerType::Portable,
-            engine_kind: EngineKind::Portable,
-            engine_metadata: None,
-            install_dir: install_dir.to_string_lossy().to_string(),
-            dependencies: Vec::new(),
-            status: PackageStatus::Ok,
-            installed_at: "2026-04-10T00:00:00Z".to_string(),
-        };
+        let conn = self.conn();
+        let package = common::InstalledPackageBuilder::new(name)
+            .version("1.0.0")
+            .kind(InstallerType::Portable)
+            .build(install_dir);
 
         database::insert_package(&conn, &package).expect("package should insert");
     }

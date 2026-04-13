@@ -10,9 +10,9 @@ use std::path::Path;
 use tempfile::TempDir;
 use winbrew_cli::CommandContext;
 use winbrew_cli::commands::repair;
-use winbrew_cli::database::{self, Config};
+use winbrew_cli::database::{self};
 use winbrew_cli::models::domains::install::{EngineKind, InstallerType};
-use winbrew_cli::models::domains::installed::{InstalledPackage, PackageStatus};
+use winbrew_cli::models::domains::installed::PackageStatus;
 use winbrew_cli::models::domains::shared::HashAlgorithm;
 use winbrew_core::Hasher;
 use zip::ZipWriter;
@@ -20,21 +20,28 @@ use zip::write::SimpleFileOptions;
 
 struct RepairFixture {
     root: TempDir,
+    db_path: std::path::PathBuf,
+    catalog_db_path: std::path::PathBuf,
     ctx: CommandContext,
 }
 
 impl RepairFixture {
     fn new() -> Self {
         let root = common::test_root();
-        common::init_database(root.path()).expect("database should initialize");
+        let config = common::init_database(root.path()).expect("database should initialize");
         std::fs::create_dir_all(root.path().join("packages")).expect("packages dir should exist");
 
-        let config = Config::load_at(root.path()).expect("config should load");
         let mut config = config;
         config.core.default_yes = true;
+        let resolved_paths = config.resolved_paths();
         let ctx = CommandContext::from_config(&config).expect("context should build");
 
-        Self { root, ctx }
+        Self {
+            root,
+            db_path: resolved_paths.db,
+            catalog_db_path: resolved_paths.catalog_db,
+            ctx,
+        }
     }
 
     fn root_path(&self) -> &Path {
@@ -42,23 +49,14 @@ impl RepairFixture {
     }
 
     fn insert_stale_package(&self, name: &str) {
-        let conn = database::get_conn().expect("database connection should open");
-        let package = InstalledPackage {
-            name: name.to_string(),
-            version: "0.9.0".to_string(),
-            kind: InstallerType::Portable,
-            engine_kind: EngineKind::Portable,
-            engine_metadata: None,
-            install_dir: self
-                .root_path()
-                .join("packages")
-                .join(name)
-                .to_string_lossy()
-                .to_string(),
-            dependencies: Vec::new(),
-            status: PackageStatus::Installing,
-            installed_at: "2026-04-01T00:00:00Z".to_string(),
-        };
+        let conn = Connection::open(&self.db_path).expect("database connection should open");
+        let install_dir = self.root_path().join("packages").join(name);
+        let package = common::InstalledPackageBuilder::new(name)
+            .version("0.9.0")
+            .kind(InstallerType::Portable)
+            .status(PackageStatus::Installing)
+            .installed_at("2026-04-01T00:00:00Z")
+            .build(&install_dir);
 
         database::insert_package(&conn, &package).expect("package should insert");
     }
@@ -101,7 +99,7 @@ fn create_catalog_db_with_hash(
     conn.execute("DELETE FROM catalog_installers", [])?;
     conn.execute("DELETE FROM catalog_packages", [])?;
 
-    let package_id = format!("winget/{}", package_name.replace(' ', "."));
+    let package_id = common::catalog_package_id(package_name);
 
     conn.execute(
         r#"
@@ -161,7 +159,7 @@ fn repair_replays_committed_journal_into_database() {
 
     repair::run(&fixture.ctx, true).expect("repair should succeed");
 
-    let conn = database::get_conn().expect("database connection should open");
+    let conn = Connection::open(&fixture.db_path).expect("database connection should open");
     let package = database::get_package(&conn, package_name)
         .expect("read package")
         .expect("package should exist");
@@ -212,33 +210,27 @@ fn repair_reinstalls_missing_package_from_catalog() -> Result<()> {
         .expect(1)
         .create();
 
-    let catalog_db_dir = fixture.root_path().join("data").join("db");
-    fs::create_dir_all(&catalog_db_dir)?;
+    if let Some(parent) = fixture.catalog_db_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
     create_catalog_db_with_hash(
-        &catalog_db_dir.join("catalog.db"),
+        &fixture.catalog_db_path,
         package_name,
         &installer_url,
         &sha512_hash,
     )?;
 
-    let conn = database::get_conn().expect("database connection should open");
-    let package = InstalledPackage {
-        name: package_name.to_string(),
-        version: "0.9.0".to_string(),
-        kind: InstallerType::Zip,
-        engine_kind: EngineKind::Zip,
-        engine_metadata: None,
-        install_dir: install_dir.to_string_lossy().to_string(),
-        dependencies: Vec::new(),
-        status: PackageStatus::Ok,
-        installed_at: "2026-04-01T00:00:00Z".to_string(),
-    };
+    let conn = Connection::open(&fixture.db_path).expect("database connection should open");
+    let package = common::InstalledPackageBuilder::new(package_name)
+        .version("0.9.0")
+        .kind(InstallerType::Zip)
+        .build(&install_dir);
 
     database::insert_package(&conn, &package).expect("package should insert");
 
     repair::run(&fixture.ctx, true).expect("repair should succeed");
 
-    let conn = database::get_conn().expect("database connection should open");
+    let conn = Connection::open(&fixture.db_path).expect("database connection should open");
     let package = database::get_package(&conn, package_name)
         .expect("read package")
         .expect("package should exist");

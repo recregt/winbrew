@@ -5,7 +5,6 @@ use std::fs;
 use tempfile::TempDir;
 use winbrew_cli::CommandContext;
 use winbrew_cli::commands::install as install_command;
-use winbrew_cli::database::Config;
 
 struct InstallFixture {
     root: TempDir,
@@ -15,10 +14,9 @@ struct InstallFixture {
 impl InstallFixture {
     fn new() -> Self {
         let root = common::test_root();
-        common::init_database(root.path()).expect("database should initialize");
+        let config = common::init_database(root.path()).expect("database should initialize");
         fs::create_dir_all(root.path().join("packages")).expect("packages dir should exist");
 
-        let config = Config::load_at(root.path()).expect("config should load");
         let ctx = CommandContext::from_config(&config).expect("context should build");
 
         Self { root, ctx }
