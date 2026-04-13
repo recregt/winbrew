@@ -3,7 +3,8 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use crate::models::{DiagnosisResult, DiagnosisSeverity, InstalledPackage, RecoveryFinding};
+use crate::models::domains::installed::InstalledPackage;
+use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity, RecoveryFinding};
 use crate::storage::database;
 
 use super::{sort_diagnoses, sort_recovery_findings};
@@ -24,7 +25,9 @@ impl PackageInstallScan {
     fn push(&mut self, diagnosis: DiagnosisResult, target_path: Option<&Path>) {
         if let Some(finding) = RecoveryFinding::from_diagnosis(&diagnosis) {
             let finding = match target_path {
-                Some(target_path) => finding.with_target_path(target_path.to_string_lossy()),
+                Some(target_path) => {
+                    finding.with_target_path(target_path.to_string_lossy().into_owned())
+                }
                 None => finding,
             };
             self.recovery_findings.push(finding);
@@ -154,7 +157,9 @@ pub(crate) fn installed_packages(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{InstallerType, PackageStatus, RecoveryActionGroup, RecoveryIssueKind};
+    use crate::models::domains::install::InstallerType;
+    use crate::models::domains::installed::PackageStatus;
+    use crate::models::domains::reporting::{RecoveryActionGroup, RecoveryIssueKind};
     use std::path::Path;
     use tempfile::tempdir;
 

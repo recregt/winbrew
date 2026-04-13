@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use winbrew_models::EngineMetadata;
+use winbrew_models::install::engine::EngineMetadata;
+use winbrew_models::shared::hash::HashAlgorithm;
 
 mod reader;
 mod replay;
@@ -50,18 +51,18 @@ impl fmt::Display for HashAlgo {
     }
 }
 
-impl From<winbrew_models::HashAlgorithm> for HashAlgo {
-    fn from(value: winbrew_models::HashAlgorithm) -> Self {
+impl From<HashAlgorithm> for HashAlgo {
+    fn from(value: HashAlgorithm) -> Self {
         match value {
-            winbrew_models::HashAlgorithm::Md5 => Self::Md5,
-            winbrew_models::HashAlgorithm::Sha1 => Self::Sha1,
-            winbrew_models::HashAlgorithm::Sha256 => Self::Sha256,
-            winbrew_models::HashAlgorithm::Sha512 => Self::Sha512,
+            HashAlgorithm::Md5 => Self::Md5,
+            HashAlgorithm::Sha1 => Self::Sha1,
+            HashAlgorithm::Sha256 => Self::Sha256,
+            HashAlgorithm::Sha512 => Self::Sha512,
         }
     }
 }
 
-impl From<HashAlgo> for winbrew_models::HashAlgorithm {
+impl From<HashAlgo> for HashAlgorithm {
     fn from(value: HashAlgo) -> Self {
         match value {
             HashAlgo::Md5 => Self::Md5,
@@ -159,7 +160,7 @@ mod tests {
     use std::process;
     use std::time::{SystemTime, UNIX_EPOCH};
     use winbrew_core::{ResolvedPaths, package_journal_key, resolved_paths};
-    use winbrew_models::InstallerType;
+    use winbrew_models::install::installer::InstallerType;
 
     fn temp_root() -> PathBuf {
         let unique_id = SystemTime::now()

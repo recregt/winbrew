@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::error::ParserError;
 
-pub use winbrew_models::CatalogMetadata;
+pub use winbrew_models::catalog::metadata::CatalogMetadata;
 
 pub fn write_metadata(path: &Path, metadata: &CatalogMetadata) -> Result<(), ParserError> {
     if let Some(parent) = path.parent() {

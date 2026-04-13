@@ -18,7 +18,8 @@
 use anyhow::Result;
 
 use crate::storage;
-use winbrew_models::{CatalogPackage, PackageRef};
+use winbrew_models::domains::catalog::CatalogPackage;
+use winbrew_models::domains::package::PackageRef;
 
 /// Search the catalog using an already-open catalog database connection.
 ///

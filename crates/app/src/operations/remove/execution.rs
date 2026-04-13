@@ -23,7 +23,7 @@ use crate::engines::{EngineKind, PackageEngine};
 use crate::storage::database;
 
 use super::{RemovalError, RemovalPlan, Result};
-use crate::models::InstalledPackage;
+use crate::models::domains::installed::InstalledPackage;
 
 /// Execute package removal using a fresh database connection.
 ///

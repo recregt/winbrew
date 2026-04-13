@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 
-use winbrew_models::{EngineMetadata, InstalledPackage as WinbrewPackage};
+use winbrew_models::install::engine::EngineMetadata;
+use winbrew_models::install::installed::InstalledPackage as WinbrewPackage;
 
 #[cfg(windows)]
 use winbrew_windows::msix_remove;

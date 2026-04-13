@@ -2,7 +2,10 @@ use anyhow::{Result, anyhow};
 use std::path::Path;
 
 use winbrew_core::network::is_zip_path;
-use winbrew_models::{CatalogInstaller, EngineInstallReceipt, InstalledPackage, InstallerType};
+use winbrew_models::catalog::package::CatalogInstaller;
+use winbrew_models::install::engine::EngineInstallReceipt;
+use winbrew_models::install::installed::InstalledPackage;
+use winbrew_models::install::installer::InstallerType;
 
 use super::EngineKind;
 use crate::filesystem::{archive::zip, portable};
@@ -163,7 +166,8 @@ fn resolve_engine_descriptor(kind: EngineKind) -> Result<&'static EngineDescript
 mod tests {
     use super::resolve_engine_kind_for_installer;
     use crate::EngineKind;
-    use winbrew_models::{CatalogInstaller, InstallerType};
+    use winbrew_models::catalog::package::CatalogInstaller;
+    use winbrew_models::install::installer::InstallerType;
 
     fn installer(kind: InstallerType, url: &str) -> CatalogInstaller {
         CatalogInstaller {

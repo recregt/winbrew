@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::io::{self, Write};
 
 use crate::commands::error::CommandError;
-use crate::models::{DiagnosisResult, DiagnosisSeverity, HealthReport};
+use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity, HealthReport};
 use crate::{CommandContext, app::doctor};
 use winbrew_ui::Ui;
 

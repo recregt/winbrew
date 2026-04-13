@@ -15,7 +15,9 @@ use thiserror::Error;
 use crate::core::fs::cleanup_path;
 use crate::core::now;
 use crate::storage;
-use winbrew_models::{EngineKind, InstalledPackage, InstallerType, PackageStatus};
+use winbrew_models::domains::install::EngineKind;
+use winbrew_models::domains::install::InstallerType;
+use winbrew_models::domains::installed::{InstalledPackage, PackageStatus};
 
 /// Errors raised while preparing or updating install state.
 #[derive(Debug, Error)]
@@ -180,10 +182,13 @@ mod tests {
     use crate::storage;
     use std::path::Path;
     use tempfile::tempdir;
-    use winbrew_models::{
-        EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope, InstalledPackage,
-        InstallerType, MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt,
-        MsiInventorySnapshot, MsiRegistryRecord, MsiShortcutRecord, PackageStatus,
+    use winbrew_models::domains::install::{
+        EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope, InstallerType,
+    };
+    use winbrew_models::domains::installed::{InstalledPackage, PackageStatus};
+    use winbrew_models::domains::inventory::{
+        MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
+        MsiRegistryRecord, MsiShortcutRecord,
     };
 
     fn init_storage(root: &Path) {

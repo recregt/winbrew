@@ -1,10 +1,12 @@
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use winbrew_models::{
-    HashAlgorithm, InstallScope, MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt,
-    MsiInventorySnapshot, MsiRegistryRecord, MsiShortcutRecord,
+use winbrew_models::install::engine::InstallScope;
+use winbrew_models::msi_inventory::records::{
+    MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
+    MsiRegistryRecord, MsiShortcutRecord,
 };
+use winbrew_models::shared::hash::HashAlgorithm;
 
 pub fn upsert_receipt(conn: &Connection, receipt: &MsiInventoryReceipt) -> Result<()> {
     conn.execute(
@@ -135,7 +137,8 @@ fn insert_files(conn: &Connection, files: &[MsiFileRecord]) -> Result<()> {
             file.package_name,
             file.path,
             file.normalized_path,
-            file.hash_algorithm.map(|algorithm| algorithm.to_string()),
+            file.hash_algorithm
+                .map(|algorithm: HashAlgorithm| algorithm.to_string()),
             file.hash_hex,
             file.is_config_file,
         ])
@@ -358,15 +361,17 @@ fn load_components(conn: &Connection, package_name: &str) -> Result<Vec<MsiCompo
 #[cfg(test)]
 mod tests {
     use super::{
-        find_packages_by_normalized_path, find_packages_by_normalized_registry_key_path,
-        get_snapshot, replace_snapshot,
+        HashAlgorithm, find_packages_by_normalized_path,
+        find_packages_by_normalized_registry_key_path, get_snapshot, replace_snapshot,
     };
     use crate::database::{insert_package, migration};
     use rusqlite::Connection;
-    use winbrew_models::{
-        EngineKind, EngineMetadata, InstallScope, InstalledPackage, InstallerType,
+    use winbrew_models::install::engine::{EngineKind, EngineMetadata, InstallScope};
+    use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
+    use winbrew_models::install::installer::InstallerType;
+    use winbrew_models::msi_inventory::records::{
         MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
-        MsiRegistryRecord, MsiShortcutRecord, PackageStatus,
+        MsiRegistryRecord, MsiShortcutRecord,
     };
 
     fn sample_package(name: &str) -> InstalledPackage {
@@ -401,7 +406,7 @@ mod tests {
                 package_name: name.to_string(),
                 path: "C:/Tools/Demo/bin/demo.exe".to_string(),
                 normalized_path: "c:/tools/demo/bin/demo.exe".to_string(),
-                hash_algorithm: Some(winbrew_models::HashAlgorithm::Sha256),
+                hash_algorithm: Some(HashAlgorithm::Sha256),
                 hash_hex: Some(
                     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
                 ),
@@ -475,7 +480,7 @@ mod tests {
             package_name: package_name.to_string(),
             path: "C:/Tools/Demo/bin/demo2.exe".to_string(),
             normalized_path: "c:/tools/demo/bin/demo2.exe".to_string(),
-            hash_algorithm: Some(winbrew_models::HashAlgorithm::Sha256),
+            hash_algorithm: Some(HashAlgorithm::Sha256),
             hash_hex: Some(
                 "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210".to_string(),
             ),

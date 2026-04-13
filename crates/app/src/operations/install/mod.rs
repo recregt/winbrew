@@ -31,9 +31,9 @@ use crate::engines;
 use crate::storage;
 
 pub use crate::core::cancel;
-pub use crate::models::{
-    CatalogPackage, InstallFailureClass, InstallOutcome, InstallResult, PackageRef,
-};
+pub use crate::models::catalog::CatalogPackage;
+pub use crate::models::domains::install::{InstallFailureClass, InstallOutcome, InstallResult};
+pub use crate::models::domains::package::PackageRef;
 pub use types::InstallError;
 pub type Result<T> = types::Result<T>;
 

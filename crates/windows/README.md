@@ -261,7 +261,7 @@ inventing a path that might be wrong.
 
 ```rust,no_run
 use std::path::Path;
-use winbrew_models::InstallScope;
+use winbrew_models::domains::install::InstallScope;
 use winbrew_windows::msi_scan_inventory;
 
 let snapshot = msi_scan_inventory(

@@ -6,7 +6,10 @@ use thiserror::Error;
 
 use super::{JournalEntry, JournalReadError, JournalReader};
 use winbrew_core::ResolvedPaths;
-use winbrew_models::{EngineKind, InstalledPackage, InstallerType, ModelError, PackageStatus};
+use winbrew_models::install::engine::EngineKind;
+use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
+use winbrew_models::install::installer::InstallerType;
+use winbrew_models::shared::error::ModelError;
 
 #[derive(Debug, Clone)]
 pub struct CommittedJournalPackage {
@@ -97,7 +100,14 @@ fn parse_committed_package_journal(
     path: &Path,
     entries: Vec<JournalEntry>,
 ) -> Result<CommittedJournalPackage, JournalReplayError> {
-    let (package_id, version, engine, install_dir, dependencies, engine_metadata) = entries
+    let (package_id, version, engine, install_dir, dependencies, engine_metadata): (
+        &str,
+        &str,
+        &str,
+        &str,
+        Vec<String>,
+        Option<winbrew_models::install::engine::EngineMetadata>,
+    ) = entries
         .iter()
         .find_map(|entry| match entry {
             JournalEntry::Metadata {

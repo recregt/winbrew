@@ -1,6 +1,7 @@
-use winbrew_models::{
-    Architecture, CatalogInstaller, CatalogPackage, InstallerType, PackageSource, Version,
-};
+use winbrew_models::catalog::package::{CatalogInstaller, CatalogPackage};
+use winbrew_models::install::installer::{Architecture, InstallerType};
+use winbrew_models::package::model::PackageSource;
+use winbrew_models::shared::version::Version;
 
 use crate::error::ParserError;
 use crate::raw::{RawFetchedInstaller, RawFetchedPackage, ScoopStreamEnvelope};
@@ -82,7 +83,8 @@ mod tests {
     use super::{parse_package, parse_packages_json};
     use crate::error::ParserError;
     use crate::raw::{RawFetchedInstaller, RawFetchedPackage};
-    use winbrew_models::{Architecture, InstallerType, PackageSource};
+    use winbrew_models::install::installer::{Architecture, InstallerType};
+    use winbrew_models::package::model::PackageSource;
 
     #[test]
     fn parses_fetched_package_into_shared_models() {

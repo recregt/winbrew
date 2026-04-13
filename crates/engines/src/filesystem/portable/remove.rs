@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::fs;
 use std::io::ErrorKind;
 
-use winbrew_models::InstalledPackage;
+use winbrew_models::install::installed::InstalledPackage;
 
 pub fn remove(package: &InstalledPackage) -> Result<()> {
     match fs::remove_dir_all(&package.install_dir) {
@@ -17,7 +17,9 @@ mod tests {
     use super::remove;
     use std::fs;
     use tempfile::tempdir;
-    use winbrew_models::{EngineKind, InstalledPackage, InstallerType, PackageStatus};
+    use winbrew_models::install::engine::EngineKind;
+    use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
+    use winbrew_models::install::installer::InstallerType;
 
     fn package(name: &str, install_dir: &std::path::Path) -> InstalledPackage {
         InstalledPackage {

@@ -1,6 +1,7 @@
 use anyhow::Result;
 
-use crate::models::{InstalledPackage, PackageQuery};
+use crate::models::domains::installed::InstalledPackage;
+use crate::models::domains::package::PackageQuery;
 use crate::storage::database;
 
 pub fn list_packages(query: Option<&str>) -> Result<Vec<InstalledPackage>> {
@@ -62,7 +63,8 @@ fn normalize(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{filter_packages, normalize};
-    use crate::models::{InstalledPackage, InstallerType, PackageStatus};
+    use crate::models::domains::install::InstallerType;
+    use crate::models::domains::installed::{InstalledPackage, PackageStatus};
 
     fn package(
         name: &str,

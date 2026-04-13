@@ -16,11 +16,12 @@ use tracing::warn;
 use crate::core::fs::{backup_path_for, cleanup_path};
 use crate::core::network::installer_filename;
 use crate::engines::{EngineKind, PackageEngine};
-use crate::models::{EngineInstallReceipt, HashAlgorithm};
+use crate::models::domains::install::EngineInstallReceipt;
+use crate::models::domains::shared::HashAlgorithm;
 
 use super::download;
 use super::state;
-use winbrew_models::CatalogInstaller;
+use crate::models::catalog::CatalogInstaller;
 
 /// Remove the temporary root directory used for a single install attempt.
 ///

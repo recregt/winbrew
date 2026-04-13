@@ -7,7 +7,8 @@ use crate::app::install;
 use crate::app::install::InstallError;
 use crate::app::install::InstallObserver;
 use crate::commands::error::{cancelled, reported_with_hint};
-use crate::models::{CatalogPackage, PackageRef};
+use crate::models::domains::catalog::CatalogPackage;
+use crate::models::domains::package::PackageRef;
 use winbrew_ui::Ui;
 
 pub fn run(ctx: &CommandContext, query: &[String], ignore_checksum_security: bool) -> Result<()> {
@@ -114,7 +115,7 @@ fn format_catalog_choice(pkg: &CatalogPackage) -> String {
         .publisher
         .as_deref()
         .map(str::trim)
-        .filter(|value| !value.is_empty())
+        .filter(|value: &&str| !value.is_empty())
     {
         label.push_str(" - ");
         label.push_str(publisher);
@@ -124,7 +125,7 @@ fn format_catalog_choice(pkg: &CatalogPackage) -> String {
         .description
         .as_deref()
         .map(str::trim)
-        .filter(|value| !value.is_empty())
+        .filter(|value: &&str| !value.is_empty())
     {
         label.push_str(" (");
         label.push_str(description);

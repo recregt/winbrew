@@ -4,8 +4,8 @@ use std::io::Write;
 use crate::CommandContext;
 use crate::app::doctor;
 use crate::app::install::InstallObserver;
-use crate::app::models::CatalogPackage;
 use crate::app::repair::{self, FileRestoreResolution, RepairPlan};
+use crate::models::domains::catalog::CatalogPackage;
 use winbrew_ui::Ui;
 
 pub fn run(ctx: &CommandContext, yes: bool) -> Result<()> {
@@ -322,7 +322,7 @@ fn format_catalog_choice(pkg: &CatalogPackage) -> String {
         .publisher
         .as_deref()
         .map(str::trim)
-        .filter(|value| !value.is_empty())
+        .filter(|value: &&str| !value.is_empty())
     {
         label.push_str(" - ");
         label.push_str(publisher);
@@ -332,7 +332,7 @@ fn format_catalog_choice(pkg: &CatalogPackage) -> String {
         .description
         .as_deref()
         .map(str::trim)
-        .filter(|value| !value.is_empty())
+        .filter(|value: &&str| !value.is_empty())
     {
         label.push_str(" (");
         label.push_str(description);

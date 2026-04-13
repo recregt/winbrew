@@ -21,9 +21,9 @@ mod plan;
 
 use thiserror::Error;
 
-use crate::models::InstallerType;
+use crate::models::domains::install::InstallerType;
 
-pub use crate::models::RemovalPlan;
+pub use crate::models::domains::install::RemovalPlan;
 pub use execution::execute_removal;
 pub use plan::{find_dependents, plan_removal};
 

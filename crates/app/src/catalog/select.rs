@@ -10,7 +10,8 @@
 //! - fall back to `Architecture::Any` when no exact match exists
 //! - fall back to the first available installer if nothing else matches
 
-use winbrew_models::{Architecture, CatalogInstaller};
+use winbrew_models::domains::catalog::CatalogInstaller;
+use winbrew_models::domains::install::Architecture;
 
 /// Select the best installer for the current architecture.
 ///
@@ -39,7 +40,7 @@ mod tests {
 
     fn sample_installer(
         arch: Architecture,
-        kind: winbrew_models::InstallerType,
+        kind: winbrew_models::domains::install::InstallerType,
     ) -> CatalogInstaller {
         CatalogInstaller {
             package_id: "Contoso.App".into(),
@@ -53,15 +54,27 @@ mod tests {
     #[test]
     fn select_installer_prefers_matching_arch() -> Result<()> {
         let installers = vec![
-            sample_installer(Architecture::Any, winbrew_models::InstallerType::Portable),
-            sample_installer(Architecture::current(), winbrew_models::InstallerType::Msix),
-            sample_installer(Architecture::X64, winbrew_models::InstallerType::Zip),
+            sample_installer(
+                Architecture::Any,
+                winbrew_models::domains::install::InstallerType::Portable,
+            ),
+            sample_installer(
+                Architecture::current(),
+                winbrew_models::domains::install::InstallerType::Msix,
+            ),
+            sample_installer(
+                Architecture::X64,
+                winbrew_models::domains::install::InstallerType::Zip,
+            ),
         ];
 
         let selected = select_installer(&installers).expect("installer should exist");
 
         assert_eq!(selected.arch, Architecture::current());
-        assert_eq!(selected.kind, winbrew_models::InstallerType::Msix);
+        assert_eq!(
+            selected.kind,
+            winbrew_models::domains::install::InstallerType::Msix
+        );
 
         Ok(())
     }
@@ -76,14 +89,23 @@ mod tests {
         };
 
         let installers = vec![
-            sample_installer(non_matching_arch, winbrew_models::InstallerType::Zip),
-            sample_installer(Architecture::Any, winbrew_models::InstallerType::Portable),
+            sample_installer(
+                non_matching_arch,
+                winbrew_models::domains::install::InstallerType::Zip,
+            ),
+            sample_installer(
+                Architecture::Any,
+                winbrew_models::domains::install::InstallerType::Portable,
+            ),
         ];
 
         let selected = select_installer(&installers).expect("installer should exist");
 
         assert_eq!(selected.arch, Architecture::Any);
-        assert_eq!(selected.kind, winbrew_models::InstallerType::Portable);
+        assert_eq!(
+            selected.kind,
+            winbrew_models::domains::install::InstallerType::Portable
+        );
 
         Ok(())
     }

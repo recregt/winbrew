@@ -4,8 +4,8 @@ use std::path::Path;
 
 use winbrew_core::fs::{cleanup_path, extract_zip_archive, replace_directory};
 
-use winbrew_models::EngineInstallReceipt;
-use winbrew_models::EngineKind;
+use winbrew_models::install::engine::EngineInstallReceipt;
+use winbrew_models::install::engine::EngineKind;
 
 pub fn install(download_path: &Path, install_dir: &Path) -> Result<EngineInstallReceipt> {
     let stage_dir = install_dir.parent().unwrap_or(install_dir).join("staging");
