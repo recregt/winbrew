@@ -5,6 +5,7 @@
 //! crate stays focused on engine selection, engine receipts, and platform
 //! adapters so the app layer can orchestrate without embedding OS details.
 
+mod payload;
 mod registry;
 
 pub mod filesystem;

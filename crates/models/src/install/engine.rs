@@ -20,7 +20,7 @@ pub enum EngineKind {
     Msix,
     /// A zip extraction flow.
     Zip,
-    /// A portable copy or extract flow.
+    /// A portable raw-copy flow.
     Portable,
     /// A native Windows MSI flow.
     Msi,
