@@ -11,7 +11,7 @@
 //! | [`cleanup_path`] | Remove files and directories with deferred-delete fallback | Best-effort |
 //! | [`replace_directory`] | Swap directories with rollback and cross-volume fallback | Transactional |
 //! | [`atomic_write`] | Write files atomically via temp file + rename | All-or-nothing |
-//! | [`extract_zip_archive`] | Extract ZIPs with path traversal protection | Rollback on fail |
+//! | [`extract_archive`] | Extract archives with path traversal protection | Rollback on fail |
 //!
 //! # Platform Behavior
 //!
@@ -41,7 +41,7 @@ mod error;
 mod move_or_copy;
 mod write;
 
-pub use archive::extract_zip_archive;
+pub use archive::{ArchiveKind, extract_archive, extract_zip_archive};
 pub use cleanup::cleanup_path;
 pub use error::{FsError, Result};
 pub use move_or_copy::{backup_path_for, replace_directory};

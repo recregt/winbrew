@@ -1,4 +1,7 @@
-use super::{ExtractionLimits, extract_zip_archive, extract_zip_archive_with_limits};
+use super::{
+    ExtractionLimits, extract_archive, extract_zip_archive, extract_zip_archive_with_limits,
+};
+use crate::fs::ArchiveKind;
 use std::fs;
 use std::io::Write;
 use tempfile::tempdir;
@@ -281,4 +284,22 @@ fn extract_zip_archive_rejects_path_depth_limit() {
 
     assert!(error.to_string().contains("too deep"));
     assert!(!destination_dir.join("a").exists());
+}
+
+#[test]
+fn extract_archive_rejects_unimplemented_backends() {
+    let temp_dir = tempdir().expect("temp dir");
+    let destination_dir = temp_dir.path().join("dest");
+    let archive_path = temp_dir.path().join("archive.7z");
+
+    fs::write(&archive_path, b"placeholder").expect("archive file");
+
+    let error = extract_archive(ArchiveKind::SevenZip, &archive_path, &destination_dir)
+        .expect_err("expected missing backend rejection");
+
+    assert!(
+        error
+            .to_string()
+            .contains("no archive backend is registered")
+    );
 }

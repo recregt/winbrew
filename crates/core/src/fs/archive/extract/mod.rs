@@ -1,5 +1,6 @@
-//! ZIP archive extraction facade.
-//! This module provides a high-level API for extracting ZIP archives, enforcing security and resource limits.
+//! Archive extraction facade.
+//! This module provides a high-level API for extracting archive payloads while
+//! preserving the ZIP security and rollback behavior WinBrew already relies on.
 
 mod cleanup;
 mod context;
@@ -15,6 +16,7 @@ pub(crate) use context::ExtractionContext;
 pub(crate) use limits::ExtractionLimits;
 pub(crate) use types::{CachedPath, PathInfo};
 
+use super::ArchiveKind;
 use crate::fs::{FsError, Result};
 use std::path::Path;
 
@@ -25,13 +27,31 @@ use super::platform::PortablePlatform as DefaultPlatform;
 #[cfg(windows)]
 use super::platform::WindowsPlatform as DefaultPlatform;
 
-/// Extracts `zip_path` into `destination_dir`, rejecting entries with invalid paths.
+/// Extracts an archive into `destination_dir`, rejecting entries with invalid paths.
+pub fn extract_archive(
+    archive_kind: ArchiveKind,
+    archive_path: &Path,
+    destination_dir: &Path,
+) -> BoxedResult<()> {
+    match archive_kind {
+        ArchiveKind::Zip => extract_zip_archive_with_limits(
+            archive_path,
+            destination_dir,
+            ExtractionLimits::default(),
+        )
+        .map_err(Box::new),
+        _ => Err(Box::new(FsError::archive_backend_unavailable(
+            archive_kind.as_str(),
+        ))),
+    }
+}
+
+/// Extracts a ZIP archive into the destination directory.
 ///
 /// The extraction target is validated so the archive cannot be unpacked through
 /// an existing reparse-point ancestor, and symlink entries are refused.
 pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> BoxedResult<()> {
-    extract_zip_archive_with_limits(zip_path, destination_dir, ExtractionLimits::default())
-        .map_err(Box::new)
+    extract_archive(ArchiveKind::Zip, zip_path, destination_dir)
 }
 
 fn extract_zip_archive_with_limits(

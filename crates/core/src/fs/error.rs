@@ -154,6 +154,9 @@ pub enum FsError {
         max_depth: usize,
     },
 
+    #[error("no archive backend is registered for {archive_kind} archives")]
+    ArchiveBackendUnavailable { archive_kind: &'static str },
+
     #[error(
         "zip extraction entry count exceeded: current count {current_file_count} exceeds limit {max_file_count}"
     )]
@@ -252,6 +255,10 @@ impl FsError {
             path: path.to_path_buf(),
             source,
         }
+    }
+
+    pub(crate) fn archive_backend_unavailable(archive_kind: &'static str) -> Self {
+        Self::ArchiveBackendUnavailable { archive_kind }
     }
 
     pub(crate) fn create_temp_file(path: &Path, source: io::Error) -> Self {
