@@ -19,6 +19,9 @@ sha2 = "0.11"
 thiserror = "2.0"
 tracing = "0.1"
 url = "2"
+tar = "0.4"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+bzip2 = "0.4"
 zip = "8"
 
 [dev-dependencies]

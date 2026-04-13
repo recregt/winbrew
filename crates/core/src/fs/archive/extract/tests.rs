@@ -2,8 +2,12 @@ use super::{
     ExtractionLimits, extract_archive, extract_zip_archive, extract_zip_archive_with_limits,
 };
 use crate::fs::ArchiveKind;
+use flate2::Compression;
+use flate2::write::GzEncoder;
 use std::fs;
 use std::io::Write;
+use tar::Builder;
+use tar::Header;
 use tempfile::tempdir;
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;
@@ -39,6 +43,36 @@ fn create_archive_with_entries(path: &std::path::Path, entries: &[(&str, &[u8])]
     }
 
     writer.finish().expect("finish zip file");
+}
+
+fn create_tar_archive(path: &std::path::Path, file_name: &str, contents: &[u8]) {
+    let file = fs::File::create(path).expect("create tar file");
+    let mut builder = Builder::new(file);
+    let mut header = Header::new_gnu();
+    header.set_size(contents.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+
+    builder
+        .append_data(&mut header, file_name, contents)
+        .expect("append tar entry");
+    builder.finish().expect("finish tar file");
+}
+
+fn create_tar_gz_archive(path: &std::path::Path, file_name: &str, contents: &[u8]) {
+    let file = fs::File::create(path).expect("create tar.gz file");
+    let encoder = GzEncoder::new(file, Compression::default());
+    let mut builder = Builder::new(encoder);
+    let mut header = Header::new_gnu();
+    header.set_size(contents.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+
+    builder
+        .append_data(&mut header, file_name, contents)
+        .expect("append tar.gz entry");
+    let encoder = builder.into_inner().expect("finish tar builder");
+    encoder.finish().expect("finish tar.gz file");
 }
 
 #[test]
@@ -301,5 +335,39 @@ fn extract_archive_rejects_unimplemented_backends() {
         error
             .to_string()
             .contains("no archive backend is registered")
+    );
+}
+
+#[test]
+fn extract_archive_extracts_tar_archive() {
+    let temp_dir = tempdir().expect("temp dir");
+    let destination_dir = temp_dir.path().join("dest");
+    let archive_path = temp_dir.path().join("archive.tar");
+
+    fs::create_dir_all(&destination_dir).expect("destination dir");
+    create_tar_archive(&archive_path, "bin/tool.exe", b"tar payload");
+
+    extract_archive(ArchiveKind::Tar, &archive_path, &destination_dir).expect("tar extraction");
+
+    assert_eq!(
+        fs::read(destination_dir.join("bin/tool.exe")).expect("read"),
+        b"tar payload"
+    );
+}
+
+#[test]
+fn extract_archive_extracts_tar_gz_archive() {
+    let temp_dir = tempdir().expect("temp dir");
+    let destination_dir = temp_dir.path().join("dest");
+    let archive_path = temp_dir.path().join("archive.tar.gz");
+
+    fs::create_dir_all(&destination_dir).expect("destination dir");
+    create_tar_gz_archive(&archive_path, "bin/tool.exe", b"tar gz payload");
+
+    extract_archive(ArchiveKind::Tar, &archive_path, &destination_dir).expect("tar.gz extraction");
+
+    assert_eq!(
+        fs::read(destination_dir.join("bin/tool.exe")).expect("read"),
+        b"tar gz payload"
     );
 }

@@ -79,8 +79,22 @@ pub enum FsError {
         source: Box<dyn StdError + Send + Sync + 'static>,
     },
 
+    #[error("failed to open archive {archive_path}")]
+    OpenArchive {
+        archive_path: PathBuf,
+        #[source]
+        source: Box<dyn StdError + Send + Sync + 'static>,
+    },
+
     #[error("failed to read zip entry for {path}")]
     ReadZipEntry {
+        path: PathBuf,
+        #[source]
+        source: Box<dyn StdError + Send + Sync + 'static>,
+    },
+
+    #[error("failed to read archive entry for {path}")]
+    ReadArchiveEntry {
         path: PathBuf,
         #[source]
         source: Box<dyn StdError + Send + Sync + 'static>,
@@ -124,6 +138,9 @@ pub enum FsError {
 
     #[error("zip entry contains an invalid path")]
     InvalidZipEntryPath,
+
+    #[error("archive entry contains an invalid path")]
+    InvalidArchiveEntryPath,
 
     #[error("refusing to extract symlink entry {path}")]
     SymlinkEntry { path: PathBuf },
@@ -300,11 +317,31 @@ impl FsError {
         }
     }
 
+    pub(crate) fn open_archive(
+        archive_path: &Path,
+        source: impl StdError + Send + Sync + 'static,
+    ) -> Self {
+        Self::OpenArchive {
+            archive_path: archive_path.to_path_buf(),
+            source: Box::new(source),
+        }
+    }
+
     pub(crate) fn read_zip_entry(
         path: &Path,
         source: impl StdError + Send + Sync + 'static,
     ) -> Self {
         Self::ReadZipEntry {
+            path: path.to_path_buf(),
+            source: Box::new(source),
+        }
+    }
+
+    pub(crate) fn read_archive_entry(
+        path: &Path,
+        source: impl StdError + Send + Sync + 'static,
+    ) -> Self {
+        Self::ReadArchiveEntry {
             path: path.to_path_buf(),
             source: Box::new(source),
         }
@@ -348,6 +385,10 @@ impl FsError {
 
     pub(crate) fn invalid_zip_entry_path() -> Self {
         Self::InvalidZipEntryPath
+    }
+
+    pub(crate) fn invalid_archive_entry_path() -> Self {
+        Self::InvalidArchiveEntryPath
     }
 
     pub(crate) fn symlink_entry(path: &Path) -> Self {
