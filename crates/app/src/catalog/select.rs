@@ -42,14 +42,9 @@ mod tests {
         arch: Architecture,
         kind: winbrew_models::domains::install::InstallerType,
     ) -> CatalogInstaller {
-        CatalogInstaller {
-            package_id: "Contoso.App".into(),
-            url: "https://example.test/app.exe".to_string(),
-            hash: "sha256:deadbeef".to_string(),
-            arch,
-            kind,
-            nested_kind: None,
-        }
+        CatalogInstaller::test_builder("Contoso.App".into(), "https://example.test/app.exe")
+            .with_arch(arch)
+            .with_kind(kind)
     }
 
     #[test]

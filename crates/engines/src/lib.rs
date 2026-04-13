@@ -72,13 +72,13 @@ mod tests {
     use winbrew_models::install::installer::InstallerType;
 
     fn installer(kind: InstallerType, nested_kind: Option<InstallerType>) -> CatalogInstaller {
-        CatalogInstaller {
-            package_id: "Contoso.App".into(),
-            url: "https://example.invalid/app.zip".to_string(),
-            hash: "hash".to_string(),
-            arch: "x64".parse().expect("arch should parse"),
-            kind,
-            nested_kind,
+        let installer =
+            CatalogInstaller::test_builder("Contoso.App".into(), "https://example.invalid/app.zip")
+                .with_kind(kind);
+
+        match nested_kind {
+            Some(nested_kind) => installer.with_nested(nested_kind),
+            None => installer,
         }
     }
 
