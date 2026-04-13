@@ -251,8 +251,11 @@ mod tests {
             connection.query_row("SELECT COUNT(*) FROM catalog_installers", [], |row| {
                 row.get(0)
             })?;
+        let schema_version: i64 =
+            connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
         assert_eq!(package_count, 2);
         assert_eq!(installer_count, 1);
+        assert_eq!(schema_version, 1);
 
         Ok(())
     }

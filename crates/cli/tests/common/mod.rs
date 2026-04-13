@@ -98,7 +98,7 @@ pub fn seed_catalog_package(
 ) -> anyhow::Result<()> {
     conn.execute_batch(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../tests/fixtures/catalog_schema.sql"
+        "/../../infra/parser/schema/catalog.sql"
     )))?;
 
     conn.execute("DELETE FROM catalog_installers", [])?;
