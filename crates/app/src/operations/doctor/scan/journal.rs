@@ -146,6 +146,7 @@ fn diagnose_committed_journal(
                 package_id,
                 version,
                 engine,
+                deployment_kind: _,
                 install_dir,
                 dependencies: _,
                 engine_metadata: _,
@@ -182,6 +183,28 @@ fn diagnose_committed_journal(
     if package.version != version
         || !package.engine_kind.as_str().eq_ignore_ascii_case(engine)
         || package.install_dir != install_dir
+    {
+        return vec![DiagnosisResult {
+            error_code: "stale_package_journal".to_string(),
+            description: format!(
+                "{}: recovery journal does not match installed package {} ({})",
+                journal_path.to_string_lossy(),
+                package.name,
+                package.version
+            ),
+            severity: DiagnosisSeverity::Warning,
+        }];
+    }
+
+    let journal_deployment_kind = entries.iter().find_map(|entry| match entry {
+        database::JournalEntry::Metadata {
+            deployment_kind, ..
+        } => *deployment_kind,
+        _ => None,
+    });
+
+    if journal_deployment_kind
+        .is_some_and(|deployment_kind| package.deployment_kind != deployment_kind)
     {
         return vec![DiagnosisResult {
             error_code: "stale_package_journal".to_string(),
