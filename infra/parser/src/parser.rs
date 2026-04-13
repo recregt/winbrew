@@ -66,6 +66,7 @@ fn parse_installer(
         hash: raw.hash,
         arch: raw.arch.parse::<Architecture>()?,
         kind: raw.kind.parse::<InstallerType>()?,
+        nested_kind: raw.nested_kind.map(|kind| kind.parse()).transpose()?,
     };
     installer.validate()?;
     Ok(installer)
@@ -97,18 +98,21 @@ mod tests {
             license: None,
             publisher: Some("Contoso Ltd.".to_string()),
             installers: vec![RawFetchedInstaller {
-                url: "https://example.invalid/app.exe".to_string(),
+                url: "https://example.invalid/app.zip".to_string(),
                 hash: "".to_string(),
                 arch: "x64".to_string(),
-                kind: "portable".to_string(),
+                kind: "zip".to_string(),
+                nested_kind: Some("msi".to_string()),
             }],
         })
         .expect("package should parse");
 
         assert_eq!(parsed.package.source, PackageSource::Winget);
         assert_eq!(parsed.installers[0].arch, Architecture::X64);
-        assert_eq!(parsed.installers[0].kind, InstallerType::Portable);
+        assert_eq!(parsed.installers[0].kind, InstallerType::Zip);
+        assert_eq!(parsed.installers[0].nested_kind, Some(InstallerType::Msi));
         assert!(parsed.raw_json.contains("Contoso.App"));
+        assert!(parsed.raw_json.contains("NestedInstallerType"));
     }
 
     #[test]
@@ -126,6 +130,7 @@ mod tests {
                 hash: String::new(),
                 arch: "x64".to_string(),
                 kind: "portable".to_string(),
+                nested_kind: None,
             }],
         })
         .expect("package should parse");

@@ -5,6 +5,7 @@ use winbrew_models::catalog::package::CatalogInstaller;
 use winbrew_models::install::engine::EngineInstallReceipt;
 use winbrew_models::install::installed::InstalledPackage;
 use winbrew_models::install::installer::InstallerType;
+use winbrew_models::shared::DeploymentKind;
 
 use super::EngineKind;
 use crate::filesystem::{archive::zip, portable};
@@ -42,6 +43,16 @@ fn matches_archive_installer(installer: &CatalogInstaller) -> bool {
 fn matches_portable_installer(installer: &CatalogInstaller) -> bool {
     installer.kind == InstallerType::Portable
         && matches!(classify_payload(&installer.url), PayloadKind::Raw)
+}
+
+pub(crate) fn resolve_deployment_kind(installer: &CatalogInstaller) -> DeploymentKind {
+    if installer.kind.is_archive() {
+        return installer
+            .nested_kind
+            .map_or(DeploymentKind::Portable, InstallerType::deployment_kind);
+    }
+
+    installer.kind.deployment_kind()
 }
 
 fn msix_install(
@@ -165,10 +176,11 @@ fn resolve_engine_descriptor(kind: EngineKind) -> Result<&'static EngineDescript
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_engine_kind_for_installer;
+    use super::{resolve_deployment_kind, resolve_engine_kind_for_installer};
     use crate::EngineKind;
     use winbrew_models::catalog::package::CatalogInstaller;
     use winbrew_models::install::installer::InstallerType;
+    use winbrew_models::shared::DeploymentKind;
 
     fn installer(kind: InstallerType, url: &str) -> CatalogInstaller {
         CatalogInstaller {
@@ -177,6 +189,7 @@ mod tests {
             hash: "hash".to_string(),
             arch: "x64".parse().expect("arch should parse"),
             kind,
+            nested_kind: None,
         }
     }
 
@@ -222,6 +235,19 @@ mod tests {
         .expect("engine should resolve");
 
         assert_eq!(engine, EngineKind::Msix);
+    }
+
+    #[test]
+    fn resolve_deployment_kind_uses_nested_installer_type_for_zip_archives() {
+        let installer = CatalogInstaller {
+            nested_kind: Some(InstallerType::Msi),
+            ..installer(InstallerType::Zip, "https://example.invalid/package.zip")
+        };
+
+        assert_eq!(
+            resolve_deployment_kind(&installer),
+            DeploymentKind::Installed
+        );
     }
 
     #[cfg(windows)]

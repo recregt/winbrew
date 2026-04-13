@@ -48,6 +48,7 @@ mod tests {
             hash: "sha256:deadbeef".to_string(),
             arch,
             kind,
+            nested_kind: None,
         }
     }
 

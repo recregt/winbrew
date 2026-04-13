@@ -25,10 +25,10 @@ pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
 
 pub fn get_installers(conn: &Connection, package_id: &str) -> Result<Vec<CatalogInstaller>> {
     let mut stmt = conn.prepare(
-        "SELECT package_id, url, hash, arch, type
+        "SELECT package_id, url, hash, arch, type, nested_kind
          FROM catalog_installers
          WHERE package_id = ?1
-         ORDER BY arch ASC, type ASC, url ASC",
+         ORDER BY arch ASC, type ASC, nested_kind ASC, url ASC",
     )?;
 
     stmt.query_map(params![package_id], row_to_installer)?
@@ -72,6 +72,7 @@ fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
         hash: row.get("hash")?,
         arch: row.get("arch")?,
         kind: row.get("type")?,
+        nested_kind: row.get("nested_kind")?,
     };
 
     CatalogInstaller::try_from(raw).map_err(|err| {

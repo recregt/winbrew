@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS catalog_installers (
     url         TEXT NOT NULL,
     hash        TEXT NOT NULL,
     arch        TEXT NOT NULL DEFAULT '',
-    type        TEXT NOT NULL DEFAULT ''
+    type        TEXT NOT NULL DEFAULT '',
+    nested_kind TEXT
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS catalog_packages_fts USING fts5(
