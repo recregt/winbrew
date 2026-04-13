@@ -1,3 +1,10 @@
+//! Terminal presentation primitives for WinBrew.
+//!
+//! `winbrew-ui` owns the interactive state used by CLI command handlers: color
+//! mode, confirmation defaults, spinner styles, progress rendering, and output
+//! writers. Keeping this crate separate from app logic prevents business code
+//! from depending on terminal behavior.
+
 #![allow(missing_docs)]
 
 mod builder;
@@ -7,12 +14,14 @@ mod progress;
 mod table;
 mod theme;
 
+/// Builder for `Ui` instances.
 pub use builder::UiBuilder;
 
 use indicatif::ProgressStyle;
 use std::io::{self, BufWriter, Write};
 use std::sync::Arc;
 
+/// Terminal-backed presentation state used by CLI command handlers.
 pub struct Ui<W: Write> {
     pub(crate) out: BufWriter<W>,
     pub(crate) err: Box<dyn Write>,
@@ -23,12 +32,14 @@ pub struct Ui<W: Write> {
 }
 
 impl Ui<io::Stdout> {
+    /// Create a UI that writes to stdout and stderr.
     pub fn new(settings: UiSettings) -> Self {
         UiBuilder::new(settings).build()
     }
 }
 
 impl<W: Write> Ui<W> {
+    /// Create a UI with an explicit writer, which is primarily useful in tests.
     pub fn with_writer(writer: W, settings: UiSettings) -> Self {
         UiBuilder::with_writer(writer, settings).build()
     }
@@ -52,6 +63,7 @@ impl Default for Ui<io::Stdout> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Presentation settings for the terminal UI.
 pub struct UiSettings {
     pub color_enabled: bool,
     pub default_yes: bool,

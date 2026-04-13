@@ -8,6 +8,8 @@ A modern package manager for Windows that installs, tracks, and cleanly removes 
 > This project is currently in active development. Public releases are not being
 > published yet, and there is no supported end-user installer flow.
 
+For the architecture and documentation map, start with [docs/index.md](docs/index.md).
+
 ## Build From Source
 
 WinBrew is intended to be built from source while development is ongoing. If
@@ -105,11 +107,16 @@ The commands below are available after you build and run WinBrew locally.
 
 | Command | Description |
 | :--- | :--- |
-| `winbrew search <query>` | Search for a package |
-| `winbrew install <pkg>` | Install a new package |
-| `winbrew remove <pkg>` | Remove a package and its leftovers |
-| `winbrew list` | List all installed packages |
+| `winbrew config` | Inspect or update runtime configuration |
 | `winbrew doctor` | Check system health and configuration |
+| `winbrew info <pkg>` | Show package details |
+| `winbrew install <pkg>` | Install a package |
+| `winbrew list` | List installed packages |
+| `winbrew remove <pkg>` | Remove a package and its leftovers |
+| `winbrew search <query>` | Search for a package |
+| `winbrew update` | Refresh the catalog data |
+| `winbrew version` | Print the binary version |
+| `winbrew repair` | Repair installed state and recovery trails |
 
 ### File Layout
 
@@ -121,13 +128,15 @@ By default, WinBrew isolates everything within the current user's local app data
 %LOCALAPPDATA%\winbrew
 ├── packages    # Installed applications
 └── data
-    ├── db      # SQLite metadata (winbrew.db)
-    ├── logs    # Rolling execution logs
-    └── cache   # Downloaded installers/temporary files
+    ├── db      # SQLite metadata (winbrew.db, catalog.db)
+    ├── pkgdb   # Per-package recovery journals
+    ├── logs    # Rolling execution logs and package evidence
+    ├── cache   # Downloaded installers/temporary files
+    └── winbrew.toml  # Persisted runtime configuration
 ```
 
-The managed-path contract, including MSI/MSIX forensic evidence folders, is
-documented in [docs/managed-paths-policy.md](docs/managed-paths-policy.md).
+The managed-path contract, including package-scoped evidence and reserved shim
+paths, is documented in [docs/managed-paths-policy.md](docs/managed-paths-policy.md).
 
 ## Configuration
 
@@ -151,6 +160,8 @@ root = "C:\\Users\\<you>\\AppData\\Local\\winbrew"
 
 Development setup and contributor tasks are documented in
 [CONTRIBUTING.md](CONTRIBUTING.md).
+
+The full docs map lives in [docs/index.md](docs/index.md).
 
 If you want the shortest path to a clean local environment, use the following
 task sequence after cloning:

@@ -1,3 +1,10 @@
+//! SQLite persistence entry point for WinBrew.
+//!
+//! This module owns the process-local database state, including the active
+//! resolved paths and the connection pools used by the app and CLI layers.
+//! It is intentionally centralized so persistence helpers can keep a stable
+//! boundary even while the underlying SQLite files are recreated or migrated.
+
 use anyhow::{Context, Result};
 use r2d2::{Pool, PooledConnection};
 use std::cell::RefCell;
@@ -18,6 +25,7 @@ mod msi_inventory;
 
 use self::connection::SqliteConnectionManager;
 
+/// Database connection type used by the storage layer.
 pub type DbConnection = PooledConnection<SqliteConnectionManager>;
 
 pub use errors::CatalogNotFoundError;
@@ -50,6 +58,7 @@ static DB_POOLS: OnceLock<Mutex<HashMap<PathBuf, &'static Pool<SqliteConnectionM
 static CATALOG_DB_POOLS: OnceLock<Mutex<HashMap<PathBuf, &'static Pool<SqliteConnectionManager>>>> =
     OnceLock::new();
 
+/// Initialize the process-local storage state for the given resolved paths.
 pub fn init(paths: &ResolvedPaths) -> Result<()> {
     CURRENT_PATHS.with(|current_paths| {
         *current_paths.borrow_mut() = Some(paths.clone());
@@ -75,6 +84,7 @@ fn resolved_paths() -> Result<ResolvedPaths> {
     })
 }
 
+/// Return the primary database connection pool.
 pub fn get_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
     pool_for(
         DB_POOLS.get_or_init(|| Mutex::new(HashMap::new())),
@@ -85,12 +95,14 @@ pub fn get_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
     )
 }
 
+/// Return a pooled connection to the primary database.
 pub fn get_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
     let pool = get_pool()?;
     pool.get()
         .context("failed to acquire database connection from pool")
 }
 
+/// Return a pooled connection to the catalog database.
 pub fn get_catalog_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
     if !resolved_paths()?.catalog_db.exists() {
         return Err(CatalogNotFoundError.into());
@@ -101,6 +113,7 @@ pub fn get_catalog_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
         .context("failed to acquire catalog database connection from pool")
 }
 
+/// Return the catalog database connection pool.
 pub fn get_catalog_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
     pool_for(
         CATALOG_DB_POOLS.get_or_init(|| Mutex::new(HashMap::new())),

@@ -2,7 +2,13 @@
 
 **`WinBrew`** uses **[go-task](https://taskfile.dev/)** and **[Lefthook](https://lefthook.dev/)** to manage the development workflow.
 
+For the full documentation map, start with [docs/index.md](docs/index.md).
+
 For implementation details of the catalog pipeline stages, see **[crawler](infra/crawler/README.md)**, **[parser](infra/parser/README.md)**, and **[publisher](infra/publisher/README.md)**.
+
+For object ownership and wiring rules, see **[docs/create-dependence.md](docs/create-dependence.md)**.
+
+For runtime directory and recovery contracts, see **[docs/managed-paths-policy.md](docs/managed-paths-policy.md)** and **[docs/recovery-policy.md](docs/recovery-policy.md)**.
 
 ## Setup
 
@@ -17,12 +23,15 @@ lefthook install
 
 | Command | Description |
 | :--- | :--- |
+| `task check` | Run cargo fmt |
+| `task check:clippy` | Run cargo clippy |
+| `task check:doc` | Run cargo doc with warnings denied |
 | `task test` | Run Rust tests |
 | `task test:nextest` | Run Rust tests with nextest |
-| `task ci:verify` | Run the full CI task set locally, including bundle validation |
+| `task ci:verify` | Run the current local CI task set (crawler, publisher, Rust, smoke) |
 | `task ci:go:crawler` | Run crawler Go checks |
 | `task ci:go:publisher` | Run publisher Go checks for the catalog bundle flow |
-| `task ci:rust` | Run Rust checks for the catalog parser bundle and CLI |
+| `task ci:rust` | Run Rust checks for the CLI and binary |
 | `task ci:smoke` | Build and smoke-test the CLI |
 | `task dev:run -- <args>` | Run locally without polluting your profile |
 | `task dev:run-release -- <args>` | Run in release mode |
@@ -31,6 +40,8 @@ lefthook install
 `task dev:run` and `task dev:run-release` use `target\winbrew-dev` via `WINBREW_PATHS_ROOT`, so config, logs, and databases stay inside the repo.
 
 You can pass any WinBrew arguments after `--`, for example `task dev:run -- doctor` or `task dev:run-release -- install firefox`.
+
+The GitHub Actions workflow also runs the parser, docs, and spellcheck jobs. Keep local checks aligned with the workflow when you add or rename tasks.
 
 ## Catalog Bundle Pipeline
 

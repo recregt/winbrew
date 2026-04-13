@@ -1,21 +1,40 @@
+//! Managed-root path helpers and derived directory contracts.
+//!
+//! The path layer owns the active WinBrew root and the directories derived from
+//! it. That includes the current runtime database layout, per-package journal
+//! paths, package-scoped evidence directories, and reserved shim locations.
+
 use std::path::{Path, PathBuf};
 
 use crate::hash::Hasher;
 use winbrew_models::shared::hash::HashAlgorithm;
 
+/// Fully resolved path set for the active WinBrew root.
 #[derive(Debug, Clone)]
 pub struct ResolvedPaths {
+    /// Managed root directory.
     pub root: PathBuf,
+    /// Install root for packages.
     pub packages: PathBuf,
+    /// Root data directory.
     pub data: PathBuf,
+    /// Process log directory.
     pub logs: PathBuf,
+    /// Package-scoped log parent directory.
     pub package_logs: PathBuf,
+    /// Download and staging cache directory.
     pub cache: PathBuf,
+    /// Recovery journal parent directory.
     pub pkgdb: PathBuf,
+    /// Reserved package shim root.
     pub shims: PathBuf,
+    /// Primary SQLite database directory.
     pub db: PathBuf,
+    /// Catalog database path.
     pub catalog_db: PathBuf,
+    /// Persisted configuration file.
     pub config: PathBuf,
+    /// Process log file.
     pub log: PathBuf,
 }
 
@@ -81,50 +100,62 @@ impl ManagedRootLayout {
     }
 }
 
+/// Return the persisted configuration file for a root.
 pub fn config_file_at(root: &Path) -> PathBuf {
     root.join("data").join("winbrew.toml")
 }
 
+/// Return the install root directory for a root.
 pub fn packages_dir_at(root: &Path) -> PathBuf {
     root.join("packages")
 }
 
+/// Return the data directory for a root.
 pub fn data_dir_at(root: &Path) -> PathBuf {
     root.join("data")
 }
 
+/// Return the package journal directory for a root.
 pub fn pkgdb_dir_at(root: &Path) -> PathBuf {
     data_dir_at(root).join("pkgdb")
 }
 
+/// Return the SQLite database directory for a root.
 pub fn db_dir_at(root: &Path) -> PathBuf {
     data_dir_at(root).join("db")
 }
 
+/// Return the primary SQLite database path for a root.
 pub fn db_path_at(root: &Path) -> PathBuf {
     db_dir_at(root).join("winbrew.db")
 }
 
+/// Return the catalog database path for a root.
 pub fn catalog_db_at(root: &Path) -> PathBuf {
     db_dir_at(root).join("catalog.db")
 }
 
+/// Return the process log directory for a root.
 pub fn log_dir_at(root: &Path) -> PathBuf {
     root.join("data").join("logs")
 }
 
+/// Return the process log file for a root.
 pub fn log_file_at(root: &Path) -> PathBuf {
     log_dir_at(root).join("winbrew.log")
 }
 
+/// Return the installer cache directory for a root.
 pub fn cache_dir_at(root: &Path) -> PathBuf {
     root.join("data").join("cache")
 }
 
+/// Return a cache file path for the given package name and version.
 pub fn cache_file_at(root: &Path, name: &str, version: &str, ext: &str) -> PathBuf {
     cache_dir_at(root).join(cache_filename(name, version, ext))
 }
 
+/// Return the stable key used for per-package recovery journals.
 pub fn package_journal_key(package_id: &str, version: &str) -> String {
     let mut key = sanitize_package_key_component(package_id);
     key.push('-');
@@ -132,6 +163,7 @@ pub fn package_journal_key(package_id: &str, version: &str) -> String {
     key
 }
 
+/// Return the journal file for the given package key.
 pub fn package_journal_file_at(root: &Path, package_key: &str) -> PathBuf {
     pkgdb_dir_at(root).join(package_key).join("journal.jsonl")
 }
@@ -146,6 +178,7 @@ fn cache_filename(name: &str, version: &str, ext: &str) -> String {
     filename
 }
 
+/// Create the standard managed directories for a root.
 pub fn ensure_dirs_at(root: &Path) -> std::io::Result<()> {
     for dir in [
         packages_dir_at(root),
@@ -161,10 +194,12 @@ pub fn ensure_dirs_at(root: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Create only the package install root for a managed root.
 pub fn ensure_install_dirs_at(root: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(packages_dir_at(root))
 }
 
+/// Expand `${root}` placeholders inside a path template.
 pub fn resolve_template(root: &Path, template: &str) -> PathBuf {
     let root_text = root.to_string_lossy();
 
@@ -175,6 +210,7 @@ pub fn resolve_template(root: &Path, template: &str) -> PathBuf {
     }
 }
 
+/// Build the resolved path set for the active root layout.
 pub fn resolved_paths(
     root: &Path,
     packages: &str,
@@ -186,27 +222,33 @@ pub fn resolved_paths(
 }
 
 impl ResolvedPaths {
+    /// Return the install directory for a package name.
     pub fn package_install_dir(&self, package_name: &str) -> PathBuf {
         self.packages.join(package_name)
     }
 
+    /// Return the journal directory for a package key.
     pub fn package_journal_dir(&self, package_key: &str) -> PathBuf {
         self.pkgdb.join(package_key)
     }
 
+    /// Return the journal file for a package key.
     pub fn package_journal_file(&self, package_key: &str) -> PathBuf {
         self.package_journal_dir(package_key).join("journal.jsonl")
     }
 
+    /// Return the package-scoped log directory for a package key.
     pub fn package_log_dir(&self, package_key: &str) -> PathBuf {
         self.package_logs.join(package_key)
     }
 
+    /// Return the reserved shim directory for a package key.
     pub fn package_shim_dir(&self, package_key: &str) -> PathBuf {
         self.shims.join(package_key)
     }
 }
 
+/// Recover the managed root from a package install directory.
 pub fn install_root_from_package_dir(install_dir: &Path) -> PathBuf {
     install_dir
         .parent()
