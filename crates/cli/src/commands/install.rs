@@ -1,3 +1,6 @@
+//! Install command wrapper for package resolution, download progress, and
+//! user-facing install outcomes.
+
 use anyhow::Result;
 use indicatif::ProgressBar;
 use std::io;

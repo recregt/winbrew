@@ -130,13 +130,14 @@ By default, WinBrew isolates everything within the current user's local app data
 └── data
     ├── db      # SQLite metadata (winbrew.db, catalog.db)
     ├── pkgdb   # Per-package recovery journals
-    ├── logs    # Rolling execution logs and package evidence
+    ├── logs    # Rolling execution logs
     ├── cache   # Downloaded installers/temporary files
     └── winbrew.toml  # Persisted runtime configuration
 ```
 
-The managed-path contract, including package-scoped evidence and reserved shim
-paths, is documented in [docs/managed-paths-policy.md](docs/managed-paths-policy.md).
+Package-scoped evidence, when emitted, is documented in
+[docs/managed-paths-policy.md](docs/managed-paths-policy.md) and uses
+`data/logs/packages/<package-key>/`.
 
 ## Configuration
 

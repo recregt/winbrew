@@ -26,6 +26,7 @@ Use it when you want to answer one of these questions:
 - [winbrew-storage](../crates/storage/src/lib.rs) for persistence and database access.
 - [winbrew-engines](../crates/engines/src/lib.rs) for engine dispatch and platform-specific installers.
 - [winbrew-app](../crates/app/src/lib.rs) for workflow orchestration.
+- [winbrew-cli](../crates/cli/src/lib.rs) for command parsing, dispatch, and terminal wiring.
 - [winbrew-ui](../crates/ui/src/lib.rs) for terminal presentation state.
 - [winbrew-windows](../crates/windows/src/lib.rs) for Windows-only platform helpers.
 

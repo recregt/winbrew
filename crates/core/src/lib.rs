@@ -1,9 +1,26 @@
 //! Core utilities shared by Winbrew.
 //!
+//! `winbrew-core` owns the reusable helpers that higher layers rely on for
+//! filesystem layout, path resolution, hashing, downloads, temp workspaces,
+//! cancellation, and time formatting. The crate keeps those boundaries in one
+//! place so the app, storage, engines, and CLI layers can share the same
+//! runtime contract.
+//!
+//! Public modules:
+//!
+//! - `env`: environment variable names used for root resolution
+//! - `paths`: managed-root and derived directory helpers
+//! - `temp_workspace`: repo-independent staging roots
+//! - `hash`: checksum helpers and digest validation
+//! - `network`: download client and installer filename helpers
+//! - `fs`: filesystem helpers used by install, update, and repair flows
+//! - `time`: timestamp helpers for persistence and reporting
+//! - `cancel`: Ctrl+C handling for long-running operations
+//!
 //! ## Environment Configuration
 //!
-//! The core crate exposes the Windows environment variable names that higher-level
-//! code uses while resolving paths.
+//! The core crate exposes the Windows environment variable names that
+//! higher-level code uses while resolving paths.
 //!
 //! ```no_run
 //! use winbrew_core::env;
@@ -13,9 +30,9 @@
 //! }
 //! ```
 //!
-//! When `WINBREW_PATHS_ROOT` is not set, the application root is typically derived
-//! from [`env::LOCALAPPDATA`] and expanded into the resolved path set in
-//! [`crate::paths::ResolvedPaths`].
+//! When `WINBREW_PATHS_ROOT` is not set, the application root is typically
+//! derived from [`env::LOCALAPPDATA`] and expanded into the resolved path set
+//! in [`crate::paths::ResolvedPaths`].
 
 pub mod cancel;
 pub mod env;

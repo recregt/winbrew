@@ -1,3 +1,8 @@
+//! Search command wrapper for catalog queries.
+//!
+//! The wrapper handles catalog-unavailable fallback text, empty-state output,
+//! and the final result count for package searches.
+
 use anyhow::Result;
 
 use crate::{CommandContext, app::search};

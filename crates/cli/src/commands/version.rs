@@ -1,3 +1,5 @@
+//! Version command wrapper for the binary version string.
+
 use anyhow::Result;
 
 use crate::{CommandContext, app::version};
