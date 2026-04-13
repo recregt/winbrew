@@ -8,7 +8,7 @@ A modern package manager for Windows that installs, tracks, and cleanly removes 
 > This project is currently in active development. Public releases are not being
 > published yet, and there is no supported end-user installer flow.
 
-For the architecture and documentation map, start with [docs/index.md](docs/index.md).
+For the architecture and documentation map, start with [docs/index.md](docs/index.md). For engine-specific behavior and ownership, see [docs/engines.md](docs/engines.md).
 
 ## Build From Source
 
@@ -162,7 +162,7 @@ root = "C:\\Users\\<you>\\AppData\\Local\\winbrew"
 Development setup and contributor tasks are documented in
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-The full docs map lives in [docs/index.md](docs/index.md).
+The full docs map lives in [docs/index.md](docs/index.md), and engine-specific guidance lives in [docs/engines.md](docs/engines.md).
 
 If you want the shortest path to a clean local environment, use the following
 task sequence after cloning:

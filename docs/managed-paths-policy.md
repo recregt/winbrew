@@ -4,9 +4,8 @@ This document defines the directory contract for the WinBrew managed root.
 
 The goal is to keep one clear rule set for which paths WinBrew owns under the
 active root, when those paths are created, what data belongs there, and which
-filesystem locations must remain outside the managed tree. This policy covers
-the current runtime layout plus the MSI/MSIX forensic additions that we want to
-standardize.
+filesystem locations must remain outside the managed tree. Engine-specific
+evidence placement and launcher-shim behavior live in [Engine Roadmap and Ownership](engines.md).
 
 ## 1. Root Ownership
 
@@ -81,57 +80,16 @@ Creation triggers are:
 This laziness is deliberate. It keeps first-run overhead low and avoids creating
 state that a user may never need.
 
-## 4. MSI/MSIX Forensic Additions
+## 4. Engine-Specific Evidence
 
-MSI and MSIX are not filesystem-copy engines in the same sense as ZIP or
-portable packages. The managed root should therefore store evidence and
-metadata, not pretend that WinBrew authored every file on disk.
+This policy does not define package-type behavior in detail.
 
-The target structure for portable-launcher and forensic data is:
+Use [Engine Roadmap and Ownership](engines.md) for the package-type matrix,
+engine-owned evidence placement, and journal interpretation.
 
-```text
-%LOCALAPPDATA%\winbrew
-├── shims/
-│   └── <package-key>/
-│       └── <launcher shims>
-├── data/
-│   ├── pkgdb/
-│   │   └── <package-key>/
-│   │       └── journal.jsonl
-│   └── logs/
-│       └── packages/
-│           └── <package-key>/
-│               └── <engine-specific log files>
-```
-
-Expected behavior for the added MSI/MSIX and portable-shim features:
-
-- When an install emits package-scoped evidence, it should use
-  `data/logs/packages/<package-key>/`.
-- MSI should place its verbose Windows Installer log there and record the log
-  path in the package journal.
-- MSI should also capture a post-install inventory snapshot and keep the
-  snapshot reference in the journal or receipt trail.
-- MSIX should store identity evidence there only when needed; it does not need
-  a large verbose log file by default.
-- Portable packages may materialize shims under `shims/<package-key>/` so the
-  package can expose launcher entry points without polluting the package install
-  root.
-- The package journal remains the canonical per-package recovery trail; the
-  external installer log is evidence, not the source of truth.
-
-For MSI, the journal should describe the lifecycle in witness terms:
-
-- intent to install
-- external installer log reference
-- post-install inventory snapshot reference
-- completion or failure outcome
-
-For MSIX, the journal should usually only need identity and outcome data:
-
-- intent to install
-- package identity / full name
-- completion or failure outcome
+The generic rule this policy keeps is simple: the managed root owns the durable
+package journal under `data/pkgdb/` and the normal runtime tree under
+`packages/`, `data/db/`, `data/logs/`, and `data/cache/`.
 
 ## 5. Unmanaged Paths
 
@@ -152,10 +110,9 @@ present them as part of the owned root tree.
 - `WINBREW_PATHS_ROOT` and `[paths].root` can redirect the active root.
 - `packages/`, `data/db/`, `data/pkgdb/`, `data/logs/`, and `data/cache/` are
   owned by WinBrew.
-- `shims/` is the planned home for package-scoped portable launcher shims.
 - `data/pkgdb/<package-key>/journal.jsonl` is the per-package recovery trail.
-- `data/logs/packages/<package-key>/` is the target home for package-scoped MSI
-  and MSIX evidence.
+- Engine-specific evidence placement and launcher-shim conventions live in
+  [Engine Roadmap and Ownership](engines.md).
 - Temporary workspaces under `%TEMP%\winbrew` stay unmanaged.
 - `bin/` is intentionally not part of the current plan because WinBrew does not
   currently have a second managed binary to place there.
