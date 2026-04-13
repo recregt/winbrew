@@ -327,7 +327,7 @@ fn install_rolls_back_on_download_failure() -> Result<()> {
 fn create_catalog_db_with_hash(path: &Path, installer_url: &str, hash: &str) -> Result<()> {
     let conn = Connection::open(path)?;
 
-    conn.execute_batch(include_str!("fixtures/catalog_schema.sql"))?;
+    conn.execute_batch(include_str!("../infra/parser/schema/catalog.sql"))?;
 
     conn.execute("DELETE FROM catalog_installers", [])?;
     conn.execute("DELETE FROM catalog_packages", [])?;
