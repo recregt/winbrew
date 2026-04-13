@@ -1,9 +1,12 @@
 //! SQLite persistence entry point for WinBrew.
 //!
-//! This module owns the process-local database state, including the active
-//! resolved paths and the connection pools used by the app and CLI layers.
-//! It is intentionally centralized so persistence helpers can keep a stable
-//! boundary even while the underlying SQLite files are recreated or migrated.
+//! This module intentionally models one active managed root per process. It
+//! owns the process-local resolved paths plus the primary and catalog pool
+//! registries used by the app and CLI layers. That keeps persistence helpers
+//! centralized while the underlying SQLite files are recreated or migrated.
+//!
+//! If WinBrew ever needs multi-root or daemon-style storage, this module is
+//! the boundary that would need a different context model.
 
 use anyhow::{Context, Result};
 use r2d2::{Pool, PooledConnection};
