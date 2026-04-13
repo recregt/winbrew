@@ -1,7 +1,8 @@
 use anyhow::Result;
 
 use crate::core::paths::ResolvedPaths;
-use crate::models::{ConfigSection, ReportSection, RuntimeReport};
+use crate::models::domains::reporting::{ReportSection, RuntimeReport};
+use crate::models::domains::shared::ConfigSection;
 
 pub fn runtime_report(
     sections: &[ConfigSection],

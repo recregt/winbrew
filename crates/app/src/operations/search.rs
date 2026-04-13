@@ -4,7 +4,7 @@
 //! owns the actual search error semantics.
 
 use crate::catalog;
-use crate::models::CatalogPackage;
+use crate::models::domains::catalog::CatalogPackage;
 use crate::storage;
 use anyhow::Error;
 

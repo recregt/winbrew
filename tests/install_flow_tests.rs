@@ -13,9 +13,10 @@ use winbrew::database;
 use winbrew::services::app::install;
 use winbrew::services::app::install::InstallObserver;
 use winbrew_core::hash::{HashAlgorithm, Hasher};
-use winbrew_models::{
-    CatalogPackage, InstallerType, PackageId, PackageName, PackageRef, PackageStatus,
-};
+use winbrew_models::domains::catalog::CatalogPackage;
+use winbrew_models::domains::install::InstallerType;
+use winbrew_models::domains::installed::PackageStatus;
+use winbrew_models::domains::package::{PackageId, PackageName, PackageRef};
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;
 

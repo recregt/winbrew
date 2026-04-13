@@ -9,7 +9,8 @@
 //! mutates anything. It can display dependents, ask for confirmation, and only
 //! then hand the plan to the execution layer.
 
-use crate::models::{InstalledPackage, RemovalPlan};
+use crate::models::domains::install::RemovalPlan;
+use crate::models::domains::installed::InstalledPackage;
 use crate::storage::database;
 
 use super::Result;
@@ -78,9 +79,10 @@ fn dependency_name(dep: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::removal_plan;
-    use crate::models::{
-        EngineMetadata, InstallScope, InstalledPackage, InstallerType, PackageStatus,
-    };
+    use crate::models::domains::install::EngineMetadata;
+    use crate::models::domains::install::InstallScope;
+    use crate::models::domains::install::InstallerType;
+    use crate::models::domains::installed::{InstalledPackage, PackageStatus};
 
     fn package(
         name: &str,

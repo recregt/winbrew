@@ -1,5 +1,5 @@
 use crate::core::paths::ResolvedPaths;
-use crate::models::ConfigSection;
+use crate::models::domains::shared::ConfigSection;
 use std::sync::Arc;
 
 /// Runtime context for the application.

@@ -1,7 +1,7 @@
 //! Summary assembly for the doctor report.
 //!
 //! This module turns the raw diagnostics produced by `scan` into the final
-//! [`crate::models::HealthReport`]. It is responsible for path rendering,
+//! [`crate::models::domains::reporting::HealthReport`]. It is responsible for path rendering,
 //! diagnostic ordering, fallback diagnostics when package inventory lookup
 //! fails, and the final error count used by the UI.
 
@@ -13,8 +13,9 @@ use crate::AppContext;
 use crate::storage::database;
 
 use super::scan;
-use crate::models::{
-    DiagnosisResult, DiagnosisSeverity, HealthReport, InstalledPackage, RecoveryFinding,
+use crate::models::domains::installed::InstalledPackage;
+use crate::models::domains::reporting::{
+    DiagnosisResult, DiagnosisSeverity, HealthReport, RecoveryFinding,
 };
 
 /// Convert a path into the display string used in the final report.
@@ -142,7 +143,7 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
 #[cfg(test)]
 mod tests {
     use super::{collect_packages, collect_recovery_findings, sort_diagnostics};
-    use crate::models::{
+    use crate::models::domains::reporting::{
         DiagnosisResult, DiagnosisSeverity, RecoveryActionGroup, RecoveryIssueKind,
     };
     use anyhow::anyhow;

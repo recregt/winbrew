@@ -5,7 +5,10 @@ use anyhow::Result;
 use common::db::{init_database, reset_installed_packages};
 use common::shared_root::test_root;
 use winbrew::database;
-use winbrew_models::{EngineKind, EngineMetadata, InstallScope, InstallerType, Package, PackageStatus};
+use winbrew_models::domains::install::{
+    EngineKind, EngineMetadata, InstallScope, InstallerType,
+};
+use winbrew_models::domains::installed::{InstalledPackage as Package, PackageStatus};
 
 fn sample_package(name: &str, status: PackageStatus) -> Package {
     Package {

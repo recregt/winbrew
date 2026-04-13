@@ -9,7 +9,8 @@ use crate::core::fs::finalize_temp_file;
 use crate::core::hash::{hash_file, verify_hash};
 use crate::core::network::{Client, build_client, download_url_to_temp_file};
 use crate::core::paths::{ResolvedPaths, ensure_dirs_at};
-use crate::models::{CatalogMetadata, HashAlgorithm};
+use crate::models::catalog::CatalogMetadata;
+use crate::models::domains::shared::HashAlgorithm;
 
 const CATALOG_DIRECT_DOWNLOAD_URL: &str = "https://wb-assets.recregt.com/catalog.db";
 const CATALOG_METADATA_DIRECT_DOWNLOAD_URL: &str = "https://wb-assets.recregt.com/metadata.json";
@@ -114,8 +115,8 @@ fn verify_catalog_hash(path: &Path, expected_hash: &str) -> Result<()> {
 mod tests {
     use super::{load_catalog_metadata, verify_catalog_hash};
     use crate::core::hash::Hasher;
-    use crate::models::CatalogMetadata;
-    use crate::models::HashAlgorithm;
+    use crate::models::catalog::CatalogMetadata;
+    use crate::models::domains::shared::HashAlgorithm;
     use std::collections::BTreeMap;
     use std::fs;
     use tempfile::tempdir;

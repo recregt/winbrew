@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::path::Path;
 use thiserror::Error;
-use winbrew_models::HashAlgorithm;
+use winbrew_models::shared::hash::HashAlgorithm;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum HashError {
@@ -82,7 +82,7 @@ pub fn hash_algorithm(value: &str) -> Option<HashAlgorithm> {
         HashAlgorithm::Md5,
     ]
     .into_iter()
-    .find(|algorithm| normalized.len() == algorithm.expected_len())
+    .find(|algorithm: &HashAlgorithm| normalized.len() == algorithm.expected_len())
 }
 
 pub fn verify_hash(expected_hash: &str, actual_hash: impl AsRef<[u8]>) -> Result<()> {

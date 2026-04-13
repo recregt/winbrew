@@ -2,6 +2,8 @@ use super::Ui;
 use super::theme::{header_cell, terminal_width};
 use comfy_table::{Cell, Color, ContentArrangement, Row, Table, presets::UTF8_FULL_CONDENSED};
 use std::io::Write;
+use winbrew_models::catalog::package::CatalogPackage;
+use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
 
 impl<W: Write> Ui<W> {
     fn render_table(&mut self, table: Table) {
@@ -9,7 +11,7 @@ impl<W: Write> Ui<W> {
         let _ = self.out.flush();
     }
 
-    pub fn display_packages(&mut self, packages: &[winbrew_models::InstalledPackage]) {
+    pub fn display_packages(&mut self, packages: &[InstalledPackage]) {
         if packages.is_empty() {
             self.notice("No packages installed via winbrew.");
             return;
@@ -37,7 +39,7 @@ impl<W: Write> Ui<W> {
         self.render_table(table);
     }
 
-    pub fn display_catalog_packages(&mut self, packages: &[winbrew_models::CatalogPackage]) {
+    pub fn display_catalog_packages(&mut self, packages: &[CatalogPackage]) {
         if packages.is_empty() {
             self.notice("No catalog packages found.");
             return;
@@ -100,12 +102,12 @@ impl<W: Write> Ui<W> {
     }
 }
 
-fn status_badge(status: winbrew_models::PackageStatus, color_enabled: bool) -> Cell {
+fn status_badge(status: PackageStatus, color_enabled: bool) -> Cell {
     let (label, color) = match status {
-        winbrew_models::PackageStatus::Installing => ("[installing]", Color::DarkGrey),
-        winbrew_models::PackageStatus::Ok => ("[installed]", Color::Green),
-        winbrew_models::PackageStatus::Updating => ("[update available]", Color::Yellow),
-        winbrew_models::PackageStatus::Failed => ("[broken]", Color::Red),
+        PackageStatus::Installing => ("[installing]", Color::DarkGrey),
+        PackageStatus::Ok => ("[installed]", Color::Green),
+        PackageStatus::Updating => ("[update available]", Color::Yellow),
+        PackageStatus::Failed => ("[broken]", Color::Red),
     };
 
     let cell = Cell::new(label);
@@ -129,10 +131,11 @@ mod tests {
     use crate::{Ui, UiSettings};
     use std::io::{Result as IoResult, Write};
     use std::sync::{Arc, Mutex};
-    use winbrew_models::{
-        CatalogPackage, EngineKind, InstalledPackage, InstallerType, PackageSource, PackageStatus,
-        Version,
-    };
+    use winbrew_models::domains::catalog::CatalogPackage;
+    use winbrew_models::domains::install::{EngineKind, InstallerType};
+    use winbrew_models::domains::installed::{InstalledPackage, PackageStatus};
+    use winbrew_models::domains::package::PackageSource;
+    use winbrew_models::domains::shared::Version;
 
     struct SharedBuffer {
         bytes: Arc<Mutex<Vec<u8>>>,

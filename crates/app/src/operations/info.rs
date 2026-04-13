@@ -1,7 +1,8 @@
 use anyhow::Result;
 
 use crate::core::paths::ResolvedPaths;
-use crate::models::{ConfigSection, InfoReport};
+use crate::models::domains::reporting::InfoReport;
+use crate::models::domains::shared::ConfigSection;
 use crate::report;
 use crate::version;
 

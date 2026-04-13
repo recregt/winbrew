@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use winbrew_models::{CatalogInstaller, CatalogPackage, RawCatalogInstaller, RawCatalogPackage};
+use winbrew_models::catalog::package::{CatalogInstaller, CatalogPackage};
+use winbrew_models::catalog::raw::{RawCatalogInstaller, RawCatalogPackage};
 
 pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
     let query = query.trim();

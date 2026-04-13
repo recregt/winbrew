@@ -3,7 +3,9 @@ use std::path::Path;
 
 use crate::core::hash::hash_file;
 use crate::core::{HashError, verify_hash};
-use crate::models::{DiagnosisResult, DiagnosisSeverity, InstalledPackage, RecoveryFinding};
+use crate::models::domains::installed::InstalledPackage;
+use crate::models::domains::inventory::MsiFileRecord;
+use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity, RecoveryFinding};
 
 use super::{sort_diagnoses, sort_recovery_findings};
 
@@ -23,7 +25,9 @@ impl MsiInventoryScan {
     fn push(&mut self, diagnosis: DiagnosisResult, target_path: Option<&Path>) {
         if let Some(finding) = RecoveryFinding::from_diagnosis(&diagnosis) {
             let finding = match target_path {
-                Some(target_path) => finding.with_target_path(target_path.to_string_lossy()),
+                Some(target_path) => {
+                    finding.with_target_path(target_path.to_string_lossy().into_owned())
+                }
                 None => finding,
             };
             self.recovery_findings.push(finding);
@@ -36,7 +40,7 @@ impl MsiInventoryScan {
 /// Verify a single MSI file against the stored inventory snapshot.
 pub(super) fn diagnose_msi_file(
     pkg: &InstalledPackage,
-    file: &crate::models::MsiFileRecord,
+    file: &MsiFileRecord,
 ) -> Option<DiagnosisResult> {
     let path = Path::new(&file.path);
 
@@ -99,7 +103,7 @@ pub(super) fn diagnose_msi_file(
 /// Translate a filesystem metadata failure into an MSI file diagnosis.
 fn diagnose_msi_file_error(
     pkg: &InstalledPackage,
-    file: &crate::models::MsiFileRecord,
+    file: &MsiFileRecord,
     err: std::io::Error,
 ) -> DiagnosisResult {
     let (error_code, description) = match err.kind() {
@@ -133,10 +137,12 @@ pub(crate) fn scan_msi_inventory(
 ) -> MsiInventoryScan {
     let mut scan = MsiInventoryScan::new();
 
-    for pkg in packages
-        .iter()
-        .filter(|pkg| matches!(pkg.engine_kind, crate::models::EngineKind::Msi))
-    {
+    for pkg in packages.iter().filter(|pkg| {
+        matches!(
+            pkg.engine_kind,
+            crate::models::domains::install::EngineKind::Msi
+        )
+    }) {
         let snapshot = match crate::storage::database::get_snapshot(conn, &pkg.name) {
             Ok(Some(snapshot)) => snapshot,
             Ok(None) => {
@@ -180,9 +186,11 @@ pub(crate) fn scan_msi_inventory(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{
-        EngineKind, InstallerType, PackageStatus, RecoveryActionGroup, RecoveryIssueKind,
-    };
+    use crate::models::domains::install::EngineKind;
+    use crate::models::domains::install::InstallerType;
+    use crate::models::domains::installed::PackageStatus;
+    use crate::models::domains::reporting::{RecoveryActionGroup, RecoveryIssueKind};
+    use crate::models::domains::shared::HashAlgorithm;
     use tempfile::tempdir;
 
     fn sample_package(name: &str, install_dir: &std::path::Path) -> InstalledPackage {
@@ -203,7 +211,7 @@ mod tests {
     fn diagnose_msi_file_error_maps_missing_and_permission_denied() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let package = sample_package("Contoso.Msi", temp_dir.path());
-        let file = crate::models::MsiFileRecord {
+        let file = MsiFileRecord {
             package_name: "Contoso.Msi".to_string(),
             path: temp_dir
                 .path()
@@ -215,7 +223,7 @@ mod tests {
                 .join("missing.exe")
                 .to_string_lossy()
                 .into_owned(),
-            hash_algorithm: Some(winbrew_models::HashAlgorithm::Sha256),
+            hash_algorithm: Some(HashAlgorithm::Sha256),
             hash_hex: Some("00".repeat(32)),
             is_config_file: false,
         };
@@ -233,8 +241,11 @@ mod tests {
 
         assert_eq!(not_found.error_code, "missing_msi_file");
         assert_eq!(denied.error_code, "msi_file_permission_denied");
-        assert_eq!(not_found.severity, crate::models::DiagnosisSeverity::Error);
-        assert_eq!(denied.severity, crate::models::DiagnosisSeverity::Error);
+        assert_eq!(
+            not_found.severity,
+            crate::models::domains::reporting::DiagnosisSeverity::Error
+        );
+        assert_eq!(denied.severity, DiagnosisSeverity::Error);
         assert!(not_found.description.contains("Contoso.Msi"));
         assert!(denied.description.contains("Contoso.Msi"));
     }
@@ -243,7 +254,7 @@ mod tests {
     fn scan_msi_inventory_attaches_file_restore_targets() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let package = sample_package("Contoso.Msi", temp_dir.path());
-        let file = crate::models::MsiFileRecord {
+        let file = MsiFileRecord {
             package_name: "Contoso.Msi".to_string(),
             path: temp_dir
                 .path()
@@ -255,18 +266,17 @@ mod tests {
                 .join("missing.exe")
                 .to_string_lossy()
                 .into_owned(),
-            hash_algorithm: Some(winbrew_models::HashAlgorithm::Sha256),
+            hash_algorithm: Some(HashAlgorithm::Sha256),
             hash_hex: Some("00".repeat(32)),
             is_config_file: false,
         };
 
-        let scan = MsiInventoryScan::new();
-        let mut scan = scan;
         let diagnosis = diagnose_msi_file_error(
             &package,
             &file,
             std::io::Error::from(std::io::ErrorKind::NotFound),
         );
+        let mut scan = MsiInventoryScan::new();
         scan.push(diagnosis, Some(Path::new(&file.path)));
 
         assert_eq!(scan.recovery_findings.len(), 1);

@@ -8,7 +8,8 @@ use std::fs;
 use std::path::Path;
 use winbrew::database;
 use winbrew::services::app::remove;
-use winbrew_models::{InstallerType, Package, PackageStatus};
+use winbrew_models::domains::install::InstallerType;
+use winbrew_models::domains::installed::{InstalledPackage as Package, PackageStatus};
 
 fn sample_package(
     name: &str,

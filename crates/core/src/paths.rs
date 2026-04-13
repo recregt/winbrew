@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::hash::Hasher;
-use winbrew_models::HashAlgorithm;
+use winbrew_models::shared::hash::HashAlgorithm;
 
 #[derive(Debug, Clone)]
 pub struct ResolvedPaths {

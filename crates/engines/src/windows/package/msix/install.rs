@@ -2,7 +2,9 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 
-use winbrew_models::{EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope};
+use winbrew_models::install::engine::{
+    EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope,
+};
 
 #[cfg(windows)]
 use winbrew_windows::msix_install;

@@ -1,4 +1,5 @@
-use crate::models::{
+use crate::models::domains::installed::InstalledPackage;
+use crate::models::domains::reporting::{
     DiagnosisResult, DiagnosisSeverity, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind,
 };
 
@@ -26,7 +27,9 @@ impl PackageJournalScan {
     fn push(&mut self, diagnosis: DiagnosisResult, target_path: Option<&std::path::Path>) {
         if let Some(finding) = RecoveryFinding::from_diagnosis(&diagnosis) {
             let finding = match target_path {
-                Some(target_path) => finding.with_target_path(target_path.to_string_lossy()),
+                Some(target_path) => {
+                    finding.with_target_path(target_path.to_string_lossy().into_owned())
+                }
                 None => finding,
             };
             self.recovery_findings.push(finding);
@@ -75,14 +78,14 @@ impl OrphanInstallScan {
 
 pub(super) fn scan_package_journals(
     paths: &crate::core::paths::ResolvedPaths,
-    packages: &[crate::models::InstalledPackage],
+    packages: &[InstalledPackage],
 ) -> PackageJournalScan {
     journal::scan_package_journals(paths, packages)
 }
 
 pub(super) fn scan_orphaned_install_dirs(
     packages_root: &std::path::Path,
-    packages: &[crate::models::InstalledPackage],
+    packages: &[InstalledPackage],
 ) -> OrphanInstallScan {
     orphan::scan_orphaned_install_dirs(packages_root, packages)
 }

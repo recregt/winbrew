@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use winbrew_models::ModelError;
+use winbrew_models::shared::error::ModelError;
 
 const SCOOP_STREAM_SCHEMA_VERSION: u32 = 1;
 const SCOOP_STREAM_SOURCE: &str = "scoop";

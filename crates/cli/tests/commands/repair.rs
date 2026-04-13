@@ -12,9 +12,9 @@ use tempfile::TempDir;
 use winbrew_cli::CommandContext;
 use winbrew_cli::commands::repair;
 use winbrew_cli::database::{self, Config};
-use winbrew_cli::models::{
-    EngineKind, HashAlgorithm, InstalledPackage, InstallerType, PackageStatus,
-};
+use winbrew_cli::models::domains::install::{EngineKind, InstallerType};
+use winbrew_cli::models::domains::installed::{InstalledPackage, PackageStatus};
+use winbrew_cli::models::domains::shared::HashAlgorithm;
 use winbrew_core::Hasher;
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;

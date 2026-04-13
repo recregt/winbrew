@@ -10,9 +10,11 @@ pub use windows::package::msix;
 use anyhow::Result;
 use std::path::Path;
 
-pub use winbrew_models::{EngineInstallReceipt, EngineKind};
+pub use winbrew_models::install::engine::{EngineInstallReceipt, EngineKind};
 
-use winbrew_models::{CatalogInstaller, InstalledPackage, InstallerType};
+use winbrew_models::catalog::package::CatalogInstaller;
+use winbrew_models::install::installed::InstalledPackage;
+use winbrew_models::install::installer::InstallerType;
 
 pub trait PackageEngine {
     fn install(
@@ -62,7 +64,7 @@ impl PackageEngine for EngineKind {
 #[cfg(test)]
 mod tests {
     use super::{EngineKind, engine_kind_for_type};
-    use winbrew_models::InstallerType;
+    use winbrew_models::install::installer::InstallerType;
 
     #[test]
     fn engine_kind_for_type_maps_supported_types() {

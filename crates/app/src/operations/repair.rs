@@ -11,10 +11,10 @@ use crate::AppContext;
 use crate::catalog;
 use crate::core::{fs::cleanup_path, temp_workspace};
 use crate::engines::{self, EngineKind};
-use crate::models::{
-    CatalogInstaller, CatalogPackage, HealthReport, InstalledPackage, PackageId, PackageRef,
-    RecoveryActionGroup,
-};
+use crate::models::catalog::{CatalogInstaller, CatalogPackage};
+use crate::models::domains::installed::InstalledPackage;
+use crate::models::domains::package::{PackageId, PackageRef};
+use crate::models::domains::reporting::{HealthReport, RecoveryActionGroup};
 use crate::operations::install::{self, InstallObserver};
 use crate::operations::remove;
 use crate::storage::database;
@@ -397,7 +397,7 @@ fn restore_target_files(
 #[cfg(test)]
 mod tests {
     use super::{build_repair_plan, restore_target_files};
-    use crate::models::{
+    use crate::models::domains::reporting::{
         DiagnosisSeverity, HealthReport, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind,
     };
     use std::path::Path;

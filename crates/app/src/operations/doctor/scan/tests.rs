@@ -1,14 +1,16 @@
 use crate::core::paths::resolved_paths;
-use crate::models::{
-    DiagnosisSeverity, InstalledPackage, InstallerType, PackageStatus, RecoveryActionGroup,
-    RecoveryIssueKind,
+use crate::models::domains::install::InstallerType;
+use crate::models::domains::installed::{InstalledPackage, PackageStatus};
+use crate::models::domains::reporting::{
+    DiagnosisSeverity, RecoveryActionGroup, RecoveryIssueKind,
 };
 use crate::storage::{self, database};
 use std::fs;
 use std::path::Path;
 use tempfile::tempdir;
-use winbrew_models::{
-    EngineKind, MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
+use winbrew_models::domains::install::EngineKind;
+use winbrew_models::domains::inventory::{
+    MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
     MsiRegistryRecord, MsiShortcutRecord,
 };
 
@@ -74,13 +76,13 @@ fn sample_snapshot(
             package_name: name.to_string(),
             product_code: "{11111111-1111-1111-1111-111111111111}".to_string(),
             upgrade_code: Some("{22222222-2222-2222-2222-222222222222}".to_string()),
-            scope: winbrew_models::InstallScope::Installed,
+            scope: winbrew_models::domains::install::InstallScope::Installed,
         },
         files: vec![MsiFileRecord {
             package_name: name.to_string(),
             path: format!("{install_dir}/bin/demo.exe"),
             normalized_path: format!("{install_dir}/bin/demo.exe"),
-            hash_algorithm: Some(winbrew_models::HashAlgorithm::Sha256),
+            hash_algorithm: Some(winbrew_models::domains::shared::HashAlgorithm::Sha256),
             hash_hex: Some(hash_hex.to_string()),
             is_config_file: false,
         }],

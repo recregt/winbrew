@@ -3,10 +3,9 @@ use rusqlite::{Connection, Error as SqlError, OptionalExtension, params, types::
 use thiserror::Error;
 
 use crate::core::now;
-use winbrew_models::{
-    EngineInstallReceipt, EngineKind, EngineMetadata, InstalledPackage, InstallerType,
-    PackageStatus,
-};
+use winbrew_models::install::engine::{EngineInstallReceipt, EngineKind, EngineMetadata};
+use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
+use winbrew_models::install::installer::InstallerType;
 
 #[derive(Debug, Error)]
 #[error("package '{name}' not found")]
@@ -169,7 +168,7 @@ pub fn list_packages(conn: &Connection) -> Result<Vec<InstalledPackage>> {
     )?;
 
     stmt.query_map([], row_to_package)?
-        .map(|row| row.context("failed to read row"))
+        .map(|row: rusqlite::Result<InstalledPackage>| row.context("failed to read row"))
         .collect()
 }
 
@@ -181,7 +180,7 @@ pub fn list_installing_packages(conn: &Connection) -> Result<Vec<InstalledPackag
     )?;
 
     stmt.query_map([], row_to_package)?
-        .map(|row| row.context("failed to read row"))
+        .map(|row: rusqlite::Result<InstalledPackage>| row.context("failed to read row"))
         .collect()
 }
 
@@ -249,9 +248,9 @@ mod tests {
     use crate::database::migration;
     use rusqlite::Connection;
     use std::path::PathBuf;
-    use winbrew_models::{
-        EngineKind, EngineMetadata, InstallScope, InstalledPackage, InstallerType, PackageStatus,
-    };
+    use winbrew_models::install::engine::{EngineKind, EngineMetadata, InstallScope};
+    use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
+    use winbrew_models::install::installer::InstallerType;
 
     fn sample_package(name: &str) -> InstalledPackage {
         InstalledPackage {

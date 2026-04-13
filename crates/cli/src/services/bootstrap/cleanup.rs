@@ -25,7 +25,7 @@ use tracing::warn;
 use crate::core::fs::cleanup_path;
 use crate::core::temp_workspace::{is_temp_root_for, temp_root_base};
 use crate::database;
-use crate::models::{InstalledPackage, PackageStatus};
+use crate::models::domains::installed::{InstalledPackage, PackageStatus};
 
 /// Find stale `Installing` rows and reconcile them with the filesystem.
 /// The current database connection is obtained from the process-wide storage
@@ -89,7 +89,8 @@ mod tests {
     use super::cleanup_stale_installations;
     use crate::core::temp_workspace;
     use crate::database;
-    use crate::models::{InstalledPackage, InstallerType, PackageStatus};
+    use crate::models::domains::install::InstallerType;
+    use crate::models::domains::installed::{InstalledPackage, PackageStatus};
     use std::fs;
     use tempfile::tempdir;
 

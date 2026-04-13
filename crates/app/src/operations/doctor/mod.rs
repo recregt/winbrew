@@ -2,7 +2,7 @@
 //!
 //! The doctor workflow provides a single public entry point, [`health_report`],
 //! that gathers database and filesystem diagnostics into a
-//! [`crate::models::HealthReport`]. The implementation stays split across
+//! [`crate::models::domains::reporting::HealthReport`]. The implementation stays split across the
 //! internal helper modules so the report assembly code does not need to know the
 //! details of package scanning or diagnostic formatting.
 //!

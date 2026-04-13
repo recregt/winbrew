@@ -3,7 +3,7 @@ use std::io;
 use rusqlite::Error as SqliteError;
 use thiserror::Error;
 
-use winbrew_models::ModelError;
+use winbrew_models::shared::error::ModelError;
 
 #[derive(Debug, Error)]
 pub enum ParserError {

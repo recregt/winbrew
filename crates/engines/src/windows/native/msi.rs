@@ -4,9 +4,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::{debug, warn};
 
-use winbrew_models::{
-    EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope, InstalledPackage,
+use winbrew_models::install::engine::{
+    EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope,
 };
+use winbrew_models::install::installed::InstalledPackage;
+use winbrew_models::msi_inventory::records::MsiInventorySnapshot;
 use winbrew_windows::{msi_scan_inventory, uninstall_value};
 
 const MSI_INSTALL_EXIT_CODES: &[i32] = &[0, 1641, 3010];
@@ -110,7 +112,7 @@ pub fn remove(package: &InstalledPackage) -> Result<()> {
     Ok(())
 }
 
-fn collect_registry_keys(snapshot: &winbrew_models::MsiInventorySnapshot) -> Vec<String> {
+fn collect_registry_keys(snapshot: &MsiInventorySnapshot) -> Vec<String> {
     let mut registry_keys = snapshot
         .registry_entries
         .iter()
@@ -123,7 +125,7 @@ fn collect_registry_keys(snapshot: &winbrew_models::MsiInventorySnapshot) -> Vec
     registry_keys
 }
 
-fn collect_shortcuts(snapshot: &winbrew_models::MsiInventorySnapshot) -> Vec<String> {
+fn collect_shortcuts(snapshot: &MsiInventorySnapshot) -> Vec<String> {
     let mut shortcuts = snapshot
         .shortcuts
         .iter()
@@ -137,7 +139,7 @@ fn collect_shortcuts(snapshot: &winbrew_models::MsiInventorySnapshot) -> Vec<Str
 }
 
 fn resolve_install_dir(
-    snapshot: &winbrew_models::MsiInventorySnapshot,
+    snapshot: &MsiInventorySnapshot,
     requested_install_dir: &Path,
     package_name: &str,
 ) -> PathBuf {

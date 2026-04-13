@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::models::{DiagnosisResult, DiagnosisSeverity, InstalledPackage};
+use crate::models::domains::installed::InstalledPackage;
+use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity};
 
 use super::{OrphanInstallScan, sort_diagnoses, sort_recovery_findings};
 

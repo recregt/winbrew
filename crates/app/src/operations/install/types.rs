@@ -13,8 +13,9 @@ use super::state::InstallStateError;
 use crate::catalog;
 use crate::core::cancel::CancellationError;
 use crate::core::hash::HashError;
-use crate::models::{CatalogInstaller, HashAlgorithm};
-use winbrew_models::InstallFailureClass;
+use crate::models::catalog::CatalogInstaller;
+use crate::models::domains::shared::HashAlgorithm;
+use winbrew_models::domains::install::InstallFailureClass;
 
 /// Raised when a package has no installers to choose from.
 #[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
@@ -148,8 +149,8 @@ mod tests {
     use super::{InstallError, InstallStateError};
     use crate::core::cancel::CancellationError;
     use crate::core::hash::HashError;
-    use crate::models::HashAlgorithm;
-    use winbrew_models::InstallFailureClass;
+    use crate::models::domains::shared::HashAlgorithm;
+    use winbrew_models::domains::install::InstallFailureClass;
 
     #[test]
     fn maps_state_conflicts_to_user_facing_errors() {

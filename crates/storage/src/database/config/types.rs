@@ -4,7 +4,7 @@ use super::keys::env_override;
 use super::registry;
 use crate::core::env::LOCALAPPDATA;
 use serde::{Deserialize, Serialize};
-pub use winbrew_models::{ConfigSection, ConfigValueSource as ConfigSource};
+pub use winbrew_models::shared::config::{ConfigSection, ConfigValueSource as ConfigSource};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Config {

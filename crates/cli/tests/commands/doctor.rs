@@ -12,9 +12,10 @@ use winbrew_cli::CommandContext;
 use winbrew_cli::commands::doctor::{exit_error, format_duration, render_results, write_json};
 use winbrew_cli::commands::error::CommandError;
 use winbrew_cli::database::{self, Config};
-use winbrew_cli::models::{
-    DiagnosisResult, DiagnosisSeverity, EngineKind, HealthReport, InstalledPackage, InstallerType,
-    PackageStatus, RecoveryFinding,
+use winbrew_cli::models::domains::install::{EngineKind, InstallerType};
+use winbrew_cli::models::domains::installed::{InstalledPackage, PackageStatus};
+use winbrew_cli::models::domains::reporting::{
+    DiagnosisResult, DiagnosisSeverity, HealthReport, RecoveryFinding,
 };
 use winbrew_ui::{UiBuilder, UiSettings};
 
