@@ -1,3 +1,8 @@
+//! Direct tests for configuration command behavior.
+//!
+//! These tests focus on persistence and command semantics rather than CLI
+//! output formatting, which is covered by the binary smoke tests.
+
 mod common;
 
 use std::path::Path;
@@ -142,4 +147,44 @@ fn config_set_accepts_valid_value() {
     let config = Config::load_at(fixture.root_path()).expect("config should load");
 
     assert_eq!(config.core.log_level, "debug");
+}
+
+#[test]
+fn config_set_get_and_unset_round_trip_restores_defaults() {
+    let mut fixture = ConfigFixture::new();
+    let default_log_level = Config::default().core.log_level;
+
+    config_command::run(
+        &fixture.ctx,
+        &mut fixture.config,
+        ConfigCommand::Set {
+            key: "core.log_level".to_string(),
+            value: Some("debug".to_string()),
+        },
+    )
+    .expect("setting log level should succeed");
+
+    config_command::run(
+        &fixture.ctx,
+        &mut fixture.config,
+        ConfigCommand::Get {
+            key: "core.log_level".to_string(),
+        },
+    )
+    .expect("reading log level should succeed");
+
+    assert_eq!(fixture.config.core.log_level, "debug");
+
+    config_command::run(
+        &fixture.ctx,
+        &mut fixture.config,
+        ConfigCommand::Unset {
+            key: "core.log_level".to_string(),
+        },
+    )
+    .expect("unsetting log level should succeed");
+
+    let config = Config::load_at(fixture.root_path()).expect("config should reload from disk");
+
+    assert_eq!(config.core.log_level, default_log_level);
 }

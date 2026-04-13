@@ -1,3 +1,5 @@
+//! Remove command coverage for confirmed removals.
+
 mod common;
 
 use anyhow::Result;

@@ -1,5 +1,11 @@
+//! Direct tests for the doctor command and its reporting helpers.
+//!
+//! These tests cover the wrapper behavior around health reporting, plus the
+//! rendering and exit-code helpers that the command depends on.
+
 mod common;
 
+use std::cell::OnceCell;
 use std::io::{Result as IoResult, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -9,6 +15,7 @@ use rusqlite::Connection;
 use tempfile::TempDir;
 use winbrew_app::doctor::health_report;
 use winbrew_cli::CommandContext;
+use winbrew_cli::commands::doctor as doctor_command;
 use winbrew_cli::commands::doctor::{exit_error, format_duration, render_results, write_json};
 use winbrew_cli::commands::error::CommandError;
 use winbrew_cli::database::{self};
@@ -21,6 +28,7 @@ use winbrew_ui::{UiBuilder, UiSettings};
 struct DoctorFixture {
     root: TempDir,
     db_path: PathBuf,
+    db_conn: OnceCell<Connection>,
     ctx: CommandContext,
 }
 
@@ -36,6 +44,7 @@ impl DoctorFixture {
         Self {
             root,
             db_path: resolved_paths.db,
+            db_conn: OnceCell::new(),
             ctx,
         }
     }
@@ -44,8 +53,10 @@ impl DoctorFixture {
         self.root.path().join("packages").join(name)
     }
 
-    fn conn(&self) -> Connection {
-        Connection::open(&self.db_path).expect("database connection should open")
+    fn conn(&self) -> &Connection {
+        self.db_conn.get_or_init(|| {
+            Connection::open(&self.db_path).expect("database connection should open")
+        })
     }
 
     fn insert_installed_package(&self, name: &str, install_dir: &Path) {
@@ -55,8 +66,33 @@ impl DoctorFixture {
             .kind(InstallerType::Portable)
             .build(install_dir);
 
-        database::insert_package(&conn, &package).expect("package should insert");
+        database::insert_package(conn, &package).expect("package should insert");
     }
+}
+
+/// Direct doctor command coverage for the high-level wrapper behavior.
+///
+/// This keeps the helper tests focused while still covering the command entry
+/// point for both plain text and JSON output modes.
+#[test]
+fn doctor_run_succeeds_in_plain_and_json_modes() {
+    let fixture = DoctorFixture::new();
+
+    doctor_command::run(&fixture.ctx, false, false).expect("plain doctor should succeed");
+    doctor_command::run(&fixture.ctx, true, false).expect("json doctor should succeed");
+}
+
+#[test]
+fn doctor_run_warn_as_error_returns_reported_error() {
+    let fixture = DoctorFixture::new();
+    let orphan_dir = fixture.package_install_dir("Contoso.Orphan");
+    std::fs::create_dir_all(&orphan_dir).expect("orphan dir should exist");
+
+    let err = doctor_command::run(&fixture.ctx, false, true)
+        .expect_err("warnings should become errors in warn-as-error mode");
+
+    let cmd_err = err.downcast_ref::<CommandError>().expect("command error");
+    assert_eq!(cmd_err.exit_code(), 1);
 }
 
 struct SharedBuffer {

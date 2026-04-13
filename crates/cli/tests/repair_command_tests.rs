@@ -1,3 +1,6 @@
+//! Repair command integration tests for journal replay, orphan cleanup, and
+//! reinstall recovery paths.
+
 mod common;
 
 use anyhow::Result;
@@ -232,4 +235,11 @@ fn repair_reinstalls_missing_package_from_catalog() -> Result<()> {
     download_mock.assert();
 
     Ok(())
+}
+
+#[test]
+fn repair_is_a_noop_when_no_recovery_targets_exist() {
+    let fixture = RepairFixture::new();
+
+    repair::run(&fixture.ctx, true).expect("repair should succeed with no targets");
 }
