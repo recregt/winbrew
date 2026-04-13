@@ -6,6 +6,7 @@ use crate::core::now;
 use winbrew_models::install::engine::{EngineInstallReceipt, EngineKind, EngineMetadata};
 use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
 use winbrew_models::install::installer::InstallerType;
+use winbrew_models::shared::DeploymentKind;
 
 #[derive(Debug, Error)]
 #[error("package '{name}' not found")]
@@ -25,12 +26,13 @@ pub fn insert_package(conn: &Connection, pkg: &InstalledPackage) -> Result<()> {
 
     conn.execute(
         "INSERT INTO installed_packages
-         (name, version, kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+         (name, version, kind, deployment_kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             pkg.name,
             pkg.version,
             pkg.kind.to_string(),
+            pkg.deployment_kind.to_string(),
             pkg.engine_kind.to_string(),
             engine_metadata,
             pkg.install_dir,
@@ -150,7 +152,7 @@ pub fn replay_committed_journal(
 
 pub fn get_package(conn: &Connection, name: &str) -> Result<Option<InstalledPackage>> {
     let mut stmt = conn.prepare(
-        "SELECT name, version, kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at
+        "SELECT name, version, kind, deployment_kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at
             FROM installed_packages WHERE name = ?1",
     )?;
 
@@ -162,7 +164,7 @@ pub fn get_package(conn: &Connection, name: &str) -> Result<Option<InstalledPack
 pub fn list_packages(conn: &Connection) -> Result<Vec<InstalledPackage>> {
     let mut stmt = conn.prepare(
         // Returns only packages that completed successfully.
-        "SELECT name, version, kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at
+        "SELECT name, version, kind, deployment_kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at
             FROM installed_packages WHERE status = 'ok'
          ORDER BY name ASC",
     )?;
@@ -174,7 +176,7 @@ pub fn list_packages(conn: &Connection) -> Result<Vec<InstalledPackage>> {
 
 pub fn list_installing_packages(conn: &Connection) -> Result<Vec<InstalledPackage>> {
     let mut stmt = conn.prepare(
-        "SELECT name, version, kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at
+        "SELECT name, version, kind, deployment_kind, engine_kind, engine_metadata, install_dir, dependencies, status, installed_at
             FROM installed_packages WHERE status = 'installing'
          ORDER BY installed_at ASC, name ASC",
     )?;
@@ -197,14 +199,16 @@ pub fn delete_package(conn: &Connection, name: &str) -> Result<bool> {
 
 fn row_to_package(row: &rusqlite::Row) -> std::result::Result<InstalledPackage, SqlError> {
     const COL_KIND: usize = 2;
-    const COL_ENGINE_KIND: usize = 3;
-    const COL_ENGINE_METADATA: usize = 4;
-    const COL_DEPENDENCIES: usize = 6;
-    const COL_STATUS: usize = 7;
+    const COL_DEPLOYMENT_KIND: usize = 3;
+    const COL_ENGINE_KIND: usize = 4;
+    const COL_ENGINE_METADATA: usize = 5;
+    const COL_DEPENDENCIES: usize = 7;
+    const COL_STATUS: usize = 8;
 
     let dependencies_raw: String = row.get("dependencies")?;
     let status_raw: String = row.get("status")?;
     let kind_raw: String = row.get("kind")?;
+    let deployment_kind_raw: String = row.get("deployment_kind")?;
     let engine_kind_raw: String = row.get("engine_kind")?;
     let engine_metadata_raw: Option<String> = row.get("engine_metadata")?;
 
@@ -214,6 +218,11 @@ fn row_to_package(row: &rusqlite::Row) -> std::result::Result<InstalledPackage, 
     let kind = kind_raw
         .parse::<InstallerType>()
         .map_err(|err| SqlError::FromSqlConversionFailure(COL_KIND, Type::Text, Box::new(err)))?;
+    let deployment_kind = deployment_kind_raw
+        .parse::<DeploymentKind>()
+        .map_err(|err| {
+            SqlError::FromSqlConversionFailure(COL_DEPLOYMENT_KIND, Type::Text, Box::new(err))
+        })?;
     let engine_kind = engine_kind_raw.parse::<EngineKind>().map_err(|err| {
         SqlError::FromSqlConversionFailure(COL_ENGINE_KIND, Type::Text, Box::new(err))
     })?;
@@ -231,6 +240,7 @@ fn row_to_package(row: &rusqlite::Row) -> std::result::Result<InstalledPackage, 
         name: row.get("name")?,
         version: row.get("version")?,
         kind,
+        deployment_kind,
         engine_kind,
         engine_metadata,
         install_dir: row.get("install_dir")?,
@@ -251,12 +261,14 @@ mod tests {
     use winbrew_models::install::engine::{EngineKind, EngineMetadata, InstallScope};
     use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
     use winbrew_models::install::installer::InstallerType;
+    use winbrew_models::shared::DeploymentKind;
 
     fn sample_package(name: &str) -> InstalledPackage {
         InstalledPackage {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             kind: InstallerType::Msi,
+            deployment_kind: DeploymentKind::Installed,
             engine_kind: EngineKind::Msi,
             engine_metadata: Some(EngineMetadata::Msi {
                 product_code: "{11111111-1111-1111-1111-111111111111}".to_string(),

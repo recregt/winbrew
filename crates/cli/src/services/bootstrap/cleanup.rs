@@ -103,6 +103,7 @@ mod tests {
             name: name.to_string(),
             version: version.to_string(),
             kind: InstallerType::Portable,
+            deployment_kind: InstallerType::Portable.deployment_kind(),
             engine_kind: InstallerType::Portable.into(),
             engine_metadata: None,
             install_dir: install_dir.to_string_lossy().into_owned(),

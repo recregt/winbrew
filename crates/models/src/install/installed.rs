@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use super::engine::{EngineKind, EngineMetadata};
 use super::installer::InstallerType;
-use crate::shared::ModelError;
+use crate::shared::{DeploymentKind, ModelError};
 
 /// The persisted status of an installed package row.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
@@ -73,6 +73,9 @@ pub struct InstalledPackage {
     pub version: String,
     /// Installer format that produced the installation.
     pub kind: InstallerType,
+    /// Semantic deployment outcome recorded for the installed row.
+    #[serde(default = "default_deployment_kind")]
+    pub deployment_kind: DeploymentKind,
     /// Engine kind that performed the install.
     pub engine_kind: EngineKind,
     /// Engine-specific metadata for repair and removal flows.
@@ -85,4 +88,8 @@ pub struct InstalledPackage {
     pub status: PackageStatus,
     /// Timestamp when the install was finalized.
     pub installed_at: String,
+}
+
+fn default_deployment_kind() -> DeploymentKind {
+    DeploymentKind::Installed
 }

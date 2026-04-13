@@ -26,6 +26,7 @@ mod tests {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             kind: InstallerType::Portable,
+            deployment_kind: InstallerType::Portable.deployment_kind(),
             engine_kind: EngineKind::Portable,
             engine_metadata: None,
             install_dir: install_dir.to_string_lossy().into_owned(),

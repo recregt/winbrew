@@ -379,6 +379,7 @@ mod tests {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             kind: InstallerType::Msi,
+            deployment_kind: InstallerType::Msi.deployment_kind(),
             engine_kind: EngineKind::Msi,
             engine_metadata: Some(EngineMetadata::Msi {
                 product_code: "{11111111-1111-1111-1111-111111111111}".to_string(),

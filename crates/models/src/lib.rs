@@ -7,7 +7,7 @@
 //!
 //! Public namespaces:
 //!
-//! - `shared`: errors, validation, identifiers, config, hash, and version
+//! - `shared`: errors, validation, identifiers, config, hash, deployment, and version
 //! - `package`: package identity, queries, dependencies, and package aggregates
 //! - `catalog`: typed catalog records and raw upstream catalog payloads
 //! - `install`: installer metadata, engine receipts, installed state, and removal planning
@@ -30,6 +30,7 @@ pub mod shared;
 pub mod domains {
     pub mod shared {
         pub use crate::shared::config::{ConfigSection, ConfigValue, ConfigValueSource};
+        pub use crate::shared::deployment::DeploymentKind;
         pub use crate::shared::error::ModelError;
         pub use crate::shared::hash::HashAlgorithm;
         pub use crate::shared::identifiers::{BucketName, CatalogId, PackageName};

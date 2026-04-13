@@ -198,6 +198,7 @@ mod tests {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             kind: InstallerType::Msi,
+            deployment_kind: InstallerType::Msi.deployment_kind(),
             engine_kind: EngineKind::Msi,
             engine_metadata: None,
             install_dir: install_dir.to_string_lossy().into_owned(),

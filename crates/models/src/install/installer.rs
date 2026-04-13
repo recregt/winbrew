@@ -2,6 +2,7 @@ use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use super::engine::EngineKind;
+use crate::shared::DeploymentKind;
 use crate::shared::ModelError;
 use crate::shared::validation::{Validate, ensure_hash, ensure_http_url};
 
@@ -27,8 +28,22 @@ pub enum InstallerType {
     Msi,
     /// Windows App Installer / MSIX package.
     Msix,
+    /// Windows AppX package.
+    Appx,
     /// Native executable installer.
     Exe,
+    /// Inno Setup installer.
+    Inno,
+    /// Nullsoft installer.
+    Nullsoft,
+    /// WiX installer.
+    Wix,
+    /// Burn bootstrapper.
+    Burn,
+    /// Progressive Web App installer.
+    Pwa,
+    /// Font installer.
+    Font,
     /// Portable archive or copy-based package.
     Portable,
     /// Zip archive installer.
@@ -104,10 +119,47 @@ impl InstallerType {
         match self {
             Self::Msi => "msi",
             Self::Msix => "msix",
+            Self::Appx => "appx",
             Self::Exe => "exe",
+            Self::Inno => "inno",
+            Self::Nullsoft => "nullsoft",
+            Self::Wix => "wix",
+            Self::Burn => "burn",
+            Self::Pwa => "pwa",
+            Self::Font => "font",
             Self::Portable => "portable",
             Self::Zip => "zip",
         }
+    }
+
+    /// Return the semantic deployment outcome associated with this installer type.
+    pub fn deployment_kind(self) -> DeploymentKind {
+        self.into()
+    }
+
+    /// Return `true` when this installer comes from a Windows package family.
+    pub fn is_windows_package(self) -> bool {
+        matches!(self, Self::Msix | Self::Appx)
+    }
+
+    /// Return `true` when this installer belongs to an MSI-based family.
+    pub fn is_msi_family(self) -> bool {
+        matches!(self, Self::Msi | Self::Wix)
+    }
+
+    /// Return `true` when this installer belongs to a native executable family.
+    pub fn is_native_exe_family(self) -> bool {
+        matches!(self, Self::Exe | Self::Inno | Self::Nullsoft | Self::Burn)
+    }
+
+    /// Return `true` when this installer needs a dedicated special-case adapter.
+    pub fn is_special_case(self) -> bool {
+        matches!(self, Self::Pwa | Self::Font)
+    }
+
+    /// Return `true` when the payload is archive-shaped and should be unpacked.
+    pub fn is_archive(self) -> bool {
+        matches!(self, Self::Zip)
     }
 }
 
@@ -118,7 +170,14 @@ impl FromStr for InstallerType {
         match s.trim().to_ascii_lowercase().as_str() {
             "msi" => Ok(Self::Msi),
             "msix" => Ok(Self::Msix),
+            "appx" => Ok(Self::Appx),
             "exe" => Ok(Self::Exe),
+            "inno" => Ok(Self::Inno),
+            "nullsoft" => Ok(Self::Nullsoft),
+            "wix" => Ok(Self::Wix),
+            "burn" => Ok(Self::Burn),
+            "pwa" => Ok(Self::Pwa),
+            "font" => Ok(Self::Font),
             "portable" => Ok(Self::Portable),
             "zip" => Ok(Self::Zip),
             other => Err(ModelError::invalid_enum_value("installer.kind", other)),
@@ -159,5 +218,74 @@ impl From<EngineKind> for InstallerType {
             EngineKind::Msi => Self::Msi,
             EngineKind::NativeExe => Self::Exe,
         }
+    }
+}
+
+impl From<InstallerType> for DeploymentKind {
+    fn from(value: InstallerType) -> Self {
+        match value {
+            InstallerType::Portable | InstallerType::Zip => Self::Portable,
+            _ => Self::Installed,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::shared::DeploymentKind;
+
+    use super::InstallerType;
+    use core::str::FromStr;
+
+    #[test]
+    fn installer_type_parses_official_winget_values() {
+        assert_eq!(
+            InstallerType::from_str("appx").expect("appx"),
+            InstallerType::Appx
+        );
+        assert_eq!(
+            InstallerType::from_str("inno").expect("inno"),
+            InstallerType::Inno
+        );
+        assert_eq!(
+            InstallerType::from_str("nullsoft").expect("nullsoft"),
+            InstallerType::Nullsoft
+        );
+        assert_eq!(
+            InstallerType::from_str("wix").expect("wix"),
+            InstallerType::Wix
+        );
+        assert_eq!(
+            InstallerType::from_str("burn").expect("burn"),
+            InstallerType::Burn
+        );
+        assert_eq!(
+            InstallerType::from_str("pwa").expect("pwa"),
+            InstallerType::Pwa
+        );
+        assert_eq!(
+            InstallerType::from_str("font").expect("font"),
+            InstallerType::Font
+        );
+    }
+
+    #[test]
+    fn installer_type_classifies_deployment_kind() {
+        assert_eq!(
+            InstallerType::Portable.deployment_kind(),
+            DeploymentKind::Portable
+        );
+        assert_eq!(
+            InstallerType::Zip.deployment_kind(),
+            DeploymentKind::Portable
+        );
+        assert_eq!(
+            InstallerType::Msi.deployment_kind(),
+            DeploymentKind::Installed
+        );
+        assert!(InstallerType::Msix.is_windows_package());
+        assert!(InstallerType::Wix.is_msi_family());
+        assert!(InstallerType::Burn.is_native_exe_family());
+        assert!(InstallerType::Pwa.is_special_case());
     }
 }

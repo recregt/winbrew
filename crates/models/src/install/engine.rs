@@ -117,11 +117,16 @@ impl EngineKind {
 
     pub fn from_installer_type(kind: InstallerType) -> Self {
         match kind {
-            InstallerType::Msix => Self::Msix,
+            InstallerType::Msix | InstallerType::Appx => Self::Msix,
+            InstallerType::Msi | InstallerType::Wix => Self::Msi,
             InstallerType::Zip => Self::Zip,
             InstallerType::Portable => Self::Portable,
-            InstallerType::Msi => Self::Msi,
-            InstallerType::Exe => Self::NativeExe,
+            InstallerType::Exe
+            | InstallerType::Inno
+            | InstallerType::Nullsoft
+            | InstallerType::Burn
+            | InstallerType::Pwa
+            | InstallerType::Font => Self::NativeExe,
         }
     }
 }

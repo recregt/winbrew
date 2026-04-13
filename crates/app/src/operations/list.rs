@@ -76,6 +76,7 @@ mod tests {
             name: name.to_string(),
             version: version.to_string(),
             kind,
+            deployment_kind: kind.deployment_kind(),
             engine_kind: kind.into(),
             engine_metadata: None,
             install_dir: install_dir.to_string(),

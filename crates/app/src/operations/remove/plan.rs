@@ -94,6 +94,7 @@ mod tests {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             kind,
+            deployment_kind: kind.deployment_kind(),
             engine_kind: kind.into(),
             engine_metadata,
             install_dir: install_dir.to_string(),
