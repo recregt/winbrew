@@ -4,6 +4,7 @@ use comfy_table::{Cell, Color, ContentArrangement, Row, Table, presets::UTF8_FUL
 use std::io::Write;
 use winbrew_models::catalog::package::CatalogPackage;
 use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
+use winbrew_models::shared::DeploymentKind;
 
 impl<W: Write> Ui<W> {
     fn render_table(&mut self, table: Table) {
@@ -23,6 +24,7 @@ impl<W: Write> Ui<W> {
         let mut table = self.build_table([
             header_cell("Name", color, Color::Green),
             header_cell("Version", color, Color::Cyan),
+            header_cell("Deployment", color, Color::Magenta),
             header_cell("Status", color, Color::DarkGrey),
             header_cell("Installed At", color, Color::DarkGrey),
         ]);
@@ -31,6 +33,7 @@ impl<W: Write> Ui<W> {
             table.add_row([
                 Cell::new(&pkg.name),
                 Cell::new(&pkg.version),
+                deployment_badge(pkg.deployment_kind, color),
                 status_badge(pkg.status, color),
                 Cell::new(&pkg.installed_at).fg(Color::DarkGrey),
             ]);
@@ -114,6 +117,16 @@ fn status_badge(status: PackageStatus, color_enabled: bool) -> Cell {
     if color_enabled { cell.fg(color) } else { cell }
 }
 
+fn deployment_badge(kind: DeploymentKind, color_enabled: bool) -> Cell {
+    let (label, color) = match kind {
+        DeploymentKind::Installed => ("[installed]", Color::Cyan),
+        DeploymentKind::Portable => ("[portable]", Color::Magenta),
+    };
+
+    let cell = Cell::new(label);
+    if color_enabled { cell.fg(color) } else { cell }
+}
+
 fn source_cell(source: impl AsRef<str>, color_enabled: bool) -> Cell {
     let source = source.as_ref();
     let color = match source.to_ascii_lowercase().as_str() {
@@ -135,6 +148,7 @@ mod tests {
     use winbrew_models::domains::install::{EngineKind, InstallerType};
     use winbrew_models::domains::installed::{InstalledPackage, PackageStatus};
     use winbrew_models::domains::package::PackageSource;
+    use winbrew_models::domains::shared::DeploymentKind;
     use winbrew_models::domains::shared::Version;
 
     struct SharedBuffer {
@@ -177,7 +191,7 @@ mod tests {
             name: "Contoso App".to_string(),
             version: "1.2.3".to_string(),
             kind: InstallerType::Portable,
-            deployment_kind: InstallerType::Portable.deployment_kind(),
+            deployment_kind: DeploymentKind::Portable,
             engine_kind: EngineKind::Portable,
             engine_metadata: None,
             install_dir: "C:\\Apps\\Contoso".to_string(),
@@ -261,6 +275,7 @@ mod tests {
         .expect("rendered output should be valid UTF-8");
 
         assert!(output.contains("installed packages"));
+        assert!(output.contains("portable"));
         assert!(output.contains("[installed]"));
         assert!(output.contains("[update available]"));
         assert!(output.contains("[broken]"));
