@@ -6,7 +6,7 @@ pre-commit:
   parallel: true
   commands:
     rust:
-      run: task ci:rust
+      run: task ci:rust:fast
     go-crawler:
       glob: "infra/crawler/**/*.go"
       root: "infra/"
