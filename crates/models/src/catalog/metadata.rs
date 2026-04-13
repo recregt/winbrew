@@ -1,3 +1,5 @@
+//! Catalog metadata summary used to index and version the generated catalog.
+
 use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -7,18 +9,26 @@ use crate::shared::ModelError;
 
 const SCHEMA_VERSION: u32 = 1;
 
+/// Summary metadata for a generated catalog snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogMetadata {
+    /// Schema version of the persisted metadata envelope.
     pub schema_version: u32,
+    /// Unix timestamp captured when the metadata was generated.
     pub generated_at_unix: u64,
+    /// Hash of the current catalog payload.
     pub current_hash: String,
+    /// Hash of the previous catalog payload, when known.
     #[serde(default)]
     pub previous_hash: String,
+    /// Total package count in the snapshot.
     pub package_count: usize,
+    /// Number of packages by source name.
     pub source_counts: BTreeMap<String, usize>,
 }
 
 impl CatalogMetadata {
+    /// Build metadata from aggregate counts and the current payload hash.
     pub fn build_from_counts(
         package_count: usize,
         source_counts: BTreeMap<String, usize>,
@@ -37,6 +47,7 @@ impl CatalogMetadata {
         }
     }
 
+    /// Validate the schema version and the required hash contract.
     pub fn validate(&self) -> Result<(), ModelError> {
         if self.schema_version != SCHEMA_VERSION {
             return Err(ModelError::invalid_contract(

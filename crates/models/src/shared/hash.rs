@@ -1,9 +1,16 @@
+//! Hash algorithm metadata used by catalog, install, and inventory code.
+//!
+//! The hash model is small on purpose: it carries the algorithm identity, the
+//! display name used in user-facing messages, the expected hex length, and a
+//! flag for legacy algorithms that should be treated with extra caution.
+
 use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 use super::error::ModelError;
 
+/// Checksum algorithms that Winbrew recognizes in persisted model data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HashAlgorithm {
@@ -14,6 +21,7 @@ pub enum HashAlgorithm {
 }
 
 impl HashAlgorithm {
+    /// Return the canonical display name used in diagnostics and CLI output.
     pub fn display_name(self) -> &'static str {
         match self {
             Self::Md5 => "MD5",
@@ -23,6 +31,7 @@ impl HashAlgorithm {
         }
     }
 
+    /// Return the expected lowercase hex length for the algorithm.
     pub fn expected_len(self) -> usize {
         match self {
             Self::Md5 => 32,
@@ -32,6 +41,7 @@ impl HashAlgorithm {
         }
     }
 
+    /// Return `true` when the algorithm should be treated as legacy.
     pub fn is_legacy(self) -> bool {
         matches!(self, Self::Md5 | Self::Sha1)
     }

@@ -1,9 +1,17 @@
+//! Shared validation helpers for model invariants.
+//!
+//! Validation in this crate is intentionally lightweight: types implement the
+//! `Validate` trait when they can check their own invariants, and helper
+//! functions provide reusable checks for common string-based contracts.
+
 use super::error::ModelError;
 
+/// A model type that can verify its own invariants.
 pub trait Validate {
     fn validate(&self) -> Result<(), ModelError>;
 }
 
+/// Reject values that are empty after trimming whitespace.
 pub fn ensure_non_empty(field: &'static str, value: &str) -> Result<(), ModelError> {
     if value.trim().is_empty() {
         Err(ModelError::empty(field))
@@ -12,6 +20,7 @@ pub fn ensure_non_empty(field: &'static str, value: &str) -> Result<(), ModelErr
     }
 }
 
+/// Accept only `http` and `https` URLs.
 pub fn ensure_http_url(field: &'static str, value: &str) -> Result<(), ModelError> {
     let parsed = url::Url::parse(value)
         .map_err(|err| ModelError::invalid_url(field, format!("{value} ({err})")))?;
@@ -25,6 +34,7 @@ pub fn ensure_http_url(field: &'static str, value: &str) -> Result<(), ModelErro
     }
 }
 
+/// Accept hexadecimal hashes with or without a known algorithm prefix.
 pub fn ensure_hash(field: &'static str, value: &str) -> Result<(), ModelError> {
     let normalized = value.trim();
     if normalized.is_empty() {

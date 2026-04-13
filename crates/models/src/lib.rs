@@ -1,3 +1,24 @@
+//! Typed model contracts for the Winbrew workspace.
+//!
+//! `winbrew-models` owns the stable Rust data types shared by the parser,
+//! storage, engines, UI, and CLI layers. The crate is intentionally split into
+//! a small set of domain families so consumers can import the exact concept
+//! they need without depending on a broad compatibility surface.
+//!
+//! Public namespaces:
+//!
+//! - `shared`: errors, validation, identifiers, config, hash, and version
+//! - `package`: package identity, queries, dependencies, and package aggregates
+//! - `catalog`: typed catalog records and raw upstream catalog payloads
+//! - `install`: installer metadata, engine receipts, installed state, and removal planning
+//! - `reporting`: diagnostics, health reports, and recovery findings
+//! - `msi_inventory`: MSI snapshot records used for repair and inventory persistence
+//!
+//! The `domains` facade remains as the stable grouping layer for downstream
+//! callers. Inside this crate, prefer the owning module paths; outside the
+//! crate, prefer `crate::domains::...` when a grouped namespace is clearer than
+//! a direct module path.
+
 pub mod catalog;
 pub mod install;
 pub mod msi_inventory;

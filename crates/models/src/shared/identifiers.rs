@@ -93,6 +93,7 @@ macro_rules! define_string_newtype {
 }
 
 define_string_newtype! {
+    /// Canonical catalog identifier that always validates against package-id syntax.
     pub struct CatalogId;
     field = "catalog_id";
     parse = |trimmed: &str| {
@@ -110,6 +111,7 @@ define_string_newtype! {
 }
 
 define_string_newtype! {
+    /// Display-friendly package name used in package references and reports.
     pub struct PackageName;
     field = "package_ref.name";
     parse = |trimmed: &str| {
@@ -123,6 +125,7 @@ define_string_newtype! {
 }
 
 define_string_newtype! {
+    /// Strongly typed bucket name used by Scoop package ids.
     pub struct BucketName;
     field = "package_id.bucket";
     parse = |trimmed: &str| {

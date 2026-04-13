@@ -1,3 +1,10 @@
+//! Semver-backed version values with WinGet-friendly normalization.
+//!
+//! The `Version` wrapper keeps version parsing and display centralized so the
+//! rest of the model layer can work with one canonical representation. Strict
+//! parsing uses semantic version rules; lossy parsing accepts common WinGet and
+//! package-feed variants.
+
 use core::fmt;
 use core::str::FromStr;
 
@@ -7,15 +14,18 @@ use serde::{Deserialize, Serialize};
 use super::error::ModelError;
 use super::validation::Validate;
 
+/// A semantic version wrapper used throughout the model layer.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Version(semver_crate::Version);
 
 impl Version {
+    /// Build a version from explicit major, minor, and patch components.
     pub fn new(major: u64, minor: u64, patch: u64) -> Self {
         Self(semver_crate::Version::new(major, minor, patch))
     }
 
+    /// Parse a strict semantic version string.
     pub fn parse(value: &str) -> Result<Self, ModelError> {
         value.parse()
     }
