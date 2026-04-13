@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+    [switch]$SkipNextest
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -43,11 +45,13 @@ try {
         $env:RUSTDOCFLAGS = $previousRUSTDOCFLAGS
     }
 
-    Write-Host 'Running cargo nextest'
-    $global:LASTEXITCODE = 0
-    & cargo nextest run --locked --all-targets --all-features -p winbrew-cli
-    if ($global:LASTEXITCODE -ne 0) {
-        exit $global:LASTEXITCODE
+    if (-not $SkipNextest) {
+        Write-Host 'Running cargo nextest'
+        $global:LASTEXITCODE = 0
+        & cargo nextest run --locked --all-targets --all-features -p winbrew-cli
+        if ($global:LASTEXITCODE -ne 0) {
+            exit $global:LASTEXITCODE
+        }
     }
 } finally {
     Pop-Location

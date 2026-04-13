@@ -82,6 +82,11 @@ tasks:
     cmds:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-rust.ps1
 
+  ci:rust:fast:
+    desc: Run fast Rust CI checks for the CLI and binary without nextest
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-rust.ps1 -SkipNextest
+
   ci:verify:
     desc: Run the CI verification task set directly, including bundle validation
     cmds:
