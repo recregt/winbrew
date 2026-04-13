@@ -1,5 +1,6 @@
 mod common;
 
+use anyhow::Result;
 use std::fs;
 
 use rusqlite::Connection;
@@ -28,12 +29,16 @@ impl ReadOnlyFixture {
         }
     }
 
+    fn package_dir(&self, name: &str) -> std::path::PathBuf {
+        self.root.path().join("packages").join(name)
+    }
+
     fn conn(&self) -> Connection {
         Connection::open(&self.db_path).expect("database connection should open")
     }
 
-    fn insert_package(&self, name: &str) {
-        let install_dir = self.root.path().join("packages").join(name);
+    fn insert_package(&self, name: &str) -> Result<()> {
+        let install_dir = self.package_dir(name);
         let conn = self.conn();
         let package = common::InstalledPackageBuilder::new(name)
             .version("1.2.3")
@@ -41,35 +46,38 @@ impl ReadOnlyFixture {
             .status(PackageStatus::Ok)
             .build(&install_dir);
 
-        database::insert_package(&conn, &package).expect("package should insert");
+        database::insert_package(&conn, &package)?;
+        Ok(())
     }
 }
 
 #[test]
-fn read_only_commands_cover_cli_views() {
+fn read_only_commands_cover_cli_views() -> Result<()> {
     let fixture = ReadOnlyFixture::new();
-    fixture.insert_package("Contoso App");
+    fixture.insert_package("Contoso App")?;
 
     let list_output = common::run_winbrew(fixture.root.path(), &["list"]);
-    common::assert_success(&list_output, "list command");
+    common::assert_success(&list_output, "list command")?;
     common::assert_output_contains_all(
         &list_output,
         &["Contoso App", "Total: 1 package(s) installed."],
-    );
+    )?;
 
     let search_output = common::run_winbrew(fixture.root.path(), &["search", "contoso"]);
-    common::assert_success(&search_output, "search command");
+    common::assert_success(&search_output, "search command")?;
     common::assert_output_contains(
         &search_output,
         "Package catalog not available. Run `winbrew update` first.",
-    );
+    )?;
 
     let info_output = common::run_winbrew(fixture.root.path(), &["info"]);
-    common::assert_success(&info_output, "info command");
-    common::assert_output_contains_all(&info_output, &["Version:", "Runtime settings displayed."]);
+    common::assert_success(&info_output, "info command")?;
+    common::assert_output_contains_all(&info_output, &["Version:", "Runtime settings displayed."])?;
 
     let version_output = common::run_winbrew(fixture.root.path(), &["version"]);
-    common::assert_success(&version_output, "version command");
-    let version_text = String::from_utf8(version_output.stdout).expect("stdout should be utf-8");
+    common::assert_success(&version_output, "version command")?;
+    let version_text = String::from_utf8(version_output.stdout)?;
     assert_eq!(version_text.trim(), version::version_string());
+
+    Ok(())
 }

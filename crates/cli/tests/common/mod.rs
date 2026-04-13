@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+use rusqlite::{Connection, params};
 use winbrew_cli::database::{self, Config};
 use winbrew_cli::models::domains::install::{EngineKind, EngineMetadata, InstallerType};
 use winbrew_cli::models::domains::installed::{InstalledPackage, PackageStatus};
@@ -53,37 +54,85 @@ pub fn output_text(output: &Output) -> String {
     text
 }
 
-pub fn assert_success(output: &Output, context: &str) {
-    if !output.status.success() {
-        panic!(
-            "{context} failed\nstatus: {}\nstdout:\n{}\nstderr:\n{}",
-            output.status,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        );
-    }
+pub fn assert_success(output: &Output, context: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        output.status.success(),
+        "{context} failed\nstatus: {}\nstdout:\n{}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    Ok(())
 }
 
-pub fn assert_output_contains(output: &Output, expected: &str) {
+pub fn assert_output_contains(output: &Output, expected: &str) -> anyhow::Result<()> {
     let text = output_text(output);
-    assert!(
+    anyhow::ensure!(
         text.contains(expected),
         "Expected output to contain: {expected}\nActual output:\n{text}"
     );
+    Ok(())
 }
 
-pub fn assert_output_contains_all(output: &Output, expected: &[&str]) {
+pub fn assert_output_contains_all(output: &Output, expected: &[&str]) -> anyhow::Result<()> {
     let text = output_text(output);
     for pattern in expected {
-        assert!(
+        anyhow::ensure!(
             text.contains(pattern),
             "Expected output to contain: {pattern}\nActual output:\n{text}"
         );
     }
+    Ok(())
 }
 
 pub fn catalog_package_id(package_name: &str) -> String {
     format!("winget/{}", package_name.replace(' ', "."))
+}
+
+pub fn seed_catalog_package(
+    conn: &Connection,
+    package_name: &str,
+    description: &str,
+    installer_url: &str,
+    hash: &str,
+) -> anyhow::Result<()> {
+    conn.execute_batch(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tests/fixtures/catalog_schema.sql"
+    )))?;
+
+    conn.execute("DELETE FROM catalog_installers", [])?;
+    conn.execute("DELETE FROM catalog_packages", [])?;
+
+    let package_id = catalog_package_id(package_name);
+
+    conn.execute(
+        r#"
+        INSERT INTO catalog_packages (
+            id, name, version, description, homepage, license, publisher
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "#,
+        params![
+            package_id.clone(),
+            package_name,
+            "1.0.0",
+            Some(description),
+            Option::<String>::None,
+            Option::<String>::None,
+            Some("Winbrew Ltd."),
+        ],
+    )?;
+
+    conn.execute(
+        r#"
+        INSERT INTO catalog_installers (
+            package_id, url, hash, arch, type
+        ) VALUES (?1, ?2, ?3, ?4, ?5)
+        "#,
+        params![package_id, installer_url, hash, "", "zip"],
+    )?;
+
+    Ok(())
 }
 
 pub struct InstalledPackageBuilder {
