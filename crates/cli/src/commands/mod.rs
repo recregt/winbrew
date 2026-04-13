@@ -46,3 +46,60 @@ pub fn run(
         Command::Config { command } => config::run(ctx, config, command),
     }
 }
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use std::io::{Result as IoResult, Write};
+    use std::sync::{Arc, Mutex};
+
+    use winbrew_ui::{Ui, UiBuilder, UiSettings};
+
+    pub(crate) type BufferBytes = Arc<Mutex<Vec<u8>>>;
+    pub(crate) type BufferedUi = Ui<SharedBuffer>;
+    pub(crate) type BufferedUiBundle = (BufferedUi, BufferBytes, BufferBytes);
+
+    pub(crate) struct SharedBuffer {
+        bytes: BufferBytes,
+    }
+
+    impl SharedBuffer {
+        pub(crate) fn new(bytes: BufferBytes) -> Self {
+            Self { bytes }
+        }
+    }
+
+    impl Write for SharedBuffer {
+        fn write(&mut self, buffer: &[u8]) -> IoResult<usize> {
+            self.bytes
+                .lock()
+                .expect("buffer lock should be available")
+                .extend_from_slice(buffer);
+            Ok(buffer.len())
+        }
+
+        fn flush(&mut self) -> IoResult<()> {
+            Ok(())
+        }
+    }
+
+    pub(crate) fn buffered_ui(settings: UiSettings) -> BufferedUiBundle {
+        let out: BufferBytes = Arc::new(Mutex::new(Vec::new()));
+        let err: BufferBytes = Arc::new(Mutex::new(Vec::new()));
+        let ui = UiBuilder::with_writer(SharedBuffer::new(Arc::clone(&out)), settings)
+            .with_error_writer(Box::new(SharedBuffer::new(Arc::clone(&err))))
+            .color_enabled(false)
+            .build();
+
+        (ui, out, err)
+    }
+
+    pub(crate) fn buffer_text(buffer: &BufferBytes) -> String {
+        String::from_utf8(
+            buffer
+                .lock()
+                .expect("buffer lock should be available")
+                .clone(),
+        )
+        .expect("buffer should be utf-8")
+    }
+}

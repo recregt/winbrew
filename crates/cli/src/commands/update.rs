@@ -76,38 +76,14 @@ impl CatalogRefresher for RealCatalogRefresher {
 #[cfg(test)]
 mod tests {
     use super::{CatalogRefresher, run_with_refresher};
+    use crate::commands::test_support::{buffer_text, buffered_ui};
     use crate::core::paths::{ResolvedPaths, resolved_paths};
     use anyhow::Result;
-    use std::io::{self, Write};
     use std::path::PathBuf;
+    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Arc, Mutex};
     use tempfile::tempdir;
-    use winbrew_ui::{UiBuilder, UiSettings};
-
-    struct SharedBuffer {
-        bytes: Arc<Mutex<Vec<u8>>>,
-    }
-
-    impl SharedBuffer {
-        fn new(bytes: Arc<Mutex<Vec<u8>>>) -> Self {
-            Self { bytes }
-        }
-    }
-
-    impl Write for SharedBuffer {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            self.bytes
-                .lock()
-                .expect("buffer lock should not be poisoned")
-                .extend_from_slice(buf);
-            Ok(buf.len())
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
+    use winbrew_ui::UiSettings;
 
     struct FakeCatalogRefresher {
         expected_root: PathBuf,
@@ -147,14 +123,7 @@ mod tests {
             "${root}/data/cache",
         );
 
-        let output = Arc::new(Mutex::new(Vec::new()));
-        let error_output = Arc::new(Mutex::new(Vec::new()));
-        let writer = SharedBuffer::new(output.clone());
-        let error_writer = SharedBuffer::new(error_output.clone());
-        let mut ui = UiBuilder::with_writer(writer, UiSettings::default())
-            .with_error_writer(Box::new(error_writer))
-            .color_enabled(false)
-            .build();
+        let (mut ui, _output, error_output) = buffered_ui(UiSettings::default());
         let called = Arc::new(AtomicBool::new(false));
         let refresher = FakeCatalogRefresher {
             expected_root: temp_dir.path().to_path_buf(),
@@ -165,11 +134,6 @@ mod tests {
 
         assert!(called.load(Ordering::Relaxed));
 
-        let error_output = error_output
-            .lock()
-            .expect("buffer lock should not be poisoned");
-        let text = String::from_utf8(error_output.clone()).expect("output should be utf-8");
-
-        assert!(text.contains("Package catalog updated."));
+        assert!(buffer_text(&error_output).contains("Package catalog updated."));
     }
 }
