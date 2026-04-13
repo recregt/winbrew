@@ -1,40 +1,38 @@
-use winbrew_core::network::{installer_filename, is_zip_path};
+use winbrew_core::{
+    ArchiveKind,
+    network::{installer_filename, is_zip_path},
+};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum PortablePayloadKind {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PayloadKind {
     Raw,
-    ZipArchive,
-    UnsupportedArchive { format: String },
+    Archive(ArchiveKind),
 }
 
-pub(crate) fn classify_portable_payload(url: &str) -> PortablePayloadKind {
+pub(crate) fn classify_payload(url: &str) -> PayloadKind {
+    archive_kind_for_url(url).map_or(PayloadKind::Raw, PayloadKind::Archive)
+}
+
+pub(crate) fn archive_kind_for_url(url: &str) -> Option<ArchiveKind> {
     if is_zip_path(url) {
-        return PortablePayloadKind::ZipArchive;
+        return Some(ArchiveKind::Zip);
     }
 
     let file_name = installer_filename(url).to_ascii_lowercase();
-
-    match unsupported_archive_format(&file_name) {
-        Some(format) => PortablePayloadKind::UnsupportedArchive {
-            format: format.to_string(),
-        },
-        None => PortablePayloadKind::Raw,
-    }
+    archive_kind_from_file_name(&file_name)
 }
 
-fn unsupported_archive_format(file_name: &str) -> Option<&'static str> {
-    if file_name.ends_with(".tar.gz") {
-        Some("tar.gz")
-    } else if file_name.ends_with(".tgz") {
-        Some("tgz")
-    } else if file_name.ends_with(".tbz2") {
-        Some("tbz2")
+fn archive_kind_from_file_name(file_name: &str) -> Option<ArchiveKind> {
+    if file_name.ends_with(".tar.gz")
+        || file_name.ends_with(".tgz")
+        || file_name.ends_with(".tbz2")
+        || file_name.ends_with(".tar")
+    {
+        Some(ArchiveKind::Tar)
     } else if file_name.ends_with(".7z") {
-        Some("7z")
+        Some(ArchiveKind::SevenZip)
     } else if file_name.ends_with(".rar") {
-        Some("rar")
-    } else if file_name.ends_with(".tar") {
-        Some("tar")
+        Some(ArchiveKind::Rar)
     } else {
         None
     }
@@ -42,43 +40,50 @@ fn unsupported_archive_format(file_name: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{PortablePayloadKind, classify_portable_payload};
+    use super::{PayloadKind, archive_kind_for_url, classify_payload};
+    use winbrew_core::ArchiveKind;
 
     #[test]
     fn classifies_zip_payloads_before_portable_fallback() {
         assert_eq!(
-            classify_portable_payload("https://example.invalid/tool.zip?token=123#fragment"),
-            PortablePayloadKind::ZipArchive
+            classify_payload("https://example.invalid/tool.zip?token=123#fragment"),
+            PayloadKind::Archive(ArchiveKind::Zip)
         );
     }
 
     #[test]
     fn classifies_raw_payloads_as_portable() {
         assert_eq!(
-            classify_portable_payload("https://example.invalid/tool.exe"),
-            PortablePayloadKind::Raw
+            classify_payload("https://example.invalid/tool.exe"),
+            PayloadKind::Raw
         );
     }
 
     #[test]
-    fn classifies_known_archive_formats_as_unsupported() {
+    fn classifies_tar_family_payloads_as_archive() {
         assert_eq!(
-            classify_portable_payload("https://example.invalid/tool.7z"),
-            PortablePayloadKind::UnsupportedArchive {
-                format: "7z".to_string(),
-            }
+            classify_payload("https://example.invalid/tool.tar.gz"),
+            PayloadKind::Archive(ArchiveKind::Tar)
         );
         assert_eq!(
-            classify_portable_payload("https://example.invalid/tool.tar.gz"),
-            PortablePayloadKind::UnsupportedArchive {
-                format: "tar.gz".to_string(),
-            }
+            classify_payload("https://example.invalid/tool.tgz"),
+            PayloadKind::Archive(ArchiveKind::Tar)
         );
         assert_eq!(
-            classify_portable_payload("https://example.invalid/tool.rar"),
-            PortablePayloadKind::UnsupportedArchive {
-                format: "rar".to_string(),
-            }
+            classify_payload("https://example.invalid/tool.tbz2"),
+            PayloadKind::Archive(ArchiveKind::Tar)
+        );
+    }
+
+    #[test]
+    fn classifies_other_archive_formats_as_archive() {
+        assert_eq!(
+            archive_kind_for_url("https://example.invalid/tool.7z"),
+            Some(ArchiveKind::SevenZip)
+        );
+        assert_eq!(
+            archive_kind_for_url("https://example.invalid/tool.rar"),
+            Some(ArchiveKind::Rar)
         );
     }
 }

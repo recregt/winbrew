@@ -26,8 +26,8 @@ That keeps the design discussion close to the rest of the workspace documentatio
 | --- | --- | --- | --- | --- |
 | `InstallerType::Msi` | `EngineKind::Msi` | Supported on Windows | Windows-delegated, WinBrew-coordinated | Scans MSI inventory first, runs `msiexec`, records product code, upgrade code, scope, registry keys, shortcuts, and inventory snapshot. |
 | `InstallerType::Msix` | `EngineKind::Msix` | Supported on Windows | Windows-delegated, WinBrew-coordinated | Delegates install/remove to Windows App Installer / package APIs and records package identity metadata. |
-| `InstallerType::Zip` | `EngineKind::Zip` | Supported | WinBrew-owned filesystem engine | Extracts into a staging tree and replaces the target install directory. Remove is plain directory cleanup. |
-| `InstallerType::Portable` | `EngineKind::Portable` | Supported | WinBrew-owned filesystem engine | Copies the raw payload into a staging tree, then replaces the target install directory. Archive-like Portable URLs are rejected until a dedicated handler exists. Remove is plain directory cleanup. |
+| `InstallerType::Zip` | `EngineKind::Zip` | Supported | WinBrew-owned filesystem engine | ZIP extraction is the first-class archive backend today. The same dispatcher also carries the `ArchiveKind` family, so future formats can be added without changing the routing model. Remove is plain directory cleanup. |
+| `InstallerType::Portable` | `EngineKind::Portable` | Supported | WinBrew-owned filesystem engine | Copies raw payloads into a staging tree, then replaces the target install directory. Raw-only fallback; archive-shaped payloads route through the archive dispatcher instead of Portable. Remove is plain directory cleanup. |
 | `InstallerType::Exe` | `EngineKind::NativeExe` | Scaffolded, not routed | Undecided | The model layer already knows about the type, but the engine registry still rejects it. |
 
 ### Practical split
@@ -52,11 +52,11 @@ Current routing rules:
 - `InstallerType::Msi` resolves to `EngineKind::Msi`.
 - `InstallerType::Msix` resolves to `EngineKind::Msix`.
 - `InstallerType::Zip` resolves to `EngineKind::Zip`.
-- `InstallerType::Portable` resolves to `EngineKind::Portable`.
+- `InstallerType::Portable` resolves to `EngineKind::Portable` for raw payloads.
 - `InstallerType::Exe` is not routable yet and returns an unsupported-type error.
-- Portable installers whose URL looks like a zip file are intentionally routed to `Zip` first.
-- Portable installers whose URL looks like a non-zip archive are rejected early instead of being copied as if they were raw binaries.
-- The zip descriptor must stay before portable in the registry table.
+- Archive-shaped installers are classified into `ArchiveKind` and routed through the archive dispatcher; ZIP is the only implemented backend today.
+- Portable installers whose URL looks like an archive are routed away from Portable and into the archive path.
+- The archive descriptor must stay before portable in the registry table.
 
 The registry is the place to keep that ordering logic visible. The selection should remain data-driven rather than a chain of hidden conditionals.
 
@@ -69,7 +69,7 @@ The registry is the place to keep that ordering logic visible. The selection sho
 WinBrew performs the full install/remove workflow on disk:
 
 - downloads or stages the payload
-- extracts zip payloads or copies raw files
+- extracts ZIP payloads or copies raw files
 - replaces the install directory atomically where possible
 - removes the install tree directly on uninstall
 

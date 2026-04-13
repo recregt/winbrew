@@ -2,18 +2,26 @@ use anyhow::Result;
 use std::fs;
 use std::path::Path;
 
-use winbrew_core::fs::{cleanup_path, extract_zip_archive, replace_directory};
+use winbrew_core::fs::{cleanup_path, extract_archive, replace_directory};
 
 use winbrew_models::install::engine::EngineInstallReceipt;
 use winbrew_models::install::engine::EngineKind;
 
-pub fn install(download_path: &Path, install_dir: &Path) -> Result<EngineInstallReceipt> {
+use crate::payload::archive_kind_for_url;
+
+pub fn install(
+    download_path: &Path,
+    install_dir: &Path,
+    installer_url: &str,
+) -> Result<EngineInstallReceipt> {
     let stage_dir = install_dir.parent().unwrap_or(install_dir).join("staging");
+    let archive_kind =
+        archive_kind_for_url(installer_url).unwrap_or(winbrew_core::ArchiveKind::Zip);
 
     cleanup_path(&stage_dir)?;
     fs::create_dir_all(&stage_dir)?;
 
-    extract_zip_archive(download_path, &stage_dir)?;
+    extract_archive(archive_kind, download_path, &stage_dir)?;
     replace_directory(&stage_dir, install_dir)?;
 
     Ok(EngineInstallReceipt::new(
@@ -50,7 +58,12 @@ mod tests {
 
         create_zip_archive(&download_path, "bin/tool.exe", b"zip-binary");
 
-        install(&download_path, &install_dir).expect("zip install");
+        install(
+            &download_path,
+            &install_dir,
+            "https://example.invalid/download.zip",
+        )
+        .expect("zip install");
 
         let installed_file = install_dir.join("bin").join("tool.exe");
         let mut contents = String::default();
