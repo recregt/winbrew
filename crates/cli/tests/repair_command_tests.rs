@@ -140,7 +140,7 @@ fn repair_replays_committed_journal_into_database() {
             package_id: package_name.to_string(),
             version: "1.0.0".to_string(),
             engine: "portable".to_string(),
-            deployment_kind: Some(DeploymentKind::Portable),
+            deployment_kind: DeploymentKind::Portable,
             install_dir: journal_install_dir.to_string_lossy().to_string(),
             dependencies: vec!["winget/Contoso.Dependency".to_string()],
             engine_metadata: None,

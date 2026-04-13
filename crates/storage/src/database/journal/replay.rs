@@ -9,7 +9,6 @@ use winbrew_core::ResolvedPaths;
 use winbrew_models::install::engine::EngineKind;
 use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
 use winbrew_models::install::installer::InstallerType;
-use winbrew_models::shared::DeploymentKind;
 use winbrew_models::shared::error::ModelError;
 
 #[derive(Debug, Clone)]
@@ -101,39 +100,32 @@ fn parse_committed_package_journal(
     path: &Path,
     entries: Vec<JournalEntry>,
 ) -> Result<CommittedJournalPackage, JournalReplayError> {
-    let (package_id, version, engine, deployment_kind, install_dir, dependencies, engine_metadata): (
-        &str,
-        &str,
-        &str,
-        Option<DeploymentKind>,
-        &str,
-        Vec<String>,
-        Option<winbrew_models::install::engine::EngineMetadata>,
-    ) = entries
-        .iter()
-        .find_map(|entry| match entry {
-            JournalEntry::Metadata {
-                package_id,
-                version,
-                engine,
-                deployment_kind,
-                install_dir,
-                dependencies,
-                engine_metadata,
-            } => Some((
-                package_id.as_str(),
-                version.as_str(),
-                engine.as_str(),
-                *deployment_kind,
-                install_dir.as_str(),
-                dependencies.clone(),
-                engine_metadata.clone(),
-            )),
-            _ => None,
-        })
-        .ok_or_else(|| JournalReplayError::MissingMetadata {
-            path: path.to_path_buf(),
-        })?;
+    let (package_id, version, engine, deployment_kind, install_dir, dependencies, engine_metadata) =
+        entries
+            .iter()
+            .find_map(|entry| match entry {
+                JournalEntry::Metadata {
+                    package_id,
+                    version,
+                    engine,
+                    deployment_kind,
+                    install_dir,
+                    dependencies,
+                    engine_metadata,
+                } => Some((
+                    package_id.as_str(),
+                    version.as_str(),
+                    engine.as_str(),
+                    *deployment_kind,
+                    install_dir.as_str(),
+                    dependencies.clone(),
+                    engine_metadata.clone(),
+                )),
+                _ => None,
+            })
+            .ok_or_else(|| JournalReplayError::MissingMetadata {
+                path: path.to_path_buf(),
+            })?;
 
     if package_id.is_empty() {
         return Err(JournalReplayError::MissingField {
@@ -192,8 +184,7 @@ fn parse_committed_package_journal(
         name: package_id.to_string(),
         version: version.to_string(),
         kind: InstallerType::from(engine_kind),
-        deployment_kind: deployment_kind
-            .unwrap_or_else(|| InstallerType::from(engine_kind).deployment_kind()),
+        deployment_kind,
         engine_kind,
         engine_metadata,
         install_dir: install_dir.to_string(),

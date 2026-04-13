@@ -140,13 +140,13 @@ fn diagnose_committed_journal(
     entries: &[database::JournalEntry],
     packages: &HashMap<&str, &InstalledPackage>,
 ) -> Vec<DiagnosisResult> {
-    let Some((package_id, version, engine, install_dir)) =
+    let Some((package_id, version, engine, deployment_kind, install_dir)) =
         entries.iter().find_map(|entry| match entry {
             database::JournalEntry::Metadata {
                 package_id,
                 version,
                 engine,
-                deployment_kind: _,
+                deployment_kind,
                 install_dir,
                 dependencies: _,
                 engine_metadata: _,
@@ -154,6 +154,7 @@ fn diagnose_committed_journal(
                 package_id.as_str(),
                 version.as_str(),
                 engine.as_str(),
+                *deployment_kind,
                 install_dir.as_str(),
             )),
             _ => None,
@@ -183,28 +184,7 @@ fn diagnose_committed_journal(
     if package.version != version
         || !package.engine_kind.as_str().eq_ignore_ascii_case(engine)
         || package.install_dir != install_dir
-    {
-        return vec![DiagnosisResult {
-            error_code: "stale_package_journal".to_string(),
-            description: format!(
-                "{}: recovery journal does not match installed package {} ({})",
-                journal_path.to_string_lossy(),
-                package.name,
-                package.version
-            ),
-            severity: DiagnosisSeverity::Warning,
-        }];
-    }
-
-    let journal_deployment_kind = entries.iter().find_map(|entry| match entry {
-        database::JournalEntry::Metadata {
-            deployment_kind, ..
-        } => *deployment_kind,
-        _ => None,
-    });
-
-    if journal_deployment_kind
-        .is_some_and(|deployment_kind| package.deployment_kind != deployment_kind)
+        || package.deployment_kind != deployment_kind
     {
         return vec![DiagnosisResult {
             error_code: "stale_package_journal".to_string(),
