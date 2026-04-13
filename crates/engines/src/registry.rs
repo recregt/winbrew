@@ -183,14 +183,7 @@ mod tests {
     use winbrew_models::shared::DeploymentKind;
 
     fn installer(kind: InstallerType, url: &str) -> CatalogInstaller {
-        CatalogInstaller {
-            package_id: "Contoso.App".into(),
-            url: url.to_string(),
-            hash: "hash".to_string(),
-            arch: "x64".parse().expect("arch should parse"),
-            kind,
-            nested_kind: None,
-        }
+        CatalogInstaller::test_builder("Contoso.App".into(), url).with_kind(kind)
     }
 
     #[test]
@@ -239,10 +232,8 @@ mod tests {
 
     #[test]
     fn resolve_deployment_kind_uses_nested_installer_type_for_zip_archives() {
-        let installer = CatalogInstaller {
-            nested_kind: Some(InstallerType::Msi),
-            ..installer(InstallerType::Zip, "https://example.invalid/package.zip")
-        };
+        let installer = installer(InstallerType::Zip, "https://example.invalid/package.zip")
+            .with_nested(InstallerType::Msi);
 
         assert_eq!(
             resolve_deployment_kind(&installer),

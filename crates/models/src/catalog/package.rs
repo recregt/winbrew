@@ -95,6 +95,40 @@ impl Validate for CatalogInstaller {
     }
 }
 
+#[cfg(any(test, debug_assertions))]
+impl CatalogInstaller {
+    pub fn test_builder(package_id: CatalogId, url: &str) -> Self {
+        Self {
+            package_id,
+            url: url.to_string(),
+            hash: "abc123".to_string(),
+            arch: Architecture::X64,
+            kind: InstallerType::Exe,
+            nested_kind: None,
+        }
+    }
+
+    pub fn with_hash(mut self, hash: impl Into<String>) -> Self {
+        self.hash = hash.into();
+        self
+    }
+
+    pub fn with_arch(mut self, arch: Architecture) -> Self {
+        self.arch = arch;
+        self
+    }
+
+    pub fn with_kind(mut self, kind: InstallerType) -> Self {
+        self.kind = kind;
+        self
+    }
+
+    pub fn with_nested(mut self, nested_kind: InstallerType) -> Self {
+        self.nested_kind = Some(nested_kind);
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{CatalogInstaller, CatalogPackage};
@@ -122,28 +156,27 @@ mod tests {
 
     #[test]
     fn validates_checksumless_catalog_installer() {
-        let installer = CatalogInstaller {
-            package_id: "winget/Contoso.App".into(),
-            url: "https://example.test/app.exe".to_string(),
-            hash: String::default(),
-            arch: Architecture::Any,
-            kind: InstallerType::Portable,
-            nested_kind: None,
-        };
+        let installer = CatalogInstaller::test_builder(
+            "winget/Contoso.App".into(),
+            "https://example.test/app.exe",
+        )
+        .with_hash("")
+        .with_arch(Architecture::Any)
+        .with_kind(InstallerType::Portable);
 
         assert!(installer.validate().is_ok());
     }
 
     #[test]
     fn catalog_installer_nested_kind_round_trips_through_serde() {
-        let installer = CatalogInstaller {
-            package_id: "winget/Contoso.App".into(),
-            url: "https://example.test/app.zip".to_string(),
-            hash: "sha256:deadbeef".to_string(),
-            arch: Architecture::Any,
-            kind: InstallerType::Zip,
-            nested_kind: Some(InstallerType::Msi),
-        };
+        let installer = CatalogInstaller::test_builder(
+            "winget/Contoso.App".into(),
+            "https://example.test/app.zip",
+        )
+        .with_arch(Architecture::Any)
+        .with_kind(InstallerType::Zip)
+        .with_nested(InstallerType::Msi)
+        .with_hash("sha256:deadbeef");
 
         let json = serde_json::to_string(&installer).expect("installer should serialize");
         assert!(json.contains("\"nested_kind\":\"msi\""));
