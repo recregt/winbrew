@@ -2,7 +2,8 @@ mod common;
 
 use anyhow::Result;
 use mockito::Server;
-use rusqlite::{Connection, params};
+use rusqlite::Connection;
+use std::cell::OnceCell;
 use std::fs;
 use std::io::{Cursor, Write};
 use std::path::Path;
@@ -22,6 +23,8 @@ struct RepairFixture {
     root: TempDir,
     db_path: std::path::PathBuf,
     catalog_db_path: std::path::PathBuf,
+    db_conn: OnceCell<Connection>,
+    catalog_db_conn: OnceCell<Connection>,
     ctx: CommandContext,
 }
 
@@ -40,6 +43,8 @@ impl RepairFixture {
             root,
             db_path: resolved_paths.db,
             catalog_db_path: resolved_paths.catalog_db,
+            db_conn: OnceCell::new(),
+            catalog_db_conn: OnceCell::new(),
             ctx,
         }
     }
@@ -48,9 +53,25 @@ impl RepairFixture {
         self.root.path()
     }
 
+    fn package_dir(&self, name: &str) -> std::path::PathBuf {
+        self.root_path().join("packages").join(name)
+    }
+
+    fn conn(&self) -> &Connection {
+        self.db_conn.get_or_init(|| {
+            Connection::open(&self.db_path).expect("database connection should open")
+        })
+    }
+
+    fn catalog_conn(&self) -> &Connection {
+        self.catalog_db_conn.get_or_init(|| {
+            Connection::open(&self.catalog_db_path).expect("catalog database should open")
+        })
+    }
+
     fn insert_stale_package(&self, name: &str) {
-        let conn = Connection::open(&self.db_path).expect("database connection should open");
-        let install_dir = self.root_path().join("packages").join(name);
+        let conn = self.conn();
+        let install_dir = self.package_dir(name);
         let package = common::InstalledPackageBuilder::new(name)
             .version("0.9.0")
             .kind(InstallerType::Portable)
@@ -58,7 +79,7 @@ impl RepairFixture {
             .installed_at("2026-04-01T00:00:00Z")
             .build(&install_dir);
 
-        database::insert_package(&conn, &package).expect("package should insert");
+        database::insert_package(conn, &package).expect("package should insert");
     }
 }
 
@@ -84,47 +105,17 @@ fn sha512_hex(bytes: &[u8]) -> String {
 }
 
 fn create_catalog_db_with_hash(
-    path: &Path,
+    fixture: &RepairFixture,
     package_name: &str,
     installer_url: &str,
     hash: &str,
 ) -> Result<()> {
-    let conn = Connection::open(path)?;
-
-    conn.execute_batch(include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../tests/fixtures/catalog_schema.sql"
-    )))?;
-
-    conn.execute("DELETE FROM catalog_installers", [])?;
-    conn.execute("DELETE FROM catalog_packages", [])?;
-
-    let package_id = common::catalog_package_id(package_name);
-
-    conn.execute(
-        r#"
-        INSERT INTO catalog_packages (
-            id, name, version, description, homepage, license, publisher
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-        "#,
-        params![
-            package_id.clone(),
-            package_name,
-            "1.0.0",
-            Some("Synthetic package for isolated repair testing"),
-            Option::<String>::None,
-            Option::<String>::None,
-            Some("Winbrew Ltd."),
-        ],
-    )?;
-
-    conn.execute(
-        r#"
-        INSERT INTO catalog_installers (
-            package_id, url, hash, arch, type
-        ) VALUES (?1, ?2, ?3, ?4, ?5)
-        "#,
-        params![package_id, installer_url, hash, "", "zip"],
+    common::seed_catalog_package(
+        fixture.catalog_conn(),
+        package_name,
+        "Synthetic package for isolated repair testing",
+        installer_url,
+        hash,
     )?;
 
     Ok(())
@@ -159,8 +150,8 @@ fn repair_replays_committed_journal_into_database() {
 
     repair::run(&fixture.ctx, true).expect("repair should succeed");
 
-    let conn = Connection::open(&fixture.db_path).expect("database connection should open");
-    let package = database::get_package(&conn, package_name)
+    let conn = fixture.conn();
+    let package = database::get_package(conn, package_name)
         .expect("read package")
         .expect("package should exist");
 
@@ -182,7 +173,7 @@ fn repair_replays_committed_journal_into_database() {
 #[test]
 fn repair_removes_orphan_install_directory() {
     let fixture = RepairFixture::new();
-    let orphan_dir = fixture.root_path().join("packages").join("Contoso.Orphan");
+    let orphan_dir = fixture.package_dir("Contoso.Orphan");
     std::fs::create_dir_all(&orphan_dir).expect("orphan dir should exist");
 
     assert!(orphan_dir.exists());
@@ -196,7 +187,7 @@ fn repair_removes_orphan_install_directory() {
 fn repair_reinstalls_missing_package_from_catalog() -> Result<()> {
     let fixture = RepairFixture::new();
     let package_name = "Winbrew Repair Zip";
-    let install_dir = fixture.root_path().join("packages").join(package_name);
+    let install_dir = fixture.package_dir(package_name);
 
     let zip_bytes = create_dummy_zip_bytes()?;
     let sha512_hash = sha512_hex(&zip_bytes);
@@ -213,25 +204,20 @@ fn repair_reinstalls_missing_package_from_catalog() -> Result<()> {
     if let Some(parent) = fixture.catalog_db_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    create_catalog_db_with_hash(
-        &fixture.catalog_db_path,
-        package_name,
-        &installer_url,
-        &sha512_hash,
-    )?;
+    create_catalog_db_with_hash(&fixture, package_name, &installer_url, &sha512_hash)?;
 
-    let conn = Connection::open(&fixture.db_path).expect("database connection should open");
+    let conn = fixture.conn();
     let package = common::InstalledPackageBuilder::new(package_name)
         .version("0.9.0")
         .kind(InstallerType::Zip)
         .build(&install_dir);
 
-    database::insert_package(&conn, &package).expect("package should insert");
+    database::insert_package(conn, &package).expect("package should insert");
 
     repair::run(&fixture.ctx, true).expect("repair should succeed");
 
-    let conn = Connection::open(&fixture.db_path).expect("database connection should open");
-    let package = database::get_package(&conn, package_name)
+    let conn = fixture.conn();
+    let package = database::get_package(conn, package_name)
         .expect("read package")
         .expect("package should exist");
 

@@ -1,6 +1,7 @@
 mod common;
 
 use anyhow::Result;
+use std::cell::OnceCell;
 use std::fs;
 
 use rusqlite::Connection;
@@ -14,6 +15,7 @@ use winbrew_cli::models::domains::installed::PackageStatus;
 struct RemoveFixture {
     root: TempDir,
     db_path: std::path::PathBuf,
+    db_conn: OnceCell<Connection>,
     ctx: CommandContext,
 }
 
@@ -29,6 +31,7 @@ impl RemoveFixture {
         Self {
             root,
             db_path: resolved_paths.db,
+            db_conn: OnceCell::new(),
             ctx,
         }
     }
@@ -37,11 +40,13 @@ impl RemoveFixture {
         self.root.path().join("packages").join(name)
     }
 
-    fn conn(&self) -> Connection {
-        Connection::open(&self.db_path).expect("database connection should open")
+    fn conn(&self) -> &Connection {
+        self.db_conn.get_or_init(|| {
+            Connection::open(&self.db_path).expect("database connection should open")
+        })
     }
 
-    fn insert_portable_package(&self, name: &str) -> std::path::PathBuf {
+    fn insert_portable_package(&self, name: &str) -> Result<std::path::PathBuf> {
         let install_dir = self.install_dir(name);
         fs::create_dir_all(&install_dir).expect("install dir should exist");
         fs::write(install_dir.join("tool.txt"), b"payload").expect("install file should exist");
@@ -53,8 +58,8 @@ impl RemoveFixture {
             .status(PackageStatus::Ok)
             .build(&install_dir);
 
-        database::insert_package(&conn, &package).expect("package should insert");
-        install_dir
+        database::insert_package(conn, &package)?;
+        Ok(install_dir)
     }
 }
 
@@ -62,15 +67,15 @@ impl RemoveFixture {
 fn remove_removes_portable_package_when_confirmed() -> Result<()> {
     let fixture = RemoveFixture::new();
     let package_name = "Contoso.App";
-    let install_dir = fixture.insert_portable_package(package_name);
+    let install_dir = fixture.insert_portable_package(package_name)?;
 
     remove_command::run(&fixture.ctx, package_name, true, false).expect("remove should succeed");
 
-    assert!(!install_dir.exists());
+    anyhow::ensure!(!install_dir.exists(), "install directory should be removed");
 
     let conn = fixture.conn();
-    let package = database::get_package(&conn, package_name)?;
-    assert!(package.is_none());
+    let package = database::get_package(conn, package_name)?;
+    anyhow::ensure!(package.is_none(), "package should be removed from database");
 
     Ok(())
 }

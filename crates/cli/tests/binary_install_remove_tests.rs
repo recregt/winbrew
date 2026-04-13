@@ -2,11 +2,11 @@ mod common;
 
 use anyhow::Result;
 use mockito::Server;
-use rusqlite::{Connection, params};
+use rusqlite::Connection;
+use std::cell::OnceCell;
 use std::fs;
 use std::io::{Cursor, Write};
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use winbrew_cli::database;
 use winbrew_cli::models::domains::install::InstallerType;
@@ -20,6 +20,8 @@ struct BinaryFixture {
     root: TempDir,
     db_path: PathBuf,
     catalog_db_path: PathBuf,
+    db_conn: OnceCell<Connection>,
+    catalog_db_conn: OnceCell<Connection>,
 }
 
 impl BinaryFixture {
@@ -34,6 +36,8 @@ impl BinaryFixture {
             root,
             db_path: resolved_paths.db,
             catalog_db_path: resolved_paths.catalog_db,
+            db_conn: OnceCell::new(),
+            catalog_db_conn: OnceCell::new(),
         }
     }
 
@@ -41,20 +45,52 @@ impl BinaryFixture {
         self.root.path()
     }
 
-    fn conn(&self) -> Connection {
-        Connection::open(&self.db_path).expect("database connection should open")
+    fn conn(&self) -> &Connection {
+        self.db_conn.get_or_init(|| {
+            Connection::open(&self.db_path).expect("database connection should open")
+        })
     }
 
-    fn catalog_conn(&self) -> Connection {
-        Connection::open(&self.catalog_db_path).expect("catalog database should open")
+    fn catalog_conn(&self) -> &Connection {
+        self.catalog_db_conn.get_or_init(|| {
+            Connection::open(&self.catalog_db_path).expect("catalog database should open")
+        })
     }
 
     fn run(&self, args: &[&str]) -> std::process::Output {
         common::run_winbrew(self.path(), args)
     }
 
-    fn insert_package(&self, name: &str, version: &str, kind: InstallerType) -> std::path::PathBuf {
-        let install_dir = self.path().join("packages").join(name);
+    fn package_dir(&self, name: &str) -> PathBuf {
+        self.path().join("packages").join(name)
+    }
+
+    fn package_file(&self, package_name: &str, relative_path: &str) -> PathBuf {
+        self.package_dir(package_name).join(relative_path)
+    }
+
+    fn assert_file_exists(&self, package_name: &str, relative_path: &str) -> Result<()> {
+        let full_path = self.package_file(package_name, relative_path);
+        anyhow::ensure!(
+            full_path.exists(),
+            "Expected file to exist: {}",
+            full_path.display()
+        );
+        Ok(())
+    }
+
+    fn assert_dir_missing(&self, package_name: &str) -> Result<()> {
+        let dir = self.package_dir(package_name);
+        anyhow::ensure!(
+            !dir.exists(),
+            "Directory should not exist: {}",
+            dir.display()
+        );
+        Ok(())
+    }
+
+    fn insert_package(&self, name: &str, version: &str, kind: InstallerType) -> PathBuf {
+        let install_dir = self.package_dir(name);
         fs::create_dir_all(&install_dir).expect("install dir should exist");
         fs::write(install_dir.join("tool.exe"), b"payload").expect("install file should exist");
 
@@ -65,7 +101,7 @@ impl BinaryFixture {
             .status(PackageStatus::Ok)
             .build(&install_dir);
 
-        database::insert_package(&conn, &package).expect("package should insert");
+        database::insert_package(conn, &package).expect("package should insert");
         install_dir
     }
 
@@ -79,41 +115,12 @@ impl BinaryFixture {
             fs::create_dir_all(parent)?;
         }
 
-        let conn = self.catalog_conn();
-        conn.execute_batch(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../tests/fixtures/catalog_schema.sql"
-        )))?;
-
-        conn.execute("DELETE FROM catalog_installers", [])?;
-        conn.execute("DELETE FROM catalog_packages", [])?;
-
-        let package_id = common::catalog_package_id(package_name);
-
-        conn.execute(
-            r#"
-            INSERT INTO catalog_packages (
-                id, name, version, description, homepage, license, publisher
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-            "#,
-            params![
-                package_id.clone(),
-                package_name,
-                "1.0.0",
-                Some("Synthetic package for binary install testing"),
-                Option::<String>::None,
-                Option::<String>::None,
-                Some("Winbrew Ltd."),
-            ],
-        )?;
-
-        conn.execute(
-            r#"
-            INSERT INTO catalog_installers (
-                package_id, url, hash, arch, type
-            ) VALUES (?1, ?2, ?3, ?4, ?5)
-            "#,
-            params![package_id, installer_url, hash, "", "zip"],
+        common::seed_catalog_package(
+            self.catalog_conn(),
+            package_name,
+            "Synthetic package for binary install testing",
+            installer_url,
+            hash,
         )?;
 
         Ok(())
@@ -160,44 +167,37 @@ fn install_runs_through_the_binary() -> Result<()> {
 
     let output = fixture.run(&["install", package_name]);
 
-    common::assert_success(&output, "install command");
-    common::assert_output_contains(&output, "Installed Winbrew Test Zip 1.0.0 into");
+    common::assert_success(&output, "install command")?;
+    common::assert_output_contains(&output, "Installed Winbrew Test Zip 1.0.0 into")?;
     download_mock.assert();
 
     let conn = fixture.conn();
-    let stored =
-        database::get_package(&conn, package_name)?.expect("package should be marked as installed");
+    let stored = database::get_package(conn, package_name)?
+        .ok_or_else(|| anyhow::anyhow!("package should be marked as installed"))?;
     assert_eq!(stored.status, PackageStatus::Ok);
     assert_eq!(stored.kind, InstallerType::Zip);
-    assert!(
-        fixture
-            .path()
-            .join("packages")
-            .join(package_name)
-            .join("bin")
-            .join("tool.exe")
-            .exists()
-    );
+    fixture.assert_file_exists(package_name, "bin/tool.exe")?;
 
     Ok(())
 }
 
 #[test]
-fn remove_runs_through_the_binary() {
+fn remove_runs_through_the_binary() -> Result<()> {
     let fixture = BinaryFixture::new();
     let package_name = "Contoso.App";
-    let install_dir = fixture.insert_package(package_name, "1.0.0", InstallerType::Portable);
+    fixture.insert_package(package_name, "1.0.0", InstallerType::Portable);
 
     let output = fixture.run(&["remove", package_name, "--yes"]);
 
-    common::assert_success(&output, "remove command");
-    common::assert_output_contains(&output, "Successfully removed Contoso.App.");
-    assert!(!install_dir.exists());
+    common::assert_success(&output, "remove command")?;
+    common::assert_output_contains(&output, "Successfully removed Contoso.App.")?;
+    fixture.assert_dir_missing(package_name)?;
 
     let conn = fixture.conn();
-    assert!(
-        database::get_package(&conn, package_name)
-            .expect("query should succeed")
-            .is_none()
+    anyhow::ensure!(
+        database::get_package(conn, package_name)?.is_none(),
+        "package should be completely removed from database"
     );
+
+    Ok(())
 }
