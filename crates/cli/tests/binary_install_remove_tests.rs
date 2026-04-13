@@ -16,6 +16,41 @@ use winbrew_core::hash::Hasher;
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;
 
+/// RAII wrapper around mockito::Server for binary flow tests.
+struct MockServer {
+    server: mockito::ServerGuard,
+    url: String,
+}
+
+impl MockServer {
+    fn new() -> Self {
+        let server = Server::new();
+        let url = server.url().to_string();
+        Self { server, url }
+    }
+
+    fn url(&self) -> &str {
+        &self.url
+    }
+
+    fn mock_get(&mut self, path: &str, body: impl AsRef<[u8]>) -> mockito::Mock {
+        self.server
+            .mock("GET", path)
+            .with_status(200)
+            .with_body(body)
+            .expect(1)
+            .create()
+    }
+}
+
+impl std::ops::Deref for MockServer {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.url
+    }
+}
+
 struct BinaryFixture {
     root: TempDir,
     db_path: PathBuf,
@@ -148,20 +183,26 @@ fn sha512_hex(bytes: &[u8]) -> String {
     digest_hex(HashAlgorithm::Sha512, bytes)
 }
 
+/// Integration test for the binary install flow using a mock HTTP server.
+///
+/// Scenario:
+/// - Seed the catalog database with a ZIP package and a matching SHA-512 hash.
+/// - Serve the installer bytes from a local mock server.
+///
+/// Expected behavior:
+/// - The command exits successfully.
+/// - Output reports the installed package and destination.
+/// - The package database marks the package as installed.
+/// - The extracted binary exists on disk.
 #[test]
 fn install_runs_through_the_binary() -> Result<()> {
     let fixture = BinaryFixture::new();
     let package_name = "Winbrew Test Zip";
     let zip_bytes = create_dummy_zip_bytes()?;
     let sha512_hash = sha512_hex(&zip_bytes);
-    let mut server = Server::new();
+    let mut server = MockServer::new();
     let installer_url = format!("{}/test.zip", server.url());
-    let download_mock = server
-        .mock("GET", "/test.zip")
-        .with_status(200)
-        .with_body(zip_bytes)
-        .expect(1)
-        .create();
+    let download_mock = server.mock_get("/test.zip", zip_bytes);
 
     fixture.create_catalog_db_with_hash(package_name, &installer_url, &sha512_hash)?;
 
@@ -181,6 +222,17 @@ fn install_runs_through_the_binary() -> Result<()> {
     Ok(())
 }
 
+/// Integration test for the binary remove flow.
+///
+/// Scenario:
+/// - Seed an installed portable package in the test database.
+/// - Invoke the CLI through the binary with `remove --yes`.
+///
+/// Expected behavior:
+/// - The command exits successfully.
+/// - Output confirms the package was removed.
+/// - The package directory is deleted.
+/// - The package row is removed from the database.
 #[test]
 fn remove_runs_through_the_binary() -> Result<()> {
     let fixture = BinaryFixture::new();
