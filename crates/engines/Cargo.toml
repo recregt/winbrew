@@ -22,3 +22,5 @@ winbrew-windows = { path = "../windows" }
 
 [dev-dependencies]
 tempfile = "3"
+tar = "0.4"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

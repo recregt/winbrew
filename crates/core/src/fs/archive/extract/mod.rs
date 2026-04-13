@@ -6,6 +6,7 @@ mod cleanup;
 mod context;
 mod engine;
 mod limits;
+mod tar;
 mod types;
 
 #[cfg(test)]
@@ -35,6 +36,12 @@ pub fn extract_archive(
 ) -> BoxedResult<()> {
     match archive_kind {
         ArchiveKind::Zip => extract_zip_archive_with_limits(
+            archive_path,
+            destination_dir,
+            ExtractionLimits::default(),
+        )
+        .map_err(Box::new),
+        ArchiveKind::Tar => tar::extract_tar_archive_with_platform::<DefaultPlatform>(
             archive_path,
             destination_dir,
             ExtractionLimits::default(),
