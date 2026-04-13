@@ -1,3 +1,5 @@
+//! Tests for the install command's argument validation and early failures.
+
 mod common;
 
 use std::fs;
@@ -30,4 +32,17 @@ fn install_rejects_empty_query() {
 
     assert_eq!(err.to_string(), "package query cannot be empty");
     assert!(fixture.root.path().join("packages").exists());
+}
+
+#[test]
+fn install_rejects_invalid_package_reference() {
+    let fixture = InstallFixture::new();
+    let query = vec!["@invalid".to_string()];
+
+    let err = install_command::run(&fixture.ctx, &query, false)
+        .expect_err("invalid package reference should fail");
+    let text = err.to_string();
+
+    assert!(text.contains("invalid package id invalid"));
+    assert!(text.contains("expected @winget/<id> or @scoop/<bucket>/<id>"));
 }

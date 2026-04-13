@@ -1,6 +1,12 @@
+//! Read-only CLI coverage for listing, search, info, and version commands.
+//!
+//! The fixture intentionally keeps the database isolated per test so the binary
+//! smoke runs can exercise empty and populated states without shared state.
+
 mod common;
 
 use anyhow::Result;
+use std::cell::OnceCell;
 use std::fs;
 
 use rusqlite::Connection;
@@ -13,6 +19,7 @@ use winbrew_cli::models::domains::installed::PackageStatus;
 struct ReadOnlyFixture {
     root: TempDir,
     db_path: std::path::PathBuf,
+    db_conn: OnceCell<Connection>,
 }
 
 impl ReadOnlyFixture {
@@ -26,6 +33,7 @@ impl ReadOnlyFixture {
         Self {
             root,
             db_path: resolved_paths.db,
+            db_conn: OnceCell::new(),
         }
     }
 
@@ -33,8 +41,10 @@ impl ReadOnlyFixture {
         self.root.path().join("packages").join(name)
     }
 
-    fn conn(&self) -> Connection {
-        Connection::open(&self.db_path).expect("database connection should open")
+    fn conn(&self) -> &Connection {
+        self.db_conn.get_or_init(|| {
+            Connection::open(&self.db_path).expect("database connection should open")
+        })
     }
 
     fn insert_package(&self, name: &str) -> Result<()> {
@@ -46,9 +56,20 @@ impl ReadOnlyFixture {
             .status(PackageStatus::Ok)
             .build(&install_dir);
 
-        database::insert_package(&conn, &package)?;
+        database::insert_package(conn, &package)?;
         Ok(())
     }
+}
+
+#[test]
+fn read_only_list_reports_when_nothing_is_installed() -> Result<()> {
+    let fixture = ReadOnlyFixture::new();
+
+    let list_output = common::run_winbrew(fixture.root.path(), &["list"]);
+    common::assert_success(&list_output, "list command")?;
+    common::assert_output_contains(&list_output, "No packages are currently installed.")?;
+
+    Ok(())
 }
 
 #[test]
