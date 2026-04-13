@@ -17,6 +17,7 @@ use winbrew_cli::commands::repair;
 use winbrew_cli::database::{self};
 use winbrew_cli::models::domains::install::{EngineKind, InstallerType};
 use winbrew_cli::models::domains::installed::PackageStatus;
+use winbrew_cli::models::domains::shared::DeploymentKind;
 use winbrew_cli::models::domains::shared::HashAlgorithm;
 use winbrew_core::Hasher;
 use zip::ZipWriter;
@@ -139,6 +140,7 @@ fn repair_replays_committed_journal_into_database() {
             package_id: package_name.to_string(),
             version: "1.0.0".to_string(),
             engine: "portable".to_string(),
+            deployment_kind: Some(DeploymentKind::Portable),
             install_dir: journal_install_dir.to_string_lossy().to_string(),
             dependencies: vec!["winget/Contoso.Dependency".to_string()],
             engine_metadata: None,

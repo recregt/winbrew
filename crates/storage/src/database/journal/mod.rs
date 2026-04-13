@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 use winbrew_models::install::engine::EngineMetadata;
+use winbrew_models::shared::DeploymentKind;
 use winbrew_models::shared::hash::HashAlgorithm;
 
 mod reader;
@@ -116,6 +117,8 @@ pub enum JournalEntry {
         version: String,
         #[serde(default)]
         engine: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        deployment_kind: Option<DeploymentKind>,
         #[serde(default, skip_serializing_if = "String::is_empty")]
         install_dir: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -188,6 +191,7 @@ mod tests {
             package_id: "winget/Contoso.App".to_string(),
             version: "1.0.0".to_string(),
             engine: "msi".to_string(),
+            deployment_kind: Some(winbrew_models::shared::DeploymentKind::Installed),
             install_dir: r"C:\winbrew\apps\Contoso.App".to_string(),
             dependencies: vec!["winget/Contoso.Shared".to_string()],
             engine_metadata: None,
@@ -467,6 +471,7 @@ mod tests {
                 package_id: "winget/Contoso.Committed".to_string(),
                 version: "1.0.0".to_string(),
                 engine: "msi".to_string(),
+                deployment_kind: Some(winbrew_models::shared::DeploymentKind::Installed),
                 install_dir: r"C:\winbrew\apps\Contoso.Committed".to_string(),
                 dependencies: Vec::new(),
                 engine_metadata: None,
@@ -483,6 +488,7 @@ mod tests {
                 package_id: "winget/Contoso.Incomplete".to_string(),
                 version: "1.0.0".to_string(),
                 engine: "msi".to_string(),
+                deployment_kind: Some(winbrew_models::shared::DeploymentKind::Installed),
                 install_dir: r"C:\winbrew\apps\Contoso.Incomplete".to_string(),
                 dependencies: Vec::new(),
                 engine_metadata: None,
