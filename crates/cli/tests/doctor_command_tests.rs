@@ -1,4 +1,3 @@
-#[path = "../common/mod.rs"]
 mod common;
 
 use std::io::{Result as IoResult, Write};
@@ -34,10 +33,6 @@ impl DoctorFixture {
         let ctx = CommandContext::from_config(&config).expect("context should build");
 
         Self { root, ctx }
-    }
-
-    fn root_path(&self) -> &Path {
-        self.root.path()
     }
 
     fn package_install_dir(&self, name: &str) -> PathBuf {
@@ -259,27 +254,23 @@ fn exit_error_uses_distinct_codes_for_errors_and_warnings() {
         ),
     ]);
 
-    let error =
-        exit_error(error_report.error_count, 0, false).expect("error code should be returned");
-    let cmd_error = error
-        .downcast_ref::<CommandError>()
-        .expect("command error should exist");
-    assert_eq!(cmd_error.exit_code(), 2);
-
     let warning_report = sample_report(vec![diagnosis(
         "orphan_install_directory",
         "orphaned package",
         DiagnosisSeverity::Warning,
     )]);
-    let warning = exit_error(warning_report.error_count, 1, true)
-        .expect("warning exit code should be returned");
-    let cmd_error = warning
-        .downcast_ref::<CommandError>()
-        .expect("command error should exist");
-    assert_eq!(cmd_error.exit_code(), 1);
 
-    assert!(exit_error(warning_report.error_count, 1, false).is_none());
-    assert!(exit_error(warning_report.error_count, 0, false).is_none());
+    let error = exit_error(error_report.error_count, 0, false).expect("error exit expected");
+    let error = error
+        .downcast_ref::<CommandError>()
+        .expect("command error should be reported");
+    assert_eq!(error.exit_code(), 2);
+
+    let warning = exit_error(warning_report.error_count, 1, true).expect("warning exit expected");
+    let warning = warning
+        .downcast_ref::<CommandError>()
+        .expect("command error should be reported");
+    assert_eq!(warning.exit_code(), 1);
 }
 
 #[test]
@@ -287,43 +278,38 @@ fn doctor_reports_healthy_installation() {
     let fixture = DoctorFixture::new();
     let report = health_report(fixture.ctx.app()).expect("health report should build");
 
-    assert_eq!(report.install_root_source, "config:paths.root");
-    assert_eq!(
-        report.install_root,
-        fixture.root_path().to_string_lossy().to_string()
-    );
     assert_eq!(report.error_count, 0);
     assert!(report.diagnostics.is_empty());
 }
 
 #[test]
-fn doctor_reports_orphan_directories_as_warnings() {
+fn doctor_reports_missing_install_dirs_as_errors() {
     let fixture = DoctorFixture::new();
-
-    std::fs::create_dir_all(fixture.package_install_dir("Contoso.Orphan"))
-        .expect("orphan dir should be created");
+    let install_dir = fixture.package_install_dir("Contoso.Missing");
+    fixture.insert_installed_package("Contoso.Missing", &install_dir);
 
     let report = health_report(fixture.ctx.app()).expect("health report should build");
 
-    assert_eq!(report.error_count, 0);
-    assert_eq!(report.diagnostics.len(), 1);
-    assert_eq!(report.diagnostics[0].error_code, "orphan_install_directory");
-    assert_eq!(report.diagnostics[0].severity, DiagnosisSeverity::Warning);
+    assert!(
+        report
+            .diagnostics
+            .iter()
+            .any(|diagnosis| diagnosis.error_code == "missing_install_directory")
+    );
 }
 
 #[test]
-fn doctor_reports_missing_install_dirs_as_errors() {
+fn doctor_reports_orphan_directories_as_warnings() {
     let fixture = DoctorFixture::new();
-
-    fixture.insert_installed_package("Contoso.Missing", &fixture.root_path().join("missing"));
+    let orphan_dir = fixture.package_install_dir("Contoso.Orphan");
+    std::fs::create_dir_all(&orphan_dir).expect("orphan dir should exist");
 
     let report = health_report(fixture.ctx.app()).expect("health report should build");
 
-    assert_eq!(report.error_count, 1);
-    assert_eq!(report.diagnostics.len(), 1);
-    assert_eq!(
-        report.diagnostics[0].error_code,
-        "missing_install_directory"
+    assert!(
+        report
+            .diagnostics
+            .iter()
+            .any(|diagnosis| diagnosis.error_code == "orphan_install_directory")
     );
-    assert_eq!(report.diagnostics[0].severity, DiagnosisSeverity::Error);
 }

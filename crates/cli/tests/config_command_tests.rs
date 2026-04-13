@@ -1,4 +1,3 @@
-#[path = "../common/mod.rs"]
 mod common;
 
 use std::path::Path;

@@ -27,27 +27,3 @@ mockito = "1"
 rusqlite = { version = "0.39", default-features = false, features = ["bundled", "modern_sqlite", "unlock_notify"] }
 winbrew-core = { path = "../core" }
 zip = "8"
-
-[[test]]
-name = "cli_tests"
-path = "tests/cli.rs"
-
-[[test]]
-name = "config_tests"
-path = "tests/commands/config.rs"
-
-[[test]]
-name = "doctor_tests"
-path = "tests/commands/doctor.rs"
-
-[[test]]
-name = "install_tests"
-path = "tests/commands/install.rs"
-
-[[test]]
-name = "remove_tests"
-path = "tests/commands/remove.rs"
-
-[[test]]
-name = "repair_tests"
-path = "tests/commands/repair.rs"
