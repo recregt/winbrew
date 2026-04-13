@@ -28,6 +28,7 @@ lefthook install
 | `task check:doc` | Run cargo doc with warnings denied |
 | `task ci:docs` | Run the full workspace doc job, including private items |
 | `task ci:parser` | Run the catalog parser CI checks |
+| `task ci:rust:fast` | Run the fast Rust pre-commit lane |
 | `task test` | Run Rust tests |
 | `task test:nextest` | Run Rust tests with nextest |
 | `task ci:verify` | Run the current local CI task set (crawler, publisher, parser, docs, Rust, smoke) |
@@ -42,6 +43,8 @@ lefthook install
 `task dev:run` and `task dev:run-release` use `target\winbrew-dev` via `WINBREW_PATHS_ROOT`, so config, logs, and databases stay inside the repo.
 
 You can pass any WinBrew arguments after `--`, for example `task dev:run -- doctor` or `task dev:run-release -- install firefox`.
+
+`task ci:rust:fast` is the pre-commit Rust lane, while `task ci:rust` keeps the full nextest-backed check for pre-push and CI.
 
 The GitHub Actions workflow also runs the parser, docs, and spellcheck jobs. Keep local checks aligned with the workflow when you add or rename tasks. The parser and docs jobs now have dedicated local task entries; spellcheck remains CI-only unless you install Typos locally.
 

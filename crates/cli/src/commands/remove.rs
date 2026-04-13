@@ -1,3 +1,6 @@
+//! Remove command wrapper for dependency checks, confirmation prompts, and
+//! removal outcomes.
+
 use anyhow::Result;
 
 use crate::commands::error::reported_with_hint;

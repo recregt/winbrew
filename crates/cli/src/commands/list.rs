@@ -1,3 +1,8 @@
+//! List command wrapper for installed-package views.
+//!
+//! The wrapper handles empty-state messaging and the final installed-package
+//! total while the app layer provides the filtered package data.
+
 use anyhow::Result;
 
 use crate::{CommandContext, app::list};

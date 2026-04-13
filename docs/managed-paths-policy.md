@@ -106,7 +106,7 @@ The target structure for portable-launcher and forensic data is:
 
 Expected behavior for the added MSI/MSIX and portable-shim features:
 
-- Every install attempt should have a package-scoped evidence directory under
+- When an install emits package-scoped evidence, it should use
   `data/logs/packages/<package-key>/`.
 - MSI should place its verbose Windows Installer log there and record the log
   path in the package journal.

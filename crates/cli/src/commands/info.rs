@@ -1,3 +1,8 @@
+//! Info command wrapper for runtime configuration reporting.
+//!
+//! The wrapper formats the collected runtime settings and prints the report
+//! sections in the order returned by the app layer.
+
 use anyhow::Result;
 
 use crate::{CommandContext, app::info};

@@ -1,3 +1,9 @@
+//! Command handler dispatch for WinBrew.
+//!
+//! This module maps parsed CLI commands to the concrete wrapper handlers in
+//! the sibling modules. Each handler owns the user-facing UI behavior for its
+//! command while delegating business logic to `winbrew-app`.
+
 use anyhow::Result;
 
 use crate::CommandContext;
@@ -15,6 +21,7 @@ pub mod search;
 pub mod update;
 pub mod version;
 
+/// Dispatch a parsed command to its wrapper handler.
 pub fn run(
     command: Command,
     ctx: &CommandContext,
