@@ -3,7 +3,7 @@ use core::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::ModelError;
+use crate::shared::ModelError;
 use crate::shared::validation::{Validate, ensure_non_empty};
 use crate::shared::{BucketName, PackageName};
 

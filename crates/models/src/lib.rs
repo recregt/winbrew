@@ -1,14 +1,9 @@
 pub mod catalog;
-pub mod config;
-pub mod error;
-pub mod hash;
 pub mod install;
 pub mod msi_inventory;
 pub mod package;
 pub mod reporting;
 pub mod shared;
-pub mod validation;
-pub mod version;
 
 /// Grouped namespace for the major model families.
 pub mod domains {
