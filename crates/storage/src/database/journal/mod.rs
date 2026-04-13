@@ -117,8 +117,7 @@ pub enum JournalEntry {
         version: String,
         #[serde(default)]
         engine: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        deployment_kind: Option<DeploymentKind>,
+        deployment_kind: DeploymentKind,
         #[serde(default, skip_serializing_if = "String::is_empty")]
         install_dir: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -191,7 +190,7 @@ mod tests {
             package_id: "winget/Contoso.App".to_string(),
             version: "1.0.0".to_string(),
             engine: "msi".to_string(),
-            deployment_kind: Some(winbrew_models::shared::DeploymentKind::Installed),
+            deployment_kind: winbrew_models::shared::DeploymentKind::Installed,
             install_dir: r"C:\winbrew\apps\Contoso.App".to_string(),
             dependencies: vec!["winget/Contoso.Shared".to_string()],
             engine_metadata: None,
@@ -374,7 +373,7 @@ mod tests {
 
         fs::write(
             writer.path(),
-            b"{\"action\":\"metadata\",\"package_id\":\"winget/Contoso.App\",\"version\":\"1.0.0\",\"engine\":\"msi\"}\n{not-json}\n",
+            b"{\"action\":\"metadata\",\"package_id\":\"winget/Contoso.App\",\"version\":\"1.0.0\",\"engine\":\"msi\",\"deployment_kind\":\"installed\"}\n{not-json}\n",
         )
         .expect("write malformed journal");
 
@@ -471,7 +470,7 @@ mod tests {
                 package_id: "winget/Contoso.Committed".to_string(),
                 version: "1.0.0".to_string(),
                 engine: "msi".to_string(),
-                deployment_kind: Some(winbrew_models::shared::DeploymentKind::Installed),
+                deployment_kind: winbrew_models::shared::DeploymentKind::Installed,
                 install_dir: r"C:\winbrew\apps\Contoso.Committed".to_string(),
                 dependencies: Vec::new(),
                 engine_metadata: None,
@@ -488,7 +487,7 @@ mod tests {
                 package_id: "winget/Contoso.Incomplete".to_string(),
                 version: "1.0.0".to_string(),
                 engine: "msi".to_string(),
-                deployment_kind: Some(winbrew_models::shared::DeploymentKind::Installed),
+                deployment_kind: winbrew_models::shared::DeploymentKind::Installed,
                 install_dir: r"C:\winbrew\apps\Contoso.Incomplete".to_string(),
                 dependencies: Vec::new(),
                 engine_metadata: None,
