@@ -7,19 +7,29 @@ use crate::shared::ModelError;
 use crate::shared::validation::{Validate, ensure_non_empty};
 use crate::shared::{BucketName, PackageName};
 
+/// A package reference provided by callers or CLI commands.
+///
+/// Package references can either name a package directly or point to an
+/// explicit catalog id via `@winget/<id>` or `@scoop/<bucket>/<id>` syntax.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PackageRef {
+    /// Reference by display name or package name.
     ByName(PackageName),
+    /// Reference by explicit package id.
     ById(PackageId),
 }
 
+/// The canonical package id syntax used by catalog and query code.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PackageId {
+    /// A Winget catalog id.
     Winget { id: String },
+    /// A Scoop bucket/id pair.
     Scoop { bucket: BucketName, id: String },
 }
 
 impl PackageRef {
+    /// Parse a package reference from `name`, `@winget/<id>`, or `@scoop/<bucket>/<id>`.
     pub fn parse(input: &str) -> Result<Self, ModelError> {
         let trimmed = input.trim();
 
@@ -43,6 +53,7 @@ impl Validate for PackageRef {
 }
 
 impl PackageId {
+    /// Parse a canonical catalog id from `winget/<id>` or `scoop/<bucket>/<id>` syntax.
     pub fn parse(input: &str) -> Result<Self, ModelError> {
         let trimmed = input.trim();
         let mut parts = trimmed.split('/');
@@ -92,6 +103,7 @@ impl PackageId {
         Ok(package_id)
     }
 
+    /// Return the canonical `source/id` display form for this package id.
     pub fn catalog_id(&self) -> String {
         match self {
             Self::Winget { id } => format!("winget/{id}"),

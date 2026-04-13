@@ -1,3 +1,9 @@
+//! Conversion logic between raw catalog records and validated catalog types.
+//!
+//! This module owns the bridge from upstream schema-shaped payloads to the typed
+//! catalog model used by the rest of the workspace. Keep parsing and
+//! normalization rules here so the raw and typed layers stay clearly separated.
+
 use core::convert::TryFrom;
 
 use crate::catalog::package::{CatalogInstaller, CatalogPackage};

@@ -5,34 +5,51 @@ use super::engine::EngineKind;
 use crate::shared::ModelError;
 use crate::shared::validation::{Validate, ensure_hash, ensure_http_url};
 
+/// The target architecture of an installer payload.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Architecture {
+    /// x64 / amd64 payload.
     X64,
+    /// x86 payload.
     X86,
+    /// ARM64 payload.
     Arm64,
+    /// Architecture-neutral payload.
     Any,
 }
 
+/// The installer format represented by a catalog record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InstallerType {
+    /// Windows Installer package.
     Msi,
+    /// Windows App Installer / MSIX package.
     Msix,
+    /// Native executable installer.
     Exe,
+    /// Portable archive or copy-based package.
     Portable,
+    /// Zip archive installer.
     Zip,
 }
 
+/// A resolved installer candidate for a package.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Installer {
+    /// Download URL for the installer.
     pub url: String,
+    /// Checksum used for verification.
     pub hash: String,
+    /// Target architecture.
     pub architecture: Architecture,
+    /// Installer format.
     pub kind: InstallerType,
 }
 
 impl Installer {
+    /// Validate the URL and checksum contract for the installer.
     pub fn validate(&self) -> Result<(), ModelError> {
         ensure_http_url("installer.url", &self.url)?;
         ensure_hash("installer.hash", &self.hash)
@@ -46,6 +63,7 @@ impl Validate for Installer {
 }
 
 impl Architecture {
+    /// Return the canonical display string for the architecture.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::X64 => "x64",
@@ -55,6 +73,7 @@ impl Architecture {
         }
     }
 
+    /// Return the current host architecture when it can be classified.
     pub fn current() -> Self {
         match std::env::consts::ARCH {
             "x86_64" => Self::X64,
@@ -80,6 +99,7 @@ impl FromStr for Architecture {
 }
 
 impl InstallerType {
+    /// Return the canonical display string for the installer format.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Msi => "msi",

@@ -6,28 +6,48 @@ use crate::shared::CatalogId;
 use crate::shared::validation::{Validate, ensure_hash, ensure_http_url, ensure_non_empty};
 use crate::shared::{ModelError, Version};
 
+/// A validated catalog package entry.
+///
+/// Catalog packages are source-aware, typed records that are ready for search,
+/// selection, and installation workflows. They preserve the source identity and
+/// descriptive fields but leave installer discovery to `CatalogInstaller`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogPackage {
+    /// Canonical catalog id.
     pub id: CatalogId,
+    /// Human-readable package name.
     pub name: String,
+    /// Parsed semantic version.
     pub version: Version,
+    /// Package source.
     pub source: PackageSource,
+    /// Optional package summary.
     pub description: Option<String>,
+    /// Optional homepage URL.
     pub homepage: Option<String>,
+    /// Optional license text.
     pub license: Option<String>,
+    /// Optional publisher string.
     pub publisher: Option<String>,
 }
 
+/// A validated installer entry associated with a catalog package.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogInstaller {
+    /// Package id this installer belongs to.
     pub package_id: CatalogId,
+    /// Download URL for the installer payload.
     pub url: String,
+    /// Expected checksum or empty string when checksumless installs are allowed.
     pub hash: String,
+    /// Architecture target for the installer.
     pub arch: Architecture,
+    /// Installer format.
     pub kind: InstallerType,
 }
 
 impl CatalogPackage {
+    /// Validate the package id, source, and version relationship.
     pub fn validate(&self) -> Result<(), ModelError> {
         self.id.validate()?;
         ensure_non_empty("catalog_package.name", &self.name)?;
@@ -53,6 +73,7 @@ impl Validate for CatalogPackage {
 }
 
 impl CatalogInstaller {
+    /// Validate the installer URL, checksum, and ids.
     pub fn validate(&self) -> Result<(), ModelError> {
         self.package_id.validate()?;
         ensure_http_url("catalog_installer.url", &self.url)?;

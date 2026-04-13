@@ -1,3 +1,11 @@
+//! Package aggregate types and source/kind classification.
+//!
+//! This file owns the canonical typed package representation used by catalog,
+//! search, and install orchestration. The aggregate keeps the source metadata,
+//! version, optional descriptive fields, installer candidates, and dependency
+//! list together so callers do not need to reconstruct a package from multiple
+//! sources.
+
 use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 
@@ -7,36 +15,55 @@ use crate::shared::{ModelError, Version};
 
 use super::dependency::Dependency;
 
+/// The upstream source that produced a package record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PackageSource {
+    /// A package sourced from the Winget catalog.
     Winget,
+    /// A package sourced from a Scoop bucket.
     Scoop,
 }
 
+/// The lifecycle classification of a package record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PackageKind {
+    /// A catalog record that can be installed.
     Catalog,
+    /// A record that represents an installed package snapshot.
     Installed,
 }
 
+/// Canonical package aggregate used by catalog, search, and install flows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Package {
+    /// Stable package identifier in canonical catalog id form.
     pub id: String,
+    /// Human-readable display name.
     pub name: String,
+    /// Parsed semantic version.
     pub version: Version,
+    /// The source that produced the record.
     pub source: PackageSource,
+    /// Whether the record represents a catalog item or installed snapshot.
     pub kind: PackageKind,
+    /// Short summary or description text, when available.
     pub description: Option<String>,
+    /// Product homepage URL, when provided.
     pub homepage: Option<String>,
+    /// License string reported by the source.
     pub license: Option<String>,
+    /// Publisher or maintainer string.
     pub publisher: Option<String>,
+    /// Resolved installer candidates associated with the package.
     pub installers: Vec<Installer>,
+    /// Declared dependencies for the package.
     pub dependencies: Vec<Dependency>,
 }
 
 impl Package {
+    /// Validate the package and all nested installer/dependency records.
     pub fn validate(&self) -> Result<(), ModelError> {
         ensure_non_empty("package.id", &self.id)?;
         ensure_non_empty("package.name", &self.name)?;
