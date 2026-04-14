@@ -47,6 +47,7 @@ pub mod domains {
     }
 
     pub mod catalog {
+        pub use crate::catalog::installer_type::CatalogInstallerType;
         pub use crate::catalog::metadata::CatalogMetadata;
         pub use crate::catalog::package::{CatalogInstaller, CatalogPackage};
         pub use crate::catalog::raw::{RawCatalogInstaller, RawCatalogPackage};

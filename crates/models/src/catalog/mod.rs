@@ -13,10 +13,12 @@
 //! - which metadata fields belong to the generated catalog index
 
 pub mod conversion;
+pub mod installer_type;
 pub mod metadata;
 pub mod package;
 pub mod raw;
 
+pub use installer_type::CatalogInstallerType;
 pub use metadata::CatalogMetadata;
 pub use package::{CatalogInstaller, CatalogPackage};
 pub use raw::{RawCatalogInstaller, RawCatalogPackage};

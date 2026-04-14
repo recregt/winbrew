@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::catalog::installer_type::CatalogInstallerType;
 use crate::install::{Architecture, InstallerType};
 use crate::package::{PackageId, PackageSource};
 use crate::shared::CatalogId;
@@ -55,6 +56,12 @@ pub struct CatalogInstaller {
     /// Checksum algorithm used to verify the installer.
     #[serde(default)]
     pub hash_algorithm: HashAlgorithm,
+    /// Normalized installer family used for catalog browsing and filtering.
+    #[serde(default, skip_serializing_if = "CatalogInstallerType::is_unknown")]
+    pub installer_type: CatalogInstallerType,
+    /// Silent-install or package-manager switches when the source provides them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installer_switches: Option<String>,
     /// Architecture target for the installer.
     pub arch: Architecture,
     /// Installer format.
@@ -148,6 +155,10 @@ impl CatalogInstaller {
             }
         }
 
+        if let Some(installer_switches) = self.installer_switches.as_deref() {
+            ensure_non_empty("catalog_installer.installer_switches", installer_switches)?;
+        }
+
         Ok(())
     }
 }
@@ -166,10 +177,22 @@ impl CatalogInstaller {
             url: url.to_string(),
             hash: "abc123".to_string(),
             hash_algorithm: HashAlgorithm::Sha256,
+            installer_type: CatalogInstallerType::Unknown,
+            installer_switches: None,
             arch: Architecture::X64,
             kind: InstallerType::Exe,
             nested_kind: None,
         }
+    }
+
+    pub fn with_installer_type(mut self, installer_type: CatalogInstallerType) -> Self {
+        self.installer_type = installer_type;
+        self
+    }
+
+    pub fn with_installer_switches(mut self, installer_switches: impl Into<String>) -> Self {
+        self.installer_switches = Some(installer_switches.into());
+        self
     }
 
     pub fn with_hash_algorithm(mut self, hash_algorithm: HashAlgorithm) -> Self {
@@ -273,6 +296,7 @@ impl CatalogPackage {
 #[cfg(test)]
 mod tests {
     use super::{CatalogInstaller, CatalogPackage};
+    use crate::catalog::installer_type::CatalogInstallerType;
     use crate::install::{Architecture, InstallerType};
     use crate::package::PackageSource;
     use crate::shared::{HashAlgorithm, Version};
@@ -314,17 +338,23 @@ mod tests {
         .with_kind(InstallerType::Zip)
         .with_nested(InstallerType::Msi)
         .with_hash("deadbeef")
-        .with_hash_algorithm(HashAlgorithm::Sha256);
+        .with_hash_algorithm(HashAlgorithm::Sha256)
+        .with_installer_type(CatalogInstallerType::Zip)
+        .with_installer_switches("/S");
 
         let json = serde_json::to_string(&installer).expect("installer should serialize");
         assert!(json.contains("\"nested_kind\":\"msi\""));
         assert!(json.contains("\"hash_algorithm\":\"sha256\""));
+        assert!(json.contains("\"installer_type\":\"zip\""));
+        assert!(json.contains("\"installer_switches\":\"/S\""));
 
         let restored: CatalogInstaller =
             serde_json::from_str(&json).expect("installer should deserialize");
 
         assert_eq!(restored.nested_kind, Some(InstallerType::Msi));
         assert_eq!(restored.hash_algorithm, HashAlgorithm::Sha256);
+        assert_eq!(restored.installer_type, CatalogInstallerType::Zip);
+        assert_eq!(restored.installer_switches.as_deref(), Some("/S"));
     }
 
     #[test]
@@ -342,6 +372,8 @@ mod tests {
 
         assert_eq!(installer.nested_kind, None);
         assert_eq!(installer.hash_algorithm, HashAlgorithm::Sha256);
+        assert_eq!(installer.installer_type, CatalogInstallerType::Unknown);
+        assert_eq!(installer.installer_switches, None);
     }
 
     #[test]
