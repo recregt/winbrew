@@ -11,8 +11,13 @@ pub struct RawCatalogPackage {
     pub name: String,
     /// Raw version string.
     pub version: String,
-    /// Optional upstream source string.
-    pub source: Option<String>,
+    /// Upstream source string.
+    pub source: String,
+    /// Optional namespace or bucket within the source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<String>,
+    /// Source-local package identifier.
+    pub source_id: String,
     /// Optional description text.
     pub description: Option<String>,
     /// Optional homepage URL.

@@ -1,11 +1,14 @@
 -- Canonical catalog schema for parser-generated snapshots.
 -- Parser code and tests include this file directly to avoid schema drift.
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
 
 CREATE TABLE IF NOT EXISTS catalog_packages (
     id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
     version     TEXT NOT NULL,
+    source      TEXT NOT NULL CHECK (source IN ('winget', 'scoop', 'chocolatey', 'winbrew')),
+    namespace   TEXT CHECK (namespace IS NULL OR length(trim(namespace)) > 0),
+    source_id   TEXT NOT NULL CHECK (length(trim(source_id)) > 0),
     description TEXT,
     homepage    TEXT,
     license     TEXT,
@@ -36,6 +39,11 @@ CREATE VIRTUAL TABLE IF NOT EXISTS catalog_packages_fts USING fts5(
 
 CREATE INDEX IF NOT EXISTS idx_catalog_packages_name    ON catalog_packages(name);
 CREATE INDEX IF NOT EXISTS idx_catalog_installers_pkg   ON catalog_installers(package_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_catalog_packages_identity ON catalog_packages(
+    source,
+    IFNULL(namespace, ''),
+    source_id
+);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_catalog_installers_unique ON catalog_installers(
     package_id,
     url,

@@ -161,7 +161,7 @@ mod tests {
     use std::path::PathBuf;
     use std::process;
     use std::time::{SystemTime, UNIX_EPOCH};
-    use winbrew_models::catalog::metadata::SCHEMA_VERSION;
+    use winbrew_models::catalog::metadata::CATALOG_DB_SCHEMA_VERSION;
 
     fn unique_temp_dir(name: &str) -> PathBuf {
         let stamp = SystemTime::now()
@@ -256,7 +256,7 @@ mod tests {
             connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
         assert_eq!(package_count, 2);
         assert_eq!(installer_count, 1);
-        assert_eq!(schema_version, i64::from(SCHEMA_VERSION));
+        assert_eq!(schema_version, i64::from(CATALOG_DB_SCHEMA_VERSION));
 
         Ok(())
     }
