@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::catalog::installer_type::CatalogInstallerType;
 use crate::shared::HashAlgorithm;
 
 /// Raw package payload exactly as it is received from the upstream feed.
@@ -42,6 +43,12 @@ pub struct RawCatalogInstaller {
     /// Raw checksum algorithm.
     #[serde(default)]
     pub hash_algorithm: HashAlgorithm,
+    /// Raw normalized installer family string.
+    #[serde(default)]
+    pub installer_type: CatalogInstallerType,
+    /// Raw silent-install or package-manager switches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installer_switches: Option<String>,
     /// Raw architecture string.
     pub arch: String,
     /// Raw installer kind string.

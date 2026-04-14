@@ -1,6 +1,8 @@
+use winbrew_models::catalog::CatalogInstallerType;
 use winbrew_models::catalog::package::{CatalogInstaller, CatalogPackage};
 use winbrew_models::install::installer::{Architecture, InstallerType};
 use winbrew_models::package::PackageId;
+use winbrew_models::package::PackageSource;
 use winbrew_models::shared::HashAlgorithm;
 use winbrew_models::shared::version::Version;
 
@@ -37,7 +39,7 @@ pub fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, ParserErro
     let installers = raw
         .installers
         .into_iter()
-        .map(|installer| parse_installer(&raw.id, installer))
+        .map(|installer| parse_installer(&raw.id, package.source, installer))
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(ParsedPackage {
@@ -64,18 +66,23 @@ pub fn parse_packages_json(input: &str) -> Result<Vec<ParsedPackage>, ParserErro
 
 fn parse_installer(
     package_id: &str,
+    package_source: PackageSource,
     raw: RawFetchedInstaller,
 ) -> Result<CatalogInstaller, ParserError> {
     let hash_algorithm = HashAlgorithm::detect(&raw.hash).unwrap_or_default();
     let hash = raw.hash;
+    let installer_kind = raw.kind.parse::<InstallerType>()?;
+    let installer_type = CatalogInstallerType::normalize(package_source, installer_kind, &raw.url);
 
     let installer = CatalogInstaller {
         package_id: package_id.into(),
         url: raw.url,
         hash,
         hash_algorithm,
+        installer_type,
+        installer_switches: None,
         arch: raw.arch.parse::<Architecture>()?,
-        kind: raw.kind.parse::<InstallerType>()?,
+        kind: installer_kind,
         nested_kind: raw.nested_kind.map(|kind| kind.parse()).transpose()?,
     };
     installer.validate()?;
@@ -94,6 +101,7 @@ mod tests {
     use super::{parse_package, parse_packages_json};
     use crate::error::ParserError;
     use crate::raw::{RawFetchedInstaller, RawFetchedPackage};
+    use winbrew_models::catalog::CatalogInstallerType;
     use winbrew_models::install::installer::{Architecture, InstallerType};
     use winbrew_models::package::model::PackageSource;
     use winbrew_models::shared::HashAlgorithm;
@@ -123,6 +131,10 @@ mod tests {
         assert_eq!(parsed.installers[0].kind, InstallerType::Zip);
         assert_eq!(parsed.installers[0].nested_kind, Some(InstallerType::Msi));
         assert_eq!(parsed.installers[0].hash_algorithm, HashAlgorithm::Sha256);
+        assert_eq!(
+            parsed.installers[0].installer_type,
+            CatalogInstallerType::Zip
+        );
         assert!(parsed.raw_json.contains("Contoso.App"));
         assert!(parsed.raw_json.contains("NestedInstallerType"));
     }
@@ -149,6 +161,10 @@ mod tests {
 
         assert_eq!(parsed.package.version.to_string(), "2026.3.17");
         assert_eq!(parsed.installers[0].hash_algorithm, HashAlgorithm::Sha256);
+        assert_eq!(
+            parsed.installers[0].installer_type,
+            CatalogInstallerType::Zip
+        );
     }
 
     #[test]

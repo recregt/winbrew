@@ -68,6 +68,8 @@ impl TryFrom<RawCatalogInstaller> for CatalogInstaller {
             url: raw.url,
             hash: raw.hash,
             hash_algorithm: raw.hash_algorithm,
+            installer_type: raw.installer_type,
+            installer_switches: raw.installer_switches,
             arch: raw.arch.parse()?,
             kind: raw.kind.parse()?,
             nested_kind: raw.nested_kind.map(|kind| kind.parse()).transpose()?,
@@ -81,6 +83,7 @@ impl TryFrom<RawCatalogInstaller> for CatalogInstaller {
 #[cfg(test)]
 mod tests {
     use super::{CatalogInstaller, CatalogPackage};
+    use crate::catalog::installer_type::CatalogInstallerType;
     use crate::catalog::raw::{RawCatalogInstaller, RawCatalogPackage};
     use crate::install::{Architecture, InstallerType};
     use crate::package::PackageSource;
@@ -115,6 +118,8 @@ mod tests {
             url: "https://example.test/app.exe".to_string(),
             hash: String::default(),
             hash_algorithm: crate::shared::HashAlgorithm::Sha256,
+            installer_type: CatalogInstallerType::Zip,
+            installer_switches: Some("/S".to_string()),
             arch: String::default(),
             kind: "portable".to_string(),
             nested_kind: Some("msi".to_string()),
@@ -130,5 +135,7 @@ mod tests {
             converted.hash_algorithm,
             crate::shared::HashAlgorithm::Sha256
         );
+        assert_eq!(converted.installer_type, CatalogInstallerType::Zip);
+        assert_eq!(converted.installer_switches.as_deref(), Some("/S"));
     }
 }
