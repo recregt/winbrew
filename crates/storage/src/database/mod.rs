@@ -31,7 +31,7 @@ use self::connection::SqliteConnectionManager;
 /// Database connection type used by the storage layer.
 pub type DbConnection = PooledConnection<SqliteConnectionManager>;
 
-pub use errors::CatalogNotFoundError;
+pub use errors::{CatalogNotFoundError, CatalogSchemaVersionMismatchError};
 
 pub use catalog::{get_installers, get_package_by_id, search};
 pub use config::{
@@ -112,8 +112,12 @@ pub fn get_catalog_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
     }
 
     let pool = get_catalog_pool()?;
-    pool.get()
-        .context("failed to acquire catalog database connection from pool")
+    let conn = pool
+        .get()
+        .context("failed to acquire catalog database connection from pool")?;
+    catalog::ensure_schema_version(&conn)?;
+
+    Ok(conn)
 }
 
 /// Return the catalog database connection pool.
