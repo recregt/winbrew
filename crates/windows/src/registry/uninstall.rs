@@ -4,8 +4,8 @@ use winreg::{
     enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE},
 };
 
-const UNINSTALL: &str = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
-const WOW6432_UNINSTALL: &str =
+pub(super) const UNINSTALL: &str = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
+pub(super) const WOW6432_UNINSTALL: &str =
     "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
 
 /// Registry hive that can contain uninstall data.
