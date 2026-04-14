@@ -13,10 +13,12 @@ use winbrew::database;
 use winbrew::services::app::install;
 use winbrew::services::app::install::InstallObserver;
 use winbrew_core::hash::{HashAlgorithm, Hasher};
+use winbrew_core::hash::hash_algorithm;
 use winbrew_models::domains::catalog::CatalogPackage;
 use winbrew_models::domains::install::InstallerType;
 use winbrew_models::domains::installed::PackageStatus;
 use winbrew_models::domains::package::{PackageId, PackageName, PackageRef};
+use winbrew_models::shared::HashAlgorithm as CatalogHashAlgorithm;
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;
 
@@ -361,10 +363,19 @@ fn create_catalog_db_with_hash(path: &Path, installer_url: &str, hash: &str) -> 
     conn.execute(
         r#"
         INSERT INTO catalog_installers (
-            package_id, url, hash, arch, type
-        ) VALUES (?1, ?2, ?3, ?4, ?5)
+            package_id, url, hash, hash_algorithm, arch, type
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
         "#,
-        params!["winget/Winbrew.TestZip", installer_url, hash, "", "zip",],
+        params![
+            "winget/Winbrew.TestZip",
+            installer_url,
+            hash,
+            hash_algorithm(hash)
+                .unwrap_or(CatalogHashAlgorithm::Sha256)
+                .as_str(),
+            "",
+            "zip",
+        ],
     )?;
 
     Ok(())

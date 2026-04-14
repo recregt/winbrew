@@ -14,7 +14,7 @@ use std::path::Path;
 
 use crate::core::cancel::check;
 use crate::core::fs::{cleanup_path, finalize_temp_file};
-use crate::core::hash::{Hasher, hash_algorithm, normalize_hash, verify_hash};
+use crate::core::hash::{Hasher, verify_hash};
 use crate::core::network::{build_client as network_build_client, download_url_to_temp_file};
 use crate::models::catalog::CatalogInstaller;
 use crate::models::domains::shared::HashAlgorithm;
@@ -55,8 +55,11 @@ where
     let result = (|| -> Result<Vec<HashAlgorithm>> {
         check()?;
 
-        let (verification, legacy_checksum_algorithms) =
-            verify_strategy(&installer.hash, ignore_checksum_security)?;
+        let (verification, legacy_checksum_algorithms) = verify_strategy(
+            &installer.hash,
+            installer.hash_algorithm,
+            ignore_checksum_security,
+        )?;
         let mut verification = verification;
 
         check()?;
@@ -114,6 +117,7 @@ impl Verification {
 
 fn verify_strategy(
     expected_hash: &str,
+    hash_algorithm: HashAlgorithm,
     ignore_checksum_security: bool,
 ) -> Result<(Verification, Vec<HashAlgorithm>)> {
     let trimmed = expected_hash.trim();
@@ -122,30 +126,25 @@ fn verify_strategy(
         return Ok((Verification::None, Vec::new()));
     }
 
-    if normalize_hash(trimmed).is_empty() {
-        return Ok((Verification::None, Vec::new()));
-    }
-
-    match hash_algorithm(trimmed) {
-        Some(HashAlgorithm::Md5) if ignore_checksum_security => {
+    match hash_algorithm {
+        HashAlgorithm::Md5 if ignore_checksum_security => {
             Ok((Verification::None, vec![HashAlgorithm::Md5]))
         }
-        Some(HashAlgorithm::Md5) => Err(crate::core::HashError::LegacyChecksumAlgorithm {
+        HashAlgorithm::Md5 => Err(crate::core::HashError::LegacyChecksumAlgorithm {
             algorithm: HashAlgorithm::Md5,
         }
         .into()),
-        Some(HashAlgorithm::Sha1) if ignore_checksum_security => Ok((
+        HashAlgorithm::Sha1 if ignore_checksum_security => Ok((
             Verification::Active(Box::new(Hasher::new(HashAlgorithm::Sha1))),
             vec![HashAlgorithm::Sha1],
         )),
-        Some(HashAlgorithm::Sha1) => Err(crate::core::HashError::LegacyChecksumAlgorithm {
+        HashAlgorithm::Sha1 => Err(crate::core::HashError::LegacyChecksumAlgorithm {
             algorithm: HashAlgorithm::Sha1,
         }
         .into()),
-        Some(algorithm) => Ok((
+        algorithm => Ok((
             Verification::Active(Box::new(Hasher::new(algorithm))),
             Vec::new(),
         )),
-        None => anyhow::bail!("unsupported checksum format for installer: {expected_hash}"),
     }
 }

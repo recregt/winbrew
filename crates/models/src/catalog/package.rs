@@ -4,7 +4,7 @@ use crate::install::{Architecture, InstallerType};
 use crate::package::{PackageId, PackageSource};
 use crate::shared::CatalogId;
 use crate::shared::validation::{Validate, ensure_hash, ensure_http_url, ensure_non_empty};
-use crate::shared::{ModelError, Version};
+use crate::shared::{HashAlgorithm, ModelError, Version};
 
 /// A validated catalog package entry.
 ///
@@ -52,6 +52,9 @@ pub struct CatalogInstaller {
     pub url: String,
     /// Expected checksum or empty string when checksumless installs are allowed.
     pub hash: String,
+    /// Checksum algorithm used to verify the installer.
+    #[serde(default)]
+    pub hash_algorithm: HashAlgorithm,
     /// Architecture target for the installer.
     pub arch: Architecture,
     /// Installer format.
@@ -130,6 +133,19 @@ impl CatalogInstaller {
 
         if !self.hash.trim().is_empty() {
             ensure_hash("catalog_installer.hash", &self.hash)?;
+
+            if let Some(expected_algorithm) = HashAlgorithm::detect(&self.hash)
+                && expected_algorithm != self.hash_algorithm
+            {
+                return Err(ModelError::invalid_contract(
+                    "catalog_installer.hash_algorithm",
+                    format!(
+                        "expected {}, got {}",
+                        expected_algorithm.as_str(),
+                        self.hash_algorithm.as_str()
+                    ),
+                ));
+            }
         }
 
         Ok(())
@@ -149,10 +165,16 @@ impl CatalogInstaller {
             package_id,
             url: url.to_string(),
             hash: "abc123".to_string(),
+            hash_algorithm: HashAlgorithm::Sha256,
             arch: Architecture::X64,
             kind: InstallerType::Exe,
             nested_kind: None,
         }
+    }
+
+    pub fn with_hash_algorithm(mut self, hash_algorithm: HashAlgorithm) -> Self {
+        self.hash_algorithm = hash_algorithm;
+        self
     }
 
     pub fn with_hash(mut self, hash: impl Into<String>) -> Self {
@@ -253,7 +275,7 @@ mod tests {
     use super::{CatalogInstaller, CatalogPackage};
     use crate::install::{Architecture, InstallerType};
     use crate::package::PackageSource;
-    use crate::shared::Version;
+    use crate::shared::{HashAlgorithm, Version};
 
     #[test]
     fn rejects_source_mismatch() {
@@ -291,15 +313,18 @@ mod tests {
         .with_arch(Architecture::Any)
         .with_kind(InstallerType::Zip)
         .with_nested(InstallerType::Msi)
-        .with_hash("sha256:deadbeef");
+        .with_hash("deadbeef")
+        .with_hash_algorithm(HashAlgorithm::Sha256);
 
         let json = serde_json::to_string(&installer).expect("installer should serialize");
         assert!(json.contains("\"nested_kind\":\"msi\""));
+        assert!(json.contains("\"hash_algorithm\":\"sha256\""));
 
         let restored: CatalogInstaller =
             serde_json::from_str(&json).expect("installer should deserialize");
 
         assert_eq!(restored.nested_kind, Some(InstallerType::Msi));
+        assert_eq!(restored.hash_algorithm, HashAlgorithm::Sha256);
     }
 
     #[test]
@@ -316,6 +341,7 @@ mod tests {
             serde_json::from_str(json).expect("installer should deserialize");
 
         assert_eq!(installer.nested_kind, None);
+        assert_eq!(installer.hash_algorithm, HashAlgorithm::Sha256);
     }
 
     #[test]

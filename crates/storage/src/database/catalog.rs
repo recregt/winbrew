@@ -5,6 +5,7 @@ use super::CatalogSchemaVersionMismatchError;
 use winbrew_models::catalog::metadata::CATALOG_DB_SCHEMA_VERSION as CATALOG_SCHEMA_VERSION;
 use winbrew_models::catalog::package::{CatalogInstaller, CatalogPackage};
 use winbrew_models::catalog::raw::RawCatalogInstaller;
+use winbrew_models::shared::HashAlgorithm;
 
 pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
     let query = query.trim();
@@ -27,10 +28,10 @@ pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
 
 pub fn get_installers(conn: &Connection, package_id: &str) -> Result<Vec<CatalogInstaller>> {
     let mut stmt = conn.prepare(
-        "SELECT package_id, url, hash, arch, type, nested_kind
+        "SELECT package_id, url, hash, hash_algorithm, arch, type, nested_kind
          FROM catalog_installers
          WHERE package_id = ?1
-         ORDER BY arch ASC, type ASC, nested_kind ASC, url ASC",
+         ORDER BY arch ASC, type ASC, nested_kind ASC, hash_algorithm ASC, url ASC",
     )?;
 
     stmt.query_map(params![package_id], row_to_installer)?
@@ -100,6 +101,16 @@ fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
         package_id: row.get::<_, String>("package_id")?,
         url: row.get("url")?,
         hash: row.get("hash")?,
+        hash_algorithm: row
+            .get::<_, String>("hash_algorithm")?
+            .parse::<HashAlgorithm>()
+            .map_err(|err| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    0,
+                    rusqlite::types::Type::Text,
+                    Box::new(err),
+                )
+            })?,
         arch: row.get("arch")?,
         kind: row.get("type")?,
         nested_kind: row.get("nested_kind")?,
@@ -117,12 +128,13 @@ mod tests {
     };
     use rusqlite::Connection;
     use winbrew_models::install::installer::InstallerType;
+    use winbrew_models::shared::HashAlgorithm;
 
     const CATALOG_SCHEMA: &str = include_str!("../../../../infra/parser/schema/catalog.sql");
 
     fn create_catalog_installers_table(conn: &Connection) {
         conn.execute_batch(
-            "CREATE TABLE catalog_installers (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    package_id TEXT NOT NULL,\n    url TEXT NOT NULL,\n    hash TEXT NOT NULL,\n    arch TEXT NOT NULL DEFAULT '',\n    type TEXT NOT NULL DEFAULT '',\n    nested_kind TEXT\n);",
+            "CREATE TABLE catalog_installers (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    package_id TEXT NOT NULL,\n    url TEXT NOT NULL,\n    hash TEXT NOT NULL,\n    hash_algorithm TEXT NOT NULL DEFAULT 'sha256',\n    arch TEXT NOT NULL DEFAULT '',\n    type TEXT NOT NULL DEFAULT '',\n    nested_kind TEXT\n);",
         )
         .expect("catalog installers table should be created");
     }
@@ -134,13 +146,14 @@ mod tests {
 
         conn.execute(
             r#"
-            INSERT INTO catalog_installers (package_id, url, hash, arch, type, nested_kind)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            INSERT INTO catalog_installers (package_id, url, hash, hash_algorithm, arch, type, nested_kind)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
             "#,
             rusqlite::params![
                 "winget/Contoso.App",
                 "https://example.test/app-one.zip",
                 "sha256:deadbeef",
+                "sha256",
                 "x64",
                 "zip",
                 "portable",
@@ -150,13 +163,14 @@ mod tests {
 
         conn.execute(
             r#"
-            INSERT INTO catalog_installers (package_id, url, hash, arch, type, nested_kind)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            INSERT INTO catalog_installers (package_id, url, hash, hash_algorithm, arch, type, nested_kind)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
             "#,
             rusqlite::params![
                 "winget/Contoso.App",
                 "https://example.test/app-two.zip",
                 "sha256:deadbeef",
+                "sha256",
                 "x64",
                 "zip",
                 "msi",
@@ -170,6 +184,8 @@ mod tests {
         assert_eq!(installers.len(), 2);
         assert_eq!(installers[0].nested_kind, Some(InstallerType::Msi));
         assert_eq!(installers[1].nested_kind, Some(InstallerType::Portable));
+        assert_eq!(installers[0].hash_algorithm, HashAlgorithm::Sha256);
+        assert_eq!(installers[1].hash_algorithm, HashAlgorithm::Sha256);
     }
 
     #[test]
