@@ -5,8 +5,78 @@ use crate::core::paths::ResolvedPaths;
 use crate::database;
 use crate::models::domains::installed::InstalledPackage;
 use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity};
+use tracing::debug;
 
 use super::{PackageJournalScan, sort_diagnoses, sort_recovery_findings};
+
+fn diagnosis(
+    error_code: &str,
+    description: String,
+    severity: DiagnosisSeverity,
+) -> DiagnosisResult {
+    DiagnosisResult {
+        error_code: error_code.to_string(),
+        description,
+        severity,
+    }
+}
+
+fn journal_error(
+    journal_path: &Path,
+    error_code: &str,
+    message: impl std::fmt::Display,
+    severity: DiagnosisSeverity,
+) -> DiagnosisResult {
+    diagnosis(
+        error_code,
+        format!("{}: {}", journal_path.to_string_lossy(), message),
+        severity,
+    )
+}
+
+fn journal_read_error_diagnosis(
+    journal_path: &Path,
+    error: database::JournalReadError,
+) -> (DiagnosisResult, Option<&Path>) {
+    match error {
+        database::JournalReadError::Incomplete { .. } => (
+            journal_error(
+                journal_path,
+                "incomplete_package_journal",
+                "incomplete recovery journal",
+                DiagnosisSeverity::Error,
+            ),
+            None,
+        ),
+        database::JournalReadError::Read { .. } => (
+            journal_error(
+                journal_path,
+                "unreadable_package_journal",
+                "recovery journal is unreadable",
+                DiagnosisSeverity::Error,
+            ),
+            None,
+        ),
+        database::JournalReadError::MalformedLine { line, .. } => (
+            journal_error(
+                journal_path,
+                "malformed_package_journal",
+                format!("recovery journal has malformed line {line}"),
+                DiagnosisSeverity::Error,
+            ),
+            None,
+        ),
+        database::JournalReadError::TrailingEntries { line, .. } => (
+            journal_error(
+                journal_path,
+                "trailing_package_journal",
+                format!("recovery journal has trailing entries after commit on line {line}"),
+                DiagnosisSeverity::Error,
+            ),
+            Some(journal_path),
+        ),
+    }
+}
 
 /// Scan package journal files under `data/pkgdb` and report recovery issues.
 pub(super) fn scan_package_journals(
@@ -16,6 +86,7 @@ pub(super) fn scan_package_journals(
     let pkgdb_root = paths.pkgdb.clone();
 
     if !pkgdb_root.exists() {
+        debug!(path = %pkgdb_root.display(), "pkgdb root does not exist, skipping journal scan");
         return PackageJournalScan::new();
     }
 
@@ -28,19 +99,20 @@ pub(super) fn scan_package_journals(
         Ok(entries) => entries,
         Err(err) => {
             if err.kind() == std::io::ErrorKind::NotFound {
+                debug!(path = %pkgdb_root.display(), "pkgdb root disappeared before journal scan");
                 return PackageJournalScan::new();
             }
 
             let mut result = PackageJournalScan::new();
             result.push(
-                DiagnosisResult {
-                    error_code: "pkgdb_unreadable".to_string(),
-                    description: format!(
+                diagnosis(
+                    "pkgdb_unreadable",
+                    format!(
                         "pkgdb root: unreadable journal directory ({}) - {err}",
                         pkgdb_root.to_string_lossy()
                     ),
-                    severity: DiagnosisSeverity::Error,
-                },
+                    DiagnosisSeverity::Error,
+                ),
                 None,
             );
             return result;
@@ -49,17 +121,30 @@ pub(super) fn scan_package_journals(
 
     let mut result = PackageJournalScan::new();
 
-    for entry in entries.flatten() {
+    for entry_result in entries {
+        let entry = match entry_result {
+            Ok(entry) => entry,
+            Err(err) => {
+                debug!(path = %pkgdb_root.display(), error = %err, "skipping unreadable pkgdb entry");
+                continue;
+            }
+        };
+
+        let entry_path = entry.path();
+
         let file_type = match entry.file_type() {
             Ok(file_type) => file_type,
-            Err(_) => continue,
+            Err(err) => {
+                debug!(path = %entry_path.display(), error = %err, "skipping pkgdb entry with unreadable file type");
+                continue;
+            }
         };
 
         if !file_type.is_dir() {
             continue;
         }
 
-        let journal_path = entry.path().join("journal.jsonl");
+        let journal_path = entry_path.join("journal.jsonl");
         if !journal_path.exists() {
             continue;
         }
@@ -72,57 +157,9 @@ pub(super) fn scan_package_journals(
                     result.push(diagnosis, Some(&journal_path));
                 }
             }
-            Err(database::JournalReadError::Incomplete { .. }) => {
-                result.push(
-                    DiagnosisResult {
-                        error_code: "incomplete_package_journal".to_string(),
-                        description: format!(
-                            "{}: incomplete recovery journal",
-                            journal_path.to_string_lossy()
-                        ),
-                        severity: DiagnosisSeverity::Error,
-                    },
-                    None,
-                );
-            }
-            Err(database::JournalReadError::Read { .. }) => {
-                result.push(
-                    DiagnosisResult {
-                        error_code: "unreadable_package_journal".to_string(),
-                        description: format!(
-                            "{}: recovery journal is unreadable",
-                            journal_path.to_string_lossy()
-                        ),
-                        severity: DiagnosisSeverity::Error,
-                    },
-                    None,
-                );
-            }
-            Err(database::JournalReadError::MalformedLine { line, .. }) => {
-                result.push(
-                    DiagnosisResult {
-                        error_code: "malformed_package_journal".to_string(),
-                        description: format!(
-                            "{}: recovery journal has malformed line {line}",
-                            journal_path.to_string_lossy()
-                        ),
-                        severity: DiagnosisSeverity::Error,
-                    },
-                    None,
-                );
-            }
-            Err(database::JournalReadError::TrailingEntries { line, .. }) => {
-                result.push(
-                    DiagnosisResult {
-                        error_code: "trailing_package_journal".to_string(),
-                        description: format!(
-                            "{}: recovery journal has trailing entries after commit on line {line}",
-                            journal_path.to_string_lossy()
-                        ),
-                        severity: DiagnosisSeverity::Error,
-                    },
-                    Some(&journal_path),
-                );
+            Err(error) => {
+                let (diagnosis, target_path) = journal_read_error_diagnosis(&journal_path, error);
+                result.push(diagnosis, target_path);
             }
         }
     }
@@ -160,25 +197,21 @@ fn diagnose_committed_journal(
             _ => None,
         })
     else {
-        return vec![DiagnosisResult {
-            error_code: "missing_journal_metadata".to_string(),
-            description: format!(
-                "{}: committed recovery journal is missing metadata",
-                journal_path.to_string_lossy()
-            ),
-            severity: DiagnosisSeverity::Error,
-        }];
+        return vec![journal_error(
+            journal_path,
+            "missing_journal_metadata",
+            "committed recovery journal is missing metadata",
+            DiagnosisSeverity::Error,
+        )];
     };
 
     let Some(package) = packages.get(package_id) else {
-        return vec![DiagnosisResult {
-            error_code: "orphan_package_journal".to_string(),
-            description: format!(
-                "{}: committed recovery journal has no installed package",
-                journal_path.to_string_lossy()
-            ),
-            severity: DiagnosisSeverity::Warning,
-        }];
+        return vec![journal_error(
+            journal_path,
+            "orphan_package_journal",
+            "committed recovery journal has no installed package",
+            DiagnosisSeverity::Warning,
+        )];
     };
 
     if package.version != version
@@ -186,16 +219,15 @@ fn diagnose_committed_journal(
         || package.install_dir != install_dir
         || package.deployment_kind != deployment_kind
     {
-        return vec![DiagnosisResult {
-            error_code: "stale_package_journal".to_string(),
-            description: format!(
-                "{}: recovery journal does not match installed package {} ({})",
-                journal_path.to_string_lossy(),
-                package.name,
-                package.version
+        return vec![journal_error(
+            journal_path,
+            "stale_package_journal",
+            format!(
+                "recovery journal does not match installed package {} ({})",
+                package.name, package.version
             ),
-            severity: DiagnosisSeverity::Warning,
-        }];
+            DiagnosisSeverity::Warning,
+        )];
     }
 
     Vec::new()
