@@ -1,6 +1,6 @@
 -- Canonical catalog schema for parser-generated snapshots.
 -- Parser code and tests include this file directly to avoid schema drift.
-PRAGMA user_version = 2;
+PRAGMA user_version = 1;
 
 CREATE TABLE IF NOT EXISTS catalog_packages (
     id          TEXT PRIMARY KEY,
@@ -12,7 +12,9 @@ CREATE TABLE IF NOT EXISTS catalog_packages (
     description TEXT,
     homepage    TEXT,
     license     TEXT,
-    publisher   TEXT
+    publisher   TEXT,
+    created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS catalog_installers (

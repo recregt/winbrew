@@ -4,7 +4,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::CatalogSchemaVersionMismatchError;
 use winbrew_models::catalog::metadata::CATALOG_DB_SCHEMA_VERSION as CATALOG_SCHEMA_VERSION;
 use winbrew_models::catalog::package::{CatalogInstaller, CatalogPackage};
-use winbrew_models::catalog::raw::{RawCatalogInstaller, RawCatalogPackage};
+use winbrew_models::catalog::raw::RawCatalogInstaller;
 
 pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
     let query = query.trim();
@@ -13,7 +13,7 @@ pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
     }
 
     let mut stmt = conn.prepare(
-        "SELECT p.id, p.name, p.version, p.source, p.namespace, p.source_id, p.description, p.homepage, p.license, p.publisher
+        "SELECT p.id, p.name, p.version, p.source, p.namespace, p.source_id, p.created_at, p.updated_at, p.description, p.homepage, p.license, p.publisher
          FROM catalog_packages p
          JOIN catalog_packages_fts fts ON p.rowid = fts.rowid
          WHERE catalog_packages_fts MATCH ?1
@@ -40,7 +40,7 @@ pub fn get_installers(conn: &Connection, package_id: &str) -> Result<Vec<Catalog
 
 pub fn get_package_by_id(conn: &Connection, package_id: &str) -> Result<Option<CatalogPackage>> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, version, source, namespace, source_id, description, homepage, license, publisher
+        "SELECT id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher
          FROM catalog_packages
          WHERE id = ?1",
     )?;
@@ -66,22 +66,33 @@ pub fn ensure_schema_version(conn: &Connection) -> Result<()> {
 }
 
 fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
-    let raw = RawCatalogPackage {
-        id: row.get::<_, String>("id")?,
+    let version = row.get::<_, String>("version")?.parse().map_err(|err| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
+    })?;
+    let source = row.get::<_, String>("source")?.parse().map_err(|err| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
+    })?;
+
+    let package = CatalogPackage {
+        id: row.get::<_, String>("id")?.into(),
         name: row.get("name")?,
-        version: row.get("version")?,
-        source: row.get("source")?,
+        version,
+        source,
         namespace: row.get("namespace")?,
         source_id: row.get("source_id")?,
+        created_at: row.get("created_at")?,
+        updated_at: row.get("updated_at")?,
         description: row.get("description")?,
         homepage: row.get("homepage")?,
         license: row.get("license")?,
         publisher: row.get("publisher")?,
     };
 
-    CatalogPackage::try_from(raw).map_err(|err| {
+    package.validate().map_err(|err| {
         rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
-    })
+    })?;
+
+    Ok(package)
 }
 
 fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
@@ -101,9 +112,13 @@ fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CATALOG_SCHEMA_VERSION, ensure_schema_version, get_installers};
+    use super::{
+        CATALOG_SCHEMA_VERSION, ensure_schema_version, get_installers, get_package_by_id, search,
+    };
     use rusqlite::Connection;
     use winbrew_models::install::installer::InstallerType;
+
+    const CATALOG_SCHEMA: &str = include_str!("../../../../infra/parser/schema/catalog.sql");
 
     fn create_catalog_installers_table(conn: &Connection) {
         conn.execute_batch(
@@ -155,6 +170,53 @@ mod tests {
         assert_eq!(installers.len(), 2);
         assert_eq!(installers[0].nested_kind, Some(InstallerType::Msi));
         assert_eq!(installers[1].nested_kind, Some(InstallerType::Portable));
+    }
+
+    #[test]
+    fn package_queries_read_timestamps() {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        conn.execute_batch(CATALOG_SCHEMA)
+            .expect("catalog schema should load");
+
+        conn.execute(
+            r#"
+            INSERT INTO catalog_packages (
+                id, name, version, source, namespace, source_id, description, homepage, license, publisher, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            "#,
+            rusqlite::params![
+                "winget/Contoso.App",
+                "Contoso App",
+                "1.2.3",
+                "winget",
+                Option::<String>::None,
+                "Contoso.App",
+                Some("Example package"),
+                Option::<String>::None,
+                Option::<String>::None,
+                Some("Contoso Ltd."),
+                "2026-04-14 12:00:00",
+                "2026-04-14 12:34:56",
+            ],
+        )
+        .expect("insert catalog package");
+
+        let package = get_package_by_id(&conn, "winget/Contoso.App")
+            .expect("package lookup should succeed")
+            .expect("package should exist");
+        let searched = search(&conn, "Contoso").expect("catalog search should succeed");
+
+        assert_eq!(package.created_at.as_deref(), Some("2026-04-14 12:00:00"));
+        assert_eq!(package.updated_at.as_deref(), Some("2026-04-14 12:34:56"));
+        assert_eq!(searched.len(), 1);
+        assert_eq!(
+            searched[0].created_at.as_deref(),
+            Some("2026-04-14 12:00:00")
+        );
+        assert_eq!(
+            searched[0].updated_at.as_deref(),
+            Some("2026-04-14 12:34:56")
+        );
     }
 
     #[test]

@@ -7,14 +7,15 @@ use crate::error::ParserError;
 use crate::parser::ParsedPackage;
 
 const PACKAGE_UPSERT: &str = r#"
-INSERT INTO catalog_packages(id, name, version, source, namespace, source_id, description, homepage, license, publisher)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+INSERT INTO catalog_packages(id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?7, ?8, ?9, ?10)
 ON CONFLICT(id) DO UPDATE SET
     name=excluded.name,
     version=excluded.version,
     source=excluded.source,
     namespace=excluded.namespace,
     source_id=excluded.source_id,
+    updated_at=CURRENT_TIMESTAMP,
     description=excluded.description,
     homepage=excluded.homepage,
     license=excluded.license,

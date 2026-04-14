@@ -27,6 +27,12 @@ pub struct CatalogPackage {
     /// Source-local identifier for the package.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub source_id: String,
+    /// When the catalog row was first written.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    /// When the catalog row was last updated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
     /// Optional package summary.
     pub description: Option<String>,
     /// Optional homepage URL.
@@ -96,6 +102,14 @@ impl CatalogPackage {
                     self.source_id
                 ),
             ));
+        }
+
+        if let Some(created_at) = self.created_at.as_deref() {
+            ensure_non_empty("catalog_package.created_at", created_at)?;
+        }
+
+        if let Some(updated_at) = self.updated_at.as_deref() {
+            ensure_non_empty("catalog_package.updated_at", updated_at)?;
         }
 
         Ok(())
@@ -174,6 +188,8 @@ impl CatalogPackage {
             source: package_id.source(),
             namespace: package_id.namespace().map(str::to_string),
             source_id: package_id.source_id().to_string(),
+            created_at: None,
+            updated_at: None,
             description: None,
             homepage: None,
             license: None,
@@ -198,6 +214,16 @@ impl CatalogPackage {
 
     pub fn with_source_id(mut self, source_id: impl Into<String>) -> Self {
         self.source_id = source_id.into();
+        self
+    }
+
+    pub fn with_created_at(mut self, created_at: impl Into<String>) -> Self {
+        self.created_at = Some(created_at.into());
+        self
+    }
+
+    pub fn with_updated_at(mut self, updated_at: impl Into<String>) -> Self {
+        self.updated_at = Some(updated_at.into());
         self
     }
 
@@ -300,6 +326,8 @@ mod tests {
             Version::parse("1.2.3").expect("version should parse"),
         )
         .with_description("Example package")
+        .with_created_at("2026-04-14 12:00:00")
+        .with_updated_at("2026-04-14 12:34:56")
         .with_publisher("Contoso Ltd.");
 
         let json = serde_json::to_string(&package).expect("package should serialize");
@@ -310,6 +338,8 @@ mod tests {
         assert_eq!(restored.source, package.source);
         assert_eq!(restored.namespace, package.namespace);
         assert_eq!(restored.source_id, package.source_id);
+        assert_eq!(restored.created_at, package.created_at);
+        assert_eq!(restored.updated_at, package.updated_at);
         assert_eq!(restored.version, package.version);
         assert_eq!(restored.publisher, package.publisher);
     }
