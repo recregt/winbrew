@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::shared::ModelError;
 
-const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 1;
 
 /// Summary metadata for a generated catalog snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
