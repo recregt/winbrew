@@ -2845,6 +2845,7 @@ dependencies = [
  "winbrew-database",
  "winbrew-engines",
  "winbrew-models",
+ "winbrew-testing",
 ]
 
 [[package]]
@@ -2874,6 +2875,7 @@ dependencies = [
  "tracing-subscriber",
  "winbrew-app",
  "winbrew-core",
+ "winbrew-testing",
  "winbrew-ui",
  "zip",
 ]
@@ -2958,6 +2960,20 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "url",
+]
+
+[[package]]
+name = "winbrew-testing"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "mockito",
+ "rusqlite",
+ "tempfile",
+ "winbrew-core",
+ "winbrew-database",
+ "winbrew-models",
+ "zip",
 ]
 
 [[package]]
