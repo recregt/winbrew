@@ -1,4 +1,4 @@
-use crate::core::paths::resolved_paths;
+use crate::core::paths::{ResolvedPaths, resolved_paths};
 use crate::database;
 use crate::models::domains::install::InstallerType;
 use crate::models::domains::installed::{InstalledPackage, PackageStatus};
@@ -6,8 +6,8 @@ use crate::models::domains::reporting::{
     DiagnosisSeverity, RecoveryActionGroup, RecoveryIssueKind,
 };
 use std::fs;
-use std::path::Path;
-use tempfile::tempdir;
+use std::path::{Path, PathBuf};
+use tempfile::{TempDir, tempdir};
 use winbrew_models::domains::install::EngineKind;
 use winbrew_models::domains::inventory::{
     MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
@@ -42,25 +42,6 @@ fn sample_msi_package(name: &str, install_dir: &std::path::Path) -> InstalledPac
         status: PackageStatus::Ok,
         installed_at: "2026-04-05T00:00:00Z".to_string(),
     }
-}
-
-fn init_storage(root: &Path) {
-    let packages = root.join("packages").to_string_lossy().into_owned();
-    let data = root.join("data").to_string_lossy().into_owned();
-    let logs = root.join("logs").to_string_lossy().into_owned();
-    let cache = root.join("cache").to_string_lossy().into_owned();
-    let paths = resolved_paths(root, &packages, &data, &logs, &cache);
-
-    database::init(&paths).expect("database should initialize");
-}
-
-fn resolved_root_paths(root: &Path) -> crate::core::paths::ResolvedPaths {
-    let packages = root.join("packages").to_string_lossy().into_owned();
-    let data = root.join("data").to_string_lossy().into_owned();
-    let logs = root.join("logs").to_string_lossy().into_owned();
-    let cache = root.join("cache").to_string_lossy().into_owned();
-
-    resolved_paths(root, &packages, &data, &logs, &cache)
 }
 
 fn sample_snapshot(
@@ -113,17 +94,149 @@ fn sample_snapshot(
     }
 }
 
+struct TestEnvironment {
+    _root: TempDir,
+    paths: ResolvedPaths,
+}
+
+impl TestEnvironment {
+    fn new() -> Self {
+        let root = tempdir().expect("temp dir should be created");
+        let paths = Self::build_paths(root.path());
+
+        Self { _root: root, paths }
+    }
+
+    fn with_storage() -> Self {
+        let env = Self::new();
+        database::init(&env.paths).expect("database should initialize");
+        env
+    }
+
+    fn build_paths(root: &Path) -> ResolvedPaths {
+        let packages = root.join("packages").to_string_lossy().into_owned();
+        let data = root.join("data").to_string_lossy().into_owned();
+        let logs = root.join("logs").to_string_lossy().into_owned();
+        let cache = root.join("cache").to_string_lossy().into_owned();
+
+        resolved_paths(root, &packages, &data, &logs, &cache)
+    }
+
+    fn root(&self) -> &Path {
+        self._root.path()
+    }
+
+    fn packages_root(&self) -> &Path {
+        &self.paths.packages
+    }
+
+    fn pkgdb_root(&self) -> &Path {
+        &self.paths.pkgdb
+    }
+
+    fn create_dir(&self, path: &Path) {
+        fs::create_dir_all(path).expect("directory should be created");
+    }
+
+    fn write_file(&self, path: &Path, content: &[u8]) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("parent directory should be created");
+        }
+
+        fs::write(path, content).expect("file should be written");
+    }
+
+    fn db_conn(&self) -> database::DbConnection {
+        database::get_conn().expect("database connection")
+    }
+
+    fn insert_package(&self, package: &InstalledPackage) -> database::DbConnection {
+        let conn = self.db_conn();
+        database::insert_package(&conn, package).expect("insert package");
+        conn
+    }
+
+    fn make_portable_package(&self, name: &str) -> (InstalledPackage, PathBuf) {
+        let install_dir = self.packages_root().join(name);
+        (sample_package(name, &install_dir), install_dir)
+    }
+
+    fn make_msi_package(&self, name: &str) -> (InstalledPackage, PathBuf) {
+        let install_dir = self.packages_root().join(name);
+        (sample_msi_package(name, &install_dir), install_dir)
+    }
+
+    fn make_msi_snapshot(
+        &self,
+        name: &str,
+        install_dir: &Path,
+        hash_hex: &str,
+    ) -> MsiInventorySnapshot {
+        sample_snapshot(name, install_dir, hash_hex)
+    }
+
+    fn journal_path(&self, package_name: &str) -> PathBuf {
+        self.pkgdb_root().join(package_name).join("journal.jsonl")
+    }
+}
+
+fn assert_single_diagnosis<'a>(
+    diagnostics: &'a [crate::models::domains::reporting::DiagnosisResult],
+    expected_error_code: &str,
+    expected_severity: DiagnosisSeverity,
+) -> &'a crate::models::domains::reporting::DiagnosisResult {
+    assert_eq!(diagnostics.len(), 1, "expected exactly one diagnosis");
+
+    let diagnosis = &diagnostics[0];
+    assert_eq!(diagnosis.error_code, expected_error_code);
+    assert_eq!(diagnosis.severity, expected_severity);
+
+    diagnosis
+}
+
+fn assert_single_recovery_finding(
+    findings: &[crate::models::domains::reporting::RecoveryFinding],
+    expected_issue_kind: RecoveryIssueKind,
+    expected_action_group: Option<RecoveryActionGroup>,
+) -> &crate::models::domains::reporting::RecoveryFinding {
+    assert_eq!(findings.len(), 1, "expected exactly one recovery finding");
+
+    let finding = &findings[0];
+    assert_eq!(finding.issue_kind, expected_issue_kind);
+    assert_eq!(finding.action_group, expected_action_group);
+
+    finding
+}
+
+fn assert_recovery_target_path(
+    finding: &crate::models::domains::reporting::RecoveryFinding,
+    expected_path: &Path,
+) {
+    let expected_path = expected_path.to_string_lossy().to_string();
+    assert_eq!(finding.target_path.as_deref(), Some(expected_path.as_str()));
+}
+
+fn assert_normalized_recovery_target_path(
+    finding: &crate::models::domains::reporting::RecoveryFinding,
+    expected_path: &Path,
+) {
+    let expected_path = expected_path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+
+    assert_eq!(finding.target_path.as_deref(), Some(expected_path.as_str()));
+}
+
 #[test]
 fn scan_packages_sorts_diagnoses_by_error_code() {
-    let temp_dir = tempdir().expect("temp dir should be created");
-    let valid_dir = temp_dir.path().join("valid");
-    std::fs::create_dir_all(&valid_dir).expect("valid dir should be created");
+    let env = TestEnvironment::new();
+    let (zeta_missing, _zeta_dir) = env.make_portable_package("Zeta.Missing");
+    let (alpha_valid, valid_dir) = env.make_portable_package("Alpha.Valid");
+    let (beta_missing, _beta_dir) = env.make_portable_package("Beta.Missing");
+    env.create_dir(&valid_dir);
 
-    let packages = vec![
-        sample_package("Zeta.Missing", &temp_dir.path().join("missing-zeta")),
-        sample_package("Alpha.Valid", &valid_dir),
-        sample_package("Beta.Missing", &temp_dir.path().join("missing-beta")),
-    ];
+    let packages = vec![zeta_missing, alpha_valid, beta_missing];
 
     let scan = super::scan_packages(&packages);
 
@@ -143,128 +256,106 @@ fn scan_packages_sorts_diagnoses_by_error_code() {
 
 #[test]
 fn scan_orphaned_install_dirs_detects_directories_without_packages() {
-    let temp_dir = tempdir().expect("temp dir should be created");
-    let packages_root = temp_dir.path().join("packages");
-    std::fs::create_dir_all(&packages_root).expect("packages root should be created");
+    let env = TestEnvironment::new();
+    env.create_dir(env.packages_root());
 
-    let orphan_dir = packages_root.join("Contoso.Orphan");
-    std::fs::create_dir_all(&orphan_dir).expect("orphan dir should be created");
+    let orphan_dir = env.packages_root().join("Contoso.Orphan");
+    env.create_dir(&orphan_dir);
 
-    let packages = vec![sample_package(
-        "Contoso.Known",
-        &packages_root.join("Contoso.Known"),
-    )];
+    let (known_package, _known_dir) = env.make_portable_package("Contoso.Known");
+    let packages = vec![known_package];
 
-    let scan = super::scan_orphaned_install_dirs(&packages_root, &packages);
+    let scan = super::scan_orphaned_install_dirs(env.packages_root(), &packages);
 
-    assert_eq!(scan.diagnostics.len(), 1);
-    assert_eq!(scan.diagnostics[0].error_code, "orphan_install_directory");
-    assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Warning);
-    assert!(scan.diagnostics[0].description.contains("Contoso.Orphan"));
-    assert_eq!(scan.recovery_findings.len(), 1);
-    assert_eq!(
-        scan.recovery_findings[0].action_group,
-        Some(RecoveryActionGroup::OrphanCleanup)
+    let diagnosis = assert_single_diagnosis(
+        &scan.diagnostics,
+        "orphan_install_directory",
+        DiagnosisSeverity::Warning,
     );
-    let orphan_path = orphan_dir.to_string_lossy().to_string();
-    assert_eq!(
-        scan.recovery_findings[0].target_path.as_deref(),
-        Some(orphan_path.as_str())
+    assert!(diagnosis.description.contains("Contoso.Orphan"));
+
+    let finding = assert_single_recovery_finding(
+        &scan.recovery_findings,
+        RecoveryIssueKind::IncompleteInstall,
+        Some(RecoveryActionGroup::OrphanCleanup),
     );
+    assert_recovery_target_path(finding, &orphan_dir);
 }
 
 #[test]
 fn scan_msi_inventory_detects_hash_mismatch() {
-    let root = tempdir().expect("temp root");
-    init_storage(root.path());
+    let env = TestEnvironment::with_storage();
 
-    let install_dir = root.path().join("packages").join("Contoso.Msi");
+    let (package, install_dir) = env.make_msi_package("Contoso.Msi");
     let file_path = install_dir.join("bin").join("demo.exe");
-    fs::create_dir_all(file_path.parent().expect("file parent"))
-        .expect("install dir should be created");
-    fs::write(&file_path, b"abc").expect("payload should be written");
+    env.create_dir(file_path.parent().expect("file parent"));
+    env.write_file(&file_path, b"abc");
 
-    let package = sample_msi_package("Contoso.Msi", &install_dir);
-    let snapshot = sample_snapshot(
+    let snapshot = env.make_msi_snapshot(
         "Contoso.Msi",
         &install_dir,
         "0000000000000000000000000000000000000000000000000000000000000000",
     );
 
-    let mut conn = database::get_conn().expect("database connection");
-    database::insert_package(&conn, &package).expect("insert package");
+    let mut conn = env.insert_package(&package);
     database::replace_snapshot(&mut conn, &snapshot).expect("replace snapshot");
 
     let scan = super::scan_msi_inventory(&conn, &[package]);
 
-    assert_eq!(scan.diagnostics.len(), 1);
-    assert_eq!(scan.diagnostics[0].error_code, "msi_file_hash_mismatch");
-    assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Error);
-    assert!(scan.diagnostics[0].description.contains("Contoso.Msi"));
-    assert_eq!(scan.recovery_findings.len(), 1);
-    assert_eq!(
-        scan.recovery_findings[0].action_group,
-        Some(RecoveryActionGroup::FileRestore)
+    let diagnosis = assert_single_diagnosis(
+        &scan.diagnostics,
+        "msi_file_hash_mismatch",
+        DiagnosisSeverity::Error,
     );
-    let expected_file_path = file_path
-        .to_string_lossy()
-        .replace('\\', "/")
-        .to_ascii_lowercase();
-    assert_eq!(
-        scan.recovery_findings[0].target_path.as_deref(),
-        Some(expected_file_path.as_str())
+    assert!(diagnosis.description.contains("Contoso.Msi"));
+
+    let finding = assert_single_recovery_finding(
+        &scan.recovery_findings,
+        RecoveryIssueKind::DiskDrift,
+        Some(RecoveryActionGroup::FileRestore),
     );
+    assert_normalized_recovery_target_path(finding, &file_path);
 }
 
 #[test]
 fn scan_msi_inventory_detects_missing_files() {
-    let root = tempdir().expect("temp root");
-    init_storage(root.path());
+    let env = TestEnvironment::with_storage();
 
-    let install_dir = root.path().join("packages").join("Contoso.Msi");
-    fs::create_dir_all(&install_dir).expect("install dir should be created");
+    let (package, install_dir) = env.make_msi_package("Contoso.Msi");
+    env.create_dir(&install_dir);
 
-    let package = sample_msi_package("Contoso.Msi", &install_dir);
-    let snapshot = sample_snapshot(
+    let snapshot = env.make_msi_snapshot(
         "Contoso.Msi",
         &install_dir,
         "0000000000000000000000000000000000000000000000000000000000000000",
     );
 
-    let mut conn = database::get_conn().expect("database connection");
-    database::insert_package(&conn, &package).expect("insert package");
+    let mut conn = env.insert_package(&package);
     database::replace_snapshot(&mut conn, &snapshot).expect("replace snapshot");
 
     let scan = super::scan_msi_inventory(&conn, &[package]);
 
-    assert_eq!(scan.diagnostics.len(), 1);
-    assert_eq!(scan.diagnostics[0].error_code, "missing_msi_file");
-    assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Error);
-    assert!(scan.diagnostics[0].description.contains("Contoso.Msi"));
-    assert_eq!(scan.recovery_findings.len(), 1);
-    assert_eq!(
-        scan.recovery_findings[0].action_group,
-        Some(RecoveryActionGroup::FileRestore)
+    let diagnosis = assert_single_diagnosis(
+        &scan.diagnostics,
+        "missing_msi_file",
+        DiagnosisSeverity::Error,
     );
-    let expected_file_path = install_dir
-        .join("bin")
-        .join("demo.exe")
-        .to_string_lossy()
-        .replace('\\', "/")
-        .to_ascii_lowercase();
-    assert_eq!(
-        scan.recovery_findings[0].target_path.as_deref(),
-        Some(expected_file_path.as_str())
+    assert!(diagnosis.description.contains("Contoso.Msi"));
+
+    let finding = assert_single_recovery_finding(
+        &scan.recovery_findings,
+        RecoveryIssueKind::DiskDrift,
+        Some(RecoveryActionGroup::FileRestore),
     );
+    assert_normalized_recovery_target_path(finding, &install_dir.join("bin").join("demo.exe"));
 }
 
 #[test]
 fn scan_package_journals_detects_incomplete_journal() {
-    let root = tempdir().expect("temp root");
-    let paths = resolved_root_paths(root.path());
+    let env = TestEnvironment::new();
 
     let mut writer =
-        database::JournalWriter::open_for_package(root.path(), "Contoso.Recover", "1.0.0")
+        database::JournalWriter::open_for_package(env.root(), "Contoso.Recover", "1.0.0")
             .expect("open journal");
     writer
         .append(&database::JournalEntry::Metadata {
@@ -279,49 +370,51 @@ fn scan_package_journals_detects_incomplete_journal() {
         .expect("write metadata");
     writer.flush().expect("flush journal");
 
-    let scan = super::scan_package_journals(&paths, &[]);
+    let scan = super::scan_package_journals(&env.paths, &[]);
 
-    assert_eq!(scan.diagnostics.len(), 1);
-    assert_eq!(scan.diagnostics[0].error_code, "incomplete_package_journal");
-    assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Error);
-    assert_eq!(scan.recovery_findings.len(), 1);
-    assert_eq!(
-        scan.recovery_findings[0].issue_kind,
-        RecoveryIssueKind::RecoveryTrailMissing
+    assert_single_diagnosis(
+        &scan.diagnostics,
+        "incomplete_package_journal",
+        DiagnosisSeverity::Error,
     );
-    assert!(scan.recovery_findings[0].target_path.is_none());
+
+    let finding = assert_single_recovery_finding(
+        &scan.recovery_findings,
+        RecoveryIssueKind::RecoveryTrailMissing,
+        None,
+    );
+    assert!(finding.target_path.is_none());
 }
 
 #[test]
 fn scan_package_journals_detects_malformed_journal() {
-    let root = tempdir().expect("temp root");
-    let paths = resolved_root_paths(root.path());
+    let env = TestEnvironment::new();
 
-    let journal_dir = paths.pkgdb.join("Contoso.Malformed");
-    fs::create_dir_all(&journal_dir).expect("journal dir should be created");
-    let journal_path = journal_dir.join("journal.jsonl");
-    fs::write(&journal_path, b"{not-json}\n").expect("write malformed journal");
+    let journal_path = env.journal_path("Contoso.Malformed");
+    env.write_file(&journal_path, b"{not-json}\n");
 
-    let scan = super::scan_package_journals(&paths, &[]);
+    let scan = super::scan_package_journals(&env.paths, &[]);
 
-    assert_eq!(scan.diagnostics.len(), 1);
-    assert_eq!(scan.diagnostics[0].error_code, "malformed_package_journal");
-    assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Error);
-    assert_eq!(scan.recovery_findings.len(), 1);
-    assert_eq!(
-        scan.recovery_findings[0].issue_kind,
-        RecoveryIssueKind::RecoveryTrailMissing
+    assert_single_diagnosis(
+        &scan.diagnostics,
+        "malformed_package_journal",
+        DiagnosisSeverity::Error,
     );
-    assert!(scan.recovery_findings[0].target_path.is_none());
+
+    let finding = assert_single_recovery_finding(
+        &scan.recovery_findings,
+        RecoveryIssueKind::RecoveryTrailMissing,
+        None,
+    );
+    assert!(finding.target_path.is_none());
 }
 
 #[test]
 fn scan_package_journals_reports_missing_journal_metadata() {
-    let root = tempdir().expect("temp root");
-    let paths = resolved_root_paths(root.path());
+    let env = TestEnvironment::new();
 
     let mut writer =
-        database::JournalWriter::open_for_package(root.path(), "Contoso.MissingMeta", "1.0.0")
+        database::JournalWriter::open_for_package(env.root(), "Contoso.MissingMeta", "1.0.0")
             .expect("open journal");
     writer
         .append(&database::JournalEntry::Commit {
@@ -330,21 +423,22 @@ fn scan_package_journals_reports_missing_journal_metadata() {
         .expect("write commit");
     writer.flush().expect("flush journal");
 
-    let scan = super::scan_package_journals(&paths, &[]);
+    let scan = super::scan_package_journals(&env.paths, &[]);
 
-    assert_eq!(scan.diagnostics.len(), 1);
-    assert_eq!(scan.diagnostics[0].error_code, "missing_journal_metadata");
-    assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Error);
+    assert_single_diagnosis(
+        &scan.diagnostics,
+        "missing_journal_metadata",
+        DiagnosisSeverity::Error,
+    );
     assert!(scan.recovery_findings.is_empty());
 }
 
 #[test]
 fn scan_package_journals_detects_orphan_committed_journal() {
-    let root = tempdir().expect("temp root");
-    let paths = resolved_root_paths(root.path());
+    let env = TestEnvironment::new();
 
     let mut writer =
-        database::JournalWriter::open_for_package(root.path(), "Contoso.Orphan", "1.0.0")
+        database::JournalWriter::open_for_package(env.root(), "Contoso.Orphan", "1.0.0")
             .expect("open journal");
     writer
         .append(&database::JournalEntry::Metadata {
@@ -365,34 +459,29 @@ fn scan_package_journals_detects_orphan_committed_journal() {
     writer.flush().expect("flush journal");
     let journal_path = writer.path().to_path_buf();
 
-    let scan = super::scan_package_journals(&paths, &[]);
+    let scan = super::scan_package_journals(&env.paths, &[]);
 
-    assert_eq!(scan.diagnostics.len(), 1);
-    assert_eq!(scan.diagnostics[0].error_code, "orphan_package_journal");
-    assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Warning);
-    assert_eq!(scan.recovery_findings.len(), 1);
-    assert_eq!(
-        scan.recovery_findings[0].issue_kind,
-        RecoveryIssueKind::IncompleteInstall
+    let diagnosis = assert_single_diagnosis(
+        &scan.diagnostics,
+        "orphan_package_journal",
+        DiagnosisSeverity::Warning,
     );
-    assert_eq!(
-        scan.recovery_findings[0].action_group,
-        Some(RecoveryActionGroup::JournalReplay)
+    assert!(diagnosis.description.contains("no installed package"));
+
+    let finding = assert_single_recovery_finding(
+        &scan.recovery_findings,
+        RecoveryIssueKind::IncompleteInstall,
+        Some(RecoveryActionGroup::JournalReplay),
     );
-    let journal_path_string = journal_path.to_string_lossy().to_string();
-    assert_eq!(
-        scan.recovery_findings[0].target_path.as_deref(),
-        Some(journal_path_string.as_str())
-    );
+    assert_recovery_target_path(finding, &journal_path);
 }
 
 #[test]
 fn scan_package_journals_tracks_trailing_journal_replay_target() {
-    let root = tempdir().expect("temp root");
-    let paths = resolved_root_paths(root.path());
+    let env = TestEnvironment::new();
 
     let mut writer =
-        database::JournalWriter::open_for_package(root.path(), "Contoso.Trailing", "1.0.0")
+        database::JournalWriter::open_for_package(env.root(), "Contoso.Trailing", "1.0.0")
             .expect("open journal");
     writer
         .append(&database::JournalEntry::Metadata {
@@ -419,23 +508,23 @@ fn scan_package_journals_tracks_trailing_journal_replay_target() {
     writer.flush().expect("flush journal");
     let journal_path = writer.path().to_path_buf();
 
-    let scan = super::scan_package_journals(&paths, &[]);
+    let scan = super::scan_package_journals(&env.paths, &[]);
 
-    assert_eq!(scan.diagnostics.len(), 1);
-    assert_eq!(scan.diagnostics[0].error_code, "trailing_package_journal");
-    assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Error);
-    assert_eq!(scan.recovery_findings.len(), 1);
-    assert_eq!(
-        scan.recovery_findings[0].issue_kind,
-        RecoveryIssueKind::Conflict
+    let diagnosis = assert_single_diagnosis(
+        &scan.diagnostics,
+        "trailing_package_journal",
+        DiagnosisSeverity::Error,
     );
-    assert_eq!(
-        scan.recovery_findings[0].action_group,
-        Some(RecoveryActionGroup::JournalReplay)
+    assert!(
+        diagnosis
+            .description
+            .contains("trailing entries after commit")
     );
-    let journal_path_string = journal_path.to_string_lossy().to_string();
-    assert_eq!(
-        scan.recovery_findings[0].target_path.as_deref(),
-        Some(journal_path_string.as_str())
+
+    let finding = assert_single_recovery_finding(
+        &scan.recovery_findings,
+        RecoveryIssueKind::Conflict,
+        Some(RecoveryActionGroup::JournalReplay),
     );
+    assert_recovery_target_path(finding, &journal_path);
 }
