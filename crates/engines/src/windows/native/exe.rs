@@ -19,91 +19,127 @@ pub fn install(
     install_dir: &Path,
     package_name: &str,
 ) -> Result<EngineInstallReceipt> {
-    #[cfg(not(windows))]
-    {
-        let _ = (installer, download_path, install_dir, package_name);
-        bail!("native executable installation is only supported on Windows")
-    }
+    validate_install_inputs(download_path, install_dir, package_name)?;
 
-    #[cfg(windows)]
-    {
-        fs::create_dir_all(install_dir)
-            .with_context(|| format!("failed to create {}", install_dir.display()))?;
+    fs::create_dir_all(install_dir)
+        .with_context(|| format!("failed to create {}", install_dir.display()))?;
 
-        let args = build_install_args(installer, install_dir, package_name)?;
+    let args = build_install_args(installer, install_dir, package_name)?;
 
-        let status = Command::new(download_path)
-            .current_dir(download_path.parent().unwrap_or(Path::new(".")))
-            .args(&args)
-            .status()
-            .with_context(|| {
-                format!("failed to launch native executable installer for {package_name}")
-            })?;
-
-        let exit_code = status.code().ok_or_else(|| {
-            anyhow::anyhow!("native executable installer terminated without an exit code")
+    let status = Command::new(download_path)
+        .current_dir(download_path.parent().unwrap_or(Path::new(".")))
+        .args(&args)
+        .status()
+        .with_context(|| {
+            format!("failed to launch native executable installer for {package_name}")
         })?;
 
-        if !NATIVE_EXE_SUCCESS_EXIT_CODES.contains(&exit_code) {
-            bail!(
-                "native executable installer for {} failed with exit code {}",
-                package_name,
-                exit_code
-            );
-        }
+    let exit_code = status.code().ok_or_else(|| {
+        anyhow::anyhow!("native executable installer terminated without an exit code")
+    })?;
 
-        let engine_metadata =
-            capture_native_exe_metadata(package_name, install_dir).map(|metadata| match metadata {
-                NativeExeInstallMetadata::QuietOnly(command) => {
-                    EngineMetadata::native_exe(Some(command), None)
-                }
-                NativeExeInstallMetadata::QuietAndStandard {
-                    quiet_uninstall_command,
-                    uninstall_command,
-                } => EngineMetadata::native_exe(
-                    Some(quiet_uninstall_command),
-                    Some(uninstall_command),
-                ),
-                NativeExeInstallMetadata::StandardOnly(command) => {
-                    EngineMetadata::native_exe(None, Some(command))
-                }
-            });
-
-        Ok(EngineInstallReceipt::new(
-            EngineKind::NativeExe,
-            install_dir.to_string_lossy().into_owned(),
-            engine_metadata,
-        ))
+    if !NATIVE_EXE_SUCCESS_EXIT_CODES.contains(&exit_code) {
+        bail!(
+            "native executable installer for {} failed with exit code {}",
+            package_name,
+            exit_code
+        );
     }
+
+    let engine_metadata =
+        capture_native_exe_metadata(package_name, install_dir).map(|metadata| match metadata {
+            NativeExeInstallMetadata::QuietOnly(command) => {
+                EngineMetadata::native_exe(Some(command), None)
+            }
+            NativeExeInstallMetadata::QuietAndStandard {
+                quiet_uninstall_command,
+                uninstall_command,
+            } => EngineMetadata::native_exe(Some(quiet_uninstall_command), Some(uninstall_command)),
+            NativeExeInstallMetadata::StandardOnly(command) => {
+                EngineMetadata::native_exe(None, Some(command))
+            }
+        });
+
+    Ok(EngineInstallReceipt::new(
+        EngineKind::NativeExe,
+        install_dir.to_string_lossy().into_owned(),
+        engine_metadata,
+    ))
 }
 
 pub fn remove(package: &InstalledPackage) -> Result<()> {
-    #[cfg(not(windows))]
+    validate_package_name(&package.name)?;
+    validate_install_dir(Path::new(&package.install_dir))?;
+
+    if let Some(command) = package
+        .engine_metadata
+        .as_ref()
+        .and_then(|metadata| metadata.native_exe_uninstall_command())
+        && let Err(err) = run_uninstall_command(command, &package.name)
     {
-        let _ = package;
-        bail!("native executable removal is only supported on Windows")
+        warn!(
+            package = package.name.as_str(),
+            error = %err,
+            "native executable uninstall command failed; falling back to directory cleanup"
+        );
     }
 
-    #[cfg(windows)]
-    {
-        if let Some(command) = package
-            .engine_metadata
-            .as_ref()
-            .and_then(|metadata| metadata.native_exe_uninstall_command())
-            && let Err(err) = run_uninstall_command(command, &package.name)
-        {
-            warn!(
-                package = package.name.as_str(),
-                error = %err,
-                "native executable uninstall command failed; falling back to directory cleanup"
-            );
-        }
+    cleanup_path(Path::new(&package.install_dir))
+        .with_context(|| format!("failed to remove {}", package.install_dir))?;
 
-        cleanup_path(Path::new(&package.install_dir))
-            .with_context(|| format!("failed to remove {}", package.install_dir))?;
+    Ok(())
+}
 
-        Ok(())
+fn validate_install_inputs(
+    download_path: &Path,
+    install_dir: &Path,
+    package_name: &str,
+) -> Result<()> {
+    validate_download_path(download_path)?;
+    validate_install_dir(install_dir)?;
+    validate_package_name(package_name)?;
+
+    Ok(())
+}
+
+fn validate_download_path(path: &Path) -> Result<()> {
+    if path.as_os_str().is_empty() {
+        bail!("installer path cannot be empty");
     }
+
+    if !path.exists() {
+        bail!("installer path does not exist: {}", path.display());
+    }
+
+    if !path.is_file() {
+        bail!("installer path is not a file: {}", path.display());
+    }
+
+    Ok(())
+}
+
+fn validate_install_dir(path: &Path) -> Result<()> {
+    let path_text = path.to_string_lossy();
+
+    if path.as_os_str().is_empty() || path_text.trim().is_empty() {
+        bail!("install directory cannot be empty");
+    }
+
+    Ok(())
+}
+
+fn validate_package_name(package_name: &str) -> Result<()> {
+    let package_name = package_name.trim();
+
+    if package_name.is_empty() {
+        bail!("package name cannot be empty");
+    }
+
+    if package_name.chars().any(|ch| ch.is_control()) {
+        bail!("package name contains invalid control characters");
+    }
+
+    Ok(())
 }
 
 enum NativeExeInstallMetadata {
@@ -325,12 +361,15 @@ fn has_arg_prefix(args: &[String], prefix: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{has_arg_prefix, split_switches};
+    use super::{
+        has_arg_prefix, split_switches, validate_download_path, validate_install_dir,
+        validate_package_name,
+    };
 
     #[cfg(windows)]
     use super::{NativeExeInstallMetadata, build_install_args, capture_native_exe_metadata};
 
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use winbrew_models::catalog::package::CatalogInstaller;
     use winbrew_models::install::installer::InstallerType;
@@ -377,6 +416,44 @@ mod tests {
         let args = vec!["/DIR=C:\\Tools\\App".to_string()];
 
         assert!(has_arg_prefix(&args, "/dir="));
+    }
+
+    #[test]
+    fn validate_download_path_rejects_missing_file() {
+        let path = native_exe_test_dir("missing-installer").join("installer.exe");
+
+        let err = validate_download_path(&path).expect_err("missing installer should fail");
+
+        assert!(err.to_string().contains("installer path does not exist"));
+    }
+
+    #[test]
+    fn validate_install_dir_rejects_empty_path() {
+        let err =
+            validate_install_dir(Path::new("")).expect_err("empty install directory should fail");
+
+        assert!(
+            err.to_string()
+                .contains("install directory cannot be empty")
+        );
+    }
+
+    #[test]
+    fn validate_package_name_rejects_empty_and_control_characters() {
+        let empty_err = validate_package_name("   ").expect_err("empty package name should fail");
+        assert!(
+            empty_err
+                .to_string()
+                .contains("package name cannot be empty")
+        );
+
+        let control_err = validate_package_name("Contoso\nNativeExe")
+            .expect_err("control characters should fail");
+        assert!(
+            control_err
+                .to_string()
+                .contains("package name contains invalid control characters")
+        );
     }
 
     #[cfg(windows)]
