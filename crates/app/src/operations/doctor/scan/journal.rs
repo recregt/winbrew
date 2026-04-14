@@ -9,6 +9,27 @@ use tracing::debug;
 
 use super::{PackageJournalScan, sort_diagnoses, sort_recovery_findings};
 
+mod error_codes {
+    pub const PKGDB_UNREADABLE: &str = "pkgdb_unreadable";
+    pub const INCOMPLETE_JOURNAL: &str = "incomplete_package_journal";
+    pub const UNREADABLE_JOURNAL: &str = "unreadable_package_journal";
+    pub const MALFORMED_JOURNAL: &str = "malformed_package_journal";
+    pub const TRAILING_JOURNAL: &str = "trailing_package_journal";
+    pub const MISSING_METADATA: &str = "missing_journal_metadata";
+    pub const ORPHAN_JOURNAL: &str = "orphan_package_journal";
+    pub const STALE_JOURNAL: &str = "stale_package_journal";
+}
+
+/// Create a standardized diagnosis result with consistent formatting.
+///
+/// This is the base builder for all diagnosis results in the journal scanner.
+/// Use [`journal_error`] for journal-specific errors with path prefixing.
+///
+/// # Arguments
+/// * `error_code` - Machine-readable error identifier.
+/// * `description` - Human-readable error description.
+/// * `severity` - Error severity level.
+#[inline]
 fn diagnosis(
     error_code: &str,
     description: String,
@@ -21,6 +42,21 @@ fn diagnosis(
     }
 }
 
+/// Create a journal-specific diagnosis with automatic path prefixing.
+///
+/// Formats the description as `{path}: {message}` for consistent error
+/// messages.
+///
+/// # Example
+/// ```ignore
+/// let diag = journal_error(
+///     &path,
+///     "incomplete_journal",
+///     "incomplete recovery journal",
+///     DiagnosisSeverity::Error,
+/// );
+/// ```
+#[inline]
 fn journal_error(
     journal_path: &Path,
     error_code: &str,
@@ -34,6 +70,17 @@ fn journal_error(
     )
 }
 
+/// Convert a [`database::JournalReadError`] into a structured diagnosis result.
+///
+/// Maps all journal reading error variants to appropriate diagnosis codes and
+/// severity levels. Returns the diagnosis along with an optional path
+/// reference for recovery findings.
+///
+/// # Error Mapping
+/// - `Incomplete` -> error, no path reference
+/// - `Read` -> error, no path reference
+/// - `MalformedLine` -> error with line number, no path reference
+/// - `TrailingEntries` -> error with line number, with path reference
 fn journal_read_error_diagnosis(
     journal_path: &Path,
     error: database::JournalReadError,
@@ -42,7 +89,7 @@ fn journal_read_error_diagnosis(
         database::JournalReadError::Incomplete { .. } => (
             journal_error(
                 journal_path,
-                "incomplete_package_journal",
+                error_codes::INCOMPLETE_JOURNAL,
                 "incomplete recovery journal",
                 DiagnosisSeverity::Error,
             ),
@@ -51,7 +98,7 @@ fn journal_read_error_diagnosis(
         database::JournalReadError::Read { .. } => (
             journal_error(
                 journal_path,
-                "unreadable_package_journal",
+                error_codes::UNREADABLE_JOURNAL,
                 "recovery journal is unreadable",
                 DiagnosisSeverity::Error,
             ),
@@ -60,7 +107,7 @@ fn journal_read_error_diagnosis(
         database::JournalReadError::MalformedLine { line, .. } => (
             journal_error(
                 journal_path,
-                "malformed_package_journal",
+                error_codes::MALFORMED_JOURNAL,
                 format!("recovery journal has malformed line {line}"),
                 DiagnosisSeverity::Error,
             ),
@@ -69,7 +116,7 @@ fn journal_read_error_diagnosis(
         database::JournalReadError::TrailingEntries { line, .. } => (
             journal_error(
                 journal_path,
-                "trailing_package_journal",
+                error_codes::TRAILING_JOURNAL,
                 format!("recovery journal has trailing entries after commit on line {line}"),
                 DiagnosisSeverity::Error,
             ),
@@ -106,7 +153,7 @@ pub(super) fn scan_package_journals(
             let mut result = PackageJournalScan::new();
             result.push(
                 diagnosis(
-                    "pkgdb_unreadable",
+                    error_codes::PKGDB_UNREADABLE,
                     format!(
                         "pkgdb root: unreadable journal directory ({}) - {err}",
                         pkgdb_root.to_string_lossy()
@@ -199,7 +246,7 @@ fn diagnose_committed_journal(
     else {
         return vec![journal_error(
             journal_path,
-            "missing_journal_metadata",
+            error_codes::MISSING_METADATA,
             "committed recovery journal is missing metadata",
             DiagnosisSeverity::Error,
         )];
@@ -208,7 +255,7 @@ fn diagnose_committed_journal(
     let Some(package) = packages.get(package_id) else {
         return vec![journal_error(
             journal_path,
-            "orphan_package_journal",
+            error_codes::ORPHAN_JOURNAL,
             "committed recovery journal has no installed package",
             DiagnosisSeverity::Warning,
         )];
@@ -221,7 +268,7 @@ fn diagnose_committed_journal(
     {
         return vec![journal_error(
             journal_path,
-            "stale_package_journal",
+            error_codes::STALE_JOURNAL,
             format!(
                 "recovery journal does not match installed package {} ({})",
                 package.name, package.version
