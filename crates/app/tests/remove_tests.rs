@@ -1,15 +1,12 @@
-#[path = "common/mod.rs"]
-mod common;
-
 use anyhow::Result;
-use common::db::{init_database, reset_install_state};
-use common::shared_root::test_root;
 use std::fs;
 use std::path::Path;
-use winbrew::database;
-use winbrew::services::app::remove;
+
+use winbrew_app::database;
+use winbrew_app::remove;
 use winbrew_models::domains::install::InstallerType;
 use winbrew_models::domains::installed::{InstalledPackage as Package, PackageStatus};
+use winbrew_testing::{init_database, reset_install_state, test_root};
 
 fn sample_package(
     name: &str,
@@ -21,6 +18,7 @@ fn sample_package(
         name: name.to_string(),
         version: "1.0.0".to_string(),
         kind,
+        deployment_kind: kind.deployment_kind(),
         engine_kind: kind.into(),
         engine_metadata: None,
         install_dir: install_dir.to_string_lossy().into_owned(),

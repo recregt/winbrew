@@ -1,21 +1,19 @@
-#[path = "common/mod.rs"]
-mod common;
-
 use anyhow::Result;
-use common::db::{init_database, reset_install_state};
-use common::shared_root::test_root;
 use std::fs;
 use std::path::Path;
-use winbrew::database;
-use winbrew::services::app::install::state;
+
+use winbrew_app::database;
+use winbrew_app::install::state;
 use winbrew_models::domains::install::{EngineInstallReceipt, EngineKind, InstallerType};
 use winbrew_models::domains::installed::{InstalledPackage as Package, PackageStatus};
+use winbrew_testing::{init_database, reset_install_state, test_root};
 
 fn sample_package(name: &str, status: PackageStatus, install_dir: &Path) -> Package {
     Package {
         name: name.to_string(),
         version: "1.0.0".to_string(),
         kind: InstallerType::Portable,
+        deployment_kind: InstallerType::Portable.deployment_kind(),
         engine_kind: EngineKind::Portable,
         engine_metadata: None,
         install_dir: install_dir.to_string_lossy().into_owned(),
@@ -104,6 +102,7 @@ fn mark_installing_and_mark_ok_update_status() -> Result<()> {
         "Contoso.Installing",
         "2.4.6",
         InstallerType::Portable,
+        InstallerType::Portable.deployment_kind(),
         EngineKind::Portable,
         &install_dir,
     )?;
@@ -114,11 +113,14 @@ fn mark_installing_and_mark_ok_update_status() -> Result<()> {
     assert_eq!(stored.engine_kind, EngineKind::Portable);
     assert_eq!(stored.dependencies, Vec::<String>::new());
 
-    state::mark_ok(
-        &conn,
-        "Contoso.Installing",
-        &EngineInstallReceipt::new(EngineKind::Portable, None),
-    )?;
+    let receipt = EngineInstallReceipt::new(
+        EngineKind::Portable,
+        install_dir.to_string_lossy().into_owned(),
+        None,
+    );
+
+    let mut conn = conn;
+    database::commit_install(&mut conn, "Contoso.Installing", &receipt)?;
 
     let stored = database::get_package(&conn, "Contoso.Installing")?
         .expect("package should still exist after mark_ok");

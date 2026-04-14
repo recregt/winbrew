@@ -2,6 +2,7 @@ use crate::core::hash::hash_algorithm;
 use crate::models::shared::hash::HashAlgorithm as CatalogHashAlgorithm;
 use anyhow::Result;
 use rusqlite::{Connection, params};
+use std::path::Path;
 
 pub fn catalog_package_id(package_name: &str) -> String {
     format!("winget/{}", package_name.replace(' ', "."))
@@ -73,4 +74,15 @@ pub fn seed_catalog_package(
     )?;
 
     Ok(())
+}
+
+pub fn seed_catalog_db(
+    path: &Path,
+    package_name: &str,
+    description: &str,
+    installer_url: &str,
+    hash: &str,
+) -> Result<()> {
+    let conn = Connection::open(path)?;
+    seed_catalog_package(&conn, package_name, description, installer_url, hash)
 }
