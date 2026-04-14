@@ -2,8 +2,8 @@
 //!
 //! These types describe the execution layer that actually performs installs or
 //! removals. The engine family keeps platform-specific details, install scope,
-//! and MSI inventory snapshots together so storage and repair code can persist
-//! the exact state reported by the engine.
+//! uninstall metadata, and MSI inventory snapshots together so storage and
+//! repair code can persist the exact state reported by the engine.
 
 use core::str::FromStr;
 use serde::{Deserialize, Serialize};
@@ -61,6 +61,15 @@ pub enum EngineMetadata {
         registry_keys: Vec<String>,
         /// Shortcuts touched by the installer.
         shortcuts: Vec<String>,
+    },
+    /// Metadata for a native executable installation.
+    NativeExe {
+        /// Quiet uninstall command published by the installer, if available.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        quiet_uninstall_command: Option<String>,
+        /// Standard uninstall command published by the installer, if available.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        uninstall_command: Option<String>,
     },
 }
 
@@ -153,7 +162,44 @@ impl EngineMetadata {
             Self::Msix {
                 package_full_name, ..
             } => Some(package_full_name.as_str()),
-            Self::Msi { .. } => None,
+            Self::Msi { .. } | Self::NativeExe { .. } => None,
+        }
+    }
+
+    /// Build native-executable metadata from discovered uninstall commands.
+    pub fn native_exe(
+        quiet_uninstall_command: Option<String>,
+        uninstall_command: Option<String>,
+    ) -> Self {
+        Self::NativeExe {
+            quiet_uninstall_command,
+            uninstall_command,
+        }
+    }
+
+    /// Return the quiet uninstall command if the metadata contains one.
+    pub fn native_exe_quiet_uninstall_command(&self) -> Option<&str> {
+        match self {
+            Self::NativeExe {
+                quiet_uninstall_command: Some(command),
+                ..
+            } => Some(command.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Return the best available uninstall command for a native executable.
+    pub fn native_exe_uninstall_command(&self) -> Option<&str> {
+        match self {
+            Self::NativeExe {
+                quiet_uninstall_command: Some(command),
+                ..
+            } => Some(command.as_str()),
+            Self::NativeExe {
+                uninstall_command: Some(command),
+                ..
+            } => Some(command.as_str()),
+            _ => None,
         }
     }
 }
@@ -217,7 +263,7 @@ impl From<InstallScope> for String {
 
 #[cfg(test)]
 mod tests {
-    use super::EngineKind;
+    use super::{EngineKind, EngineMetadata};
     use core::str::FromStr;
 
     #[test]
@@ -225,5 +271,35 @@ mod tests {
         let err = EngineKind::from_str("exe").expect_err("exe should not parse as an engine kind");
 
         assert!(err.to_string().contains("invalid engine.kind: exe"));
+    }
+
+    #[test]
+    fn native_exe_metadata_prefers_quiet_uninstall_command() {
+        let metadata = EngineMetadata::native_exe(
+            Some("C:\\Apps\\Demo\\uninstall.exe /S".to_string()),
+            Some("C:\\Apps\\Demo\\uninstall.exe".to_string()),
+        );
+
+        assert_eq!(
+            metadata.native_exe_quiet_uninstall_command(),
+            Some("C:\\Apps\\Demo\\uninstall.exe /S")
+        );
+        assert_eq!(
+            metadata.native_exe_uninstall_command(),
+            Some("C:\\Apps\\Demo\\uninstall.exe /S")
+        );
+    }
+
+    #[test]
+    fn native_exe_metadata_falls_back_to_uninstall_command() {
+        let metadata =
+            EngineMetadata::native_exe(None, Some("C:\\Apps\\Demo\\uninstall.exe".to_string()));
+
+        assert_eq!(metadata.native_exe_quiet_uninstall_command(), None);
+        assert_eq!(
+            metadata.native_exe_uninstall_command(),
+            Some("C:\\Apps\\Demo\\uninstall.exe")
+        );
+        assert_eq!(metadata.msix_package_full_name(), None);
     }
 }

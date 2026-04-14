@@ -101,3 +101,42 @@ fn update_status_and_engine_metadata_round_trip() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn update_status_and_engine_metadata_round_trip_native_exe() -> Result<()> {
+    let test_root = tempdir()?;
+    init_database(test_root.path())?;
+
+    let conn = database::get_conn()?;
+    conn.execute("DELETE FROM installed_packages", [])?;
+    let mut package = sample_package("Contoso.NativeExe", PackageStatus::Installing);
+    package.engine_kind = EngineKind::NativeExe;
+    package.kind = InstallerType::Exe;
+
+    database::insert_package(&conn, &package)?;
+
+    database::update_status_and_engine_metadata(
+        &conn,
+        &package.name,
+        PackageStatus::Ok,
+        Some(&EngineMetadata::native_exe(
+            Some("C:\\Apps\\Contoso.NativeExe\\uninstall.exe /S".to_string()),
+            Some("C:\\Apps\\Contoso.NativeExe\\uninstall.exe".to_string()),
+        )),
+        &package.install_dir,
+        "2026-03-24T00:10:00Z",
+    )?;
+
+    let stored = database::get_package(&conn, &package.name)?.expect("package should exist");
+    assert_eq!(stored.status, PackageStatus::Ok);
+    assert_eq!(stored.engine_kind, EngineKind::NativeExe);
+    assert_eq!(
+        stored.engine_metadata,
+        Some(EngineMetadata::native_exe(
+            Some("C:\\Apps\\Contoso.NativeExe\\uninstall.exe /S".to_string()),
+            Some("C:\\Apps\\Contoso.NativeExe\\uninstall.exe".to_string()),
+        ))
+    );
+
+    Ok(())
+}

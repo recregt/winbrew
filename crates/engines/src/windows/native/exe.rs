@@ -2,12 +2,14 @@ use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use tracing::warn;
 
 use winbrew_core::fs::cleanup_path;
 use winbrew_models::catalog::package::CatalogInstaller;
-use winbrew_models::install::engine::{EngineInstallReceipt, EngineKind};
+use winbrew_models::install::engine::{EngineInstallReceipt, EngineKind, EngineMetadata};
 use winbrew_models::install::installed::InstalledPackage;
 use winbrew_models::install::installer::InstallerType;
+use winbrew_windows::uninstall_roots;
 
 const NATIVE_EXE_SUCCESS_EXIT_CODES: &[i32] = &[0, 1641, 3010];
 
@@ -50,10 +52,27 @@ pub fn install(
             );
         }
 
+        let engine_metadata =
+            capture_native_exe_metadata(package_name, install_dir).map(|metadata| match metadata {
+                NativeExeInstallMetadata::QuietOnly(command) => {
+                    EngineMetadata::native_exe(Some(command), None)
+                }
+                NativeExeInstallMetadata::QuietAndStandard {
+                    quiet_uninstall_command,
+                    uninstall_command,
+                } => EngineMetadata::native_exe(
+                    Some(quiet_uninstall_command),
+                    Some(uninstall_command),
+                ),
+                NativeExeInstallMetadata::StandardOnly(command) => {
+                    EngineMetadata::native_exe(None, Some(command))
+                }
+            });
+
         Ok(EngineInstallReceipt::new(
             EngineKind::NativeExe,
             install_dir.to_string_lossy().into_owned(),
-            None,
+            engine_metadata,
         ))
     }
 }
@@ -67,11 +86,142 @@ pub fn remove(package: &InstalledPackage) -> Result<()> {
 
     #[cfg(windows)]
     {
+        if let Some(command) = package
+            .engine_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.native_exe_uninstall_command())
+            && let Err(err) = run_uninstall_command(command, &package.name)
+        {
+            warn!(
+                package = package.name.as_str(),
+                error = %err,
+                "native executable uninstall command failed; falling back to directory cleanup"
+            );
+        }
+
         cleanup_path(Path::new(&package.install_dir))
             .with_context(|| format!("failed to remove {}", package.install_dir))?;
 
         Ok(())
     }
+}
+
+enum NativeExeInstallMetadata {
+    QuietOnly(String),
+    QuietAndStandard {
+        quiet_uninstall_command: String,
+        uninstall_command: String,
+    },
+    StandardOnly(String),
+}
+
+fn capture_native_exe_metadata(
+    package_name: &str,
+    install_dir: &Path,
+) -> Option<NativeExeInstallMetadata> {
+    let mut fallback = None;
+    let package_name = package_name.trim();
+
+    for root in uninstall_roots() {
+        for key_result in root.key.enum_keys() {
+            let Ok(key_name) = key_result else { continue };
+            let Ok(app_key) = root.key.open_subkey(&key_name) else {
+                continue;
+            };
+
+            let Ok(display_name) = app_key.get_value::<String, _>("DisplayName") else {
+                continue;
+            };
+
+            if !display_name.trim().eq_ignore_ascii_case(package_name) {
+                continue;
+            }
+
+            let install_location = match app_key.get_value::<String, _>("InstallLocation") {
+                Ok(value) if !value.trim().is_empty() => Some(value),
+                _ => None,
+            };
+
+            if let Some(install_location) = install_location
+                && !same_install_location(Path::new(&install_location), install_dir)
+            {
+                continue;
+            }
+
+            let quiet_uninstall_command =
+                match app_key.get_value::<String, _>("QuietUninstallString") {
+                    Ok(value) if !value.trim().is_empty() => Some(value),
+                    _ => None,
+                };
+            let uninstall_command = match app_key.get_value::<String, _>("UninstallString") {
+                Ok(value) if !value.trim().is_empty() => Some(value),
+                _ => None,
+            };
+
+            match (quiet_uninstall_command, uninstall_command) {
+                (Some(quiet_uninstall_command), Some(uninstall_command)) => {
+                    return Some(NativeExeInstallMetadata::QuietAndStandard {
+                        quiet_uninstall_command,
+                        uninstall_command,
+                    });
+                }
+                (Some(quiet_uninstall_command), None) => {
+                    return Some(NativeExeInstallMetadata::QuietOnly(quiet_uninstall_command));
+                }
+                (None, Some(uninstall_command)) => {
+                    fallback
+                        .get_or_insert(NativeExeInstallMetadata::StandardOnly(uninstall_command));
+                }
+                (None, None) => continue,
+            }
+        }
+    }
+
+    fallback
+}
+
+fn same_install_location(left: &Path, right: &Path) -> bool {
+    match (fs::canonicalize(left), fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => normalize_path_text(left) == normalize_path_text(right),
+    }
+}
+
+fn normalize_path_text(path: &Path) -> String {
+    path.to_string_lossy()
+        .replace('/', "\\")
+        .trim_end_matches('\\')
+        .to_ascii_lowercase()
+}
+
+fn run_uninstall_command(command: &str, package_name: &str) -> Result<()> {
+    let mut command_parts = split_switches(command)?;
+
+    if command_parts.is_empty() {
+        bail!("native executable uninstall command is empty for '{package_name}'");
+    }
+
+    let program = command_parts.remove(0);
+    let status = Command::new(program)
+        .args(command_parts)
+        .status()
+        .with_context(|| {
+            format!("failed to launch native executable uninstaller for {package_name}")
+        })?;
+
+    let exit_code = status.code().ok_or_else(|| {
+        anyhow::anyhow!("native executable uninstaller terminated without an exit code")
+    })?;
+
+    if !NATIVE_EXE_SUCCESS_EXIT_CODES.contains(&exit_code) {
+        bail!(
+            "native executable uninstaller for {} failed with exit code {}",
+            package_name,
+            exit_code
+        );
+    }
+
+    Ok(())
 }
 
 #[cfg(windows)]
