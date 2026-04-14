@@ -23,14 +23,17 @@ pub(super) fn scan_orphaned_install_dirs(
         Ok(entries) => entries,
         Err(err) => {
             let mut result = OrphanInstallScan::new();
-            result.diagnostics.push(DiagnosisResult {
-                error_code: "packages_root_unreadable".to_string(),
-                description: format!(
-                    "packages root: unreadable packages directory ({}) - {err}",
-                    packages_root.to_string_lossy()
-                ),
-                severity: DiagnosisSeverity::Error,
-            });
+            result.push(
+                DiagnosisResult {
+                    error_code: "packages_root_unreadable".to_string(),
+                    description: format!(
+                        "packages root: unreadable packages directory ({}) - {err}",
+                        packages_root.to_string_lossy()
+                    ),
+                    severity: DiagnosisSeverity::Error,
+                },
+                None,
+            );
             return result;
         }
     };
@@ -58,7 +61,7 @@ pub(super) fn scan_orphaned_install_dirs(
             continue;
         }
 
-        result.push(package_name, &path);
+        result.push_orphan(package_name, &path);
     }
 
     result.diagnostics = sort_diagnoses(result.diagnostics);
