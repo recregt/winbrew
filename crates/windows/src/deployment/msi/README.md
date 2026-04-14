@@ -267,15 +267,15 @@ Common failure classes:
 The scanner is read-only, so there is no rollback or partial write behavior here.
 If it fails, nothing has been persisted yet.
 
-## Relationship to storage
+## Relationship to database
 
 The scanner does not write to SQLite. It only produces the snapshot shape that
-`winbrew-storage` knows how to persist.
+`winbrew-database` knows how to persist.
 
 That separation is deliberate:
 
 - `msi` reads and normalizes MSI data
-- `storage` owns transactional persistence and reverse lookups
+- `database` owns transactional persistence and reverse lookups
 - `app` decides when a successful scan should be committed
 
 Keeping those responsibilities separate makes the MSI scan logic easier to

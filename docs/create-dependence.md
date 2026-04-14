@@ -86,12 +86,12 @@ It may construct:
 
 It must remain presentation-only.
 
-### Core, Storage, and Windows Layers
+### Core, Database, and Windows Layers
 
 These crates own shared infrastructure or platform-specific resources.
 
 - `winbrew-core` owns shared infrastructure helpers such as temp workspace and network primitives.
-- `winbrew-storage` owns persistence helpers and database connection access.
+- `winbrew-database` owns persistence helpers and database connection access.
 - `winbrew-windows` owns platform-specific wrappers and platform resource creation.
 
 These crates should expose factory helpers for their own resources, but they should not absorb presentation state.
@@ -106,8 +106,8 @@ These crates should expose factory helpers for their own resources, but they sho
 | `Ui::new` / `UiBuilder::new` | `winbrew-ui` | `UiSettings` | `Ui` | CLI command handlers | Presentation only |
 | `install::download::build_client` | `winbrew-app` via `winbrew-core` network helper | user agent, network config | HTTP client | install and repair flows | Infrastructure helper, not UI-aware |
 | `temp_workspace::build_temp_root` | `winbrew-core` | package name, version | temp path | install and repair flows | Shared infrastructure helper |
-| `database::get_conn` | `winbrew-storage` | current database state | DB connection | app and bootstrap code | Persistence boundary |
-| `database::get_catalog_conn` | `winbrew-storage` | current catalog database state | catalog DB connection | repair and install resolution | Persistence boundary |
+| `database::get_conn` | `winbrew-database` | current database state | DB connection | app and bootstrap code | Persistence boundary |
+| `database::get_catalog_conn` | `winbrew-database` | current catalog database state | catalog DB connection | repair and install resolution | Persistence boundary |
 | `repair::build_repair_plan` | `winbrew-app` | `HealthReport`, packages root | `RepairPlan` | CLI repair orchestration | Pure planning helper |
 | `repair::resolve_file_restore_target` | `winbrew-app` | package name, chooser callback | resolution enum | CLI repair orchestration | Decision helper, no UI ownership |
 | `install::run` | `winbrew-app` | `AppContext`, package ref, observer | install outcome | CLI install and repair | App-owned execution with callback boundary |

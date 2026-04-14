@@ -9,7 +9,7 @@ use crate::shared::ModelError;
 
 pub const SCHEMA_VERSION: u32 = 1;
 /// Schema version for the generated SQLite catalog database.
-pub const CATALOG_DB_SCHEMA_VERSION: u32 = 5;
+pub const CATALOG_DB_SCHEMA_VERSION: u32 = 1;
 
 /// Summary metadata for a generated catalog snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,7 +21,6 @@ pub struct CatalogMetadata {
     /// Hash of the current catalog payload.
     pub current_hash: String,
     /// Hash of the previous catalog payload, when known.
-    #[serde(default)]
     pub previous_hash: String,
     /// Total package count in the snapshot.
     pub package_count: usize,

@@ -27,7 +27,7 @@ Use it when you want to answer one of these questions:
 
 - [winbrew-models](../crates/models/src/lib.rs) for typed model contracts.
 - [winbrew-core](../crates/core/src/lib.rs) for shared filesystem, hash, network, and path helpers.
-- [winbrew-storage](../crates/storage/src/lib.rs) for persistence and database access.
+- [winbrew-database](../crates/database/src/lib.rs) for persistence and database access.
 - [winbrew-engines](../crates/engines/src/lib.rs) for engine dispatch and platform-specific installers.
 - [winbrew-app](../crates/app/src/lib.rs) for workflow orchestration.
 - [winbrew-cli](../crates/cli/src/lib.rs) for command parsing, dispatch, and terminal wiring.
