@@ -19,8 +19,8 @@ use tracing::{debug, warn};
 use std::path::PathBuf;
 
 use crate::core::fs::cleanup_path;
+use crate::database;
 use crate::engines::{EngineKind, PackageEngine};
-use crate::storage::database;
 
 use super::{RemovalError, RemovalPlan, Result};
 use crate::models::domains::installed::InstalledPackage;

@@ -132,7 +132,7 @@ fn diagnose_msi_file_error(
 }
 
 pub(crate) fn scan_msi_inventory(
-    conn: &crate::storage::DbConnection,
+    conn: &crate::database::DbConnection,
     packages: &[InstalledPackage],
 ) -> MsiInventoryScan {
     let mut scan = MsiInventoryScan::new();
@@ -143,7 +143,7 @@ pub(crate) fn scan_msi_inventory(
             crate::models::domains::install::EngineKind::Msi
         )
     }) {
-        let snapshot = match crate::storage::database::get_snapshot(conn, &pkg.name) {
+        let snapshot = match crate::database::get_snapshot(conn, &pkg.name) {
             Ok(Some(snapshot)) => snapshot,
             Ok(None) => {
                 scan.push(

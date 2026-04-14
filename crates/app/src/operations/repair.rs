@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use crate::AppContext;
 use crate::catalog;
 use crate::core::{fs::cleanup_path, temp_workspace};
+use crate::database;
 use crate::engines::{self, EngineKind};
 use crate::models::catalog::{CatalogInstaller, CatalogPackage};
 use crate::models::domains::installed::InstalledPackage;
@@ -17,7 +18,6 @@ use crate::models::domains::package::{PackageId, PackageRef};
 use crate::models::domains::reporting::{HealthReport, RecoveryActionGroup};
 use crate::operations::install::{self, InstallObserver};
 use crate::operations::remove;
-use crate::storage::database;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileRestorePackage {
@@ -143,12 +143,12 @@ pub fn resolve_repair_catalog_package<FChoose>(
 where
     FChoose: FnMut(&str, &[CatalogPackage]) -> Result<usize>,
 {
-    let catalog_conn = crate::storage::get_catalog_conn()?;
+    let catalog_conn = crate::database::get_catalog_conn()?;
     resolve_repair_catalog_package_with_conn(&catalog_conn, package_name, choose_package)
 }
 
 fn resolve_repair_catalog_package_with_conn<FChoose>(
-    catalog_conn: &crate::storage::DbConnection,
+    catalog_conn: &crate::database::DbConnection,
     package_name: &str,
     choose_package: FChoose,
 ) -> Result<CatalogPackage>
@@ -169,7 +169,7 @@ pub fn resolve_file_restore_target<FChoose>(
 where
     FChoose: FnMut(&str, &[CatalogPackage]) -> Result<usize>,
 {
-    let catalog_conn = crate::storage::get_catalog_conn()?;
+    let catalog_conn = crate::database::get_catalog_conn()?;
     let conn = database::get_conn()?;
     let package =
         resolve_repair_catalog_package_with_conn(&catalog_conn, package_name, choose_package)?;
@@ -185,7 +185,7 @@ where
         )));
     }
 
-    let installers = crate::storage::get_installers(&catalog_conn, &package.id)?;
+    let installers = crate::database::get_installers(&catalog_conn, &package.id)?;
     let installer = install::types::select_installer(&installers)?;
     let engine = engines::resolve_engine_for_installer(&installer)?;
 

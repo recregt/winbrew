@@ -3,9 +3,9 @@ use std::path::Path;
 
 use anyhow::Result;
 
+use crate::database;
 use crate::models::domains::installed::InstalledPackage;
 use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity, RecoveryFinding};
-use crate::storage::database;
 
 use super::{sort_diagnoses, sort_recovery_findings};
 
@@ -149,7 +149,7 @@ pub(crate) fn scan_packages(packages: &[InstalledPackage]) -> PackageInstallScan
 }
 
 pub(crate) fn installed_packages(
-    conn: &crate::storage::DbConnection,
+    conn: &crate::database::DbConnection,
 ) -> Result<Vec<InstalledPackage>> {
     database::list_packages(conn)
 }

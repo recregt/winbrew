@@ -145,9 +145,9 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bitflags"
-version = "2.11.0"
+version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "843867be96c8daad0d758b57df9392b6d8d271134fce549de6ce169ff98a92af"
+checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
 
 [[package]]
 name = "block-buffer"
@@ -914,9 +914,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-rustls"
-version = "0.27.8"
+version = "0.27.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2b52f86d1d4bc0d6b4e6826d960b1b333217e07d36b882dca570a5e1c48895b"
+checksum = "33ca68d021ef39cf6463ab54c1d0f5daf03377b70561305bb89a8f83aab66e0f"
 dependencies = [
  "http",
  "hyper",
@@ -1666,9 +1666,9 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ec095654a25171c2124e9e3393a930bddbffdc939556c914957a4c3e0a87166"
+checksum = "44c5af06bb1b7d3216d91932aed5265164bf384dc89cd6ba05cf59a35f5f76ea"
 dependencies = [
  "rand_chacha",
  "rand_core",
@@ -1899,9 +1899,9 @@ checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.11"
+version = "0.103.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20a6af516fea4b20eccceaf166e8aa666ac996208e8a644ce3ef5aa783bc7cd4"
+checksum = "8279bb85272c9f10811ae6a6c547ff594d6a7f3c6c6b02ee9726d1d0dcfcdd06"
 dependencies = [
  "aws-lc-rs",
  "ring",
@@ -2842,9 +2842,9 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "winbrew-core",
+ "winbrew-database",
  "winbrew-engines",
  "winbrew-models",
- "winbrew-storage",
 ]
 
 [[package]]
@@ -2902,6 +2902,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "winbrew-database"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "r2d2",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "winbrew-core",
+ "winbrew-models",
+]
+
+[[package]]
 name = "winbrew-engines"
 version = "0.1.0"
 dependencies = [
@@ -2940,23 +2958,6 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "url",
-]
-
-[[package]]
-name = "winbrew-storage"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "r2d2",
- "rusqlite",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "toml",
- "tracing",
- "tracing-subscriber",
- "winbrew-core",
- "winbrew-models",
 ]
 
 [[package]]

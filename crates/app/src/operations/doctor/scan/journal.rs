@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::core::paths::ResolvedPaths;
+use crate::database;
 use crate::models::domains::installed::InstalledPackage;
 use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity};
-use crate::storage::database;
 
 use super::{PackageJournalScan, sort_diagnoses, sort_recovery_findings};
 

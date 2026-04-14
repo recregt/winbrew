@@ -12,7 +12,7 @@ build = "build.rs"
 anyhow.workspace = true
 winbrew-core = { path = "../core" }
 winbrew-models = { path = "../models" }
-winbrew-storage = { path = "../storage" }
+winbrew-database = { path = "../database" }
 winbrew-engines = { path = "../engines" }
 serde_json = "1"
 thiserror = "2.0"

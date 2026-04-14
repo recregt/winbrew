@@ -106,7 +106,7 @@ pub fn update_status_and_engine_metadata(
 }
 
 pub fn commit_install(
-    conn: &mut crate::database::DbConnection,
+    conn: &mut crate::DbConnection,
     name: &str,
     engine_receipt: &EngineInstallReceipt,
 ) -> Result<()> {
@@ -125,7 +125,7 @@ pub fn commit_install(
     )?;
 
     if let Some(snapshot) = engine_receipt.msi_inventory_snapshot.as_ref() {
-        crate::database::apply_snapshot(&tx, snapshot)?;
+        crate::apply_snapshot(&tx, snapshot)?;
     }
 
     tx.commit().context("failed to commit install state")?;
@@ -135,7 +135,7 @@ pub fn commit_install(
 
 pub fn replay_committed_journal(
     conn: &mut Connection,
-    journal: &crate::database::CommittedJournalPackage,
+    journal: &crate::CommittedJournalPackage,
 ) -> Result<()> {
     let tx = conn
         .transaction()
@@ -255,7 +255,7 @@ mod tests {
     use super::{
         get_package, insert_package, replay_committed_journal, update_status_and_engine_metadata,
     };
-    use crate::database::migration;
+    use crate::migration;
     use rusqlite::Connection;
     use std::path::PathBuf;
     use winbrew_models::install::engine::{EngineKind, EngineMetadata, InstallScope};
@@ -341,7 +341,7 @@ mod tests {
             ..sample_package(package_name)
         };
 
-        let replay = crate::database::CommittedJournalPackage {
+        let replay = crate::CommittedJournalPackage {
             journal_path: PathBuf::from("C:/tmp/journal.jsonl"),
             entries: Vec::new(),
             package: replay_package,

@@ -1,34 +1,36 @@
-//! SQLite persistence entry point for WinBrew.
+//! Persistence layer for WinBrew.
 //!
-//! This module intentionally models one active managed root per process. It
-//! owns the process-local resolved paths plus the primary and catalog pool
-//! registries used by the app and CLI layers. That keeps persistence helpers
-//! centralized while the underlying SQLite files are recreated or migrated.
+//! `winbrew-database` owns SQLite access, config persistence, journal replay,
+//! and MSI inventory normalization. It stays close to the runtime database
+//! contract so higher layers can use typed helpers instead of direct SQL
+//! plumbing.
 //!
-//! If WinBrew ever needs multi-root or daemon-style storage, this module is
-//! the boundary that would need a different context model.
+//! The database module keeps its pool registry keyed by resolved paths. That
+//! makes the current process-local root model explicit while still keeping the
+//! storage boundary centralized for the app and CLI layers.
 
+#![cfg(windows)]
+
+pub use winbrew_core as core;
+
+pub mod catalog;
+pub mod config;
+pub mod connection;
+pub mod errors;
+pub mod installed_packages;
+pub mod journal;
+pub mod migration;
+pub mod msi_inventory;
+
+use self::connection::SqliteConnectionManager;
 use anyhow::{Context, Result};
 use r2d2::{Pool, PooledConnection};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
+use winbrew_core::paths::ResolvedPaths;
 
-use crate::core::paths::ResolvedPaths;
-
-mod catalog;
-mod config;
-mod connection;
-mod errors;
-mod installed_packages;
-mod journal;
-mod migration;
-mod msi_inventory;
-
-use self::connection::SqliteConnectionManager;
-
-/// Database connection type used by the storage layer.
 pub type DbConnection = PooledConnection<SqliteConnectionManager>;
 
 pub use errors::{CatalogNotFoundError, CatalogSchemaVersionMismatchError};

@@ -145,7 +145,7 @@ mod tests {
     use winbrew_models::install::installer::InstallerType;
     use winbrew_models::shared::HashAlgorithm;
 
-    const CATALOG_SCHEMA: &str = include_str!("../../../../infra/parser/schema/catalog.sql");
+    const CATALOG_SCHEMA: &str = include_str!("../../../infra/parser/schema/catalog.sql");
 
     fn create_catalog_installers_table(conn: &Connection) {
         conn.execute_batch(

@@ -1,10 +1,10 @@
 use crate::core::paths::resolved_paths;
+use crate::database;
 use crate::models::domains::install::InstallerType;
 use crate::models::domains::installed::{InstalledPackage, PackageStatus};
 use crate::models::domains::reporting::{
     DiagnosisSeverity, RecoveryActionGroup, RecoveryIssueKind,
 };
-use crate::storage::{self, database};
 use std::fs;
 use std::path::Path;
 use tempfile::tempdir;
@@ -51,7 +51,7 @@ fn init_storage(root: &Path) {
     let cache = root.join("cache").to_string_lossy().into_owned();
     let paths = resolved_paths(root, &packages, &data, &logs, &cache);
 
-    storage::init(&paths).expect("storage should initialize");
+    database::init(&paths).expect("database should initialize");
 }
 
 fn resolved_root_paths(root: &Path) -> crate::core::paths::ResolvedPaths {
@@ -191,9 +191,9 @@ fn scan_msi_inventory_detects_hash_mismatch() {
         "0000000000000000000000000000000000000000000000000000000000000000",
     );
 
-    let mut conn = storage::get_conn().expect("database connection");
-    storage::insert_package(&conn, &package).expect("insert package");
-    storage::replace_snapshot(&mut conn, &snapshot).expect("replace snapshot");
+    let mut conn = database::get_conn().expect("database connection");
+    database::insert_package(&conn, &package).expect("insert package");
+    database::replace_snapshot(&mut conn, &snapshot).expect("replace snapshot");
 
     let scan = super::scan_msi_inventory(&conn, &[package]);
 
@@ -231,9 +231,9 @@ fn scan_msi_inventory_detects_missing_files() {
         "0000000000000000000000000000000000000000000000000000000000000000",
     );
 
-    let mut conn = storage::get_conn().expect("database connection");
-    storage::insert_package(&conn, &package).expect("insert package");
-    storage::replace_snapshot(&mut conn, &snapshot).expect("replace snapshot");
+    let mut conn = database::get_conn().expect("database connection");
+    database::insert_package(&conn, &package).expect("insert package");
+    database::replace_snapshot(&mut conn, &snapshot).expect("replace snapshot");
 
     let scan = super::scan_msi_inventory(&conn, &[package]);
 

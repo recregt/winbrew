@@ -44,7 +44,7 @@ pub(crate) fn cleanup_temp_root(temp_root: &Path) {
 /// install directories are removed so the next install attempt starts from a
 /// clean slate.
 pub(crate) fn rollback_failed_install(
-    conn: &crate::storage::DbConnection,
+    conn: &crate::database::DbConnection,
     name: &str,
     install_dir: &Path,
 ) {
@@ -58,7 +58,7 @@ pub(crate) fn rollback_failed_install(
 /// a separate function so the outer workflow can keep cancellation semantics
 /// explicit.
 pub(crate) fn rollback_cancelled_install(
-    conn: &crate::storage::DbConnection,
+    conn: &crate::database::DbConnection,
     name: &str,
     install_dir: &Path,
 ) {
