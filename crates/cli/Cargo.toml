@@ -27,3 +27,4 @@ mockito = "1"
 rusqlite = { version = "0.39", default-features = false, features = ["bundled", "modern_sqlite", "unlock_notify"] }
 winbrew-core = { path = "../core" }
 zip = "8"
+winbrew-testing = { path = "../testing" }

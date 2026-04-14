@@ -1,20 +1,22 @@
-#[path = "common/mod.rs"]
-mod common;
-
 use anyhow::Result;
-use common::db::{init_database, reset_installed_packages};
-use common::shared_root::test_root;
-use winbrew::database;
-use winbrew_models::domains::install::{
-    EngineKind, EngineMetadata, InstallScope, InstallerType,
-};
+use std::path::Path;
+use tempfile::tempdir;
+use winbrew_database as database;
+use winbrew_models::domains::install::{EngineKind, EngineMetadata, InstallScope, InstallerType};
 use winbrew_models::domains::installed::{InstalledPackage as Package, PackageStatus};
+
+fn init_database(root: &Path) -> Result<()> {
+    let config = database::Config::load_at(root)?;
+    database::init(&config.resolved_paths())?;
+    Ok(())
+}
 
 fn sample_package(name: &str, status: PackageStatus) -> Package {
     Package {
         name: name.to_string(),
         version: "1.0.0".to_string(),
         kind: InstallerType::Portable,
+        deployment_kind: InstallerType::Portable.deployment_kind(),
         engine_kind: EngineKind::Portable,
         engine_metadata: None,
         install_dir: format!(r"C:\\winbrew\\packages\\{name}"),
@@ -26,12 +28,11 @@ fn sample_package(name: &str, status: PackageStatus) -> Package {
 
 #[test]
 fn package_crud_round_trip() -> Result<()> {
-    let test_root = test_root();
-    let root = test_root.path();
-    init_database(root)?;
+    let test_root = tempdir()?;
+    init_database(test_root.path())?;
 
     let conn = database::get_conn()?;
-    reset_installed_packages(&conn)?;
+    conn.execute("DELETE FROM installed_packages", [])?;
     let package = sample_package("Contoso.RoundTrip", PackageStatus::Installing);
 
     database::insert_package(&conn, &package)?;
@@ -64,12 +65,11 @@ fn package_crud_round_trip() -> Result<()> {
 
 #[test]
 fn update_status_and_engine_metadata_round_trip() -> Result<()> {
-    let test_root = test_root();
-    let root = test_root.path();
-    init_database(root)?;
+    let test_root = tempdir()?;
+    init_database(test_root.path())?;
 
     let conn = database::get_conn()?;
-    reset_installed_packages(&conn)?;
+    conn.execute("DELETE FROM installed_packages", [])?;
     let mut package = sample_package("Contoso.Msix", PackageStatus::Installing);
     package.engine_kind = EngineKind::Msix;
     package.kind = InstallerType::Msix;
@@ -84,6 +84,8 @@ fn update_status_and_engine_metadata_round_trip() -> Result<()> {
             "Contoso.Msix_1.0.0_x64__8wekyb3d8bbwe",
             InstallScope::Installed,
         )),
+        &package.install_dir,
+        "2026-03-24T00:10:00Z",
     )?;
 
     let stored = database::get_package(&conn, &package.name)?.expect("package should exist");
