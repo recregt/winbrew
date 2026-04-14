@@ -24,6 +24,8 @@ pub fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, ParserErro
         source: package_id.source(),
         namespace: package_id.namespace().map(str::to_string),
         source_id: package_id.source_id().to_string(),
+        created_at: None,
+        updated_at: None,
         description: raw.description,
         homepage: raw.homepage,
         license: raw.license,
