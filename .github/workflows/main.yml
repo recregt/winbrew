@@ -113,22 +113,12 @@ jobs:
 
           cargo doc --locked --workspace --document-private-items --no-deps
 
-          printf '%s\n' '<meta http-equiv="refresh" content="0; url=winbrew/index.html">' > target/doc/index.html
-
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy target/doc --project-name=winbrew --branch=main --commit-dirty=true
-
-      - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: .cloudflare
-          command: deploy
 
   spellcheck:
     name: Spell Check with Typos
