@@ -293,6 +293,52 @@ fn scan_package_journals_detects_incomplete_journal() {
 }
 
 #[test]
+fn scan_package_journals_detects_malformed_journal() {
+    let root = tempdir().expect("temp root");
+    let paths = resolved_root_paths(root.path());
+
+    let journal_dir = paths.pkgdb.join("Contoso.Malformed");
+    fs::create_dir_all(&journal_dir).expect("journal dir should be created");
+    let journal_path = journal_dir.join("journal.jsonl");
+    fs::write(&journal_path, b"{not-json}\n").expect("write malformed journal");
+
+    let scan = super::scan_package_journals(&paths, &[]);
+
+    assert_eq!(scan.diagnostics.len(), 1);
+    assert_eq!(scan.diagnostics[0].error_code, "malformed_package_journal");
+    assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Error);
+    assert_eq!(scan.recovery_findings.len(), 1);
+    assert_eq!(
+        scan.recovery_findings[0].issue_kind,
+        RecoveryIssueKind::RecoveryTrailMissing
+    );
+    assert!(scan.recovery_findings[0].target_path.is_none());
+}
+
+#[test]
+fn scan_package_journals_reports_missing_journal_metadata() {
+    let root = tempdir().expect("temp root");
+    let paths = resolved_root_paths(root.path());
+
+    let mut writer =
+        database::JournalWriter::open_for_package(root.path(), "Contoso.MissingMeta", "1.0.0")
+            .expect("open journal");
+    writer
+        .append(&database::JournalEntry::Commit {
+            installed_at: "2026-04-12T00:00:00Z".to_string(),
+        })
+        .expect("write commit");
+    writer.flush().expect("flush journal");
+
+    let scan = super::scan_package_journals(&paths, &[]);
+
+    assert_eq!(scan.diagnostics.len(), 1);
+    assert_eq!(scan.diagnostics[0].error_code, "missing_journal_metadata");
+    assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Error);
+    assert!(scan.recovery_findings.is_empty());
+}
+
+#[test]
 fn scan_package_journals_detects_orphan_committed_journal() {
     let root = tempdir().expect("temp root");
     let paths = resolved_root_paths(root.path());
