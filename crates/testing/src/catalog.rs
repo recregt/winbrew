@@ -23,6 +23,27 @@ pub fn seed_catalog_package(
     conn.execute("DELETE FROM catalog_installers", [])?;
     conn.execute("DELETE FROM catalog_packages", [])?;
 
+    insert_catalog_package(conn, package_name, description, installer_url, hash)
+}
+
+pub fn append_catalog_db(
+    path: &Path,
+    package_name: &str,
+    description: &str,
+    installer_url: &str,
+    hash: &str,
+) -> Result<()> {
+    let conn = Connection::open(path)?;
+    insert_catalog_package(&conn, package_name, description, installer_url, hash)
+}
+
+fn insert_catalog_package(
+    conn: &Connection,
+    package_name: &str,
+    description: &str,
+    installer_url: &str,
+    hash: &str,
+) -> Result<()> {
     let package_id = catalog_package_id(package_name);
     let source_id = package_id
         .split_once('/')
