@@ -135,13 +135,17 @@ pub fn seed_catalog_package(
     conn.execute(
         r#"
         INSERT INTO catalog_installers (
-            package_id, url, hash, hash_algorithm, installer_type, installer_switches, arch, type
+            package_id, url, hash, hash_algorithm, installer_type, installer_switches, arch, kind
         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
         "#,
         params![
             package_id,
             installer_url,
-            hash,
+            if hash.trim().is_empty() {
+                Option::<String>::None
+            } else {
+                Some(hash.to_string())
+            },
             hash_algorithm(hash)
                 .unwrap_or(HashAlgorithm::Sha256)
                 .as_str(),
