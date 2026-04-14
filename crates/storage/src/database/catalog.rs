@@ -255,6 +255,54 @@ mod tests {
     }
 
     #[test]
+    fn package_updates_refresh_updated_at_automatically() {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        conn.execute_batch(CATALOG_SCHEMA)
+            .expect("catalog schema should load");
+
+        conn.execute(
+            r#"
+            INSERT INTO catalog_packages (
+                id, name, version, source, namespace, source_id, description, homepage, license, publisher, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            "#,
+            rusqlite::params![
+                "winget/Contoso.App",
+                "Contoso App",
+                "1.2.3",
+                "winget",
+                Option::<String>::None,
+                "Contoso.App",
+                Some("Example package"),
+                Option::<String>::None,
+                Option::<String>::None,
+                Some("Contoso Ltd."),
+                "2026-04-14 12:00:00",
+                "2026-04-14 12:34:56",
+            ],
+        )
+        .expect("insert catalog package");
+
+        conn.execute(
+            r#"
+            UPDATE catalog_packages
+            SET description = ?1
+            WHERE id = ?2
+            "#,
+            rusqlite::params!["Updated package", "winget/Contoso.App"],
+        )
+        .expect("update catalog package");
+
+        let package = get_package_by_id(&conn, "winget/Contoso.App")
+            .expect("package lookup should succeed")
+            .expect("package should exist");
+
+        assert_eq!(package.description.as_deref(), Some("Updated package"));
+        assert_ne!(package.updated_at.as_deref(), Some("2026-04-14 12:34:56"));
+        assert_eq!(package.created_at.as_deref(), Some("2026-04-14 12:00:00"));
+    }
+
+    #[test]
     fn ensure_schema_version_accepts_expected_version() {
         let conn = Connection::open_in_memory().expect("open in-memory database");
         conn.execute(

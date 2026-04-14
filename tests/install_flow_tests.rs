@@ -363,8 +363,8 @@ fn create_catalog_db_with_hash(path: &Path, installer_url: &str, hash: &str) -> 
     conn.execute(
         r#"
         INSERT INTO catalog_installers (
-            package_id, url, hash, hash_algorithm, arch, type
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            package_id, url, hash, hash_algorithm, installer_type, installer_switches, arch, type
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
         "#,
         params![
             "winget/Winbrew.TestZip",
@@ -373,6 +373,8 @@ fn create_catalog_db_with_hash(path: &Path, installer_url: &str, hash: &str) -> 
             hash_algorithm(hash)
                 .unwrap_or(CatalogHashAlgorithm::Sha256)
                 .as_str(),
+            "zip",
+            Option::<String>::None,
             "",
             "zip",
         ],
