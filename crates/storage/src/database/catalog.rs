@@ -26,37 +26,16 @@ pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
 }
 
 pub fn get_installers(conn: &Connection, package_id: &str) -> Result<Vec<CatalogInstaller>> {
-    let query = if catalog_installers_has_nested_kind(conn)? {
+    let mut stmt = conn.prepare(
         "SELECT package_id, url, hash, arch, type, nested_kind
          FROM catalog_installers
          WHERE package_id = ?1
-         ORDER BY arch ASC, type ASC, nested_kind ASC, url ASC"
-    } else {
-        "SELECT package_id, url, hash, arch, type, NULL AS nested_kind
-         FROM catalog_installers
-         WHERE package_id = ?1
-         ORDER BY arch ASC, type ASC, url ASC"
-    };
-
-    let mut stmt = conn.prepare(query)?;
+         ORDER BY arch ASC, type ASC, nested_kind ASC, url ASC",
+    )?;
 
     stmt.query_map(params![package_id], row_to_installer)?
         .collect::<std::result::Result<Vec<_>, _>>()
         .context("failed to read catalog installer")
-}
-
-fn catalog_installers_has_nested_kind(conn: &Connection) -> Result<bool> {
-    let mut stmt = conn.prepare("PRAGMA table_info(catalog_installers)")?;
-    let mut rows = stmt.query([])?;
-
-    while let Some(row) = rows.next()? {
-        let column_name: String = row.get(1)?;
-        if column_name == "nested_kind" {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
 }
 
 pub fn get_package_by_id(conn: &Connection, package_id: &str) -> Result<Option<CatalogPackage>> {
@@ -126,53 +105,17 @@ mod tests {
     use rusqlite::Connection;
     use winbrew_models::install::installer::InstallerType;
 
-    fn create_catalog_installers_table(conn: &Connection, with_nested_kind: bool) {
-        let nested_kind_column = if with_nested_kind {
-            ",\n    nested_kind TEXT"
-        } else {
-            ""
-        };
-
-        let schema = format!(
-            "CREATE TABLE catalog_installers (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    package_id TEXT NOT NULL,\n    url TEXT NOT NULL,\n    hash TEXT NOT NULL,\n    arch TEXT NOT NULL DEFAULT '',\n    type TEXT NOT NULL DEFAULT ''{nested_kind_column}\n);"
-        );
-
-        conn.execute_batch(&schema)
-            .expect("catalog installers table should be created");
-    }
-
-    #[test]
-    fn get_installers_reads_legacy_schema_without_nested_kind() {
-        let conn = Connection::open_in_memory().expect("open in-memory database");
-        create_catalog_installers_table(&conn, false);
-
-        conn.execute(
-            r#"
-            INSERT INTO catalog_installers (package_id, url, hash, arch, type)
-            VALUES (?1, ?2, ?3, ?4, ?5)
-            "#,
-            rusqlite::params![
-                "winget/Contoso.App",
-                "https://example.test/app.exe",
-                "sha256:deadbeef",
-                "x64",
-                "zip",
-            ],
+    fn create_catalog_installers_table(conn: &Connection) {
+        conn.execute_batch(
+            "CREATE TABLE catalog_installers (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    package_id TEXT NOT NULL,\n    url TEXT NOT NULL,\n    hash TEXT NOT NULL,\n    arch TEXT NOT NULL DEFAULT '',\n    type TEXT NOT NULL DEFAULT '',\n    nested_kind TEXT\n);",
         )
-        .expect("insert legacy installer");
-
-        let installers = get_installers(&conn, "winget/Contoso.App")
-            .expect("legacy catalog installers should load");
-
-        assert_eq!(installers.len(), 1);
-        assert_eq!(installers[0].kind, InstallerType::Zip);
-        assert_eq!(installers[0].nested_kind, None);
+        .expect("catalog installers table should be created");
     }
 
     #[test]
     fn get_installers_reads_nested_kind_when_present() {
         let conn = Connection::open_in_memory().expect("open in-memory database");
-        create_catalog_installers_table(&conn, true);
+        create_catalog_installers_table(&conn);
 
         conn.execute(
             r#"

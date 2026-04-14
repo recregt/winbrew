@@ -94,15 +94,6 @@ impl PackageSource {
             Self::Winbrew => "winbrew",
         }
     }
-
-    pub fn from_catalog_id(id: &str) -> Self {
-        match id.split_once('/') {
-            Some(("scoop", _)) => Self::Scoop,
-            Some(("chocolatey", _)) => Self::Chocolatey,
-            Some(("winbrew", _)) => Self::Winbrew,
-            _ => Self::Winget,
-        }
-    }
 }
 
 impl FromStr for PackageSource {
