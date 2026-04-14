@@ -67,6 +67,7 @@ impl TryFrom<RawCatalogInstaller> for CatalogInstaller {
             package_id: raw.package_id.into(),
             url: raw.url,
             hash: raw.hash,
+            hash_algorithm: raw.hash_algorithm,
             arch: raw.arch.parse()?,
             kind: raw.kind.parse()?,
             nested_kind: raw.nested_kind.map(|kind| kind.parse()).transpose()?,
@@ -113,6 +114,7 @@ mod tests {
             package_id: "winget/Contoso.App".to_string(),
             url: "https://example.test/app.exe".to_string(),
             hash: String::default(),
+            hash_algorithm: crate::shared::HashAlgorithm::Sha256,
             arch: String::default(),
             kind: "portable".to_string(),
             nested_kind: Some("msi".to_string()),
@@ -124,5 +126,9 @@ mod tests {
         assert_eq!(converted.arch, Architecture::Any);
         assert_eq!(converted.kind, InstallerType::Portable);
         assert_eq!(converted.nested_kind, Some(InstallerType::Msi));
+        assert_eq!(
+            converted.hash_algorithm,
+            crate::shared::HashAlgorithm::Sha256
+        );
     }
 }

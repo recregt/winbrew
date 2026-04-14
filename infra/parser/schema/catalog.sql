@@ -1,6 +1,6 @@
 -- Canonical catalog schema for parser-generated snapshots.
 -- Parser code and tests include this file directly to avoid schema drift.
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
 
 CREATE TABLE IF NOT EXISTS catalog_packages (
     id          TEXT PRIMARY KEY,
@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS catalog_installers (
     package_id  TEXT NOT NULL REFERENCES catalog_packages(id) ON DELETE CASCADE,
     url         TEXT NOT NULL,
     hash        TEXT NOT NULL,
+    hash_algorithm TEXT NOT NULL DEFAULT 'sha256' CHECK (hash_algorithm IN ('md5', 'sha1', 'sha256', 'sha512')),
     arch        TEXT NOT NULL DEFAULT '',
     type        TEXT NOT NULL DEFAULT '',
     nested_kind TEXT
@@ -50,6 +51,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_catalog_installers_unique ON catalog_insta
     package_id,
     url,
     hash,
+    hash_algorithm,
     arch,
     type,
     IFNULL(nested_kind, '')

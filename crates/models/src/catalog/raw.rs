@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::shared::HashAlgorithm;
+
 /// Raw package payload exactly as it is received from the upstream feed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RawCatalogPackage {
@@ -37,6 +39,9 @@ pub struct RawCatalogInstaller {
     pub url: String,
     /// Raw checksum string.
     pub hash: String,
+    /// Raw checksum algorithm.
+    #[serde(default)]
+    pub hash_algorithm: HashAlgorithm,
     /// Raw architecture string.
     pub arch: String,
     /// Raw installer kind string.

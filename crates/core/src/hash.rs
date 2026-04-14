@@ -65,33 +65,7 @@ impl Hasher {
 
 /// Detect the checksum algorithm referenced by a hash string.
 pub fn hash_algorithm(value: &str) -> Option<HashAlgorithm> {
-    let normalized = normalize_hash(value);
-
-    if normalized.is_empty() {
-        return None;
-    }
-
-    let trimmed = value.trim_start().to_ascii_lowercase();
-
-    for (prefix, algorithm) in [
-        ("sha512:", HashAlgorithm::Sha512),
-        ("sha256:", HashAlgorithm::Sha256),
-        ("sha1:", HashAlgorithm::Sha1),
-        ("md5:", HashAlgorithm::Md5),
-    ] {
-        if trimmed.starts_with(prefix) {
-            return Some(algorithm);
-        }
-    }
-
-    [
-        HashAlgorithm::Sha512,
-        HashAlgorithm::Sha256,
-        HashAlgorithm::Sha1,
-        HashAlgorithm::Md5,
-    ]
-    .into_iter()
-    .find(|algorithm: &HashAlgorithm| normalized.len() == algorithm.expected_len())
+    HashAlgorithm::detect(value)
 }
 
 pub fn verify_hash(expected_hash: &str, actual_hash: impl AsRef<[u8]>) -> Result<()> {

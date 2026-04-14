@@ -7,6 +7,8 @@ use rusqlite::{Connection, params};
 use winbrew_cli::database::{self, Config};
 use winbrew_cli::models::domains::install::{EngineKind, EngineMetadata, InstallerType};
 use winbrew_cli::models::domains::installed::{InstalledPackage, PackageStatus};
+use winbrew_cli::models::domains::shared::HashAlgorithm;
+use winbrew_core::hash::hash_algorithm;
 
 pub const DEFAULT_INSTALLED_AT: &str = "2026-04-12T00:00:00Z";
 
@@ -133,10 +135,19 @@ pub fn seed_catalog_package(
     conn.execute(
         r#"
         INSERT INTO catalog_installers (
-            package_id, url, hash, arch, type
-        ) VALUES (?1, ?2, ?3, ?4, ?5)
+            package_id, url, hash, hash_algorithm, arch, type
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
         "#,
-        params![package_id, installer_url, hash, "", "zip"],
+        params![
+            package_id,
+            installer_url,
+            hash,
+            hash_algorithm(hash)
+                .unwrap_or(HashAlgorithm::Sha256)
+                .as_str(),
+            "",
+            "zip",
+        ],
     )?;
 
     Ok(())

@@ -1,6 +1,7 @@
 use winbrew_models::catalog::package::{CatalogInstaller, CatalogPackage};
 use winbrew_models::install::installer::{Architecture, InstallerType};
 use winbrew_models::package::PackageId;
+use winbrew_models::shared::HashAlgorithm;
 use winbrew_models::shared::version::Version;
 
 use crate::error::ParserError;
@@ -65,10 +66,14 @@ fn parse_installer(
     package_id: &str,
     raw: RawFetchedInstaller,
 ) -> Result<CatalogInstaller, ParserError> {
+    let hash_algorithm = HashAlgorithm::detect(&raw.hash).unwrap_or_default();
+    let hash = raw.hash;
+
     let installer = CatalogInstaller {
         package_id: package_id.into(),
         url: raw.url,
-        hash: raw.hash,
+        hash,
+        hash_algorithm,
         arch: raw.arch.parse::<Architecture>()?,
         kind: raw.kind.parse::<InstallerType>()?,
         nested_kind: raw.nested_kind.map(|kind| kind.parse()).transpose()?,
@@ -91,6 +96,7 @@ mod tests {
     use crate::raw::{RawFetchedInstaller, RawFetchedPackage};
     use winbrew_models::install::installer::{Architecture, InstallerType};
     use winbrew_models::package::model::PackageSource;
+    use winbrew_models::shared::HashAlgorithm;
 
     #[test]
     fn parses_fetched_package_into_shared_models() {
@@ -116,6 +122,7 @@ mod tests {
         assert_eq!(parsed.installers[0].arch, Architecture::X64);
         assert_eq!(parsed.installers[0].kind, InstallerType::Zip);
         assert_eq!(parsed.installers[0].nested_kind, Some(InstallerType::Msi));
+        assert_eq!(parsed.installers[0].hash_algorithm, HashAlgorithm::Sha256);
         assert!(parsed.raw_json.contains("Contoso.App"));
         assert!(parsed.raw_json.contains("NestedInstallerType"));
     }
@@ -141,6 +148,7 @@ mod tests {
         .expect("package should parse");
 
         assert_eq!(parsed.package.version.to_string(), "2026.3.17");
+        assert_eq!(parsed.installers[0].hash_algorithm, HashAlgorithm::Sha256);
     }
 
     #[test]
