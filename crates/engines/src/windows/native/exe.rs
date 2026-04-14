@@ -327,6 +327,36 @@ fn has_arg_prefix(args: &[String], prefix: &str) -> bool {
 mod tests {
     use super::{has_arg_prefix, split_switches};
 
+    #[cfg(windows)]
+    use super::{NativeExeInstallMetadata, build_install_args, capture_native_exe_metadata};
+
+    use std::path::PathBuf;
+
+    use winbrew_models::catalog::package::CatalogInstaller;
+    use winbrew_models::install::installer::InstallerType;
+    use winbrew_models::shared::CatalogId;
+    use winbrew_windows::create_test_uninstall_entry;
+
+    #[cfg(windows)]
+    fn native_exe_installer(kind: InstallerType, switches: Option<&str>) -> CatalogInstaller {
+        let mut installer = CatalogInstaller::test_builder(
+            CatalogId::parse("winget/Contoso.NativeExe").expect("catalog id should parse"),
+            "https://example.invalid/setup.exe",
+        )
+        .with_kind(kind);
+
+        if let Some(switches) = switches {
+            installer = installer.with_installer_switches(switches);
+        }
+
+        installer
+    }
+
+    #[cfg(windows)]
+    fn native_exe_test_dir(suffix: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("winbrew-nativeexe-{}-{suffix}", std::process::id()))
+    }
+
     #[test]
     fn split_switches_preserves_quoted_arguments() {
         let args = split_switches(r#"/S /D="C:\Program Files\Demo" /quiet"#)
@@ -347,5 +377,105 @@ mod tests {
         let args = vec!["/DIR=C:\\Tools\\App".to_string()];
 
         assert!(has_arg_prefix(&args, "/dir="));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn build_install_args_rejects_generic_exe_without_switches() {
+        let installer = native_exe_installer(InstallerType::Exe, None);
+        let install_dir = native_exe_test_dir("generic-exe");
+
+        let err = build_install_args(&installer, &install_dir, "Contoso.NativeExe")
+            .expect_err("generic exe installs should require explicit switches");
+
+        assert!(
+            err.to_string().contains(
+                "missing installer switches for generic exe installer 'Contoso.NativeExe'"
+            )
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn build_install_args_adds_inno_defaults_and_install_dir() {
+        let installer = native_exe_installer(InstallerType::Inno, Some("/VERYSILENT"));
+        let install_dir = native_exe_test_dir("inno");
+
+        let args = build_install_args(&installer, &install_dir, "Contoso.NativeExe")
+            .expect("inno installs should build args");
+
+        assert_eq!(
+            args,
+            vec![
+                "/VERYSILENT".to_string(),
+                "/SUPPRESSMSGBOXES".to_string(),
+                "/NORESTART".to_string(),
+                "/SP-".to_string(),
+                format!(r"/DIR={}", install_dir.display()),
+            ]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn capture_native_exe_metadata_reads_quiet_and_standard_commands() {
+        let package_name = "Contoso.NativeExe";
+        let install_dir = native_exe_test_dir("quiet-and-standard");
+        std::fs::create_dir_all(&install_dir).expect("install directory should exist");
+        let uninstall_exe = install_dir.join("uninstall.exe");
+        let quiet_command = format!(r"{} /S", uninstall_exe.display());
+        let expected_standard_command = uninstall_exe.display().to_string();
+        let registry_entry = create_test_uninstall_entry(
+            package_name,
+            &install_dir,
+            Some(quiet_command.as_str()),
+            Some(expected_standard_command.as_str()),
+        )
+        .expect("test uninstall entry should be creatable");
+
+        let metadata = capture_native_exe_metadata(package_name, &install_dir)
+            .expect("metadata should be captured");
+
+        assert!(matches!(
+            metadata,
+            NativeExeInstallMetadata::QuietAndStandard {
+                ref quiet_uninstall_command,
+                ref uninstall_command,
+                ..
+            } if quiet_uninstall_command == &quiet_command
+                && uninstall_command == &expected_standard_command
+        ));
+
+        drop(registry_entry);
+        let _ = std::fs::remove_dir_all(&install_dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn capture_native_exe_metadata_falls_back_to_standard_command() {
+        let package_name = "Contoso.NativeExe.Fallback";
+        let install_dir = native_exe_test_dir("standard-only");
+        std::fs::create_dir_all(&install_dir).expect("install directory should exist");
+        let uninstall_exe = install_dir.join("uninstall.exe");
+        let expected_uninstall_command = uninstall_exe.display().to_string();
+        let registry_entry = create_test_uninstall_entry(
+            package_name,
+            &install_dir,
+            None,
+            Some(expected_uninstall_command.as_str()),
+        )
+        .expect("test uninstall entry should be creatable");
+
+        let metadata = capture_native_exe_metadata(package_name, &install_dir)
+            .expect("metadata should be captured");
+
+        assert!(matches!(
+            metadata,
+            NativeExeInstallMetadata::StandardOnly(ref uninstall_command)
+                if uninstall_command == &expected_uninstall_command
+        ));
+
+        drop(registry_entry);
+        let _ = std::fs::remove_dir_all(&install_dir);
     }
 }

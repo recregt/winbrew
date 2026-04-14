@@ -1,8 +1,10 @@
 use anyhow::Result;
 use regex::RegexBuilder;
 
+mod test_support;
 mod uninstall;
 
+pub use test_support::{UninstallEntryGuard, create_test_uninstall_entry};
 pub use uninstall::{Hive, UninstallRoot, uninstall_roots};
 
 /// Display information collected from uninstall registry entries.
