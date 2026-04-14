@@ -13,7 +13,7 @@ use crate::payload::{PayloadKind, classify_payload};
 use crate::windows::package::msix;
 
 #[cfg(windows)]
-use crate::windows::native::msi;
+use crate::windows::native::{exe, msi};
 
 type InstallFn = fn(&CatalogInstaller, &Path, &Path, &str) -> Result<EngineInstallReceipt>;
 type RemoveFn = fn(&InstalledPackage) -> Result<()>;
@@ -28,6 +28,10 @@ struct EngineDescriptor {
 
 fn matches_msix_installer(installer: &CatalogInstaller) -> bool {
     installer.kind.is_windows_package()
+}
+
+fn matches_native_exe_installer(installer: &CatalogInstaller) -> bool {
+    installer.kind.is_native_exe_family()
 }
 
 #[cfg(windows)]
@@ -64,6 +68,24 @@ fn msix_install(
     msix::install::install(download_path, install_dir, package_name)
 }
 
+fn native_exe_install(
+    installer: &CatalogInstaller,
+    download_path: &Path,
+    install_dir: &Path,
+    package_name: &str,
+) -> Result<EngineInstallReceipt> {
+    #[cfg(not(windows))]
+    {
+        let _ = (installer, download_path, install_dir, package_name);
+        bail!("native executable installation is only supported on Windows")
+    }
+
+    #[cfg(windows)]
+    {
+        exe::install(installer, download_path, install_dir, package_name)
+    }
+}
+
 #[cfg(windows)]
 fn msi_install(
     _installer: &CatalogInstaller,
@@ -96,6 +118,19 @@ fn msix_remove(package: &InstalledPackage) -> Result<()> {
     msix::remove::remove(package)
 }
 
+fn native_exe_remove(package: &InstalledPackage) -> Result<()> {
+    #[cfg(not(windows))]
+    {
+        let _ = package;
+        bail!("native executable removal is only supported on Windows")
+    }
+
+    #[cfg(windows)]
+    {
+        exe::remove(package)
+    }
+}
+
 #[cfg(windows)]
 fn msi_remove(package: &InstalledPackage) -> Result<()> {
     msi::remove(package)
@@ -109,8 +144,9 @@ fn portable_remove(package: &InstalledPackage) -> Result<()> {
     portable::remove::remove(package)
 }
 
-// Archive payloads must appear before Portable so archive installers route to the
-// archive engine while Portable remains the raw-copy fallback.
+// Native executable families must appear before Zip so explicit installer kinds
+// win over archive URL heuristics. Zip must still appear before Portable so
+// archive payloads do not fall back to the raw-copy engine.
 const ENGINE_DESCRIPTORS: &[EngineDescriptor] = &[
     #[cfg(windows)]
     EngineDescriptor {
@@ -124,6 +160,12 @@ const ENGINE_DESCRIPTORS: &[EngineDescriptor] = &[
         install: msix_install,
         remove: msix_remove,
         matches_installer: matches_msix_installer,
+    },
+    EngineDescriptor {
+        kind: EngineKind::NativeExe,
+        install: native_exe_install,
+        remove: native_exe_remove,
+        matches_installer: matches_native_exe_installer,
     },
     EngineDescriptor {
         kind: EngineKind::Zip,
@@ -231,6 +273,48 @@ mod tests {
     }
 
     #[test]
+    fn resolve_installer_routes_native_exe_family_to_native_exe() {
+        for kind in [
+            InstallerType::Exe,
+            InstallerType::Inno,
+            InstallerType::Nullsoft,
+            InstallerType::Burn,
+        ] {
+            let engine = resolve_engine_kind_for_installer(&installer(
+                kind,
+                "https://example.invalid/native-installer.exe",
+            ))
+            .expect("engine should resolve");
+
+            assert_eq!(engine, EngineKind::NativeExe);
+        }
+    }
+
+    #[test]
+    fn resolve_installer_prefers_explicit_native_exe_kind_over_archive_url() {
+        let engine = resolve_engine_kind_for_installer(&installer(
+            InstallerType::Exe,
+            "https://example.invalid/native-installer.zip",
+        ))
+        .expect("engine should resolve");
+
+        assert_eq!(engine, EngineKind::NativeExe);
+    }
+
+    #[test]
+    fn resolve_installer_keeps_special_case_native_exe_variants_unsupported() {
+        for kind in [InstallerType::Pwa, InstallerType::Font] {
+            let err = resolve_engine_kind_for_installer(&installer(
+                kind,
+                "https://example.invalid/special-installer.exe",
+            ))
+            .expect_err("special cases should not route yet");
+
+            assert!(err.to_string().contains("unsupported installer type"));
+        }
+    }
+
+    #[test]
     fn resolve_deployment_kind_uses_nested_installer_type_for_zip_archives() {
         let installer = installer(InstallerType::Zip, "https://example.invalid/package.zip")
             .with_nested(InstallerType::Msi);
@@ -239,6 +323,23 @@ mod tests {
             resolve_deployment_kind(&installer),
             DeploymentKind::Installed
         );
+    }
+
+    #[test]
+    fn resolve_deployment_kind_defaults_native_exe_family_to_installed() {
+        for kind in [
+            InstallerType::Exe,
+            InstallerType::Inno,
+            InstallerType::Nullsoft,
+            InstallerType::Burn,
+        ] {
+            let installer = installer(kind, "https://example.invalid/native-installer.exe");
+
+            assert_eq!(
+                resolve_deployment_kind(&installer),
+                DeploymentKind::Installed
+            );
+        }
     }
 
     #[cfg(windows)]

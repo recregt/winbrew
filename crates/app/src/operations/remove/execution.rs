@@ -4,7 +4,8 @@
 //! database and filesystem state accordingly. The exact removal strategy
 //! depends on the package engine:
 //!
-//! - MSIX and MSI packages are removed through the engine first and then cleaned from disk.
+//! - MSIX, MSI, and native executable packages are removed through the engine
+//!   first and then cleaned from disk.
 //! - Zip and portable packages are staged into a trash directory before the
 //!   database row is deleted so the install tree can be restored if metadata
 //!   removal fails.
@@ -65,7 +66,7 @@ fn execute_removal_with_conn(
     let engine_kind = plan.package.engine_kind;
 
     match engine_kind {
-        EngineKind::Msix | EngineKind::Msi => {
+        EngineKind::Msix | EngineKind::Msi | EngineKind::NativeExe => {
             engine_kind.remove(&plan.package)?;
 
             if install_dir.exists()
@@ -107,11 +108,6 @@ fn execute_removal_with_conn(
             } else {
                 database::delete_package(conn, &plan.package.name)?;
             }
-        }
-        _ => {
-            return Err(RemovalError::UnsupportedPackageType {
-                kind: plan.package.kind,
-            });
         }
     }
 

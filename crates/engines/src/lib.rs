@@ -116,10 +116,13 @@ mod tests {
 
     #[test]
     fn engine_kind_for_type_recognizes_native_exe_family() {
-        assert_eq!(
-            engine_kind_for_type(InstallerType::Inno).unwrap(),
-            EngineKind::NativeExe
-        );
+        for kind in [
+            InstallerType::Inno,
+            InstallerType::Nullsoft,
+            InstallerType::Burn,
+        ] {
+            assert_eq!(engine_kind_for_type(kind).unwrap(), EngineKind::NativeExe);
+        }
     }
 
     #[test]
@@ -130,5 +133,22 @@ mod tests {
             resolve_deployment_kind(&installer),
             DeploymentKind::Installed
         );
+    }
+
+    #[test]
+    fn resolve_deployment_kind_defaults_native_exe_family_to_installed() {
+        for kind in [
+            InstallerType::Exe,
+            InstallerType::Inno,
+            InstallerType::Nullsoft,
+            InstallerType::Burn,
+        ] {
+            let installer = installer(kind, None);
+
+            assert_eq!(
+                resolve_deployment_kind(&installer),
+                DeploymentKind::Installed
+            );
+        }
     }
 }
