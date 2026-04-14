@@ -10,6 +10,17 @@ For object ownership and wiring rules, see **[create-dependence.md](docs/create-
 
 For runtime directory and recovery contracts, see **[managed-paths-policy.md](docs/managed-paths-policy.md)** and **[recovery-policy.md](docs/recovery-policy.md)**.
 
+## Schema Ownership
+
+WinBrew uses a shared-contract layout for persisted data:
+
+- `infra/parser/schema/catalog.sql` is the canonical DDL for parser-generated `catalog.db` snapshots.
+- `crates/storage/src/database/migration.rs` is the canonical DDL for the main installed-packages database.
+- `crates/storage/src/database/journal/` owns the journal JSONL wire format and replay contract.
+- `crates/models/` owns the shared DTO and validation layer that parser and storage both consume.
+
+When a persisted contract changes, update the owning module and the root contract tests in the same PR. Do not add a second schema source in tests, fixtures, or build scripts.
+
 ## Setup
 
 ```powershell
