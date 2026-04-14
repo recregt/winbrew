@@ -17,12 +17,12 @@ pub struct AppContext {
 }
 
 impl AppContext {
-    pub fn from_config(config: &crate::storage::database::Config) -> anyhow::Result<Self> {
+    pub fn from_config(config: &crate::database::Config) -> anyhow::Result<Self> {
         Self::from_config_with_verbosity(config, 0)
     }
 
     pub fn from_config_with_verbosity(
-        config: &crate::storage::database::Config,
+        config: &crate::database::Config,
         verbosity: u8,
     ) -> anyhow::Result<Self> {
         let paths = config.resolved_paths();

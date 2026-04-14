@@ -1,16 +1,25 @@
-#[path = "common/mod.rs"]
-mod common;
-
 use std::collections::HashSet;
+use std::path::Path;
 
 use anyhow::Result;
-use common::db::init_database;
-use common::shared_root::test_root;
 use rusqlite::{Connection, params};
-use winbrew::database;
+use tempfile::TempDir;
+use winbrew_database as database;
+use winbrew_database::Config;
+use winbrew_models::catalog::CatalogInstallerType;
 use winbrew_models::domains::shared::DeploymentKind;
 
-const CATALOG_SCHEMA: &str = include_str!("../infra/parser/schema/catalog.sql");
+const CATALOG_SCHEMA: &str = include_str!("../../../infra/parser/schema/catalog.sql");
+
+fn test_root() -> TempDir {
+    tempfile::tempdir().expect("failed to create test root")
+}
+
+fn init_database(root: &Path) -> Result<()> {
+    let config = Config::load_at(root)?;
+    database::init(&config.resolved_paths())?;
+    Ok(())
+}
 
 fn object_exists(conn: &Connection, object_type: &str, name: &str) -> Result<bool> {
     let exists = conn.query_row(
@@ -61,6 +70,47 @@ fn column_default(conn: &Connection, table: &str, column: &str) -> Result<Option
     }
 
     anyhow::bail!("column {column} not found in {table}");
+}
+
+fn installer_type_check_values(schema: &str) -> Result<Vec<String>> {
+    let marker = "installer_type IN (";
+    let start = schema
+        .find(marker)
+        .map(|index| index + marker.len())
+        .ok_or_else(|| anyhow::anyhow!("installer_type CHECK clause not found"))?;
+    let end = schema[start..]
+        .find(")")
+        .ok_or_else(|| anyhow::anyhow!("installer_type CHECK clause is not closed"))?;
+
+    let values = schema[start..start + end]
+        .split(',')
+        .map(|value| value.trim().trim_matches('\'').to_string())
+        .collect::<Vec<_>>();
+
+    Ok(values)
+}
+
+fn model_installer_type_values() -> Vec<&'static str> {
+    [
+        CatalogInstallerType::Msi,
+        CatalogInstallerType::Msix,
+        CatalogInstallerType::Appx,
+        CatalogInstallerType::Exe,
+        CatalogInstallerType::Inno,
+        CatalogInstallerType::Nullsoft,
+        CatalogInstallerType::Wix,
+        CatalogInstallerType::Burn,
+        CatalogInstallerType::Pwa,
+        CatalogInstallerType::Font,
+        CatalogInstallerType::Portable,
+        CatalogInstallerType::Zip,
+        CatalogInstallerType::Nuget,
+        CatalogInstallerType::Scoop,
+        CatalogInstallerType::Unknown,
+    ]
+    .into_iter()
+    .map(CatalogInstallerType::as_str)
+    .collect()
 }
 
 fn insert_catalog_package(conn: &Connection) -> Result<()> {
@@ -115,7 +165,10 @@ fn catalog_contract_matches_canonical_schema() -> Result<()> {
     let conn = Connection::open_in_memory()?;
     conn.execute_batch(CATALOG_SCHEMA)?;
 
-    assert_eq!(conn.query_row::<i64, _, _>("PRAGMA user_version", [], |row| row.get(0))?, 5);
+    assert_eq!(
+        conn.query_row::<i64, _, _>("PRAGMA user_version", [], |row| row.get(0))?,
+        5
+    );
 
     for (object_type, name) in [
         ("table", "catalog_packages"),
@@ -136,12 +189,20 @@ fn catalog_contract_matches_canonical_schema() -> Result<()> {
     assert!(installer_columns.contains("kind"));
     assert!(!installer_columns.contains("type"));
 
+    assert_eq!(
+        installer_type_check_values(CATALOG_SCHEMA)?,
+        model_installer_type_values()
+    );
+
     assert!(!column_notnull(&conn, "catalog_installers", "hash")?);
     assert_eq!(column_default(&conn, "catalog_installers", "hash")?, None);
 
     insert_catalog_package(&conn)?;
 
-    for installer_type in ["msi", "msix", "appx", "exe", "inno", "nullsoft", "wix", "burn", "pwa", "font", "portable", "zip", "nuget", "scoop"] {
+    for installer_type in [
+        "msi", "msix", "appx", "exe", "inno", "nullsoft", "wix", "burn", "pwa", "font", "portable",
+        "zip", "nuget", "scoop",
+    ] {
         insert_catalog_installer(&conn, installer_type)?;
     }
 
@@ -181,10 +242,17 @@ fn main_database_contract_matches_storage_migration() -> Result<()> {
         "status",
         "installed_at",
     ] {
-        assert!(installed_columns.contains(column), "missing column {column}");
+        assert!(
+            installed_columns.contains(column),
+            "missing column {column}"
+        );
     }
 
-    assert!(column_notnull(&conn, "installed_packages", "deployment_kind")?);
+    assert!(column_notnull(
+        &conn,
+        "installed_packages",
+        "deployment_kind"
+    )?);
     assert_eq!(
         column_default(&conn, "installed_packages", "deployment_kind")?.as_deref(),
         Some("'installed'")
@@ -197,11 +265,8 @@ fn main_database_contract_matches_storage_migration() -> Result<()> {
 fn journal_contract_round_trips_metadata_and_commit() -> Result<()> {
     let test_root = test_root();
 
-    let mut writer = database::JournalWriter::open_for_package(
-        test_root.path(),
-        "winget/Contoso.App",
-        "1.0.0",
-    )?;
+    let mut writer =
+        database::JournalWriter::open_for_package(test_root.path(), "winget/Contoso.App", "1.0.0")?;
 
     writer.append(&database::JournalEntry::Metadata {
         package_id: "winget/Contoso.App".to_string(),

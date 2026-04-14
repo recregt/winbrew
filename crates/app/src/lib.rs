@@ -2,15 +2,15 @@
 //!
 //! `winbrew-app` owns the business-level orchestration for install, update,
 //! doctor, repair, and related command flows. It sits between the CLI
-//! presentation layer and the lower-level core, storage, engines, and models
+//! presentation layer and the lower-level core, database, engines, and models
 //! crates, so it can keep execution logic reusable in tests and other callers.
 
 #![cfg(windows)]
 
 pub use winbrew_core as core;
+pub use winbrew_database as database;
 pub use winbrew_engines as engines;
 pub use winbrew_models as models;
-pub use winbrew_storage as storage;
 
 mod catalog;
 pub mod operations;

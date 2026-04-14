@@ -1,8 +1,8 @@
 use anyhow::Result;
 
+use crate::database;
 use crate::models::domains::installed::InstalledPackage;
 use crate::models::domains::package::PackageQuery;
-use crate::storage::database;
 
 pub fn list_packages(query: Option<&str>) -> Result<Vec<InstalledPackage>> {
     let conn = database::get_conn()?;

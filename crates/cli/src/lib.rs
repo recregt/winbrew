@@ -24,7 +24,7 @@ use winbrew_ui::{Ui, UiSettings};
 
 pub(crate) use winbrew_app as app;
 pub use winbrew_app::core::cancel;
-pub use winbrew_app::{core, engines, models, storage as database};
+pub use winbrew_app::{core, database, engines, models};
 
 #[derive(Debug, Clone)]
 pub struct CommandContext {

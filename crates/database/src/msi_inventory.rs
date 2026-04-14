@@ -364,7 +364,7 @@ mod tests {
         HashAlgorithm, find_packages_by_normalized_path,
         find_packages_by_normalized_registry_key_path, get_snapshot, replace_snapshot,
     };
-    use crate::database::{insert_package, migration};
+    use crate::{insert_package, migration};
     use rusqlite::Connection;
     use winbrew_models::install::engine::{EngineKind, EngineMetadata, InstallScope};
     use winbrew_models::install::installed::{InstalledPackage, PackageStatus};

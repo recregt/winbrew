@@ -1,7 +1,7 @@
 use anyhow::Result;
 
+use crate::database::Config;
 pub use crate::models::domains::shared::{ConfigSection, ConfigValue, ConfigValueSource};
-use crate::storage::database::Config;
 
 pub fn list_sections(config: &Config) -> Result<Vec<ConfigSection>> {
     config.effective_sections()

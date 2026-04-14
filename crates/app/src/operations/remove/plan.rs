@@ -9,9 +9,9 @@
 //! mutates anything. It can display dependents, ask for confirmation, and only
 //! then hand the plan to the execution layer.
 
+use crate::database;
 use crate::models::domains::install::RemovalPlan;
 use crate::models::domains::installed::InstalledPackage;
-use crate::storage::database;
 
 use super::Result;
 

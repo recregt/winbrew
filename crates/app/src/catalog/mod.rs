@@ -11,7 +11,7 @@
 //! - `select` chooses the best installer for the current machine architecture.
 //!
 //! Keeping these concerns together makes the catalog rules easy to audit while
-//! still leaving the CLI layer unaware of storage and ranking details.
+//! still leaving the CLI layer unaware of database and ranking details.
 
 mod search;
 mod select;

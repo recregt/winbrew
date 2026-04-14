@@ -27,8 +27,8 @@ use std::path::PathBuf;
 use crate::catalog;
 use crate::core::paths::{ensure_install_dirs_at, install_root_from_package_dir};
 use crate::core::temp_workspace;
+use crate::database;
 use crate::engines;
-use crate::storage;
 
 pub use crate::core::cancel;
 pub use crate::models::catalog::CatalogPackage;
@@ -92,12 +92,13 @@ pub fn run<O: InstallObserver>(
     observer: &mut O,
 ) -> Result<InstallOutcome> {
     let observer = RefCell::new(observer);
-    let catalog_conn = storage::get_catalog_conn()?;
+    let catalog_conn = database::get_catalog_conn()?;
     let package =
         catalog::resolve_catalog_package_ref(&catalog_conn, &package_ref, |query, matches| {
             observer.borrow_mut().choose_package(query, matches)
         })?;
-    let installer = types::select_installer(&storage::get_installers(&catalog_conn, &package.id)?)?;
+    let installer =
+        types::select_installer(&database::get_installers(&catalog_conn, &package.id)?)?;
     let engine = engines::resolve_engine_for_installer(&installer)?;
     let package_version = package.version.to_string();
 
@@ -111,7 +112,7 @@ pub fn run<O: InstallObserver>(
 
     let _temp_root_guard = TempRootGuard::new(temp_root.clone());
 
-    let mut conn = storage::get_conn()?;
+    let mut conn = database::get_conn()?;
     state::prepare_install_target(&conn, &package.name, &install_dir)?;
     state::mark_installing(
         &conn,
@@ -159,7 +160,7 @@ pub fn run<O: InstallObserver>(
         return Err(cancel::CancellationError.into());
     }
 
-    if let Err(err) = storage::commit_install(&mut conn, &package.name, &engine_receipt) {
+    if let Err(err) = database::commit_install(&mut conn, &package.name, &engine_receipt) {
         let _ = state::mark_failed(&conn, &package.name);
         return Err(err.into());
     }

@@ -1,7 +1,7 @@
 //! Catalog lookup and package-resolution helpers.
 //!
 //! This module turns a user-facing query or package reference into a concrete
-//! catalog package. It keeps the resolution rules close to the catalog storage
+//! catalog package. It keeps the resolution rules close to the catalog database
 //! layer so callers can depend on a single, consistent interpretation of the
 //! catalog database.
 //!
@@ -17,7 +17,7 @@
 
 use anyhow::Result;
 
-use crate::storage;
+use crate::database;
 use winbrew_models::domains::catalog::CatalogPackage;
 use winbrew_models::domains::package::PackageRef;
 
@@ -27,20 +27,20 @@ use winbrew_models::domains::package::PackageRef;
 /// and only need query-level failure semantics. It does not open or validate
 /// the catalog database on its own.
 fn search_catalog_packages(
-    conn: &storage::DbConnection,
+    conn: &database::DbConnection,
     query: &str,
 ) -> Result<Vec<CatalogPackage>> {
-    storage::search(conn, query)
+    database::search(conn, query)
 }
 
 /// Search the shared catalog connection and return catalog results for the query.
 ///
 /// This is the app-facing search entry point used by callers that do not
-/// already have a catalog connection open. Higher layers can map storage
+/// already have a catalog connection open. Higher layers can map database
 /// failures into user-facing errors if they need a narrower error type.
 pub(crate) fn search_packages(query: &str) -> Result<Vec<CatalogPackage>> {
-    let conn = storage::get_catalog_conn()?;
-    storage::search(&conn, query)
+    let conn = database::get_catalog_conn()?;
+    database::search(&conn, query)
 }
 
 /// Resolve a query into a single catalog package.
@@ -50,7 +50,7 @@ pub(crate) fn search_packages(query: &str) -> Result<Vec<CatalogPackage>> {
 /// interactive selection, and the provided chooser is only consulted when the
 /// query still maps to multiple candidates.
 fn resolve_catalog_package<FChoose>(
-    conn: &storage::DbConnection,
+    conn: &database::DbConnection,
     query: &str,
     mut choose_package: FChoose,
 ) -> Result<CatalogPackage>
@@ -92,7 +92,7 @@ where
 /// ID only, which keeps package references deterministic when the caller has a
 /// unique identifier.
 pub(crate) fn resolve_catalog_package_ref<FChoose>(
-    conn: &storage::DbConnection,
+    conn: &database::DbConnection,
     package_ref: &PackageRef,
     choose_package: FChoose,
 ) -> Result<CatalogPackage>
@@ -112,9 +112,9 @@ where
 /// The catalog ID path never asks the caller to choose between matches because
 /// a package ID is expected to identify exactly one record.
 fn resolve_catalog_package_by_id(
-    conn: &storage::DbConnection,
+    conn: &database::DbConnection,
     package_id: &str,
 ) -> Result<CatalogPackage> {
-    storage::get_package_by_id(conn, package_id)?
+    database::get_package_by_id(conn, package_id)?
         .ok_or_else(|| anyhow::anyhow!("no catalog package matched '{package_id}'"))
 }

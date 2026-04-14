@@ -11,7 +11,7 @@ use super::{OrphanInstallScan, sort_diagnoses, sort_recovery_findings};
 /// Orphaned directories are reported as warnings because they indicate stale
 /// filesystem state rather than a broken package record. If the root directory
 /// itself cannot be read, the function returns a single error diagnostic so the
-/// caller can surface the storage problem directly.
+/// caller can surface the database problem directly.
 pub(super) fn scan_orphaned_install_dirs(
     packages_root: &Path,
     packages: &[InstalledPackage],

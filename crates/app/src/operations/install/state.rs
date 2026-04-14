@@ -14,7 +14,7 @@ use thiserror::Error;
 
 use crate::core::fs::cleanup_path;
 use crate::core::now;
-use crate::storage;
+use crate::database;
 use winbrew_models::domains::install::EngineKind;
 use winbrew_models::domains::install::InstallerType;
 use winbrew_models::domains::installed::{InstalledPackage, PackageStatus};
@@ -72,12 +72,12 @@ pub type Result<T> = std::result::Result<T, InstallStateError>;
 /// the stale package row is removed and the install directory is cleaned so the
 /// next attempt starts from a known-good state.
 pub fn prepare_install_target(
-    conn: &crate::storage::DbConnection,
+    conn: &crate::database::DbConnection,
     name: &str,
     install_dir: &Path,
 ) -> Result<()> {
     if let Some(existing) =
-        storage::get_package(conn, name).map_err(|source| InstallStateError::LookupFailed {
+        database::get_package(conn, name).map_err(|source| InstallStateError::LookupFailed {
             name: name.to_string(),
             source,
         })?
@@ -99,7 +99,7 @@ pub fn prepare_install_target(
                 });
             }
             PackageStatus::Failed => {
-                storage::delete_package(conn, name).map_err(|source| {
+                database::delete_package(conn, name).map_err(|source| {
                     InstallStateError::DeleteFailed {
                         name: name.to_string(),
                         source,
@@ -127,7 +127,7 @@ pub fn prepare_install_target(
 /// the database reflects that work is in progress before the payload download
 /// starts.
 pub fn mark_installing(
-    conn: &crate::storage::DbConnection,
+    conn: &crate::database::DbConnection,
     name: impl Into<String>,
     version: impl Into<String>,
     kind: InstallerType,
@@ -143,7 +143,7 @@ pub fn mark_installing(
         engine_kind,
         install_dir,
     );
-    storage::insert_package(conn, &package).map_err(|source| {
+    database::insert_package(conn, &package).map_err(|source| {
         InstallStateError::DatabaseOperationFailed {
             operation: "marking package as installing",
             source,
@@ -155,8 +155,8 @@ pub fn mark_installing(
 ///
 /// The outer install flow uses this during rollback to preserve the failure
 /// state in the local database after partial installation has been cleaned up.
-pub fn mark_failed(conn: &crate::storage::DbConnection, name: &str) -> Result<()> {
-    storage::update_status(conn, name, PackageStatus::Failed).map_err(|source| {
+pub fn mark_failed(conn: &crate::database::DbConnection, name: &str) -> Result<()> {
+    database::update_status(conn, name, PackageStatus::Failed).map_err(|source| {
         InstallStateError::DatabaseOperationFailed {
             operation: "marking package as failed",
             source,
@@ -182,7 +182,7 @@ fn installing_package(
         install_dir: install_dir.to_string_lossy().into_owned(),
         dependencies: Vec::new(),
         status: PackageStatus::Installing,
-        // Provisional value for in-progress installs; storage::commit_install overwrites it.
+        // Provisional value for in-progress installs; database::commit_install overwrites it.
         installed_at: now(),
     }
 }
@@ -190,7 +190,7 @@ fn installing_package(
 #[cfg(test)]
 mod tests {
     use crate::core::paths::resolved_paths;
-    use crate::storage;
+    use crate::database;
     use std::path::Path;
     use tempfile::tempdir;
     use winbrew_models::domains::install::{
@@ -209,7 +209,7 @@ mod tests {
         let cache = root.join("cache").to_string_lossy().into_owned();
         let paths = resolved_paths(root, &packages, &data, &logs, &cache);
 
-        storage::init(&paths).expect("storage should initialize");
+        database::init(&paths).expect("database should initialize");
     }
 
     fn sample_package(name: &str, install_dir: &str) -> InstalledPackage {
@@ -278,8 +278,8 @@ mod tests {
         let package_name = "demo";
         let install_dir = "C:/Tools/Actual";
 
-        let conn = storage::get_conn().expect("database connection should open");
-        storage::insert_package(&conn, &sample_package(package_name, "C:/Tools/Old"))
+        let conn = database::get_conn().expect("database connection should open");
+        database::insert_package(&conn, &sample_package(package_name, "C:/Tools/Old"))
             .expect("insert package");
 
         let mut receipt = EngineInstallReceipt::new(
@@ -296,9 +296,10 @@ mod tests {
         receipt.msi_inventory_snapshot = Some(sample_snapshot(package_name, install_dir));
 
         let mut conn = conn;
-        storage::commit_install(&mut conn, package_name, &receipt).expect("commit package install");
+        database::commit_install(&mut conn, package_name, &receipt)
+            .expect("commit package install");
 
-        let package = storage::get_package(&conn, package_name)
+        let package = database::get_package(&conn, package_name)
             .expect("read package")
             .expect("package should exist");
 
@@ -306,12 +307,12 @@ mod tests {
         assert_eq!(package.install_dir, install_dir);
 
         let file_owners =
-            storage::find_packages_by_normalized_path(&conn, "c:/tools/actual/bin/demo.exe")
+            database::find_packages_by_normalized_path(&conn, "c:/tools/actual/bin/demo.exe")
                 .expect("lookup file owners");
         assert_eq!(file_owners, vec![package_name.to_string()]);
 
         let registry_owners =
-            storage::find_packages_by_normalized_registry_key_path(&conn, "software\\demo")
+            database::find_packages_by_normalized_registry_key_path(&conn, "software\\demo")
                 .expect("lookup registry owners");
         assert_eq!(registry_owners, vec![package_name.to_string()]);
     }

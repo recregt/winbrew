@@ -4,8 +4,8 @@
 //! owns the actual search error semantics.
 
 use crate::catalog;
+use crate::database;
 use crate::models::domains::catalog::CatalogPackage;
-use crate::storage;
 use anyhow::Error;
 
 #[derive(Debug)]
@@ -21,7 +21,7 @@ pub fn search_packages(query: &str) -> SearchResult<Vec<CatalogPackage>> {
         Ok(packages) => Ok(packages),
         Err(err)
             if err
-                .downcast_ref::<storage::CatalogNotFoundError>()
+                .downcast_ref::<database::CatalogNotFoundError>()
                 .is_some() =>
         {
             Err(SearchError::CatalogUnavailable)

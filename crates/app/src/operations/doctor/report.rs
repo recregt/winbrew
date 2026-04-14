@@ -10,7 +10,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use crate::AppContext;
-use crate::storage::database;
+use crate::database;
 
 use super::scan;
 use crate::models::domains::installed::InstalledPackage;
