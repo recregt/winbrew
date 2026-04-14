@@ -112,6 +112,7 @@ jobs:
           set -euo pipefail
 
           cargo doc --locked --workspace --document-private-items --no-deps
+          printf '%s\n' '/ /winbrew/ 301' '/index.html /winbrew/ 301' > target/doc/_redirects
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
