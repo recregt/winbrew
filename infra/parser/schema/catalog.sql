@@ -1,6 +1,6 @@
 -- Canonical catalog schema for parser-generated snapshots.
 -- Parser code and tests include this file directly to avoid schema drift.
-PRAGMA user_version = 3;
+PRAGMA user_version = 4;
 
 CREATE TABLE IF NOT EXISTS catalog_packages (
     id          TEXT PRIMARY KEY,
@@ -76,4 +76,14 @@ CREATE TRIGGER IF NOT EXISTS catalog_packages_au AFTER UPDATE ON catalog_package
     VALUES ('delete', old.rowid, old.name, old.description);
     INSERT INTO catalog_packages_fts(rowid, name, description)
     VALUES (new.rowid, new.name, new.description);
+END;
+
+CREATE TRIGGER IF NOT EXISTS catalog_packages_update_timestamp
+AFTER UPDATE ON catalog_packages
+FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN
+    UPDATE catalog_packages
+    SET updated_at = datetime('now')
+    WHERE rowid = NEW.rowid;
 END;
