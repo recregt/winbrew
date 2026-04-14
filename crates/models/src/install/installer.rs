@@ -283,8 +283,27 @@ mod tests {
             InstallerType::Msi.deployment_kind(),
             DeploymentKind::Installed
         );
+        assert_eq!(
+            InstallerType::Exe.deployment_kind(),
+            DeploymentKind::Installed
+        );
+        assert_eq!(
+            InstallerType::Inno.deployment_kind(),
+            DeploymentKind::Installed
+        );
+        assert_eq!(
+            InstallerType::Nullsoft.deployment_kind(),
+            DeploymentKind::Installed
+        );
+        assert_eq!(
+            InstallerType::Burn.deployment_kind(),
+            DeploymentKind::Installed
+        );
         assert!(InstallerType::Msix.is_windows_package());
         assert!(InstallerType::Wix.is_msi_family());
+        assert!(InstallerType::Exe.is_native_exe_family());
+        assert!(InstallerType::Inno.is_native_exe_family());
+        assert!(InstallerType::Nullsoft.is_native_exe_family());
         assert!(InstallerType::Burn.is_native_exe_family());
         assert!(InstallerType::Pwa.is_special_case());
     }

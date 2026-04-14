@@ -1,7 +1,9 @@
 //! Windows-native installers live here.
+//!
+//! This namespace hosts the MSI and native-executable engine paths. They are
+//! separated from archive extractors because Windows Installer-driven flows and
+//! native bootstrapper flows are coordinated through process execution rather
+//! than file extraction.
 
-//! This namespace now hosts the MSI engine path. It is separated from archive
-//! extractors because MSI installation and removal are driven by the Windows
-//! Installer service rather than by file extraction.
-
+pub mod exe;
 pub mod msi;

@@ -28,12 +28,12 @@ That keeps the design discussion close to the rest of the workspace documentatio
 | `InstallerType::Msix` | `EngineKind::Msix` | Supported on Windows | Windows-delegated, WinBrew-coordinated | Delegates install/remove to Windows App Installer / package APIs and records package identity metadata. |
 | `InstallerType::Zip` | `EngineKind::Zip` | Supported | WinBrew-owned filesystem engine | ZIP is the archive front door today. The same dispatcher already carries the `ArchiveKind` family, and ZIP/Tar backends are implemented there. Remove is plain directory cleanup. |
 | `InstallerType::Portable` | `EngineKind::Portable` | Supported | WinBrew-owned filesystem engine | Copies raw payloads into a staging tree, then replaces the target install directory. Raw-only fallback; archive-shaped payloads route through the archive dispatcher instead of Portable. Remove is plain directory cleanup. |
-| `InstallerType::Exe` | `EngineKind::NativeExe` | Scaffolded, not routed | Undecided | The model layer already knows about the type, but the engine registry still rejects it. |
+| `InstallerType::Exe` | `EngineKind::NativeExe` | Supported on Windows | Windows-delegated, WinBrew-coordinated | v1 covers the native-exe family (`Exe`, `Inno`, `Nullsoft`, `Burn`). `Pwa` and `Font` remain scaffolded. |
 
 ### Practical split
 
 - WinBrew-owned engines are the filesystem engines: `Zip` handles archive extraction, and `Portable` handles raw payload copying.
-- Windows-delegated engines are the OS-backed engines: `Msi` and `Msix`.
+- Windows-delegated engines are the OS-backed engines: `Msi`, `Msix`, and `NativeExe`.
 - `NativeExe` is the nearest future addition, but it still needs a backend and registry entry before it counts as supported.
 
 ## How Routing Works
@@ -51,9 +51,10 @@ Current routing rules:
 
 - `InstallerType::Msi` resolves to `EngineKind::Msi`.
 - `InstallerType::Msix` resolves to `EngineKind::Msix`.
+- `InstallerType::Exe`, `InstallerType::Inno`, `InstallerType::Nullsoft`, and `InstallerType::Burn` resolve to `EngineKind::NativeExe`.
 - `InstallerType::Zip` resolves to `EngineKind::Zip`.
 - `InstallerType::Portable` resolves to `EngineKind::Portable` for raw payloads.
-- `InstallerType::Exe` is not routable yet and returns an unsupported-type error.
+- `InstallerType::Pwa` and `InstallerType::Font` are still not routable and return an unsupported-type error.
 - Archive-shaped installers are classified into `ArchiveKind` and routed through the archive dispatcher; ZIP and Tar are implemented today, while 7z and rar still hit the generic backend-unavailable error.
 - Portable installers whose URL looks like an archive are routed away from Portable and into the archive path.
 - The archive descriptor must stay before portable in the registry table.
@@ -88,15 +89,15 @@ In both cases, WinBrew should treat the OS as the execution authority and itself
 
 ### Undecided execution
 
-`NativeExe` is scaffolded but not yet supported.
+`Pwa` and `Font` are scaffolded but not yet supported.
 
-The project still needs to decide whether it will become:
+The project still needs to decide whether they will become:
 
 - a WinBrew-owned file placement engine,
 - a Windows-delegated execution wrapper,
 - or a narrow adapter around existing OS behavior.
 
-Until that decision is made, the registry should keep rejecting it rather than pretending it is implemented.
+Until that decision is made, the registry should keep rejecting them rather than pretending they are implemented.
 
 ## Journal Model
 
@@ -137,21 +138,20 @@ Policy docs should remain policy docs. They can point back here, but they should
 
 ## Next Implementation Target
 
-The nearest addition is `NativeExe` / `Exe`.
+The nearest follow-up work is NativeExe hardening and the remaining special-case families.
 
 Why it is the next obvious candidate:
 
-- the type plumbing already exists in `winbrew-models`
-- the registry currently has a clear unsupported branch for it
-- it has no backend yet, so it is easy to identify as a new unit of work
+- the v1 family route now exists, but uninstall metadata is still fallback-only
+- `Pwa` and `Font` are still explicitly rejected
+- the current backend is intentionally conservative about installer switches and removal behavior
 
-The implementation plan for that addition should cover:
+The implementation plan for that follow-up should cover:
 
-- the registry descriptor entry
-- the backend contract
-- removal semantics
-- receipt and metadata shape
-- tests for routing and unsupported paths
+- uninstall metadata capture for native-exe installs, if we decide to persist it
+- richer installer-family handling inside the native-exe backend
+- `Pwa` and `Font` routing decisions
+- tests for remove/recovery behavior once metadata becomes authoritative
 
 ## Related Files
 
