@@ -142,16 +142,15 @@ The nearest follow-up work is NativeExe hardening and the remaining special-case
 
 Why it is the next obvious candidate:
 
-- the v1 family route now exists, but uninstall metadata is still fallback-only
+- the v1 family route now exists and captures uninstall metadata when the registry publishes it
 - `Pwa` and `Font` are still explicitly rejected
 - the current backend is intentionally conservative about installer switches and removal behavior
 
 The implementation plan for that follow-up should cover:
 
-- uninstall metadata capture for native-exe installs, if we decide to persist it
 - richer installer-family handling inside the native-exe backend
 - `Pwa` and `Font` routing decisions
-- tests for remove/recovery behavior once metadata becomes authoritative
+- tests for remove/recovery behavior using captured uninstall metadata
 
 ## Related Files
 
