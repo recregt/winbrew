@@ -83,34 +83,6 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
     )
     .context("migration failed")?;
 
-    ensure_installed_packages_deployment_kind_column(conn)?;
-
-    Ok(())
-}
-
-fn ensure_installed_packages_deployment_kind_column(conn: &Connection) -> Result<()> {
-    let column_exists: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM pragma_table_info('installed_packages') WHERE name = 'deployment_kind'",
-        [],
-        |row| row.get(0),
-    )?;
-
-    if column_exists == 0 {
-        conn.execute(
-            "ALTER TABLE installed_packages ADD COLUMN deployment_kind TEXT NOT NULL DEFAULT 'installed'",
-            [],
-        )?;
-    }
-
-    conn.execute(
-        "UPDATE installed_packages
-            SET deployment_kind = CASE
-                WHEN kind IN ('portable', 'zip') THEN 'portable'
-                ELSE 'installed'
-            END",
-        [],
-    )?;
-
     Ok(())
 }
 

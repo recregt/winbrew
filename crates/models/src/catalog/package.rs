@@ -54,10 +54,8 @@ pub struct CatalogInstaller {
     /// Expected checksum or empty string when checksumless installs are allowed.
     pub hash: String,
     /// Checksum algorithm used to verify the installer.
-    #[serde(default)]
     pub hash_algorithm: HashAlgorithm,
     /// Normalized installer family used for catalog browsing and filtering.
-    #[serde(default, skip_serializing_if = "CatalogInstallerType::is_unknown")]
     pub installer_type: CatalogInstallerType,
     /// Silent-install or package-manager switches when the source provides them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -358,11 +356,13 @@ mod tests {
     }
 
     #[test]
-    fn catalog_installer_defaults_missing_nested_kind_on_deserialize() {
+    fn catalog_installer_deserializes_without_nested_kind() {
         let json = r#"{
             "package_id":"winget/Contoso.App",
             "url":"https://example.test/app.exe",
             "hash":"sha256:deadbeef",
+            "hash_algorithm":"sha256",
+            "installer_type":"unknown",
             "arch":"any",
             "kind":"portable"
         }"#;

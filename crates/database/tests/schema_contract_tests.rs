@@ -7,6 +7,7 @@ use tempfile::TempDir;
 use winbrew_database as database;
 use winbrew_database::Config;
 use winbrew_models::catalog::CatalogInstallerType;
+use winbrew_models::catalog::metadata::CATALOG_DB_SCHEMA_VERSION;
 use winbrew_models::domains::shared::DeploymentKind;
 
 const CATALOG_SCHEMA: &str = include_str!("../../../infra/parser/schema/catalog.sql");
@@ -167,7 +168,7 @@ fn catalog_contract_matches_canonical_schema() -> Result<()> {
 
     assert_eq!(
         conn.query_row::<i64, _, _>("PRAGMA user_version", [], |row| row.get(0))?,
-        5
+        i64::from(CATALOG_DB_SCHEMA_VERSION)
     );
 
     for (object_type, name) in [
@@ -212,7 +213,7 @@ fn catalog_contract_matches_canonical_schema() -> Result<()> {
 }
 
 #[test]
-fn main_database_contract_matches_storage_migration() -> Result<()> {
+fn main_database_contract_matches_database_schema() -> Result<()> {
     let test_root = test_root();
     init_database(test_root.path())?;
 

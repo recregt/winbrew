@@ -41,10 +41,8 @@ pub struct RawCatalogInstaller {
     /// Raw checksum string.
     pub hash: String,
     /// Raw checksum algorithm.
-    #[serde(default)]
     pub hash_algorithm: HashAlgorithm,
     /// Raw normalized installer family string.
-    #[serde(default)]
     pub installer_type: CatalogInstallerType,
     /// Raw silent-install or package-manager switches.
     #[serde(default, skip_serializing_if = "Option::is_none")]

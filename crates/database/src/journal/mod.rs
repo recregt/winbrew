@@ -171,7 +171,7 @@ mod tests {
             .as_nanos();
 
         std::env::temp_dir().join(format!(
-            "winbrew-storage-journal-{}-{unique_id}",
+            "winbrew-database-journal-{}-{unique_id}",
             process::id()
         ))
     }
