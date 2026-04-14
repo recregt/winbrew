@@ -14,6 +14,9 @@
 //!
 //! The goal is to keep search semantics predictable for the CLI while still
 //! allowing interactive disambiguation when multiple packages match a name.
+//!
+//! Queries are trimmed before search, must not be empty, and are capped at 256
+//! characters so obviously invalid input fails fast.
 
 use anyhow::{Result, bail};
 
@@ -21,12 +24,30 @@ use crate::database;
 use winbrew_models::domains::catalog::CatalogPackage;
 use winbrew_models::domains::package::PackageRef;
 
+const MAX_QUERY_LENGTH: usize = 256;
+
+fn validate_query(query: &str) -> Result<&str> {
+    let query = query.trim();
+
+    if query.is_empty() {
+        bail!("query cannot be empty or whitespace-only");
+    }
+
+    let query_length = query.chars().count();
+    if query_length > MAX_QUERY_LENGTH {
+        bail!("query too long: {query_length} characters (max {MAX_QUERY_LENGTH})");
+    }
+
+    Ok(query)
+}
+
 /// Search the shared catalog connection and return catalog results for the query.
 ///
 /// This is the app-facing search entry point used by callers that do not
 /// already have a catalog connection open. Higher layers can map database
 /// failures into user-facing errors if they need a narrower error type.
 pub(crate) fn search_packages(query: &str) -> Result<Vec<CatalogPackage>> {
+    let query = validate_query(query)?;
     let conn = database::get_catalog_conn()?;
     database::search(&conn, query)
 }
@@ -45,6 +66,7 @@ fn resolve_catalog_package<FChoose>(
 where
     FChoose: FnMut(&str, &[CatalogPackage]) -> Result<usize>,
 {
+    let query = validate_query(query)?;
     let mut matches = database::search(conn, query)?;
 
     if matches.is_empty() {
@@ -52,7 +74,14 @@ where
     }
 
     if matches.len() == 1 {
-        return Ok(matches.pop().expect("single match exists"));
+        debug_assert_eq!(
+            matches.len(),
+            1,
+            "single-match branch must contain exactly one package"
+        );
+        return matches.pop().ok_or_else(|| {
+            anyhow::anyhow!("internal error: expected single match but vector was empty")
+        });
     }
 
     if let Some(exact_index) = matches
@@ -110,7 +139,7 @@ fn resolve_catalog_package_by_id(
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_catalog_package_ref, search_packages};
+    use super::{MAX_QUERY_LENGTH, resolve_catalog_package_ref, search_packages};
     use crate::database;
     use anyhow::Result;
     use std::fs;
@@ -292,16 +321,50 @@ mod tests {
     }
 
     #[test]
-    fn empty_query_returns_no_results() -> Result<()> {
+    fn whitespace_only_query_is_rejected() -> Result<()> {
         let catalog = TestCatalog::with_packages(&[(
             "Contoso",
             "Exact match package",
             "https://example.invalid/contoso.zip",
         )])?;
 
-        let packages = catalog.search("   ")?;
+        let err = catalog
+            .search("   ")
+            .expect_err("blank query should be rejected");
 
-        assert!(packages.is_empty());
+        assert!(err.to_string().contains("query cannot be empty"));
+        Ok(())
+    }
+
+    #[test]
+    fn trimmed_queries_still_search_successfully() -> Result<()> {
+        let catalog = TestCatalog::with_packages(&[(
+            "Contoso",
+            "Exact match package",
+            "https://example.invalid/contoso.zip",
+        )])?;
+
+        let packages = catalog.search("  Contoso  ")?;
+
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name, "Contoso");
+        Ok(())
+    }
+
+    #[test]
+    fn very_long_query_is_rejected() -> Result<()> {
+        let catalog = TestCatalog::with_packages(&[(
+            "Contoso",
+            "Exact match package",
+            "https://example.invalid/contoso.zip",
+        )])?;
+
+        let query = "a".repeat(MAX_QUERY_LENGTH + 1);
+        let err = catalog
+            .search(&query)
+            .expect_err("oversized query should be rejected");
+
+        assert!(err.to_string().contains("query too long"));
         Ok(())
     }
 
