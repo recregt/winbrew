@@ -15,23 +15,11 @@
 //! The goal is to keep search semantics predictable for the CLI while still
 //! allowing interactive disambiguation when multiple packages match a name.
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 use crate::database;
 use winbrew_models::domains::catalog::CatalogPackage;
 use winbrew_models::domains::package::PackageRef;
-
-/// Search the catalog using an already-open catalog database connection.
-///
-/// This helper exists for callers that already resolved the catalog connection
-/// and only need query-level failure semantics. It does not open or validate
-/// the catalog database on its own.
-fn search_catalog_packages(
-    conn: &database::DbConnection,
-    query: &str,
-) -> Result<Vec<CatalogPackage>> {
-    database::search(conn, query)
-}
 
 /// Search the shared catalog connection and return catalog results for the query.
 ///
@@ -57,32 +45,33 @@ fn resolve_catalog_package<FChoose>(
 where
     FChoose: FnMut(&str, &[CatalogPackage]) -> Result<usize>,
 {
-    let matches = search_catalog_packages(conn, query)?;
+    let mut matches = database::search(conn, query)?;
 
     if matches.is_empty() {
-        anyhow::bail!("no catalog packages matched '{query}'");
+        bail!("no catalog packages matched '{query}'");
     }
 
     if matches.len() == 1 {
-        return Ok(matches.into_iter().next().expect("single match exists"));
+        return Ok(matches.pop().expect("single match exists"));
     }
 
     if let Some(exact_index) = matches
         .iter()
         .position(|pkg| pkg.name.eq_ignore_ascii_case(query))
     {
-        return Ok(matches
-            .into_iter()
-            .nth(exact_index)
-            .expect("exact match index is valid"));
+        return Ok(matches.swap_remove(exact_index));
     }
 
     let selected = choose_package(query, &matches)?;
 
-    matches
-        .into_iter()
-        .nth(selected)
-        .ok_or_else(|| anyhow::anyhow!("selected package index was out of range"))
+    if selected >= matches.len() {
+        bail!(
+            "selected package index {selected} was out of range (0..{})",
+            matches.len()
+        );
+    }
+
+    Ok(matches.swap_remove(selected))
 }
 
 /// Resolve a package reference to a single catalog package.
@@ -117,4 +106,159 @@ fn resolve_catalog_package_by_id(
 ) -> Result<CatalogPackage> {
     database::get_package_by_id(conn, package_id)?
         .ok_or_else(|| anyhow::anyhow!("no catalog package matched '{package_id}'"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{resolve_catalog_package_ref, search_packages};
+    use crate::database;
+    use anyhow::Result;
+    use std::fs;
+    use std::path::Path;
+    use winbrew_models::domains::package::{PackageName, PackageRef};
+    use winbrew_testing::{append_catalog_db, init_database, seed_catalog_db, test_root};
+
+    fn prepare_catalog(root: &Path, packages: &[(&str, &str, &str)]) -> Result<()> {
+        assert!(!packages.is_empty());
+
+        init_database(root)?;
+
+        let catalog_db_path = root.join("data").join("db").join("catalog.db");
+        fs::create_dir_all(
+            catalog_db_path
+                .parent()
+                .expect("catalog database parent directory"),
+        )?;
+
+        let (first_name, first_description, first_url) = packages[0];
+        seed_catalog_db(
+            &catalog_db_path,
+            first_name,
+            first_description,
+            first_url,
+            "sha256:11111111",
+        )?;
+
+        for (index, &(name, description, url)) in packages.iter().enumerate().skip(1) {
+            let hash = format!("sha256:{index:08x}");
+            append_catalog_db(&catalog_db_path, name, description, url, &hash)?;
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn exact_name_match_bypasses_chooser() -> Result<()> {
+        let root = test_root();
+        prepare_catalog(
+            root.path(),
+            &[
+                (
+                    "Contoso",
+                    "Exact match package",
+                    "https://example.invalid/contoso.zip",
+                ),
+                (
+                    "Contoso App",
+                    "Ambiguous sibling package",
+                    "https://example.invalid/contoso-app.zip",
+                ),
+            ],
+        )?;
+
+        let conn = database::get_catalog_conn()?;
+        let package = resolve_catalog_package_ref(
+            &conn,
+            &PackageRef::ByName(PackageName::parse("Contoso")?),
+            |_, _| panic!("chooser should not be called for an exact name match"),
+        )?;
+
+        assert_eq!(package.name, "Contoso");
+        Ok(())
+    }
+
+    #[test]
+    fn chooser_selection_returns_requested_package() -> Result<()> {
+        let root = test_root();
+        prepare_catalog(
+            root.path(),
+            &[
+                (
+                    "Alpha Tool",
+                    "First ambiguous package",
+                    "https://example.invalid/alpha.zip",
+                ),
+                (
+                    "Beta Tool",
+                    "Second ambiguous package",
+                    "https://example.invalid/beta.zip",
+                ),
+            ],
+        )?;
+
+        let conn = database::get_catalog_conn()?;
+        let package = resolve_catalog_package_ref(
+            &conn,
+            &PackageRef::ByName(PackageName::parse("Tool")?),
+            |_, matches| {
+                Ok(matches
+                    .iter()
+                    .position(|pkg| pkg.name == "Beta Tool")
+                    .expect("beta package should be in the chooser list"))
+            },
+        )?;
+
+        assert_eq!(package.name, "Beta Tool");
+        Ok(())
+    }
+
+    #[test]
+    fn chooser_selection_rejects_out_of_range_index() -> Result<()> {
+        let root = test_root();
+        prepare_catalog(
+            root.path(),
+            &[
+                (
+                    "Alpha Tool",
+                    "First ambiguous package",
+                    "https://example.invalid/alpha.zip",
+                ),
+                (
+                    "Beta Tool",
+                    "Second ambiguous package",
+                    "https://example.invalid/beta.zip",
+                ),
+            ],
+        )?;
+
+        let conn = database::get_catalog_conn()?;
+        let err = resolve_catalog_package_ref(
+            &conn,
+            &PackageRef::ByName(PackageName::parse("Tool")?),
+            |_, matches| Ok(matches.len()),
+        )
+        .expect_err("out-of-range chooser index should fail");
+
+        assert!(err.to_string().contains("out of range"));
+        Ok(())
+    }
+
+    #[test]
+    fn search_packages_returns_results_from_catalog_db() -> Result<()> {
+        let root = test_root();
+        prepare_catalog(
+            root.path(),
+            &[(
+                "Contoso",
+                "Exact match package",
+                "https://example.invalid/contoso.zip",
+            )],
+        )?;
+
+        let packages = search_packages("Contoso")?;
+
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name, "Contoso");
+        Ok(())
+    }
 }
