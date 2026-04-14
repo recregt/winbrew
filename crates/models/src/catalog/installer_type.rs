@@ -9,19 +9,23 @@ use crate::shared::ModelError;
 /// Normalized installer family stored on catalog installer rows.
 ///
 /// This is intentionally broader than the source-facing `InstallerType` enum.
-/// It captures package-manager families such as Scoop and Chocolatey in
-/// addition to direct installer families such as MSI, ZIP, and Inno.
+/// It captures direct installer families as well as package-manager families
+/// such as Scoop and Chocolatey.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CatalogInstallerType {
     Msi,
     Msix,
+    Appx,
     Exe,
     Inno,
-    Nsis,
-    Zip,
+    Nullsoft,
     Wix,
     Burn,
+    Pwa,
+    Font,
+    Portable,
+    Zip,
     Nuget,
     Scoop,
     #[default]
@@ -34,12 +38,16 @@ impl CatalogInstallerType {
         match self {
             Self::Msi => "msi",
             Self::Msix => "msix",
+            Self::Appx => "appx",
             Self::Exe => "exe",
             Self::Inno => "inno",
-            Self::Nsis => "nsis",
-            Self::Zip => "zip",
+            Self::Nullsoft => "nullsoft",
             Self::Wix => "wix",
             Self::Burn => "burn",
+            Self::Pwa => "pwa",
+            Self::Font => "font",
+            Self::Portable => "portable",
+            Self::Zip => "zip",
             Self::Nuget => "nuget",
             Self::Scoop => "scoop",
             Self::Unknown => "unknown",
@@ -59,27 +67,31 @@ impl CatalogInstallerType {
                 InstallerType::Portable if is_archive_url(url) => Self::Zip,
                 InstallerType::Portable => Self::Scoop,
                 InstallerType::Zip => Self::Zip,
-                InstallerType::Msix | InstallerType::Appx => Self::Msix,
+                InstallerType::Msix => Self::Msix,
+                InstallerType::Appx => Self::Appx,
                 InstallerType::Msi => Self::Msi,
                 InstallerType::Exe => Self::Exe,
                 InstallerType::Inno => Self::Inno,
-                InstallerType::Nullsoft => Self::Nsis,
+                InstallerType::Nullsoft => Self::Nullsoft,
                 InstallerType::Wix => Self::Wix,
                 InstallerType::Burn => Self::Burn,
-                InstallerType::Pwa | InstallerType::Font => Self::Unknown,
+                InstallerType::Pwa => Self::Pwa,
+                InstallerType::Font => Self::Font,
             },
             PackageSource::Winget | PackageSource::Winbrew => match kind {
                 InstallerType::Portable if is_archive_url(url) => Self::Zip,
-                InstallerType::Portable => Self::Unknown,
+                InstallerType::Portable => Self::Portable,
                 InstallerType::Zip => Self::Zip,
-                InstallerType::Msix | InstallerType::Appx => Self::Msix,
+                InstallerType::Msix => Self::Msix,
+                InstallerType::Appx => Self::Appx,
                 InstallerType::Msi => Self::Msi,
                 InstallerType::Exe => Self::Exe,
                 InstallerType::Inno => Self::Inno,
-                InstallerType::Nullsoft => Self::Nsis,
+                InstallerType::Nullsoft => Self::Nullsoft,
                 InstallerType::Wix => Self::Wix,
                 InstallerType::Burn => Self::Burn,
-                InstallerType::Pwa | InstallerType::Font => Self::Unknown,
+                InstallerType::Pwa => Self::Pwa,
+                InstallerType::Font => Self::Font,
             },
         }
     }
@@ -91,13 +103,17 @@ impl FromStr for CatalogInstallerType {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.trim().to_ascii_lowercase().as_str() {
             "msi" => Ok(Self::Msi),
-            "msix" | "appx" => Ok(Self::Msix),
+            "msix" => Ok(Self::Msix),
+            "appx" => Ok(Self::Appx),
             "exe" => Ok(Self::Exe),
             "inno" => Ok(Self::Inno),
-            "nsis" | "nullsoft" => Ok(Self::Nsis),
-            "zip" => Ok(Self::Zip),
+            "nsis" | "nullsoft" => Ok(Self::Nullsoft),
             "wix" => Ok(Self::Wix),
             "burn" => Ok(Self::Burn),
+            "pwa" => Ok(Self::Pwa),
+            "font" => Ok(Self::Font),
+            "portable" => Ok(Self::Portable),
+            "zip" => Ok(Self::Zip),
             "nuget" => Ok(Self::Nuget),
             "scoop" => Ok(Self::Scoop),
             "unknown" => Ok(Self::Unknown),
@@ -142,4 +158,61 @@ fn is_archive_url(url: &str) -> bool {
         || normalized.ends_with(".tar.gz")
         || normalized.ends_with(".tgz")
         || normalized.ends_with(".tbz2")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CatalogInstallerType;
+    use crate::install::InstallerType;
+    use crate::package::PackageSource;
+
+    #[test]
+    fn parses_nullsoft_alias() {
+        assert_eq!(
+            "nsis".parse::<CatalogInstallerType>().expect("nsis"),
+            CatalogInstallerType::Nullsoft
+        );
+        assert_eq!(
+            "nullsoft"
+                .parse::<CatalogInstallerType>()
+                .expect("nullsoft"),
+            CatalogInstallerType::Nullsoft
+        );
+    }
+
+    #[test]
+    fn normalizes_raw_installer_families() {
+        assert_eq!(
+            CatalogInstallerType::normalize(
+                PackageSource::Winget,
+                InstallerType::Appx,
+                "https://example.test/app.appx"
+            ),
+            CatalogInstallerType::Appx
+        );
+        assert_eq!(
+            CatalogInstallerType::normalize(
+                PackageSource::Winget,
+                InstallerType::Portable,
+                "https://example.test/app.exe"
+            ),
+            CatalogInstallerType::Portable
+        );
+        assert_eq!(
+            CatalogInstallerType::normalize(
+                PackageSource::Winget,
+                InstallerType::Portable,
+                "https://example.test/app.zip"
+            ),
+            CatalogInstallerType::Zip
+        );
+        assert_eq!(
+            CatalogInstallerType::normalize(
+                PackageSource::Winget,
+                InstallerType::Nullsoft,
+                "https://example.test/app.exe"
+            ),
+            CatalogInstallerType::Nullsoft
+        );
+    }
 }

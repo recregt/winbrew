@@ -32,7 +32,7 @@ ON CONFLICT(package_id) DO UPDATE SET
 const DELETE_INSTALLERS: &str = "DELETE FROM catalog_installers WHERE package_id = ?1";
 
 const INSTALLER_INSERT: &str = r#"
-INSERT INTO catalog_installers(package_id, url, hash, hash_algorithm, installer_type, installer_switches, arch, type, nested_kind)
+INSERT INTO catalog_installers(package_id, url, hash, hash_algorithm, installer_type, installer_switches, arch, kind, nested_kind)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
 "#;
 
@@ -132,10 +132,16 @@ impl CatalogWriter {
         });
 
         for installer in installers {
+            let hash = if installer.hash.trim().is_empty() {
+                None
+            } else {
+                Some(installer.hash.as_str())
+            };
+
             installer_stmt.execute(params![
                 parsed.package.id.as_str(),
                 installer.url.as_str(),
-                installer.hash.as_str(),
+                hash,
                 installer.hash_algorithm.as_str(),
                 installer.installer_type.as_str(),
                 installer.installer_switches.as_deref(),

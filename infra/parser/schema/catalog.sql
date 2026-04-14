@@ -1,6 +1,6 @@
 -- Canonical catalog schema for parser-generated snapshots.
 -- Parser code and tests include this file directly to avoid schema drift.
-PRAGMA user_version = 4;
+PRAGMA user_version = 5;
 
 CREATE TABLE IF NOT EXISTS catalog_packages (
     id          TEXT PRIMARY KEY,
@@ -20,13 +20,15 @@ CREATE TABLE IF NOT EXISTS catalog_packages (
 CREATE TABLE IF NOT EXISTS catalog_installers (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     package_id  TEXT NOT NULL REFERENCES catalog_packages(id) ON DELETE CASCADE,
+    -- Current sources require a direct download URL.
     url         TEXT NOT NULL,
-    hash        TEXT NOT NULL,
+    -- Checksum is optional for checksumless manifests.
+    hash        TEXT,
     hash_algorithm TEXT NOT NULL DEFAULT 'sha256' CHECK (hash_algorithm IN ('md5', 'sha1', 'sha256', 'sha512')),
-    installer_type TEXT NOT NULL DEFAULT 'unknown' CHECK (installer_type IN ('msi', 'msix', 'exe', 'inno', 'nsis', 'nullsoft', 'zip', 'wix', 'burn', 'nuget', 'scoop', 'unknown')),
+    installer_type TEXT NOT NULL DEFAULT 'unknown' CHECK (installer_type IN ('msi', 'msix', 'appx', 'exe', 'inno', 'nullsoft', 'wix', 'burn', 'pwa', 'font', 'portable', 'zip', 'nuget', 'scoop', 'unknown')),
     installer_switches TEXT,
     arch        TEXT NOT NULL DEFAULT '',
-    type        TEXT NOT NULL DEFAULT '',
+    kind        TEXT NOT NULL DEFAULT '',
     nested_kind TEXT
 );
 
@@ -52,12 +54,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_catalog_packages_identity ON catalog_packa
 CREATE UNIQUE INDEX IF NOT EXISTS idx_catalog_installers_unique ON catalog_installers(
     package_id,
     url,
-    hash,
+    IFNULL(hash, ''),
     hash_algorithm,
     installer_type,
     IFNULL(installer_switches, ''),
     arch,
-    type,
+    kind,
     IFNULL(nested_kind, '')
 );
 
