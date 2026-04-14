@@ -11,7 +11,7 @@ use tempfile::TempDir;
 use winbrew_cli::CommandContext;
 use winbrew_cli::commands::remove as remove_command;
 use winbrew_cli::database::{self};
-use winbrew_cli::models::domains::install::InstallerType;
+use winbrew_cli::models::domains::install::{EngineMetadata, InstallerType};
 use winbrew_cli::models::domains::installed::PackageStatus;
 
 struct RemoveFixture {
@@ -63,6 +63,30 @@ impl RemoveFixture {
         database::insert_package(conn, &package)?;
         Ok(install_dir)
     }
+
+    fn insert_native_exe_package(
+        &self,
+        name: &str,
+        uninstall_command: String,
+    ) -> Result<std::path::PathBuf> {
+        let install_dir = self.install_dir(name);
+        fs::create_dir_all(&install_dir).expect("install dir should exist");
+        fs::write(install_dir.join("tool.exe"), b"payload").expect("install file should exist");
+
+        let conn = self.conn();
+        let package = common::InstalledPackageBuilder::new(name)
+            .version("1.0.0")
+            .kind(InstallerType::Exe)
+            .engine_metadata(Some(EngineMetadata::native_exe(
+                Some(uninstall_command),
+                None,
+            )))
+            .status(PackageStatus::Ok)
+            .build(&install_dir);
+
+        database::insert_package(conn, &package)?;
+        Ok(install_dir)
+    }
 }
 
 #[test]
@@ -73,6 +97,29 @@ fn remove_removes_portable_package_when_confirmed() -> Result<()> {
 
     remove_command::run(&fixture.ctx, package_name, true, false).expect("remove should succeed");
 
+    anyhow::ensure!(!install_dir.exists(), "install directory should be removed");
+
+    let conn = fixture.conn();
+    let package = database::get_package(conn, package_name)?;
+    anyhow::ensure!(package.is_none(), "package should be removed from database");
+
+    Ok(())
+}
+
+#[test]
+fn remove_removes_native_exe_package_when_confirmed() -> Result<()> {
+    let fixture = RemoveFixture::new();
+    let package_name = "Contoso.NativeExe";
+    let uninstall_marker = fixture.root.path().join("nativeexe-uninstall.log");
+    let uninstall_command = format!(
+        r#"powershell -NoProfile -Command "Set-Content -LiteralPath '{}' -Value 'ran'""#,
+        uninstall_marker.display()
+    );
+    let install_dir = fixture.insert_native_exe_package(package_name, uninstall_command)?;
+
+    remove_command::run(&fixture.ctx, package_name, true, false).expect("remove should succeed");
+
+    anyhow::ensure!(uninstall_marker.exists(), "uninstall command should run");
     anyhow::ensure!(!install_dir.exists(), "install directory should be removed");
 
     let conn = fixture.conn();
