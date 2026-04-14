@@ -1,3 +1,9 @@
+//! Shared coordination for doctor scan sources.
+//!
+//! Each submodule owns a single scan source, while this module provides the
+//! shared result container, sorting helpers, and the entry points used by the
+//! doctor workflow.
+
 use crate::models::domains::installed::InstalledPackage;
 use crate::models::domains::reporting::{
     DiagnosisResult, DiagnosisSeverity, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind,
@@ -11,17 +17,15 @@ mod package;
 pub(super) use msi::{MsiInventoryScan, scan_msi_inventory};
 pub(super) use package::{PackageInstallScan, installed_packages, scan_packages};
 
-pub(super) struct PackageJournalScan {
+#[derive(Debug, Default)]
+pub(super) struct ScanResult {
     pub(super) diagnostics: Vec<DiagnosisResult>,
     pub(super) recovery_findings: Vec<RecoveryFinding>,
 }
 
-impl PackageJournalScan {
+impl ScanResult {
     fn new() -> Self {
-        Self {
-            diagnostics: Vec::new(),
-            recovery_findings: Vec::new(),
-        }
+        Self::default()
     }
 
     fn push(&mut self, diagnosis: DiagnosisResult, target_path: Option<&std::path::Path>) {
@@ -37,22 +41,8 @@ impl PackageJournalScan {
 
         self.diagnostics.push(diagnosis);
     }
-}
 
-pub(super) struct OrphanInstallScan {
-    pub(super) diagnostics: Vec<DiagnosisResult>,
-    pub(super) recovery_findings: Vec<RecoveryFinding>,
-}
-
-impl OrphanInstallScan {
-    fn new() -> Self {
-        Self {
-            diagnostics: Vec::new(),
-            recovery_findings: Vec::new(),
-        }
-    }
-
-    fn push(&mut self, package_name: &str, path: &std::path::Path) {
+    fn push_orphan(&mut self, package_name: &str, path: &std::path::Path) {
         let description = format!(
             "{}: orphan install directory ({})",
             package_name,
@@ -75,6 +65,9 @@ impl OrphanInstallScan {
         });
     }
 }
+
+pub(super) type PackageJournalScan = ScanResult;
+pub(super) type OrphanInstallScan = ScanResult;
 
 pub(super) fn scan_package_journals(
     paths: &crate::core::paths::ResolvedPaths,
