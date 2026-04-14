@@ -19,10 +19,11 @@ pub mod package;
 pub mod shared_root;
 pub mod zip;
 
-pub use catalog::{catalog_package_id, seed_catalog_package};
+pub use catalog::{catalog_package_id, seed_catalog_db, seed_catalog_package};
 pub use db::{init_database, reset_install_state, reset_installed_packages};
 pub use env::{TestEnvVar, env_lock};
 pub use mock::MockServer;
+pub use mockito::Mock;
 pub use output::{
     assert_output_contains, assert_output_contains_all, assert_success, output_text, repo_root,
     run_winbrew,

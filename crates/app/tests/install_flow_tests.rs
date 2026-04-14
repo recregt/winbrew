@@ -1,80 +1,24 @@
-#[path = "common/shared_root.rs"]
-mod shared_root;
-
 use anyhow::Result;
-use mockito::{Mock, Server, ServerGuard};
-use rusqlite::{Connection, params};
-use shared_root::test_root;
 use std::fs;
-use std::io::{Cursor, Write};
 use std::path::Path;
-use winbrew::AppContext;
-use winbrew::database;
-use winbrew::services::app::install;
-use winbrew::services::app::install::InstallObserver;
-use winbrew_core::hash::{HashAlgorithm, Hasher};
-use winbrew_core::hash::hash_algorithm;
+
+use winbrew_app::install;
+use winbrew_app::install::InstallObserver;
+use winbrew_app::{AppContext, database};
 use winbrew_models::domains::catalog::CatalogPackage;
 use winbrew_models::domains::install::InstallerType;
 use winbrew_models::domains::installed::PackageStatus;
 use winbrew_models::domains::package::{PackageId, PackageName, PackageRef};
 use winbrew_models::shared::HashAlgorithm as CatalogHashAlgorithm;
-use zip::ZipWriter;
-use zip::write::SimpleFileOptions;
-
-fn create_dummy_zip_bytes() -> Result<Vec<u8>> {
-    let buffer = Cursor::new(Vec::new());
-    let mut writer = ZipWriter::new(buffer);
-    writer.start_file("bin/tool.exe", SimpleFileOptions::default())?;
-    writer.write_all(b"zip-binary")?;
-    let buffer = writer.finish()?;
-    Ok(buffer.into_inner())
-}
-
-fn reset_install_state(root: &Path) -> Result<()> {
-    let conn = database::get_conn()?;
-    conn.execute("DELETE FROM installed_packages", [])?;
-
-    let packages_dir = root.join("packages");
-    if packages_dir.exists() {
-        fs::remove_dir_all(&packages_dir)?;
-    }
-    fs::create_dir_all(&packages_dir)?;
-
-    Ok(())
-}
-
-fn digest_hex(algorithm: HashAlgorithm, bytes: &[u8]) -> String {
-    let mut hasher = Hasher::new(algorithm);
-    hasher.update(bytes);
-    let digest = hasher.finalize();
-
-    digest.iter().map(|byte| format!("{:02x}", byte)).collect()
-}
-
-fn md5_hex(bytes: &[u8]) -> String {
-    digest_hex(HashAlgorithm::Md5, bytes)
-}
-
-fn sha1_hex(bytes: &[u8]) -> String {
-    digest_hex(HashAlgorithm::Sha1, bytes)
-}
-
-fn sha512_hex(bytes: &[u8]) -> String {
-    digest_hex(HashAlgorithm::Sha512, bytes)
-}
-
-fn init_context(root: &Path) -> Result<AppContext> {
-    let config = database::Config::load_at(root)?;
-    let context = AppContext::from_config(config)?;
-    database::init(&context.paths)?;
-    Ok(context)
-}
+use winbrew_testing::{
+    Mock, MockServer, create_dummy_zip_bytes, init_database, md5_hex, reset_install_state,
+    seed_catalog_db, sha1_hex, sha512_hex, test_root,
+};
 
 struct InstallTestFixture {
     ctx: AppContext,
     package_name: String,
-    _server: Option<ServerGuard>,
+    server: Option<MockServer>,
     download_mock: Option<Mock>,
 }
 
@@ -96,35 +40,37 @@ impl InstallObserver for NoopInstallObserver {
 
 impl InstallTestFixture {
     fn from_catalog(root: &Path, installer_url: &str, hash: &str) -> Result<Self> {
+        let config = init_database(root)?;
         reset_install_state(root)?;
 
         let catalog_db_dir = root.join("data").join("db");
         fs::create_dir_all(&catalog_db_dir)?;
-        create_catalog_db_with_hash(&catalog_db_dir.join("catalog.db"), installer_url, hash)?;
+        seed_catalog_db(
+            &catalog_db_dir.join("catalog.db"),
+            "Winbrew Test Zip",
+            "Synthetic package for isolated install testing",
+            installer_url,
+            hash,
+        )?;
 
-        let ctx = init_context(root)?;
+        let ctx = AppContext::from_config(&config)?;
 
         Ok(Self {
             ctx,
             package_name: "Winbrew Test Zip".to_string(),
-            _server: None,
+            server: None,
             download_mock: None,
         })
     }
 
     fn from_zip(root: &Path, zip_bytes: Vec<u8>, hash: &str) -> Result<Self> {
-        let mut server = Server::new();
+        let mut server = MockServer::new();
 
         let installer_url = format!("{}/test.zip", server.url());
-        let download_mock = server
-            .mock("GET", "/test.zip")
-            .with_status(200)
-            .with_body(zip_bytes)
-            .expect(1)
-            .create();
+        let download_mock = server.mock_get("/test.zip", zip_bytes);
 
         let mut fixture = Self::from_catalog(root, &installer_url, hash)?;
-        fixture._server = Some(server);
+        fixture.server = Some(server);
         fixture.download_mock = Some(download_mock);
         Ok(fixture)
     }
@@ -199,7 +145,7 @@ fn install_supports_explicit_winget_ids() -> Result<()> {
 
     let outcome = fixture.run_install_ref(
         PackageRef::ById(PackageId::Winget {
-            id: "Winbrew.TestZip".to_string(),
+            id: "Winbrew.Test.Zip".to_string(),
         }),
         false,
     )?;
@@ -267,7 +213,7 @@ fn install_allows_sha1_with_override() -> Result<()> {
 
     assert!(matches!(
         outcome.legacy_checksum_algorithms.as_slice(),
-        [winbrew_core::hash::HashAlgorithm::Sha1]
+        [CatalogHashAlgorithm::Sha1]
     ));
     fixture.assert_downloaded();
     Ok(())
@@ -297,14 +243,9 @@ fn install_rolls_back_on_download_failure() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
 
-    let mut server = Server::new();
+    let mut server = MockServer::new();
     let installer_url = format!("{}/test.zip", server.url());
-    let download_mock = server
-        .mock("GET", "/test.zip")
-        .with_status(500)
-        .with_body("boom")
-        .expect(1)
-        .create();
+    let download_mock = server.mock_get_with_status("/test.zip", 500, "boom");
 
     let fixture = InstallTestFixture::from_catalog(root, &installer_url, "")?;
 
@@ -322,63 +263,6 @@ fn install_rolls_back_on_download_failure() -> Result<()> {
     let stored = database::get_package(&conn, &fixture.package_name)?
         .expect("package should remain tracked after rollback");
     assert_eq!(stored.status, PackageStatus::Failed);
-
-    Ok(())
-}
-
-fn create_catalog_db_with_hash(path: &Path, installer_url: &str, hash: &str) -> Result<()> {
-    let conn = Connection::open(path)?;
-
-    conn.execute_batch(include_str!("../infra/parser/schema/catalog.sql"))?;
-
-    conn.execute("DELETE FROM catalog_installers", [])?;
-    conn.execute("DELETE FROM catalog_packages", [])?;
-
-    let package_id = "winget/Winbrew.TestZip";
-    let source_id = package_id
-        .split_once('/')
-        .map(|(_, source_id)| source_id.to_string())
-        .unwrap_or_else(|| package_id.to_string());
-
-    conn.execute(
-        r#"
-        INSERT INTO catalog_packages (
-            id, name, version, source, namespace, source_id, description, homepage, license, publisher
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-        "#,
-        params![
-            package_id,
-            "Winbrew Test Zip",
-            "1.0.0",
-            "winget",
-            Option::<String>::None,
-            source_id,
-            Some("Synthetic package for isolated install testing"),
-            Option::<String>::None,
-            Option::<String>::None,
-            Some("Winbrew Ltd."),
-        ],
-    )?;
-
-    conn.execute(
-        r#"
-        INSERT INTO catalog_installers (
-            package_id, url, hash, hash_algorithm, installer_type, installer_switches, arch, kind
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-        "#,
-        params![
-            "winget/Winbrew.TestZip",
-            installer_url,
-            hash,
-            hash_algorithm(hash)
-                .unwrap_or(CatalogHashAlgorithm::Sha256)
-                .as_str(),
-            "zip",
-            Option::<String>::None,
-            "",
-            "zip",
-        ],
-    )?;
 
     Ok(())
 }
