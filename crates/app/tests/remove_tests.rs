@@ -4,7 +4,7 @@ use std::path::Path;
 
 use winbrew_app::database;
 use winbrew_app::remove;
-use winbrew_models::domains::install::InstallerType;
+use winbrew_models::domains::install::{EngineMetadata, InstallerType};
 use winbrew_models::domains::installed::{InstalledPackage as Package, PackageStatus};
 use winbrew_testing::{init_database, reset_install_state, test_root};
 
@@ -23,6 +23,21 @@ fn sample_package(
         engine_metadata: None,
         install_dir: install_dir.to_string_lossy().into_owned(),
         dependencies,
+        status: PackageStatus::Ok,
+        installed_at: "2026-04-05T00:00:00Z".to_string(),
+    }
+}
+
+fn native_exe_package(name: &str, install_dir: &Path, uninstall_command: String) -> Package {
+    Package {
+        name: name.to_string(),
+        version: "1.0.0".to_string(),
+        kind: InstallerType::Exe,
+        deployment_kind: InstallerType::Exe.deployment_kind(),
+        engine_kind: InstallerType::Exe.into(),
+        engine_metadata: Some(EngineMetadata::native_exe(Some(uninstall_command), None)),
+        install_dir: install_dir.to_string_lossy().into_owned(),
+        dependencies: Vec::new(),
         status: PackageStatus::Ok,
         installed_at: "2026-04-05T00:00:00Z".to_string(),
     }
@@ -160,27 +175,31 @@ fn find_dependents_returns_sorted_packages() -> Result<()> {
 }
 
 #[test]
-fn remove_rejects_unsupported_package_type() -> Result<()> {
+fn remove_removes_native_exe_package_and_runs_uninstall_command() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
     init_database(root)?;
     reset_install_state(root)?;
     let conn = database::get_conn()?;
 
-    let install_dir = root.join("packages").join("Contoso.Unsupported");
-    let package = sample_package(
-        "Contoso.Unsupported",
-        InstallerType::Exe,
-        &install_dir,
-        Vec::new(),
+    let install_dir = root.join("packages").join("Contoso.NativeExe");
+    fs::create_dir_all(&install_dir)?;
+    fs::write(install_dir.join("tool.exe"), b"binary")?;
+
+    let uninstall_marker = root.join("nativeexe-uninstall.log");
+    let uninstall_command = format!(
+        r#"powershell -NoProfile -Command "Set-Content -LiteralPath '{}' -Value 'ran'""#,
+        uninstall_marker.display()
     );
+    let package = native_exe_package("Contoso.NativeExe", &install_dir, uninstall_command);
 
     database::insert_package(&conn, &package)?;
 
-    let err = remove::remove(&package.name, false).expect_err("unsupported kind should fail");
+    remove::remove(&package.name, false)?;
 
-    assert!(err.to_string().contains("unsupported package type"));
-    assert!(database::get_package(&conn, &package.name)?.is_some());
+    assert!(uninstall_marker.exists());
+    assert!(!install_dir.exists());
+    assert!(database::get_package(&conn, &package.name)?.is_none());
 
     Ok(())
 }
