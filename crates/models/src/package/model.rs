@@ -23,6 +23,10 @@ pub enum PackageSource {
     Winget,
     /// A package sourced from a Scoop bucket.
     Scoop,
+    /// A package sourced from Chocolatey.
+    Chocolatey,
+    /// A package sourced from the WinBrew catalog.
+    Winbrew,
 }
 
 /// The lifecycle classification of a package record.
@@ -86,12 +90,16 @@ impl PackageSource {
         match self {
             Self::Winget => "winget",
             Self::Scoop => "scoop",
+            Self::Chocolatey => "chocolatey",
+            Self::Winbrew => "winbrew",
         }
     }
 
     pub fn from_catalog_id(id: &str) -> Self {
         match id.split_once('/') {
             Some(("scoop", _)) => Self::Scoop,
+            Some(("chocolatey", _)) => Self::Chocolatey,
+            Some(("winbrew", _)) => Self::Winbrew,
             _ => Self::Winget,
         }
     }
@@ -104,6 +112,8 @@ impl FromStr for PackageSource {
         match s.trim().to_ascii_lowercase().as_str() {
             "winget" => Ok(Self::Winget),
             "scoop" => Ok(Self::Scoop),
+            "chocolatey" => Ok(Self::Chocolatey),
+            "winbrew" => Ok(Self::Winbrew),
             other => Err(ModelError::invalid_enum_value("package.source", other)),
         }
     }
@@ -200,6 +210,14 @@ mod tests {
         assert_eq!(
             PackageSource::from_str("scoop").unwrap(),
             PackageSource::Scoop
+        );
+        assert_eq!(
+            PackageSource::from_str("chocolatey").unwrap(),
+            PackageSource::Chocolatey
+        );
+        assert_eq!(
+            PackageSource::from_str("winbrew").unwrap(),
+            PackageSource::Winbrew
         );
         assert_eq!(
             PackageKind::from_str("catalog").unwrap(),

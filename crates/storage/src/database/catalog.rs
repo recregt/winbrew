@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::CatalogSchemaVersionMismatchError;
-use winbrew_models::catalog::metadata::SCHEMA_VERSION as CATALOG_SCHEMA_VERSION;
+use winbrew_models::catalog::metadata::CATALOG_DB_SCHEMA_VERSION as CATALOG_SCHEMA_VERSION;
 use winbrew_models::catalog::package::{CatalogInstaller, CatalogPackage};
 use winbrew_models::catalog::raw::{RawCatalogInstaller, RawCatalogPackage};
 
@@ -13,7 +13,7 @@ pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
     }
 
     let mut stmt = conn.prepare(
-        "SELECT p.id, p.name, p.version, p.description, p.homepage, p.license, p.publisher
+        "SELECT p.id, p.name, p.version, p.source, p.namespace, p.source_id, p.description, p.homepage, p.license, p.publisher
          FROM catalog_packages p
          JOIN catalog_packages_fts fts ON p.rowid = fts.rowid
          WHERE catalog_packages_fts MATCH ?1
@@ -61,7 +61,7 @@ fn catalog_installers_has_nested_kind(conn: &Connection) -> Result<bool> {
 
 pub fn get_package_by_id(conn: &Connection, package_id: &str) -> Result<Option<CatalogPackage>> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, version, description, homepage, license, publisher
+        "SELECT id, name, version, source, namespace, source_id, description, homepage, license, publisher
          FROM catalog_packages
          WHERE id = ?1",
     )?;
@@ -91,7 +91,9 @@ fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
         id: row.get::<_, String>("id")?,
         name: row.get("name")?,
         version: row.get("version")?,
-        source: None,
+        source: row.get("source")?,
+        namespace: row.get("namespace")?,
+        source_id: row.get("source_id")?,
         description: row.get("description")?,
         homepage: row.get("homepage")?,
         license: row.get("license")?,
@@ -120,7 +122,7 @@ fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_schema_version, get_installers};
+    use super::{CATALOG_SCHEMA_VERSION, ensure_schema_version, get_installers};
     use rusqlite::Connection;
     use winbrew_models::install::installer::InstallerType;
 
@@ -215,8 +217,11 @@ mod tests {
     #[test]
     fn ensure_schema_version_accepts_expected_version() {
         let conn = Connection::open_in_memory().expect("open in-memory database");
-        conn.execute("PRAGMA user_version = 1", [])
-            .expect("set schema version");
+        conn.execute(
+            &format!("PRAGMA user_version = {}", CATALOG_SCHEMA_VERSION),
+            [],
+        )
+        .expect("set schema version");
 
         ensure_schema_version(&conn).expect("schema version should match");
     }

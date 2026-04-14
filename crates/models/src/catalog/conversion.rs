@@ -9,16 +9,20 @@ use core::convert::TryFrom;
 use crate::catalog::package::{CatalogInstaller, CatalogPackage};
 use crate::catalog::raw::{RawCatalogInstaller, RawCatalogPackage};
 use crate::package::Package;
-use crate::package::PackageSource;
+use crate::package::PackageId;
 use crate::shared::ModelError;
 
 impl From<&Package> for CatalogPackage {
     fn from(package: &Package) -> Self {
+        let package_id = PackageId::parse(package.id.as_ref()).expect("package id should parse");
+
         Self {
             id: package.id.clone().into(),
             name: package.name.clone(),
             version: package.version.clone(),
-            source: package.source,
+            source: package_id.source(),
+            namespace: package_id.namespace().map(str::to_string),
+            source_id: package_id.source_id().to_string(),
             description: package.description.clone(),
             homepage: package.homepage.clone(),
             license: package.license.clone(),
@@ -31,18 +35,15 @@ impl TryFrom<RawCatalogPackage> for CatalogPackage {
     type Error = ModelError;
 
     fn try_from(raw: RawCatalogPackage) -> Result<Self, Self::Error> {
-        let source = raw
-            .source
-            .as_deref()
-            .map(str::parse)
-            .transpose()?
-            .unwrap_or_else(|| PackageSource::from_catalog_id(&raw.id));
+        let source = raw.source.parse()?;
 
         let package = Self {
             id: raw.id.into(),
             name: raw.name,
             version: raw.version.parse()?,
             source,
+            namespace: raw.namespace,
+            source_id: raw.source_id,
             description: raw.description,
             homepage: raw.homepage,
             license: raw.license,
@@ -85,7 +86,9 @@ mod tests {
             id: "winget/Contoso.App".to_string(),
             name: "Contoso App".to_string(),
             version: "1.2.3".to_string(),
-            source: None,
+            source: "winget".to_string(),
+            namespace: None,
+            source_id: "Contoso.App".to_string(),
             description: Some("Example package".to_string()),
             homepage: None,
             license: None,
@@ -95,6 +98,8 @@ mod tests {
         let converted = CatalogPackage::try_from(package).expect("raw package should convert");
 
         assert_eq!(converted.source, PackageSource::Winget);
+        assert_eq!(converted.namespace, None);
+        assert_eq!(converted.source_id, "Contoso.App");
         assert_eq!(converted.version.to_string(), "1.2.3");
     }
 

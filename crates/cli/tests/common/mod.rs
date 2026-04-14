@@ -105,17 +105,24 @@ pub fn seed_catalog_package(
     conn.execute("DELETE FROM catalog_packages", [])?;
 
     let package_id = catalog_package_id(package_name);
+    let source_id = package_id
+        .split_once('/')
+        .map(|(_, source_id)| source_id.to_string())
+        .unwrap_or_else(|| package_id.clone());
 
     conn.execute(
         r#"
         INSERT INTO catalog_packages (
-            id, name, version, description, homepage, license, publisher
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            id, name, version, source, namespace, source_id, description, homepage, license, publisher
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
         "#,
         params![
             package_id.clone(),
             package_name,
             "1.0.0",
+            "winget",
+            Option::<String>::None,
+            source_id,
             Some(description),
             Option::<String>::None,
             Option::<String>::None,

@@ -1,6 +1,6 @@
 use winbrew_models::catalog::package::{CatalogInstaller, CatalogPackage};
 use winbrew_models::install::installer::{Architecture, InstallerType};
-use winbrew_models::package::model::PackageSource;
+use winbrew_models::package::PackageId;
 use winbrew_models::shared::version::Version;
 
 use crate::error::ParserError;
@@ -15,12 +15,15 @@ pub struct ParsedPackage {
 
 pub fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, ParserError> {
     let raw_json = serde_json::to_string(&raw)?;
+    let package_id = PackageId::parse(raw.id.as_str())?;
 
     let package = CatalogPackage {
         id: raw.id.clone().into(),
         name: raw.name,
         version: Version::parse_lossy(&raw.version)?,
-        source: PackageSource::from_catalog_id(&raw.id),
+        source: package_id.source(),
+        namespace: package_id.namespace().map(str::to_string),
+        source_id: package_id.source_id().to_string(),
         description: raw.description,
         homepage: raw.homepage,
         license: raw.license,

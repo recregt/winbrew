@@ -147,7 +147,6 @@ mod tests {
     use winbrew_models::domains::catalog::CatalogPackage;
     use winbrew_models::domains::install::{EngineKind, InstallerType};
     use winbrew_models::domains::installed::{InstalledPackage, PackageStatus};
-    use winbrew_models::domains::package::PackageSource;
     use winbrew_models::domains::shared::DeploymentKind;
     use winbrew_models::domains::shared::Version;
 
@@ -174,15 +173,15 @@ mod tests {
     }
 
     fn catalog_package(description: Option<&str>) -> CatalogPackage {
-        CatalogPackage {
-            id: "scoop/main/Contoso.App".into(),
-            name: "Contoso App".to_string(),
-            version: Version::parse("1.2.3").expect("version should parse"),
-            source: PackageSource::Scoop,
-            description: description.map(ToOwned::to_owned),
-            homepage: None,
-            license: None,
-            publisher: None,
+        let package = CatalogPackage::test_builder(
+            "scoop/main/Contoso.App".into(),
+            "Contoso App",
+            Version::parse("1.2.3").expect("version should parse"),
+        );
+
+        match description {
+            Some(description) => package.with_description(description),
+            None => package,
         }
     }
 
@@ -218,16 +217,11 @@ mod tests {
         ui.display_catalog_packages(&[catalog_package(Some(long_description))]);
         ui.display_catalog_packages(&[
             catalog_package(Some("Short description")),
-            CatalogPackage {
-                id: "winget/main/Fabrikam.Tool".into(),
-                name: "Fabrikam Tool".to_string(),
-                version: Version::parse("2.0.0").expect("version should parse"),
-                source: PackageSource::Winget,
-                description: None,
-                homepage: None,
-                license: None,
-                publisher: None,
-            },
+            CatalogPackage::test_builder(
+                "winget/Fabrikam.Tool".into(),
+                "Fabrikam Tool",
+                Version::parse("2.0.0").expect("version should parse"),
+            ),
         ]);
         ui.display_catalog_packages(&[catalog_package(None)]);
 
@@ -242,7 +236,7 @@ mod tests {
         assert!(!output.contains(long_description));
         assert!(!output.contains("No description available"));
         assert!(output.contains("Contoso App"));
-        assert!(output.contains("winget/main/Fabrikam.Tool"));
+        assert!(output.contains("winget/Fabrikam.Tool"));
         assert!(output.contains("scoop/main/Contoso.App"));
         assert!(output.contains("catalog packages"));
     }

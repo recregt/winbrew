@@ -44,5 +44,7 @@ fn install_rejects_invalid_package_reference() {
     let text = err.to_string();
 
     assert!(text.contains("invalid package id invalid"));
-    assert!(text.contains("expected @winget/<id> or @scoop/<bucket>/<id>"));
+    assert!(text.contains(
+        "expected @winget/<id>, @scoop/<bucket>/<id>, @chocolatey/<id>, or @winbrew/<id>"
+    ));
 }

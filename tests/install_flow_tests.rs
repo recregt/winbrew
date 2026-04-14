@@ -332,16 +332,25 @@ fn create_catalog_db_with_hash(path: &Path, installer_url: &str, hash: &str) -> 
     conn.execute("DELETE FROM catalog_installers", [])?;
     conn.execute("DELETE FROM catalog_packages", [])?;
 
+    let package_id = "winget/Winbrew.TestZip";
+    let source_id = package_id
+        .split_once('/')
+        .map(|(_, source_id)| source_id.to_string())
+        .unwrap_or_else(|| package_id.to_string());
+
     conn.execute(
         r#"
         INSERT INTO catalog_packages (
-            id, name, version, description, homepage, license, publisher
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            id, name, version, source, namespace, source_id, description, homepage, license, publisher
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
         "#,
         params![
-            "winget/Winbrew.TestZip",
+            package_id,
             "Winbrew Test Zip",
             "1.0.0",
+            "winget",
+            Option::<String>::None,
+            source_id,
             Some("Synthetic package for isolated install testing"),
             Option::<String>::None,
             Option::<String>::None,

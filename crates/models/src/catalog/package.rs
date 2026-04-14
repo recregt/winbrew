@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::install::{Architecture, InstallerType};
-use crate::package::PackageSource;
+use crate::package::{PackageId, PackageSource};
 use crate::shared::CatalogId;
 use crate::shared::validation::{Validate, ensure_hash, ensure_http_url, ensure_non_empty};
 use crate::shared::{ModelError, Version};
@@ -21,6 +21,12 @@ pub struct CatalogPackage {
     pub version: Version,
     /// Package source.
     pub source: PackageSource,
+    /// Optional namespace or bucket within the source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<String>,
+    /// Source-local identifier for the package.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub source_id: String,
     /// Optional package summary.
     pub description: Option<String>,
     /// Optional homepage URL.
@@ -54,14 +60,41 @@ impl CatalogPackage {
     pub fn validate(&self) -> Result<(), ModelError> {
         self.id.validate()?;
         ensure_non_empty("catalog_package.name", &self.name)?;
+        ensure_non_empty("catalog_package.source_id", &self.source_id)?;
+        if let Some(namespace) = self.namespace.as_deref() {
+            ensure_non_empty("catalog_package.namespace", namespace)?;
+        }
         self.version.validate()?;
 
-        let expected_source = PackageSource::from_catalog_id(self.id.as_ref());
+        let package_id = PackageId::parse(self.id.as_ref())?;
+        let expected_source = package_id.source();
         if self.source != expected_source {
             return Err(ModelError::source_mismatch(
                 "catalog_package.source",
-                expected_source,
-                self.source,
+                expected_source.as_str(),
+                self.source.as_str(),
+            ));
+        }
+
+        if self.namespace.as_deref() != package_id.namespace() {
+            return Err(ModelError::invalid_contract(
+                "catalog_package.namespace",
+                format!(
+                    "expected {:?}, got {:?}",
+                    package_id.namespace(),
+                    self.namespace.as_deref()
+                ),
+            ));
+        }
+
+        if self.source_id != package_id.source_id() {
+            return Err(ModelError::invalid_contract(
+                "catalog_package.source_id",
+                format!(
+                    "expected {}, got {}",
+                    package_id.source_id(),
+                    self.source_id
+                ),
             ));
         }
 
@@ -129,6 +162,66 @@ impl CatalogInstaller {
     }
 }
 
+#[cfg(any(test, debug_assertions))]
+impl CatalogPackage {
+    pub fn test_builder(id: CatalogId, name: &str, version: Version) -> Self {
+        let package_id = PackageId::parse(id.as_ref()).expect("catalog id should parse");
+
+        Self {
+            id,
+            name: name.to_string(),
+            version,
+            source: package_id.source(),
+            namespace: package_id.namespace().map(str::to_string),
+            source_id: package_id.source_id().to_string(),
+            description: None,
+            homepage: None,
+            license: None,
+            publisher: None,
+        }
+    }
+
+    pub fn with_source(mut self, source: PackageSource) -> Self {
+        self.source = source;
+        self
+    }
+
+    pub fn with_namespace(mut self, namespace: impl Into<String>) -> Self {
+        self.namespace = Some(namespace.into());
+        self
+    }
+
+    pub fn without_namespace(mut self) -> Self {
+        self.namespace = None;
+        self
+    }
+
+    pub fn with_source_id(mut self, source_id: impl Into<String>) -> Self {
+        self.source_id = source_id.into();
+        self
+    }
+
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    pub fn with_homepage(mut self, homepage: impl Into<String>) -> Self {
+        self.homepage = Some(homepage.into());
+        self
+    }
+
+    pub fn with_license(mut self, license: impl Into<String>) -> Self {
+        self.license = Some(license.into());
+        self
+    }
+
+    pub fn with_publisher(mut self, publisher: impl Into<String>) -> Self {
+        self.publisher = Some(publisher.into());
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{CatalogInstaller, CatalogPackage};
@@ -138,16 +231,12 @@ mod tests {
 
     #[test]
     fn rejects_source_mismatch() {
-        let package = CatalogPackage {
-            id: "winget/Contoso.App".into(),
-            name: "Contoso App".to_string(),
-            version: Version::parse("1.2.3").expect("version should parse"),
-            source: PackageSource::Scoop,
-            description: None,
-            homepage: None,
-            license: None,
-            publisher: None,
-        };
+        let package = CatalogPackage::test_builder(
+            "winget/Contoso.App".into(),
+            "Contoso App",
+            Version::parse("1.2.3").expect("version should parse"),
+        )
+        .with_source(PackageSource::Scoop);
 
         let err = package.validate().expect_err("source mismatch should fail");
 
@@ -205,16 +294,13 @@ mod tests {
 
     #[test]
     fn catalog_package_round_trips_through_serde() {
-        let package = CatalogPackage {
-            id: "scoop/main/Contoso.App".into(),
-            name: "Contoso App".to_string(),
-            version: Version::parse("1.2.3").expect("version should parse"),
-            source: PackageSource::Scoop,
-            description: Some("Example package".to_string()),
-            homepage: None,
-            license: None,
-            publisher: Some("Contoso Ltd.".to_string()),
-        };
+        let package = CatalogPackage::test_builder(
+            "scoop/main/Contoso.App".into(),
+            "Contoso App",
+            Version::parse("1.2.3").expect("version should parse"),
+        )
+        .with_description("Example package")
+        .with_publisher("Contoso Ltd.");
 
         let json = serde_json::to_string(&package).expect("package should serialize");
         let restored: CatalogPackage =
@@ -222,6 +308,8 @@ mod tests {
 
         assert_eq!(restored.id, package.id);
         assert_eq!(restored.source, package.source);
+        assert_eq!(restored.namespace, package.namespace);
+        assert_eq!(restored.source_id, package.source_id);
         assert_eq!(restored.version, package.version);
         assert_eq!(restored.publisher, package.publisher);
     }
