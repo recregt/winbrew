@@ -114,64 +114,112 @@ mod tests {
     use crate::database;
     use anyhow::Result;
     use std::fs;
-    use std::path::Path;
+    use tempfile::TempDir;
+    use winbrew_models::domains::catalog::CatalogPackage;
     use winbrew_models::domains::package::{PackageName, PackageRef};
     use winbrew_testing::{append_catalog_db, init_database, seed_catalog_db, test_root};
 
-    fn prepare_catalog(root: &Path, packages: &[(&str, &str, &str)]) -> Result<()> {
-        assert!(!packages.is_empty());
+    struct TestCatalog {
+        _root: TempDir,
+    }
 
-        init_database(root)?;
+    impl TestCatalog {
+        fn with_packages(packages: &[(&str, &str, &str)]) -> Result<Self> {
+            assert!(!packages.is_empty());
 
-        let catalog_db_path = root.join("data").join("db").join("catalog.db");
-        fs::create_dir_all(
-            catalog_db_path
-                .parent()
-                .expect("catalog database parent directory"),
-        )?;
+            let root = test_root();
+            init_database(root.path())?;
 
-        let (first_name, first_description, first_url) = packages[0];
-        seed_catalog_db(
-            &catalog_db_path,
-            first_name,
-            first_description,
-            first_url,
-            "sha256:11111111",
-        )?;
+            let catalog_db_path = root.path().join("data").join("db").join("catalog.db");
+            fs::create_dir_all(
+                catalog_db_path
+                    .parent()
+                    .expect("catalog database parent directory"),
+            )?;
 
-        for (index, &(name, description, url)) in packages.iter().enumerate().skip(1) {
-            let hash = format!("sha256:{index:08x}");
-            append_catalog_db(&catalog_db_path, name, description, url, &hash)?;
+            let (first_name, first_description, first_url) = packages[0];
+            seed_catalog_db(
+                &catalog_db_path,
+                first_name,
+                first_description,
+                first_url,
+                "sha256:11111111",
+            )?;
+
+            for (index, &(name, description, url)) in packages.iter().enumerate().skip(1) {
+                let hash = format!("sha256:{index:08x}");
+                append_catalog_db(&catalog_db_path, name, description, url, &hash)?;
+            }
+
+            Ok(Self { _root: root })
         }
 
-        Ok(())
+        fn conn(&self) -> Result<database::DbConnection> {
+            database::get_catalog_conn()
+        }
+
+        fn resolve_by_name(&self, name: &str) -> Result<CatalogPackage> {
+            self.resolve_by_name_with_chooser(name, |_, _| {
+                panic!("chooser should not be called for an exact name match")
+            })
+        }
+
+        fn resolve_by_name_with_chooser<F>(&self, name: &str, chooser: F) -> Result<CatalogPackage>
+        where
+            F: FnMut(&str, &[CatalogPackage]) -> Result<usize>,
+        {
+            let conn = self.conn()?;
+            resolve_catalog_package_ref(
+                &conn,
+                &PackageRef::ByName(PackageName::parse(name)?),
+                chooser,
+            )
+        }
+
+        fn resolve_ref(&self, package_ref: &str) -> Result<CatalogPackage> {
+            let conn = self.conn()?;
+            let package_ref = PackageRef::parse(package_ref)?;
+
+            resolve_catalog_package_ref(&conn, &package_ref, |_, _| {
+                panic!("chooser should not be called for exact id resolution")
+            })
+        }
+
+        fn search(&self, query: &str) -> Result<Vec<CatalogPackage>> {
+            search_packages(query)
+        }
     }
 
     #[test]
     fn exact_name_match_bypasses_chooser() -> Result<()> {
-        let root = test_root();
-        prepare_catalog(
-            root.path(),
-            &[
-                (
-                    "Contoso",
-                    "Exact match package",
-                    "https://example.invalid/contoso.zip",
-                ),
-                (
-                    "Contoso App",
-                    "Ambiguous sibling package",
-                    "https://example.invalid/contoso-app.zip",
-                ),
-            ],
-        )?;
+        let catalog = TestCatalog::with_packages(&[
+            (
+                "Contoso",
+                "Exact match package",
+                "https://example.invalid/contoso.zip",
+            ),
+            (
+                "Contoso App",
+                "Ambiguous sibling package",
+                "https://example.invalid/contoso-app.zip",
+            ),
+        ])?;
 
-        let conn = database::get_catalog_conn()?;
-        let package = resolve_catalog_package_ref(
-            &conn,
-            &PackageRef::ByName(PackageName::parse("Contoso")?),
-            |_, _| panic!("chooser should not be called for an exact name match"),
-        )?;
+        let package = catalog.resolve_by_name("Contoso")?;
+
+        assert_eq!(package.name, "Contoso");
+        Ok(())
+    }
+
+    #[test]
+    fn case_insensitive_exact_name_match_is_preferred() -> Result<()> {
+        let catalog = TestCatalog::with_packages(&[(
+            "Contoso",
+            "Exact match package",
+            "https://example.invalid/contoso.zip",
+        )])?;
+
+        let package = catalog.resolve_by_name("contoso")?;
 
         assert_eq!(package.name, "Contoso");
         Ok(())
@@ -179,34 +227,27 @@ mod tests {
 
     #[test]
     fn chooser_selection_returns_requested_package() -> Result<()> {
-        let root = test_root();
-        prepare_catalog(
-            root.path(),
-            &[
-                (
-                    "Alpha Tool",
-                    "First ambiguous package",
-                    "https://example.invalid/alpha.zip",
-                ),
-                (
-                    "Beta Tool",
-                    "Second ambiguous package",
-                    "https://example.invalid/beta.zip",
-                ),
-            ],
-        )?;
+        let catalog = TestCatalog::with_packages(&[
+            (
+                "Alpha Tool",
+                "First ambiguous package",
+                "https://example.invalid/alpha.zip",
+            ),
+            (
+                "Beta Tool",
+                "Second ambiguous package",
+                "https://example.invalid/beta.zip",
+            ),
+        ])?;
 
-        let conn = database::get_catalog_conn()?;
-        let package = resolve_catalog_package_ref(
-            &conn,
-            &PackageRef::ByName(PackageName::parse("Tool")?),
-            |_, matches| {
-                Ok(matches
-                    .iter()
-                    .position(|pkg| pkg.name == "Beta Tool")
-                    .expect("beta package should be in the chooser list"))
-            },
-        )?;
+        let package = catalog.resolve_by_name_with_chooser("Tool", |query, matches| {
+            assert_eq!(query, "Tool");
+            assert_eq!(matches.len(), 2);
+            Ok(matches
+                .iter()
+                .position(|pkg| pkg.name == "Beta Tool")
+                .expect("beta package should be in the chooser list"))
+        })?;
 
         assert_eq!(package.name, "Beta Tool");
         Ok(())
@@ -214,30 +255,22 @@ mod tests {
 
     #[test]
     fn chooser_selection_rejects_out_of_range_index() -> Result<()> {
-        let root = test_root();
-        prepare_catalog(
-            root.path(),
-            &[
-                (
-                    "Alpha Tool",
-                    "First ambiguous package",
-                    "https://example.invalid/alpha.zip",
-                ),
-                (
-                    "Beta Tool",
-                    "Second ambiguous package",
-                    "https://example.invalid/beta.zip",
-                ),
-            ],
-        )?;
+        let catalog = TestCatalog::with_packages(&[
+            (
+                "Alpha Tool",
+                "First ambiguous package",
+                "https://example.invalid/alpha.zip",
+            ),
+            (
+                "Beta Tool",
+                "Second ambiguous package",
+                "https://example.invalid/beta.zip",
+            ),
+        ])?;
 
-        let conn = database::get_catalog_conn()?;
-        let err = resolve_catalog_package_ref(
-            &conn,
-            &PackageRef::ByName(PackageName::parse("Tool")?),
-            |_, matches| Ok(matches.len()),
-        )
-        .expect_err("out-of-range chooser index should fail");
+        let err = catalog
+            .resolve_by_name_with_chooser("Tool", |_, matches| Ok(matches.len()))
+            .expect_err("out-of-range chooser index should fail");
 
         assert!(err.to_string().contains("out of range"));
         Ok(())
@@ -245,20 +278,46 @@ mod tests {
 
     #[test]
     fn search_packages_returns_results_from_catalog_db() -> Result<()> {
-        let root = test_root();
-        prepare_catalog(
-            root.path(),
-            &[(
-                "Contoso",
-                "Exact match package",
-                "https://example.invalid/contoso.zip",
-            )],
-        )?;
+        let catalog = TestCatalog::with_packages(&[(
+            "Contoso",
+            "Exact match package",
+            "https://example.invalid/contoso.zip",
+        )])?;
 
-        let packages = search_packages("Contoso")?;
+        let packages = catalog.search("Contoso")?;
 
         assert_eq!(packages.len(), 1);
         assert_eq!(packages[0].name, "Contoso");
+        Ok(())
+    }
+
+    #[test]
+    fn empty_query_returns_no_results() -> Result<()> {
+        let catalog = TestCatalog::with_packages(&[(
+            "Contoso",
+            "Exact match package",
+            "https://example.invalid/contoso.zip",
+        )])?;
+
+        let packages = catalog.search("   ")?;
+
+        assert!(packages.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn id_resolution_is_deterministic() -> Result<()> {
+        let catalog = TestCatalog::with_packages(&[(
+            "Contoso",
+            "Exact match package",
+            "https://example.invalid/contoso.zip",
+        )])?;
+
+        let first = catalog.resolve_ref("@winget/Contoso")?;
+        let second = catalog.resolve_ref("@winget/Contoso")?;
+
+        assert_eq!(first.id, second.id);
+        assert_eq!(first.name, "Contoso");
         Ok(())
     }
 }
