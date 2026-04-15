@@ -10,7 +10,7 @@ use winbrew_models::shared::DeploymentKind;
 use super::EngineKind;
 use crate::filesystem::{archive::zip, portable};
 use crate::payload::{PayloadKind, classify_payload};
-use crate::windows::package::msix;
+use crate::windows::api::msix;
 
 #[cfg(windows)]
 use crate::windows::native::{exe, msi};

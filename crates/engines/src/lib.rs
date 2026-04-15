@@ -13,7 +13,7 @@ pub mod windows;
 
 pub use filesystem::archive::zip;
 pub use filesystem::portable;
-pub use windows::package::msix;
+pub use windows::api::msix;
 
 use anyhow::Result;
 use std::path::Path;
