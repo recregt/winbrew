@@ -1,3 +1,10 @@
+//! MSIX installation implementation.
+//!
+//! This is a thin adapter around the Windows App Installer APIs exposed by
+//! `winbrew_windows::msix_install`. It does not unpack files or manage a
+//! portable install tree; it only records the MSIX receipt metadata WinBrew
+//! needs later for removal.
+
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
@@ -8,6 +15,11 @@ use winbrew_models::install::engine::{
 
 use winbrew_windows::msix_install;
 
+/// Install an MSIX package and return the receipt data WinBrew needs later.
+///
+/// The function calls into Windows to register the package, creates the target
+/// install directory so the install record has a concrete path, and returns an
+/// `EngineInstallReceipt` with `EngineKind::Msix` plus `EngineMetadata::Msix`.
 pub fn install(
     download_path: &Path,
     install_dir: &Path,
