@@ -28,7 +28,7 @@ That keeps the design discussion close to the rest of the workspace documentatio
 | `InstallerType::Msix` | `EngineKind::Msix` | Supported on Windows | Windows-delegated, WinBrew-coordinated | Delegates install/remove to Windows App Installer / package APIs and records package identity metadata. |
 | `InstallerType::Zip` | `EngineKind::Zip` | Supported | WinBrew-owned filesystem engine | ZIP is the archive front door today. The same dispatcher already carries the `ArchiveKind` family, and ZIP/Tar backends are implemented there. Remove is plain directory cleanup. |
 | `InstallerType::Portable` | `EngineKind::Portable` | Supported | WinBrew-owned filesystem engine | Copies raw payloads into a staging tree, then replaces the target install directory. Raw-only fallback; archive-shaped payloads route through the archive dispatcher instead of Portable. Remove is plain directory cleanup. |
-| `InstallerType::Exe` | `EngineKind::NativeExe` | Supported on Windows | Windows-delegated, WinBrew-coordinated | v1 covers the native-exe family (`Exe`, `Inno`, `Nullsoft`, `Burn`). `Pwa` and `Font` remain scaffolded. |
+| `InstallerType::Exe` | `EngineKind::NativeExe` | Supported on Windows | Windows-delegated, WinBrew-coordinated | v1 covers the native-exe family (`Exe`, `Inno`, `Nullsoft`, `Burn`). Switches are parsed literally and duplicate entries are rejected. `Pwa` and `Font` remain scaffolded. |
 
 ### Practical split
 
