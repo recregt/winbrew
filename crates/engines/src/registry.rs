@@ -11,6 +11,7 @@ use super::EngineKind;
 use crate::filesystem::{archive::zip, portable};
 use crate::payload::{PayloadKind, classify_payload};
 use crate::windows::api::msix;
+use crate::windows::font;
 
 #[cfg(windows)]
 use crate::windows::native::{exe, msi};
@@ -32,6 +33,10 @@ fn matches_msix_installer(installer: &CatalogInstaller) -> bool {
 
 fn matches_native_exe_installer(installer: &CatalogInstaller) -> bool {
     installer.kind.is_native_exe_family()
+}
+
+fn matches_font_installer(installer: &CatalogInstaller) -> bool {
+    installer.kind.is_font_family()
 }
 
 #[cfg(windows)]
@@ -86,6 +91,24 @@ fn native_exe_install(
     }
 }
 
+fn font_install(
+    installer: &CatalogInstaller,
+    download_path: &Path,
+    install_dir: &Path,
+    package_name: &str,
+) -> Result<EngineInstallReceipt> {
+    #[cfg(not(windows))]
+    {
+        let _ = (installer, download_path, install_dir, package_name);
+        bail!("font installation is only supported on Windows")
+    }
+
+    #[cfg(windows)]
+    {
+        font::install(installer, download_path, install_dir, package_name)
+    }
+}
+
 #[cfg(windows)]
 fn msi_install(
     _installer: &CatalogInstaller,
@@ -131,6 +154,19 @@ fn native_exe_remove(package: &InstalledPackage) -> Result<()> {
     }
 }
 
+fn font_remove(package: &InstalledPackage) -> Result<()> {
+    #[cfg(not(windows))]
+    {
+        let _ = package;
+        bail!("font removal is only supported on Windows")
+    }
+
+    #[cfg(windows)]
+    {
+        font::remove(package)
+    }
+}
+
 #[cfg(windows)]
 fn msi_remove(package: &InstalledPackage) -> Result<()> {
     msi::remove(package)
@@ -144,9 +180,9 @@ fn portable_remove(package: &InstalledPackage) -> Result<()> {
     portable::remove::remove(package)
 }
 
-// Native executable families must appear before Zip so explicit installer kinds
-// win over archive URL heuristics. Zip must still appear before Portable so
-// archive payloads do not fall back to the raw-copy engine.
+// Native executable and font families must appear before Zip so explicit
+// installer kinds win over archive URL heuristics. Zip must still appear before
+// Portable so archive payloads do not fall back to the raw-copy engine.
 const ENGINE_DESCRIPTORS: &[EngineDescriptor] = &[
     #[cfg(windows)]
     EngineDescriptor {
@@ -166,6 +202,12 @@ const ENGINE_DESCRIPTORS: &[EngineDescriptor] = &[
         install: native_exe_install,
         remove: native_exe_remove,
         matches_installer: matches_native_exe_installer,
+    },
+    EngineDescriptor {
+        kind: EngineKind::Font,
+        install: font_install,
+        remove: font_remove,
+        matches_installer: matches_font_installer,
     },
     EngineDescriptor {
         kind: EngineKind::Zip,
@@ -302,16 +344,25 @@ mod tests {
     }
 
     #[test]
-    fn resolve_installer_keeps_special_case_native_exe_variants_unsupported() {
-        for kind in [InstallerType::Pwa, InstallerType::Font] {
-            let err = resolve_engine_kind_for_installer(&installer(
-                kind,
-                "https://example.invalid/special-installer.exe",
-            ))
-            .expect_err("special cases should not route yet");
+    fn resolve_installer_keeps_pwa_unsupported() {
+        let err = resolve_engine_kind_for_installer(&installer(
+            InstallerType::Pwa,
+            "https://example.invalid/special-installer.exe",
+        ))
+        .expect_err("pwa should not route yet");
 
-            assert!(err.to_string().contains("unsupported installer type"));
-        }
+        assert!(err.to_string().contains("unsupported installer type"));
+    }
+
+    #[test]
+    fn resolve_installer_routes_font_to_font_engine() {
+        let engine = resolve_engine_kind_for_installer(&installer(
+            InstallerType::Font,
+            "https://example.invalid/font.ttf",
+        ))
+        .expect("engine should resolve");
+
+        assert_eq!(engine, EngineKind::Font);
     }
 
     #[test]

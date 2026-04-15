@@ -28,13 +28,15 @@ That keeps the design discussion close to the rest of the workspace documentatio
 | `InstallerType::Msix` | `EngineKind::Msix` | Supported on Windows | Windows-delegated, WinBrew-coordinated | Delegates install/remove to Windows App Installer / package APIs and records package identity metadata. |
 | `InstallerType::Zip` | `EngineKind::Zip` | Supported | WinBrew-owned filesystem engine | ZIP is the archive front door today. The same dispatcher already carries the `ArchiveKind` family, and ZIP/Tar backends are implemented there. Remove is plain directory cleanup. |
 | `InstallerType::Portable` | `EngineKind::Portable` | Supported | WinBrew-owned filesystem engine | Copies raw payloads into a staging tree, then replaces the target install directory. Raw-only fallback; archive-shaped payloads route through the archive dispatcher instead of Portable. Remove is plain directory cleanup. |
-| `InstallerType::Exe` | `EngineKind::NativeExe` | Supported on Windows | Windows-delegated, WinBrew-coordinated | v1 covers the native-exe family (`Exe`, `Inno`, `Nullsoft`, `Burn`). Switches are parsed literally and duplicate entries are rejected. `Pwa` and `Font` remain scaffolded. |
+| `InstallerType::Font` | `EngineKind::Font` | Supported on Windows | Windows-delegated, WinBrew-coordinated | Installs raw font payloads into the per-user Windows fonts directory and removes the copied file on uninstall. |
+| `InstallerType::Exe` | `EngineKind::NativeExe` | Supported on Windows | Windows-delegated, WinBrew-coordinated | v1 covers the native-exe family (`Exe`, `Inno`, `Nullsoft`, `Burn`). Switches are parsed literally and duplicate entries are rejected. `Pwa` remains scaffolded. |
 
 ### Practical split
 
 - WinBrew-owned engines are the filesystem engines: `Zip` handles archive extraction, and `Portable` handles raw payload copying.
-- Windows-delegated engines are the OS-backed engines: `Msi`, `Msix`, and `NativeExe`.
+- Windows-delegated engines are the OS-backed engines: `Msi`, `Msix`, `NativeExe`, and `Font`.
 - `NativeExe` is already supported on Windows and follows the same Windows-delegated ownership pattern as `Msi` and `Msix`.
+- `Font` is supported on Windows as a per-user font engine; `Pwa` remains explicitly out of scope.
 
 ## How Routing Works
 
@@ -52,9 +54,10 @@ Current routing rules:
 - `InstallerType::Msi` resolves to `EngineKind::Msi`.
 - `InstallerType::Msix` resolves to `EngineKind::Msix`.
 - `InstallerType::Exe`, `InstallerType::Inno`, `InstallerType::Nullsoft`, and `InstallerType::Burn` resolve to `EngineKind::NativeExe`.
+- `InstallerType::Font` resolves to `EngineKind::Font`.
 - `InstallerType::Zip` resolves to `EngineKind::Zip`.
 - `InstallerType::Portable` resolves to `EngineKind::Portable` for raw payloads.
-- `InstallerType::Pwa` and `InstallerType::Font` are still not routable and return an unsupported-type error.
+- `InstallerType::Pwa` is still not routable and returns an unsupported-type error.
 - Archive-shaped installers are classified into `ArchiveKind` and routed through the archive dispatcher; ZIP and Tar are implemented today, while 7z and rar still hit the generic backend-unavailable error.
 - Portable installers whose URL looks like an archive are routed away from Portable and into the archive path.
 - The archive descriptor must stay before portable in the registry table.
@@ -138,19 +141,19 @@ Policy docs should remain policy docs. They can point back here, but they should
 
 ## Next Implementation Target
 
-The nearest follow-up work is hardening the native-exe backend and finishing the remaining special-case families.
+The nearest follow-up work is hardening the new font backend and finishing any remaining native-exe edge cases.
 
 Why it is the next obvious candidate:
 
-- the v1 family route now exists and captures uninstall metadata when the registry publishes it
-- `Pwa` and `Font` are still explicitly rejected
-- the current backend is intentionally conservative about installer switches and removal behavior
+- the v1 family route now exists for native executables and the separate font engine is now wired in
+- `Pwa` remains explicitly out of scope
+- both OS-backed install paths are intentionally conservative about switch and cleanup behavior
 
 The implementation plan for that follow-up should cover:
 
 - richer installer-family handling inside the native-exe backend
-- `Pwa` and `Font` routing decisions
-- tests for remove/recovery behavior using captured uninstall metadata
+- deeper font validation, registration, and removal coverage
+- tests for remove/recovery behavior using the engine-specific metadata and cleanup contract
 
 ## Related Files
 
