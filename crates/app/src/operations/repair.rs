@@ -189,6 +189,15 @@ where
     let installer = install::types::select_installer(&installers)?;
     let engine = engines::resolve_engine_for_installer(&installer)?;
 
+    if engine_requires_reinstall_only(engine) {
+        return Ok(FileRestoreResolution::Reinstall(Box::new(
+            FileRestoreReinstallTarget {
+                catalog_package: package,
+                installed_version: installed_package.version,
+            },
+        )));
+    }
+
     Ok(FileRestoreResolution::Restore(Box::new(
         ResolvedFileRestoreTarget {
             package,
@@ -197,6 +206,10 @@ where
             installed_package,
         },
     )))
+}
+
+fn engine_requires_reinstall_only(engine: EngineKind) -> bool {
+    matches!(engine, EngineKind::Font)
 }
 
 /// Reinstall a package using the exact catalog package that was already chosen.
@@ -396,7 +409,7 @@ fn restore_target_files(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_repair_plan, restore_target_files};
+    use super::{build_repair_plan, engine_requires_reinstall_only, restore_target_files};
     use crate::models::domains::reporting::{
         DiagnosisSeverity, HealthReport, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind,
     };
@@ -467,5 +480,15 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn font_requires_reinstall_only() {
+        assert!(engine_requires_reinstall_only(
+            crate::engines::EngineKind::Font
+        ));
+        assert!(!engine_requires_reinstall_only(
+            crate::engines::EngineKind::NativeExe
+        ));
     }
 }

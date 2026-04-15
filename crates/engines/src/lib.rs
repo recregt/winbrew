@@ -112,6 +112,10 @@ mod tests {
             engine_kind_for_type(InstallerType::Exe).unwrap(),
             EngineKind::NativeExe
         );
+        assert_eq!(
+            engine_kind_for_type(InstallerType::Font).unwrap(),
+            EngineKind::Font
+        );
     }
 
     #[test]
@@ -123,6 +127,14 @@ mod tests {
         ] {
             assert_eq!(engine_kind_for_type(kind).unwrap(), EngineKind::NativeExe);
         }
+    }
+
+    #[test]
+    fn engine_kind_for_type_recognizes_font_family() {
+        assert_eq!(
+            engine_kind_for_type(InstallerType::Font).unwrap(),
+            EngineKind::Font
+        );
     }
 
     #[test]

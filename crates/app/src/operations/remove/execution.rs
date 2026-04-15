@@ -66,7 +66,7 @@ fn execute_removal_with_conn(
     let engine_kind = plan.package.engine_kind;
 
     match engine_kind {
-        EngineKind::Msix | EngineKind::Msi | EngineKind::NativeExe => {
+        EngineKind::Msix | EngineKind::Msi | EngineKind::NativeExe | EngineKind::Font => {
             engine_kind.remove(&plan.package)?;
 
             if install_dir.exists()

@@ -4,10 +4,11 @@
 //! in one place instead of scattering `cfg(windows)` checks throughout the
 //! engine registry and crate root.
 //!
-//! WinBrew has three different Windows-facing responsibilities:
+//! WinBrew has four different Windows-facing responsibilities:
 //!
 //! - [`native`] launches installers as processes, which covers MSI and native
 //!   executable families.
+//! - [`font`] installs and removes per-user Windows fonts.
 //! - [`api`] delegates to Windows package APIs, which currently covers MSIX.
 //! - the rest of the crate stays platform-neutral and only calls into this
 //!   layer when the selected engine needs Windows-specific behavior.
@@ -25,6 +26,7 @@
 //!
 //! - [`native`] for process-driven installer backends such as MSI and native
 //!   `.exe` installers
+//! - [`font`] for per-user Windows font installation and removal
 //! - [`api`] for Windows package API adapters such as MSIX
 //!
 //! Example: pick the backend family without reaching into the lower-level
@@ -40,6 +42,7 @@
 //! }
 //! ```
 
+pub mod font;
 #[cfg(windows)]
 pub mod native;
 

@@ -26,6 +26,8 @@ pub enum EngineKind {
     Msi,
     /// A non-MSI executable flow.
     NativeExe,
+    /// A per-user Windows font flow.
+    Font,
 }
 
 /// The install scope reported by Windows package flows.
@@ -121,6 +123,7 @@ impl EngineKind {
             Self::Portable => "portable",
             Self::Msi => "msi",
             Self::NativeExe => "nativeexe",
+            Self::Font => "font",
         }
     }
 
@@ -134,8 +137,8 @@ impl EngineKind {
             | InstallerType::Inno
             | InstallerType::Nullsoft
             | InstallerType::Burn
-            | InstallerType::Pwa
-            | InstallerType::Font => Self::NativeExe,
+            | InstallerType::Pwa => Self::NativeExe,
+            InstallerType::Font => Self::Font,
         }
     }
 }
@@ -220,6 +223,7 @@ impl FromStr for EngineKind {
             "portable" => Ok(Self::Portable),
             "msi" => Ok(Self::Msi),
             "nativeexe" => Ok(Self::NativeExe),
+            "font" => Ok(Self::Font),
             other => Err(ModelError::invalid_enum_value("engine.kind", other)),
         }
     }
@@ -264,6 +268,7 @@ impl From<InstallScope> for String {
 #[cfg(test)]
 mod tests {
     use super::{EngineKind, EngineMetadata};
+    use crate::install::installer::InstallerType;
     use core::str::FromStr;
 
     #[test]
@@ -271,6 +276,20 @@ mod tests {
         let err = EngineKind::from_str("exe").expect_err("exe should not parse as an engine kind");
 
         assert!(err.to_string().contains("invalid engine.kind: exe"));
+    }
+
+    #[test]
+    fn engine_kind_parses_font() {
+        assert_eq!(
+            EngineKind::from_str("font").expect("font"),
+            EngineKind::Font
+        );
+        assert_eq!(EngineKind::Font.to_string(), "font");
+    }
+
+    #[test]
+    fn engine_kind_round_trips_font_to_installer_type() {
+        assert_eq!(InstallerType::from(EngineKind::Font), InstallerType::Font);
     }
 
     #[test]

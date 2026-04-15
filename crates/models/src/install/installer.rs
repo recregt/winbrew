@@ -152,9 +152,14 @@ impl InstallerType {
         matches!(self, Self::Exe | Self::Inno | Self::Nullsoft | Self::Burn)
     }
 
+    /// Return `true` when this installer belongs to the Windows font family.
+    pub fn is_font_family(self) -> bool {
+        matches!(self, Self::Font)
+    }
+
     /// Return `true` when this installer needs a dedicated special-case adapter.
     pub fn is_special_case(self) -> bool {
-        matches!(self, Self::Pwa | Self::Font)
+        matches!(self, Self::Pwa)
     }
 
     /// Return `true` when the payload is archive-shaped and should be unpacked.
@@ -217,6 +222,7 @@ impl From<EngineKind> for InstallerType {
             EngineKind::Portable => Self::Portable,
             EngineKind::Msi => Self::Msi,
             EngineKind::NativeExe => Self::Exe,
+            EngineKind::Font => Self::Font,
         }
     }
 }
@@ -305,6 +311,9 @@ mod tests {
         assert!(InstallerType::Inno.is_native_exe_family());
         assert!(InstallerType::Nullsoft.is_native_exe_family());
         assert!(InstallerType::Burn.is_native_exe_family());
+        assert!(InstallerType::Font.is_font_family());
+        assert!(!InstallerType::Font.is_native_exe_family());
+        assert!(!InstallerType::Font.is_special_case());
         assert!(InstallerType::Pwa.is_special_case());
     }
 }
