@@ -12,6 +12,9 @@
 //!
 //! - validates the installer path, install directory, and package name before
 //!   starting work
+//! - parses installer switches literally and rejects duplicate flags before
+//!   execution, so catalog mistakes fail fast instead of being silently
+//!   normalized
 //! - launches the downloaded installer as a process and treats the Windows
 //!   installer success codes `0`, `1641`, and `3010` as successful outcomes
 //! - captures uninstall metadata from the Windows uninstall registry when it
@@ -438,7 +441,34 @@ fn split_switches(raw: &str) -> Result<Vec<String>> {
         args.push(current);
     }
 
+    validate_unique_switches(&args, raw)?;
+
     Ok(args)
+}
+
+fn validate_unique_switches(args: &[String], raw: &str) -> Result<()> {
+    use std::collections::HashSet;
+
+    let mut seen = HashSet::new();
+
+    for arg in args {
+        let signature = switch_signature(arg);
+
+        if !seen.insert(signature) {
+            bail!("duplicate installer switch detected: {arg} in {raw}");
+        }
+    }
+
+    Ok(())
+}
+
+fn switch_signature(arg: &str) -> String {
+    let trimmed = arg.trim();
+
+    match trimmed.split_once('=') {
+        Some((left, _)) => format!("{}=", left.to_ascii_lowercase()),
+        None => trimmed.to_ascii_lowercase(),
+    }
 }
 
 fn push_flag_if_missing(args: &mut Vec<String>, flag: &str) {
@@ -514,6 +544,27 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("unterminated quoted installer switches")
+        );
+    }
+
+    #[test]
+    fn split_switches_rejects_duplicate_flags() {
+        let err = split_switches(r#"/S /quiet /s"#).expect_err("duplicate flags should fail");
+
+        assert!(
+            err.to_string()
+                .contains("duplicate installer switch detected")
+        );
+    }
+
+    #[test]
+    fn split_switches_rejects_duplicate_value_switches() {
+        let err = split_switches(r#"ALLUSERS=1 ALLUSERS=0"#)
+            .expect_err("duplicate value switches should fail");
+
+        assert!(
+            err.to_string()
+                .contains("duplicate installer switch detected")
         );
     }
 
@@ -644,6 +695,21 @@ mod tests {
                 "/quiet".to_string(),
                 "/D=C:\\Program Files\\Demo".to_string(),
             ]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn build_install_args_rejects_duplicate_switches() {
+        let installer = native_exe_installer(InstallerType::Exe, Some(r#"/quiet /quiet"#));
+        let install_dir = native_exe_test_dir("duplicate-switches");
+
+        let err = build_install_args(&installer, &install_dir, "Contoso.NativeExe")
+            .expect_err("duplicate installer switches should fail");
+
+        assert!(
+            err.to_string()
+                .contains("duplicate installer switch detected")
         );
     }
 
