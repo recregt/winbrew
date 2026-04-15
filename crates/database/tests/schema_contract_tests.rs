@@ -105,6 +105,7 @@ fn model_installer_type_values() -> Vec<&'static str> {
         CatalogInstallerType::Font,
         CatalogInstallerType::Portable,
         CatalogInstallerType::Zip,
+        CatalogInstallerType::Msstore,
         CatalogInstallerType::Nuget,
         CatalogInstallerType::Scoop,
         CatalogInstallerType::Unknown,
@@ -212,8 +213,8 @@ fn catalog_contract_matches_canonical_schema() -> Result<()> {
     insert_catalog_package(&conn)?;
 
     for installer_type in [
-        "msi", "msix", "appx", "exe", "inno", "nullsoft", "wix", "burn", "pwa", "font", "portable",
-        "zip", "nuget", "scoop",
+        "msi", "msix", "appx", "msstore", "exe", "inno", "nullsoft", "wix", "burn", "pwa", "font",
+        "portable", "zip", "nuget", "scoop",
     ] {
         insert_catalog_installer(&conn, installer_type)?;
     }

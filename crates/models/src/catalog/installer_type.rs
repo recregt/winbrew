@@ -17,6 +17,7 @@ pub enum CatalogInstallerType {
     Msi,
     Msix,
     Appx,
+    Msstore,
     Exe,
     Inno,
     Nullsoft,
@@ -39,6 +40,7 @@ impl CatalogInstallerType {
             Self::Msi => "msi",
             Self::Msix => "msix",
             Self::Appx => "appx",
+            Self::Msstore => "msstore",
             Self::Exe => "exe",
             Self::Inno => "inno",
             Self::Nullsoft => "nullsoft",
@@ -105,6 +107,7 @@ impl FromStr for CatalogInstallerType {
             "msi" => Ok(Self::Msi),
             "msix" => Ok(Self::Msix),
             "appx" => Ok(Self::Appx),
+            "msstore" => Ok(Self::Msstore),
             "exe" => Ok(Self::Exe),
             "inno" => Ok(Self::Inno),
             "nsis" | "nullsoft" => Ok(Self::Nullsoft),
@@ -177,6 +180,10 @@ mod tests {
                 .parse::<CatalogInstallerType>()
                 .expect("nullsoft"),
             CatalogInstallerType::Nullsoft
+        );
+        assert_eq!(
+            "msstore".parse::<CatalogInstallerType>().expect("msstore"),
+            CatalogInstallerType::Msstore
         );
     }
 

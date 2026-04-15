@@ -395,7 +395,10 @@ func (installer wingetManifestInstaller) resolve(defaults wingetManifest) (winge
 	installerURL := strings.TrimSpace(firstNonEmpty(installer.InstallerUrl, defaults.InstallerUrl))
 	installerHash := strings.TrimSpace(firstNonEmpty(installer.InstallerSha256, defaults.InstallerSha256))
 	nestedInstallerType := normalizeWingetInstallerType(firstNonEmpty(installer.NestedInstallerType, defaults.NestedInstallerType))
-	scope := normalizeWingetScope(firstNonEmpty(installer.Scope, defaults.Scope))
+	scope, err := resolveWingetScope(firstNonEmpty(installer.Scope, defaults.Scope))
+	if err != nil {
+		return wingetInstallerSnapshot{}, err
+	}
 
 	if installerURL == "" {
 		return wingetInstallerSnapshot{}, fmt.Errorf("winget installer for %s is missing InstallerUrl", defaults.PackageIdentifier)
@@ -438,13 +441,18 @@ func normalizeWingetInstallerType(value string) string {
 }
 
 func normalizeWingetScope(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "user", "installed":
-		return "installed"
-	case "machine", "provisioned":
-		return "provisioned"
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func resolveWingetScope(value string) (string, error) {
+	normalized := normalizeWingetScope(value)
+	switch normalized {
+	case "":
+		return "", nil
+	case "user", "machine":
+		return normalized, nil
 	default:
-		return ""
+		return "", fmt.Errorf("unsupported winget scope %q", value)
 	}
 }
 
