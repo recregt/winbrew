@@ -203,3 +203,32 @@ fn remove_removes_native_exe_package_and_runs_uninstall_command() -> Result<()> 
 
     Ok(())
 }
+
+#[test]
+fn remove_removes_native_exe_package_without_uninstall_metadata() -> Result<()> {
+    let test_root = test_root();
+    let root = test_root.path();
+    init_database(root)?;
+    reset_install_state(root)?;
+    let conn = database::get_conn()?;
+
+    let install_dir = root.join("packages").join("Contoso.NativeExeFallback");
+    fs::create_dir_all(&install_dir)?;
+    fs::write(install_dir.join("tool.exe"), b"binary")?;
+
+    let package = sample_package(
+        "Contoso.NativeExeFallback",
+        InstallerType::Exe,
+        &install_dir,
+        Vec::new(),
+    );
+
+    database::insert_package(&conn, &package)?;
+
+    remove::remove(&package.name, false)?;
+
+    assert!(!install_dir.exists());
+    assert!(database::get_package(&conn, &package.name)?.is_none());
+
+    Ok(())
+}

@@ -34,7 +34,7 @@ That keeps the design discussion close to the rest of the workspace documentatio
 
 - WinBrew-owned engines are the filesystem engines: `Zip` handles archive extraction, and `Portable` handles raw payload copying.
 - Windows-delegated engines are the OS-backed engines: `Msi`, `Msix`, and `NativeExe`.
-- `NativeExe` is the nearest future addition, but it still needs a backend and registry entry before it counts as supported.
+- `NativeExe` is already supported on Windows and follows the same Windows-delegated ownership pattern as `Msi` and `Msix`.
 
 ## How Routing Works
 
@@ -138,7 +138,7 @@ Policy docs should remain policy docs. They can point back here, but they should
 
 ## Next Implementation Target
 
-The nearest follow-up work is NativeExe hardening and the remaining special-case families.
+The nearest follow-up work is hardening the native-exe backend and finishing the remaining special-case families.
 
 Why it is the next obvious candidate:
 
@@ -158,7 +158,7 @@ The implementation plan for that follow-up should cover:
 - [crates/engines/src/registry.rs](../crates/engines/src/registry.rs)
 - [crates/engines/src/windows/native/mod.rs](../crates/engines/src/windows/native/mod.rs)
 - [crates/engines/src/windows/native/msi.rs](../crates/engines/src/windows/native/msi.rs)
-- [crates/engines/src/windows/package/msix/mod.rs](../crates/engines/src/windows/package/msix/mod.rs)
+- [crates/engines/src/windows/api/msix/mod.rs](../crates/engines/src/windows/api/msix/mod.rs)
 - [crates/engines/src/filesystem/archive/zip/install.rs](../crates/engines/src/filesystem/archive/zip/install.rs)
 - [crates/engines/src/filesystem/portable/install.rs](../crates/engines/src/filesystem/portable/install.rs)
 - [crates/database/src/journal/mod.rs](../crates/database/src/journal/mod.rs)
