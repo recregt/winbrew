@@ -32,8 +32,8 @@ ON CONFLICT(package_id) DO UPDATE SET
 const DELETE_INSTALLERS: &str = "DELETE FROM catalog_installers WHERE package_id = ?1";
 
 const INSTALLER_INSERT: &str = r#"
-INSERT INTO catalog_installers(package_id, url, hash, hash_algorithm, installer_type, installer_switches, arch, kind, nested_kind)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+INSERT INTO catalog_installers(package_id, url, hash, hash_algorithm, installer_type, installer_switches, scope, arch, kind, nested_kind)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
 "#;
 
 const SCHEMA: &str = include_str!("../schema/catalog.sql");
@@ -122,6 +122,11 @@ impl CatalogWriter {
                         .as_deref()
                         .cmp(&right.installer_switches.as_deref()),
                 )
+                .then(
+                    left.scope
+                        .map(String::from)
+                        .cmp(&right.scope.map(String::from)),
+                )
                 .then(left.arch.as_str().cmp(right.arch.as_str()))
                 .then(left.kind.as_str().cmp(right.kind.as_str()))
                 .then(
@@ -145,6 +150,7 @@ impl CatalogWriter {
                 installer.hash_algorithm.as_str(),
                 installer.installer_type.as_str(),
                 installer.installer_switches.as_deref(),
+                installer.scope.map(String::from),
                 installer.arch.to_string(),
                 installer.kind.to_string(),
                 installer.nested_kind.map(|kind| kind.as_str()),

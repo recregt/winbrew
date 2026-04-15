@@ -25,6 +25,25 @@ func TestDoReturnsOnFirstSuccess(t *testing.T) {
 	}
 }
 
+func TestDoResultReturnsValueOnFirstSuccess(t *testing.T) {
+	t.Parallel()
+
+	attempts := 0
+	value, err := DoResult(context.Background(), 3, time.Millisecond, func() (string, error) {
+		attempts++
+		return "ok", nil
+	})
+	if err != nil {
+		t.Fatalf("DoResult() error = %v, want nil", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("DoResult() attempts = %d, want 1", attempts)
+	}
+	if got, want := value, "ok"; got != want {
+		t.Fatalf("DoResult() value = %q, want %q", got, want)
+	}
+}
+
 func TestDoRetriesUntilSuccess(t *testing.T) {
 	t.Parallel()
 

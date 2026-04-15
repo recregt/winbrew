@@ -8,4 +8,5 @@ require (
 
 require (
 	golang.org/x/sync v0.20.0 // direct
+	modernc.org/sqlite v1.37.1
 )

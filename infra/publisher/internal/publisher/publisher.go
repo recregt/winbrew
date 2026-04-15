@@ -259,10 +259,24 @@ func uploadObjects(ctx context.Context, client *minio.Client, bucketName, inputP
 	}
 
 	metadataKey := metadataKeyForObjectKey(objectKey)
-	if _, err := client.PutObject(ctx, bucketName, metadataKey, bytes.NewReader(metadataBytes), int64(len(metadataBytes)), minio.PutObjectOptions{
+	tempMetadataKey := metadataTempKeyForObjectKey(objectKey)
+	if _, err := client.PutObject(ctx, bucketName, tempMetadataKey, bytes.NewReader(metadataBytes), int64(len(metadataBytes)), minio.PutObjectOptions{
 		ContentType: "application/json",
 	}); err != nil {
-		return fmt.Errorf("failed to upload metadata object %s to bucket %s: %w", metadataKey, bucketName, err)
+		return fmt.Errorf("failed to upload temporary metadata object %s to bucket %s: %w", tempMetadataKey, bucketName, err)
+	}
+	defer func() {
+		_ = client.RemoveObject(ctx, bucketName, tempMetadataKey, minio.RemoveObjectOptions{})
+	}()
+
+	if _, err := client.CopyObject(ctx, minio.CopyDestOptions{
+		Bucket: bucketName,
+		Object: metadataKey,
+	}, minio.CopySrcOptions{
+		Bucket: bucketName,
+		Object: tempMetadataKey,
+	}); err != nil {
+		return fmt.Errorf("failed to publish metadata object %s to bucket %s: %w", metadataKey, bucketName, err)
 	}
 
 	return nil

@@ -73,6 +73,7 @@ impl TryFrom<RawCatalogInstaller> for CatalogInstaller {
             arch: raw.arch.parse()?,
             kind: raw.kind.parse()?,
             nested_kind: raw.nested_kind.map(|kind| kind.parse()).transpose()?,
+            scope: raw.scope.map(|scope| scope.parse()).transpose()?,
         };
 
         installer.validate()?;
@@ -85,7 +86,7 @@ mod tests {
     use super::{CatalogInstaller, CatalogPackage};
     use crate::catalog::installer_type::CatalogInstallerType;
     use crate::catalog::raw::{RawCatalogInstaller, RawCatalogPackage};
-    use crate::install::{Architecture, InstallerType};
+    use crate::install::{Architecture, InstallScope, InstallerType};
     use crate::package::PackageSource;
 
     #[test]
@@ -123,6 +124,7 @@ mod tests {
             arch: String::default(),
             kind: "portable".to_string(),
             nested_kind: Some("msi".to_string()),
+            scope: Some("installed".to_string()),
         };
 
         let converted =
@@ -131,6 +133,7 @@ mod tests {
         assert_eq!(converted.arch, Architecture::Any);
         assert_eq!(converted.kind, InstallerType::Portable);
         assert_eq!(converted.nested_kind, Some(InstallerType::Msi));
+        assert_eq!(converted.scope, Some(InstallScope::Installed));
         assert_eq!(
             converted.hash_algorithm,
             crate::shared::HashAlgorithm::Sha256

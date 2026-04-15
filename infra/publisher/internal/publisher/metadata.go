@@ -106,6 +106,11 @@ func metadataKeyForObjectKey(objectKey string) string {
 	return path.Join(path.Dir(objectKey), "metadata.json")
 }
 
+func metadataTempKeyForObjectKey(objectKey string) string {
+	// The temp key is only used during publish and never exposed to clients.
+	return path.Join(path.Dir(objectKey), "metadata.json.tmp")
+}
+
 func (m *Metadata) validate() error {
 	if m == nil {
 		return fmt.Errorf("metadata cannot be nil")

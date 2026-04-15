@@ -54,4 +54,7 @@ pub struct RawCatalogInstaller {
     /// Raw nested installer kind string when the installer is archive-shaped.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nested_kind: Option<String>,
+    /// Raw install scope string when the source provides one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
 }
