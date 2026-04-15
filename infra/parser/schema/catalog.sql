@@ -33,17 +33,20 @@ CREATE TABLE IF NOT EXISTS catalog_installers (
     -- Checksum is optional for checksumless manifests.
     hash        TEXT,
     hash_algorithm TEXT NOT NULL DEFAULT 'sha256' CHECK (hash_algorithm IN ('md5', 'sha1', 'sha256', 'sha512')),
-    installer_type TEXT NOT NULL DEFAULT 'unknown' CHECK (installer_type IN ('msi', 'msix', 'appx', 'exe', 'inno', 'nullsoft', 'wix', 'burn', 'pwa', 'font', 'portable', 'zip', 'nuget', 'scoop', 'unknown')),
+    -- Normalized installer family used for filtering and source-aware browse flows.
+    installer_type TEXT NOT NULL DEFAULT 'unknown' CHECK (installer_type IN ('msi', 'msix', 'appx', 'exe', 'inno', 'nullsoft', 'wix', 'burn', 'pwa', 'font', 'portable', 'zip', 'msstore', 'nuget', 'scoop', 'unknown')),
     installer_switches TEXT,
-    scope       TEXT CHECK (scope IS NULL OR scope IN ('installed', 'provisioned')),
+    -- Winget manifest scope when the source provides one.
+    scope       TEXT CHECK (scope IS NULL OR scope IN ('machine', 'user')),
     arch        TEXT NOT NULL DEFAULT '',
+    -- Raw installer format used by the engine-facing model.
     kind        TEXT NOT NULL DEFAULT '',
     nested_kind TEXT
 );
 
 CREATE TABLE IF NOT EXISTS catalog_packages_raw (
     package_id  TEXT PRIMARY KEY REFERENCES catalog_packages(id) ON DELETE CASCADE,
-    raw         TEXT NOT NULL CHECK (json_valid(raw))
+    raw         TEXT CHECK (raw IS NULL OR json_valid(raw))
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS catalog_packages_fts USING fts5(
@@ -75,19 +78,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_catalog_installers_unique ON catalog_insta
 
 CREATE TRIGGER IF NOT EXISTS catalog_packages_ai AFTER INSERT ON catalog_packages BEGIN
     INSERT INTO catalog_packages_fts(rowid, name, description)
-    VALUES (new.rowid, new.name, new.description);
+    VALUES (new.rowid, new.name, COALESCE(new.description, ''));
 END;
 
 CREATE TRIGGER IF NOT EXISTS catalog_packages_ad AFTER DELETE ON catalog_packages BEGIN
     INSERT INTO catalog_packages_fts(catalog_packages_fts, rowid, name, description)
-    VALUES ('delete', old.rowid, old.name, old.description);
+    VALUES ('delete', old.rowid, old.name, COALESCE(old.description, ''));
 END;
 
 CREATE TRIGGER IF NOT EXISTS catalog_packages_au AFTER UPDATE ON catalog_packages BEGIN
     INSERT INTO catalog_packages_fts(catalog_packages_fts, rowid, name, description)
-    VALUES ('delete', old.rowid, old.name, old.description);
+    VALUES ('delete', old.rowid, old.name, COALESCE(old.description, ''));
     INSERT INTO catalog_packages_fts(rowid, name, description)
-    VALUES (new.rowid, new.name, new.description);
+    VALUES (new.rowid, new.name, COALESCE(new.description, ''));
 END;
 
 CREATE TRIGGER IF NOT EXISTS catalog_packages_update_timestamp

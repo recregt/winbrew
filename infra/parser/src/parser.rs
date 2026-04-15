@@ -81,7 +81,7 @@ fn parse_installer(
         hash_algorithm,
         installer_type,
         installer_switches: None,
-        scope: None,
+        scope: raw.scope,
         arch: raw.arch.parse::<Architecture>()?,
         kind: installer_kind,
         nested_kind: raw.nested_kind.map(|kind| kind.parse()).transpose()?,
@@ -123,7 +123,7 @@ mod tests {
                 arch: "x64".to_string(),
                 kind: "zip".to_string(),
                 nested_kind: Some("msi".to_string()),
-                scope: None,
+                scope: Some("user".to_string()),
             }],
         })
         .expect("package should parse");
@@ -132,6 +132,7 @@ mod tests {
         assert_eq!(parsed.installers[0].arch, Architecture::X64);
         assert_eq!(parsed.installers[0].kind, InstallerType::Zip);
         assert_eq!(parsed.installers[0].nested_kind, Some(InstallerType::Msi));
+        assert_eq!(parsed.installers[0].scope.as_deref(), Some("user"));
         assert_eq!(parsed.installers[0].hash_algorithm, HashAlgorithm::Sha256);
         assert_eq!(
             parsed.installers[0].installer_type,

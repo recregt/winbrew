@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::installer_type::CatalogInstallerType;
-use crate::install::{Architecture, InstallScope, InstallerType};
+use crate::install::{Architecture, InstallerType};
 use crate::package::{PackageId, PackageSource};
 use crate::shared::CatalogId;
 use crate::shared::validation::{Validate, ensure_hash, ensure_http_url, ensure_non_empty};
@@ -62,14 +62,14 @@ pub struct CatalogInstaller {
     pub installer_switches: Option<String>,
     /// Architecture target for the installer.
     pub arch: Architecture,
-    /// Installer format.
+    /// Raw installer format used by the engine-facing model, distinct from `installer_type`.
     pub kind: InstallerType,
     /// Nested installer format when the installer contains an archive payload.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nested_kind: Option<InstallerType>,
-    /// Optional install scope reported by the source.
+    /// Optional install scope reported by the source, usually `user` or `machine` for Winget.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scope: Option<InstallScope>,
+    pub scope: Option<String>,
 }
 
 impl CatalogPackage {
@@ -160,6 +160,16 @@ impl CatalogInstaller {
             ensure_non_empty("catalog_installer.installer_switches", installer_switches)?;
         }
 
+        if let Some(scope) = self.scope.as_deref() {
+            let normalized_scope = scope.trim().to_ascii_lowercase();
+            if !matches!(normalized_scope.as_str(), "user" | "machine") {
+                return Err(ModelError::invalid_contract(
+                    "catalog_installer.scope",
+                    format!("expected user or machine, got {scope}"),
+                ));
+            }
+        }
+
         Ok(())
     }
 }
@@ -222,8 +232,8 @@ impl CatalogInstaller {
         self
     }
 
-    pub fn with_scope(mut self, scope: InstallScope) -> Self {
-        self.scope = Some(scope);
+    pub fn with_scope(mut self, scope: impl Into<String>) -> Self {
+        self.scope = Some(scope.into());
         self
     }
 }
@@ -304,7 +314,7 @@ impl CatalogPackage {
 mod tests {
     use super::{CatalogInstaller, CatalogPackage};
     use crate::catalog::installer_type::CatalogInstallerType;
-    use crate::install::{Architecture, InstallScope, InstallerType};
+    use crate::install::{Architecture, InstallerType};
     use crate::package::PackageSource;
     use crate::shared::{HashAlgorithm, Version};
 
@@ -344,7 +354,7 @@ mod tests {
         .with_arch(Architecture::Any)
         .with_kind(InstallerType::Zip)
         .with_nested(InstallerType::Msi)
-        .with_scope(InstallScope::Installed)
+        .with_scope("user")
         .with_hash("deadbeef")
         .with_hash_algorithm(HashAlgorithm::Sha256)
         .with_installer_type(CatalogInstallerType::Zip)
@@ -355,7 +365,7 @@ mod tests {
         assert!(json.contains("\"hash_algorithm\":\"sha256\""));
         assert!(json.contains("\"installer_type\":\"zip\""));
         assert!(json.contains("\"installer_switches\":\"/S\""));
-        assert!(json.contains("\"scope\":\"installed\""));
+        assert!(json.contains("\"scope\":\"user\""));
 
         let restored: CatalogInstaller =
             serde_json::from_str(&json).expect("installer should deserialize");
@@ -364,7 +374,7 @@ mod tests {
         assert_eq!(restored.hash_algorithm, HashAlgorithm::Sha256);
         assert_eq!(restored.installer_type, CatalogInstallerType::Zip);
         assert_eq!(restored.installer_switches.as_deref(), Some("/S"));
-        assert_eq!(restored.scope, Some(InstallScope::Installed));
+        assert_eq!(restored.scope.as_deref(), Some("user"));
     }
 
     #[test]

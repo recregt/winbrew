@@ -85,7 +85,7 @@ ManifestVersion: 1.12.0
 	if got, want := pkg.Publisher, "Microsoft Corporation"; got != want {
 		t.Fatalf("package publisher = %q, want %q", got, want)
 	}
-	if got, want := pkg.Installers[0].Scope, "installed"; got != want {
+	if got, want := pkg.Installers[0].Scope, "user"; got != want {
 		t.Fatalf("installer scope = %q, want %q", got, want)
 	}
 	if got, want := pkg.Installers[1].Arch, ""; got != want {
@@ -155,7 +155,7 @@ ManifestVersion: 1.12.0
 	if got, want := pkg.Description, "Contoso app"; got != want {
 		t.Fatalf("package description = %q, want %q", got, want)
 	}
-	if got, want := pkg.Installers[0].Scope, "provisioned"; got != want {
+	if got, want := pkg.Installers[0].Scope, "machine"; got != want {
 		t.Fatalf("installer scope = %q, want %q", got, want)
 	}
 	if got, want := pkg.Installers[0].Arch, "x64"; got != want {

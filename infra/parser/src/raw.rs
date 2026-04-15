@@ -147,12 +147,12 @@ mod tests {
                 "arch": "x64",
                 "type": "zip",
                 "NestedInstallerType": "msi",
-                "scope": "installed"
+                "scope": "user"
             }"#,
         )
         .expect("installer should deserialize");
 
         assert_eq!(installer.nested_kind.as_deref(), Some("msi"));
-        assert_eq!(installer.scope.as_deref(), Some("installed"));
+        assert_eq!(installer.scope.as_deref(), Some("user"));
     }
 }

@@ -122,11 +122,7 @@ impl CatalogWriter {
                         .as_deref()
                         .cmp(&right.installer_switches.as_deref()),
                 )
-                .then(
-                    left.scope
-                        .map(String::from)
-                        .cmp(&right.scope.map(String::from)),
-                )
+                .then(left.scope.as_deref().cmp(&right.scope.as_deref()))
                 .then(left.arch.as_str().cmp(right.arch.as_str()))
                 .then(left.kind.as_str().cmp(right.kind.as_str()))
                 .then(
@@ -150,7 +146,7 @@ impl CatalogWriter {
                 installer.hash_algorithm.as_str(),
                 installer.installer_type.as_str(),
                 installer.installer_switches.as_deref(),
-                installer.scope.map(String::from),
+                installer.scope.as_deref(),
                 installer.arch.to_string(),
                 installer.kind.to_string(),
                 installer.nested_kind.map(|kind| kind.as_str()),
