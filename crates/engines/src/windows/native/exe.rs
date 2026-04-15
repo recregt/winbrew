@@ -12,7 +12,8 @@
 //!
 //! - validates the installer path, install directory, and package name before
 //!   starting work
-//! - parses installer switches literally and rejects duplicate flags before
+//! - parses installer switches literally and rejects duplicate installer
+//!   switches before
 //!   execution, so catalog mistakes fail fast instead of being silently
 //!   normalized
 //! - launches the downloaded installer as a process and treats the Windows
