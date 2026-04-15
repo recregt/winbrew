@@ -36,6 +36,7 @@ Use it when you want to answer one of these questions:
 
 ## Pipeline Docs
 
+- [WinBrew Catalog Pipeline](pipeline.md) for the full offline Winget catalog and delivery strategy.
 - [infra/crawler](../infra/crawler/README.md) for source crawling.
 - [infra/parser](../infra/parser/README.md) for catalog bundle parsing.
 - [infra/publisher](../infra/publisher/README.md) for bundle publishing.
