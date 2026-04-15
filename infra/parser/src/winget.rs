@@ -1,63 +1,87 @@
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
-
-use rusqlite::{Connection, OpenFlags};
 
 use crate::error::ParserError;
 use crate::parser::{ParsedPackage, parse_package};
 use crate::raw::RawFetchedPackage;
 
-const QUERY: &str = r#"
-SELECT
-    i.id,
-    n.name,
-    v.version,
-    np.norm_publisher
-FROM manifest m
-JOIN ids i        ON i.rowid = m.id
-JOIN names n      ON n.rowid = m.name
-JOIN versions v   ON v.rowid = m.version
-LEFT JOIN norm_publishers_map npm ON npm.manifest = m.rowid
-LEFT JOIN norm_publishers np      ON np.rowid = npm.norm_publisher
-GROUP BY i.id
-HAVING v.version = MAX(v.version)
-ORDER BY i.id ASC
-"#;
+const WINGET_STREAM_SCHEMA_VERSION: u32 = 1;
+const WINGET_STREAM_SOURCE: &str = "winget";
+const WINGET_STREAM_KIND: &str = "package";
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WingetStreamEnvelope {
+    schema_version: u32,
+    source: String,
+    kind: String,
+    payload: RawFetchedPackage,
+}
+
+impl WingetStreamEnvelope {
+    fn validate(&self) -> Result<(), ParserError> {
+        if self.schema_version != WINGET_STREAM_SCHEMA_VERSION {
+            return Err(ParserError::Contract(format!(
+                "unsupported winget stream schema version: expected {WINGET_STREAM_SCHEMA_VERSION}, got {}",
+                self.schema_version
+            )));
+        }
+
+        if self.source != WINGET_STREAM_SOURCE {
+            return Err(ParserError::Contract(format!(
+                "expected {WINGET_STREAM_SOURCE}, got {}",
+                self.source
+            )));
+        }
+
+        if self.kind != WINGET_STREAM_KIND {
+            return Err(ParserError::Contract(format!(
+                "expected {WINGET_STREAM_KIND}, got {}",
+                self.kind
+            )));
+        }
+
+        Ok(())
+    }
+}
 
 pub fn read_winget_packages<F>(path: &Path, mut on_package: F) -> Result<(), ParserError>
 where
     F: FnMut(ParsedPackage) -> Result<(), ParserError>,
 {
-    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-    let mut statement = connection.prepare(QUERY)?;
-    let mut rows = statement.query([])?;
+    let file = File::open(path)?;
+    let mut reader = BufReader::new(file);
+    let mut line = Vec::new();
+    let mut line_number = 0;
 
-    while let Some(row) = rows.next()? {
-        let id: String = row.get(0)?;
-        let name: String = row.get(1)?;
-        let version: String = row.get(2)?;
-        let publisher: Option<String> = row.get(3)?;
+    loop {
+        line.clear();
+        let bytes_read = reader.read_until(b'\n', &mut line)?;
+        if bytes_read == 0 {
+            break;
+        }
 
-        let raw = RawFetchedPackage {
-            id: format!("winget/{id}"),
-            name,
-            version,
-            description: None,
-            homepage: None,
-            license: None,
-            publisher: publisher.and_then(|publisher| {
-                let trimmed = publisher.trim();
-                if trimmed.is_empty() {
-                    None
-                } else {
-                    Some(trimmed.to_string())
-                }
-            }),
-            installers: Vec::new(),
+        line_number += 1;
+        if line.iter().all(|byte| byte.is_ascii_whitespace()) {
+            continue;
+        }
+
+        let envelope: WingetStreamEnvelope = match serde_json::from_slice(&line) {
+            Ok(raw) => raw,
+            Err(source) => {
+                return Err(ParserError::LineDecode {
+                    line: line_number,
+                    source,
+                });
+            }
         };
 
-        match parse_package(raw) {
+        envelope.validate()?;
+
+        match parse_package(envelope.payload) {
             Ok(parsed) => on_package(parsed)?,
-            Err(err) => eprintln!("skipping winget package {id}: {err}"),
+            Err(err) => eprintln!("skipping winget package on line {}: {err}", line_number),
         }
     }
 

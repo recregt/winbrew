@@ -21,7 +21,7 @@ fn main() {
 }
 
 fn parse_args() -> Result<RunConfig, String> {
-    let mut winget_db_path: Option<PathBuf> = None;
+    let mut winget_jsonl_path: Option<PathBuf> = None;
     let mut output_db_path: Option<PathBuf> = None;
     let mut metadata_path: Option<PathBuf> = None;
 
@@ -29,11 +29,11 @@ fn parse_args() -> Result<RunConfig, String> {
     while let Some(arg) = args.next() {
         let arg_text = arg.to_string_lossy();
         match arg_text.as_ref() {
-            "--winget-db" => {
+            "--winget-jsonl" | "--winget-db" => {
                 let value = args
                     .next()
-                    .ok_or_else(|| "--winget-db requires a value".to_string())?;
-                winget_db_path = Some(PathBuf::from(value));
+                    .ok_or_else(|| "--winget-jsonl requires a value".to_string())?;
+                winget_jsonl_path = Some(PathBuf::from(value));
             }
             "--out" => {
                 let value = args
@@ -56,9 +56,9 @@ fn parse_args() -> Result<RunConfig, String> {
         }
     }
 
-    let winget_db_path = winget_db_path.ok_or_else(help_text_missing)?;
+    let winget_jsonl_path = winget_jsonl_path.ok_or_else(help_text_missing)?;
     let output_db_path = output_db_path.ok_or_else(help_text_missing)?;
-    let mut config = RunConfig::new(winget_db_path, output_db_path);
+    let mut config = RunConfig::new(winget_jsonl_path, output_db_path);
     if let Some(metadata_path) = metadata_path {
         config = config.with_metadata_path(metadata_path);
     }
@@ -73,7 +73,7 @@ fn help_text_missing() -> String {
 fn help_text() -> String {
     [
         "Usage:",
-        "  winbrew-infra-parser --winget-db <path> --out <catalog.db> [--metadata <metadata.json>]",
+        "  winbrew-infra-parser --winget-jsonl <path> --out <catalog.db> [--metadata <metadata.json>]",
     ]
     .join("\n")
 }

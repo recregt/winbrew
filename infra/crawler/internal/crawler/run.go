@@ -84,10 +84,10 @@ func Run(ctx context.Context, configPath, wingetOutPath string) error {
 
 	trimmed := strings.TrimSpace(wingetOutPath)
 	if trimmed == "" {
-		trimmed = filepath.Join("staging", "winget_source.db")
+		trimmed = filepath.Join("staging", "winget_source.jsonl")
 	}
 
-	return runPipeline(ctx, cfg, srcs, trimmed)
+	return runPipeline(ctx, cfg, srcs, cacheDir, trimmed)
 }
 
 func tunedTransport(responseHeaderTimeout time.Duration) *http.Transport {
@@ -117,7 +117,7 @@ func cappedHeaderTimeout(fetchTimeout time.Duration) time.Duration {
 	return maxHeaderTimeout
 }
 
-func runPipeline(ctx context.Context, cfg *config.Config, srcs crawlerSources, wingetOutPath string) error {
+func runPipeline(ctx context.Context, cfg *config.Config, srcs crawlerSources, cacheDir, wingetOutPath string) error {
 	group, groupCtx := errgroup.WithContext(ctx)
 	configuredSources := 0
 
@@ -150,18 +150,48 @@ func runPipeline(ctx context.Context, cfg *config.Config, srcs crawlerSources, w
 	if srcs.winget != nil {
 		configuredSources++
 		group.Go(func() error {
-			if err := os.MkdirAll(filepath.Dir(wingetOutPath), 0o750); err != nil {
-				return fmt.Errorf("failed to create winget staging dir: %w", err)
+			sourceDBPath := filepath.Join(cacheDir, "winget", "winget_source.db")
+			if err := os.MkdirAll(filepath.Dir(sourceDBPath), 0o750); err != nil {
+				return fmt.Errorf("failed to create winget cache dir: %w", err)
 			}
 
-			slog.Info("downloading staged source db", "name", srcs.winget.Name(), "dst", wingetOutPath)
+			slog.Info("downloading winget source db", "name", srcs.winget.Name(), "dst", sourceDBPath)
 			if err := retry.Do(groupCtx, cfg.Retry.Max, cfg.Retry.Backoff, func() error {
-				return srcs.winget.DownloadSourceDB(groupCtx, wingetOutPath)
+				return srcs.winget.DownloadSourceDB(groupCtx, sourceDBPath)
 			}); err != nil {
 				if groupCtx.Err() != nil {
 					return fmt.Errorf("source %s cancelled: %w", srcs.winget.Name(), groupCtx.Err())
 				}
 				return fmt.Errorf("failed to stage %s source db: %w", srcs.winget.Name(), err)
+			}
+
+			if err := os.MkdirAll(filepath.Dir(wingetOutPath), 0o750); err != nil {
+				return fmt.Errorf("failed to create winget output dir: %w", err)
+			}
+
+			outFile, err := os.Create(wingetOutPath)
+			if err != nil {
+				return fmt.Errorf("failed to create winget output file: %w", err)
+			}
+			defer func() {
+				if closeErr := outFile.Close(); err == nil && closeErr != nil {
+					err = fmt.Errorf("failed to close winget output file: %w", closeErr)
+				}
+			}()
+
+			writer := bufio.NewWriterSize(outFile, 256*1024)
+			defer func() {
+				if flushErr := writer.Flush(); err == nil && flushErr != nil {
+					err = fmt.Errorf("failed to flush winget output: %w", flushErr)
+				}
+			}()
+
+			slog.Info("writing winget JSONL", "name", srcs.winget.Name(), "dst", wingetOutPath)
+			if err := srcs.winget.WriteJSONL(groupCtx, sourceDBPath, writer, cfg.Retry.Max, cfg.Retry.Backoff); err != nil {
+				if groupCtx.Err() != nil {
+					return fmt.Errorf("source %s cancelled: %w", srcs.winget.Name(), groupCtx.Err())
+				}
+				return fmt.Errorf("failed to stream packages from %s: %w", srcs.winget.Name(), err)
 			}
 
 			return nil
@@ -177,7 +207,7 @@ func runPipeline(ctx context.Context, cfg *config.Config, srcs crawlerSources, w
 	}
 
 	if srcs.winget != nil {
-		slog.Info("pipeline complete", "sources_run", configuredSources, "winget_db", wingetOutPath)
+		slog.Info("pipeline complete", "sources_run", configuredSources, "winget_jsonl", wingetOutPath)
 	} else {
 		slog.Info("pipeline complete", "sources_run", configuredSources)
 	}

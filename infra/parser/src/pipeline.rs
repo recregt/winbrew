@@ -14,20 +14,20 @@ use crate::sqlite::CatalogWriter;
 use crate::winget::read_winget_packages;
 
 pub struct RunConfig {
-    pub winget_db_path: PathBuf,
+    pub winget_jsonl_path: PathBuf,
     pub output_db_path: PathBuf,
     pub metadata_path: PathBuf,
 }
 
 impl RunConfig {
-    pub fn new(winget_db_path: PathBuf, output_db_path: PathBuf) -> Self {
+    pub fn new(winget_jsonl_path: PathBuf, output_db_path: PathBuf) -> Self {
         let metadata_path = output_db_path.parent().map_or_else(
             || PathBuf::from("metadata.json"),
             |parent| parent.join("metadata.json"),
         );
 
         Self {
-            winget_db_path,
+            winget_jsonl_path,
             output_db_path,
             metadata_path,
         }
@@ -48,7 +48,7 @@ pub fn run<R: BufRead>(reader: R, config: RunConfig) -> Result<CatalogMetadata, 
         writer.write_package(&package)
     })?;
 
-    read_winget_packages(&config.winget_db_path, |package| {
+    read_winget_packages(&config.winget_jsonl_path, |package| {
         stats.record(&package);
         writer.write_package(&package)
     })?;
@@ -171,39 +171,24 @@ mod tests {
         std::env::temp_dir().join(format!("winbrew-{name}-{}-{stamp}", process::id()))
     }
 
-    fn create_winget_db(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-        let connection = Connection::open(path)?;
-        connection.execute_batch(
-            r#"
-            CREATE TABLE ids (id TEXT NOT NULL);
-            CREATE TABLE names (name TEXT NOT NULL);
-            CREATE TABLE versions (version TEXT NOT NULL);
-            CREATE TABLE manifest (id INTEGER NOT NULL, name INTEGER NOT NULL, version INTEGER NOT NULL);
-            CREATE TABLE norm_publishers (norm_publisher TEXT NOT NULL);
-            CREATE TABLE norm_publishers_map (manifest INTEGER NOT NULL, norm_publisher INTEGER NOT NULL);
-            "#,
-        )?;
+    fn create_winget_jsonl(path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+        let envelope = serde_json::json!({
+            "schema_version": 1,
+            "source": "winget",
+            "kind": "package",
+            "payload": {
+                "id": "winget/Contoso.App",
+                "name": "Contoso App",
+                "version": "2.0.0",
+                "description": null,
+                "homepage": null,
+                "license": null,
+                "publisher": "Contoso Ltd.",
+                "installers": []
+            }
+        });
 
-        connection.execute("INSERT INTO ids(id) VALUES (?1)", ["Contoso.App"])?;
-        let id_rowid = connection.last_insert_rowid();
-        connection.execute("INSERT INTO names(name) VALUES (?1)", ["Contoso App"])?;
-        let name_rowid = connection.last_insert_rowid();
-        connection.execute("INSERT INTO versions(version) VALUES (?1)", ["2.0.0"])?;
-        let version_rowid = connection.last_insert_rowid();
-        connection.execute(
-            "INSERT INTO manifest(id, name, version) VALUES (?1, ?2, ?3)",
-            [id_rowid, name_rowid, version_rowid],
-        )?;
-        let manifest_rowid = connection.last_insert_rowid();
-        connection.execute(
-            "INSERT INTO norm_publishers(norm_publisher) VALUES (?1)",
-            ["Contoso Ltd."],
-        )?;
-        let publisher_rowid = connection.last_insert_rowid();
-        connection.execute(
-            "INSERT INTO norm_publishers_map(manifest, norm_publisher) VALUES (?1, ?2)",
-            [manifest_rowid, publisher_rowid],
-        )?;
+        fs::write(path, format!("{}\n", serde_json::to_string(&envelope)?))?;
 
         Ok(())
     }
@@ -214,8 +199,8 @@ mod tests {
         let root = unique_temp_dir("parser-e2e");
         fs::create_dir_all(&root)?;
 
-        let winget_db_path = root.join("winget.db");
-        create_winget_db(&winget_db_path)?;
+        let winget_jsonl_path = root.join("winget.jsonl");
+        create_winget_jsonl(&winget_jsonl_path)?;
 
         let output_db_path = root.join("catalog.db");
         let metadata_path = root.join("metadata.json");
@@ -226,7 +211,7 @@ mod tests {
 
         let metadata = run(
             Cursor::new(scoop_jsonl.as_bytes().to_vec()),
-            RunConfig::new(winget_db_path.clone(), output_db_path.clone())
+            RunConfig::new(winget_jsonl_path.clone(), output_db_path.clone())
                 .with_metadata_path(metadata_path.clone()),
         )?;
 
