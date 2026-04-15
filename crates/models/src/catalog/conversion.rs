@@ -29,6 +29,10 @@ impl From<&Package> for CatalogPackage {
             homepage: package.homepage.clone(),
             license: package.license.clone(),
             publisher: package.publisher.clone(),
+            locale: None,
+            moniker: None,
+            tags: None,
+            bin: None,
         }
     }
 }
@@ -52,6 +56,10 @@ impl TryFrom<RawCatalogPackage> for CatalogPackage {
             homepage: raw.homepage,
             license: raw.license,
             publisher: raw.publisher,
+            locale: raw.locale,
+            moniker: raw.moniker,
+            tags: raw.tags,
+            bin: raw.bin,
         };
 
         package.validate()?;
@@ -102,6 +110,10 @@ mod tests {
             homepage: None,
             license: None,
             publisher: Some("Contoso Ltd.".to_string()),
+            locale: Some("en-US".to_string()),
+            moniker: Some("contoso".to_string()),
+            tags: Some("[\"utility\"]".to_string()),
+            bin: Some("[\"tool.exe\"]".to_string()),
         };
 
         let converted = CatalogPackage::try_from(package).expect("raw package should convert");
@@ -110,6 +122,10 @@ mod tests {
         assert_eq!(converted.namespace, None);
         assert_eq!(converted.source_id, "Contoso.App");
         assert_eq!(converted.version.to_string(), "1.2.3");
+        assert_eq!(converted.locale.as_deref(), Some("en-US"));
+        assert_eq!(converted.moniker.as_deref(), Some("contoso"));
+        assert_eq!(converted.tags.as_deref(), Some("[\"utility\"]"));
+        assert_eq!(converted.bin.as_deref(), Some("[\"tool.exe\"]"));
     }
 
     #[test]

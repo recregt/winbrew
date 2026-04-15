@@ -119,8 +119,8 @@ fn insert_catalog_package(conn: &Connection) -> Result<()> {
     conn.execute(
         r#"
         INSERT INTO catalog_packages (
-            id, name, version, source, namespace, source_id, description, homepage, license, publisher
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, tags, bin
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
         "#,
         params![
             "winget/Contoso.App",
@@ -133,6 +133,10 @@ fn insert_catalog_package(conn: &Connection) -> Result<()> {
             Option::<String>::None,
             Option::<String>::None,
             Option::<String>::None,
+                Some("en-US"),
+                Option::<String>::None,
+                Option::<String>::None,
+                Option::<String>::None,
         ],
     )?;
 
@@ -194,6 +198,20 @@ fn catalog_contract_matches_canonical_schema() -> Result<()> {
     assert!(!installer_columns.contains("type"));
     assert!(!column_notnull(&conn, "catalog_installers", "scope")?);
     assert_eq!(column_default(&conn, "catalog_installers", "scope")?, None);
+
+    let package_columns = table_columns(&conn, "catalog_packages")?;
+    for column in ["locale", "moniker", "tags", "bin"] {
+        assert!(
+            package_columns.contains(column),
+            "missing package column {column}"
+        );
+    }
+
+    let fts_columns = table_columns(&conn, "catalog_packages_fts")?;
+    assert!(fts_columns.contains("name"));
+    assert!(fts_columns.contains("description"));
+    assert!(fts_columns.contains("moniker"));
+    assert!(fts_columns.contains("tags"));
 
     let schema_version: String = conn.query_row(
         "SELECT value FROM schema_meta WHERE name = 'schema_version'",

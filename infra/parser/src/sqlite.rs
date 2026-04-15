@@ -7,8 +7,8 @@ use crate::error::ParserError;
 use crate::parser::ParsedPackage;
 
 const PACKAGE_UPSERT: &str = r#"
-INSERT INTO catalog_packages(id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?7, ?8, ?9, ?10)
+INSERT INTO catalog_packages(id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher, locale, moniker, tags, bin)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
 ON CONFLICT(id) DO UPDATE SET
     name=excluded.name,
     version=excluded.version,
@@ -19,7 +19,11 @@ ON CONFLICT(id) DO UPDATE SET
     description=excluded.description,
     homepage=excluded.homepage,
     license=excluded.license,
-    publisher=excluded.publisher
+    publisher=excluded.publisher,
+    locale=excluded.locale,
+    moniker=excluded.moniker,
+    tags=excluded.tags,
+    bin=excluded.bin
 "#;
 
 const RAW_UPSERT: &str = r#"
@@ -94,6 +98,10 @@ impl CatalogWriter {
             parsed.package.homepage.as_deref(),
             parsed.package.license.as_deref(),
             parsed.package.publisher.as_deref(),
+            parsed.package.locale.as_deref(),
+            parsed.package.moniker.as_deref(),
+            parsed.package.tags.as_deref(),
+            parsed.package.bin.as_deref(),
         ])?;
 
         raw_stmt.execute(params![

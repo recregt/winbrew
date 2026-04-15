@@ -59,6 +59,8 @@ type wingetManifest struct {
 	PackageVersion      string                    `yaml:"PackageVersion"`
 	PackageLocale       string                    `yaml:"PackageLocale,omitempty"`
 	DefaultLocale       string                    `yaml:"DefaultLocale,omitempty"`
+	Moniker             string                    `yaml:"Moniker,omitempty"`
+	Tags                []string                  `yaml:"Tags,omitempty"`
 	Publisher           string                    `yaml:"Publisher,omitempty"`
 	PackageName         string                    `yaml:"PackageName,omitempty"`
 	ShortDescription    string                    `yaml:"ShortDescription,omitempty"`
@@ -101,6 +103,9 @@ type wingetPackageSnapshot struct {
 	Homepage    string                    `json:"homepage,omitempty"`
 	License     string                    `json:"license,omitempty"`
 	Publisher   string                    `json:"publisher,omitempty"`
+	Locale      string                    `json:"locale,omitempty"`
+	Moniker     string                    `json:"moniker,omitempty"`
+	Tags        []string                  `json:"tags,omitempty"`
 	Installers  []wingetInstallerSnapshot `json:"installers,omitempty"`
 }
 
@@ -466,6 +471,26 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+func firstNonEmptyStrings(values ...[]string) []string {
+	for _, value := range values {
+		if len(value) == 0 {
+			continue
+		}
+
+		result := make([]string, 0, len(value))
+		for _, item := range value {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+
+	return nil
+}
+
 func ensureWingetPackageCoordinate(expected, actual string) error {
 	if trimmed := strings.TrimSpace(actual); trimmed != "" && trimmed != expected {
 		return fmt.Errorf("winget manifest identifier mismatch: expected %s, got %s", expected, trimmed)
@@ -495,6 +520,9 @@ func buildWingetPackageSnapshot(row wingetIndexRow, rootManifest wingetManifest,
 			Homepage:    strings.TrimSpace(rootManifest.Homepage),
 			License:     strings.TrimSpace(rootManifest.License),
 			Publisher:   firstNonEmpty(rootManifest.Publisher, row.publisher),
+			Locale:      firstNonEmpty(rootManifest.PackageLocale, rootManifest.DefaultLocale),
+			Moniker:     firstNonEmpty(rootManifest.Moniker),
+			Tags:        firstNonEmptyStrings(rootManifest.Tags),
 			Installers:  installers,
 		}, nil
 	case "version":
@@ -525,6 +553,9 @@ func buildWingetPackageSnapshot(row wingetIndexRow, rootManifest wingetManifest,
 			Homepage:    firstNonEmpty(localeManifest.Homepage, rootManifest.Homepage),
 			License:     firstNonEmpty(localeManifest.License, rootManifest.License),
 			Publisher:   firstNonEmpty(localeManifest.Publisher, rootManifest.Publisher, row.publisher),
+			Locale:      firstNonEmpty(localeManifest.PackageLocale, rootManifest.PackageLocale, rootManifest.DefaultLocale),
+			Moniker:     firstNonEmpty(localeManifest.Moniker, rootManifest.Moniker),
+			Tags:        firstNonEmptyStrings(localeManifest.Tags, rootManifest.Tags),
 			Installers:  installers,
 		}, nil
 	default:

@@ -163,6 +163,10 @@ type packageSnapshot struct {
 	Homepage    string              `json:"homepage,omitempty"`
 	License     string              `json:"license,omitempty"`
 	Publisher   string              `json:"publisher,omitempty"`
+	Locale      string              `json:"locale,omitempty"`
+	Moniker     string              `json:"moniker,omitempty"`
+	Tags        []string            `json:"tags,omitempty"`
+	Bin         json.RawMessage     `json:"bin,omitempty"`
 	Installers  []installerSnapshot `json:"installers,omitempty"`
 }
 
@@ -192,6 +196,10 @@ func packageSnapshotFromPackage(pkg normalize.Package) packageSnapshot {
 		Homepage:    pkg.Homepage,
 		License:     pkg.License,
 		Publisher:   pkg.Publisher,
+		Locale:      pkg.Locale,
+		Moniker:     pkg.Moniker,
+		Tags:        append([]string(nil), pkg.Tags...),
+		Bin:         append(json.RawMessage(nil), pkg.Bin...),
 		Installers:  installers,
 	}
 }
@@ -315,9 +323,11 @@ type scoopManifest struct {
 	Description  string               `json:"description"`
 	Homepage     string               `json:"homepage"`
 	License      any                  `json:"license"` // string or object
-	URL          any                  `json:"url"`     // string or []string
-	Hash         any                  `json:"hash"`    // string or []string
-	Bin          any                  `json:"bin"`     // string, []string or [][]string
+	Moniker      string               `json:"moniker,omitempty"`
+	Tags         []string             `json:"tags,omitempty"`
+	URL          any                  `json:"url"`  // string or []string
+	Hash         any                  `json:"hash"` // string or []string
+	Bin          any                  `json:"bin"`  // string, []string or [][]string
 	Architecture map[string]archBlock `json:"architecture"`
 }
 
@@ -367,9 +377,25 @@ func readManifest(ctx context.Context, bucketName, dir, filename string) (normal
 		Description: m.Description,
 		Homepage:    m.Homepage,
 		License:     resolveLicense(m.License),
+		Moniker:     m.Moniker,
+		Tags:        append([]string(nil), m.Tags...),
+		Bin:         rawJSONValue(m.Bin),
 		Installers:  resolveInstallers(m),
 		Raw:         append(json.RawMessage(nil), raw.Bytes()...),
 	}, nil
+}
+
+func rawJSONValue(value any) json.RawMessage {
+	if value == nil {
+		return nil
+	}
+
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil
+	}
+
+	return append(json.RawMessage(nil), data...)
 }
 
 func bufferJSONLWriter(w io.Writer) (io.Writer, func() error) {

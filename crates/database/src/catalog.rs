@@ -15,7 +15,7 @@ pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
     }
 
     let mut stmt = conn.prepare(
-        "SELECT p.id, p.name, p.version, p.source, p.namespace, p.source_id, p.created_at, p.updated_at, p.description, p.homepage, p.license, p.publisher
+        "SELECT p.id, p.name, p.version, p.source, p.namespace, p.source_id, p.created_at, p.updated_at, p.description, p.homepage, p.license, p.publisher, p.locale, p.moniker, p.tags, p.bin
          FROM catalog_packages p
          JOIN catalog_packages_fts fts ON p.rowid = fts.rowid
          WHERE catalog_packages_fts MATCH ?1
@@ -42,7 +42,7 @@ pub fn get_installers(conn: &Connection, package_id: &str) -> Result<Vec<Catalog
 
 pub fn get_package_by_id(conn: &Connection, package_id: &str) -> Result<Option<CatalogPackage>> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher
+        "SELECT id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher, locale, moniker, tags, bin
          FROM catalog_packages
          WHERE id = ?1",
     )?;
@@ -105,6 +105,10 @@ fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
         homepage: row.get("homepage")?,
         license: row.get("license")?,
         publisher: row.get("publisher")?,
+        locale: row.get("locale")?,
+        moniker: row.get("moniker")?,
+        tags: row.get("tags")?,
+        bin: row.get("bin")?,
     };
 
     package.validate().map_err(|err| {
@@ -268,8 +272,8 @@ mod tests {
         conn.execute(
             r#"
             INSERT INTO catalog_packages (
-                id, name, version, source, namespace, source_id, description, homepage, license, publisher, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             "#,
             rusqlite::params![
                 "winget/Contoso.App",
@@ -282,6 +286,7 @@ mod tests {
                 Option::<String>::None,
                 Option::<String>::None,
                 Some("Contoso Ltd."),
+                Some("en-US"),
                 "2026-04-14 12:00:00",
                 "2026-04-14 12:34:56",
             ],
@@ -315,8 +320,8 @@ mod tests {
         conn.execute(
             r#"
             INSERT INTO catalog_packages (
-                id, name, version, source, namespace, source_id, description, homepage, license, publisher, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             "#,
             rusqlite::params![
                 "winget/Contoso.App",
@@ -329,6 +334,7 @@ mod tests {
                 Option::<String>::None,
                 Option::<String>::None,
                 Some("Contoso Ltd."),
+                Some("en-US"),
                 "2026-04-14 12:00:00",
                 "2026-04-14 12:34:56",
             ],

@@ -42,6 +42,18 @@ pub struct CatalogPackage {
     pub license: Option<String>,
     /// Optional publisher string.
     pub publisher: Option<String>,
+    /// Optional package metadata locale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+    /// Optional package moniker or alias.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moniker: Option<String>,
+    /// Optional package search tags encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tags: Option<String>,
+    /// Optional package bin metadata encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bin: Option<String>,
 }
 
 /// A validated installer entry associated with a catalog package.
@@ -121,6 +133,27 @@ impl CatalogPackage {
 
         if let Some(updated_at) = self.updated_at.as_deref() {
             ensure_non_empty("catalog_package.updated_at", updated_at)?;
+        }
+
+        if let Some(locale) = self.locale.as_deref() {
+            ensure_non_empty("catalog_package.locale", locale)?;
+        } else if self.source == PackageSource::Winget {
+            return Err(ModelError::invalid_contract(
+                "catalog_package.locale",
+                "winget packages require a locale",
+            ));
+        }
+
+        if let Some(moniker) = self.moniker.as_deref() {
+            ensure_non_empty("catalog_package.moniker", moniker)?;
+        }
+
+        if let Some(tags) = self.tags.as_deref() {
+            ensure_non_empty("catalog_package.tags", tags)?;
+        }
+
+        if let Some(bin) = self.bin.as_deref() {
+            ensure_non_empty("catalog_package.bin", bin)?;
         }
 
         Ok(())
@@ -256,6 +289,10 @@ impl CatalogPackage {
             homepage: None,
             license: None,
             publisher: None,
+            locale: None,
+            moniker: None,
+            tags: None,
+            bin: None,
         }
     }
 
@@ -306,6 +343,26 @@ impl CatalogPackage {
 
     pub fn with_publisher(mut self, publisher: impl Into<String>) -> Self {
         self.publisher = Some(publisher.into());
+        self
+    }
+
+    pub fn with_locale(mut self, locale: impl Into<String>) -> Self {
+        self.locale = Some(locale.into());
+        self
+    }
+
+    pub fn with_moniker(mut self, moniker: impl Into<String>) -> Self {
+        self.moniker = Some(moniker.into());
+        self
+    }
+
+    pub fn with_tags(mut self, tags: impl Into<String>) -> Self {
+        self.tags = Some(tags.into());
+        self
+    }
+
+    pub fn with_bin(mut self, bin: impl Into<String>) -> Self {
+        self.bin = Some(bin.into());
         self
     }
 }
@@ -408,7 +465,11 @@ mod tests {
         .with_description("Example package")
         .with_created_at("2026-04-14 12:00:00")
         .with_updated_at("2026-04-14 12:34:56")
-        .with_publisher("Contoso Ltd.");
+        .with_publisher("Contoso Ltd.")
+        .with_locale("en-US")
+        .with_moniker("contoso")
+        .with_tags("[\"utility\"]")
+        .with_bin("[\"tool.exe\"]");
 
         let json = serde_json::to_string(&package).expect("package should serialize");
         let restored: CatalogPackage =
@@ -422,5 +483,24 @@ mod tests {
         assert_eq!(restored.updated_at, package.updated_at);
         assert_eq!(restored.version, package.version);
         assert_eq!(restored.publisher, package.publisher);
+        assert_eq!(restored.locale, package.locale);
+        assert_eq!(restored.moniker, package.moniker);
+        assert_eq!(restored.tags, package.tags);
+        assert_eq!(restored.bin, package.bin);
+    }
+
+    #[test]
+    fn winget_packages_require_locale() {
+        let package = CatalogPackage::test_builder(
+            "winget/Contoso.App".into(),
+            "Contoso App",
+            Version::parse("1.2.3").expect("version should parse"),
+        );
+
+        let err = package
+            .validate()
+            .expect_err("winget package should require locale");
+
+        assert!(err.to_string().contains("require a locale"));
     }
 }

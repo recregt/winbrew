@@ -15,12 +15,15 @@ fn insert_package(
     package_id: &str,
     name: &str,
     description: Option<&str>,
+    moniker: Option<&str>,
+    tags: Option<&[&str]>,
 ) -> Result<()> {
+    let tags_json = tags.map(serde_json::to_string).transpose()?;
     conn.execute(
         r#"
         INSERT INTO catalog_packages (
-            id, name, version, source, namespace, source_id, description, homepage, license, publisher
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, tags, bin
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
         "#,
         params![
             package_id,
@@ -32,6 +35,10 @@ fn insert_package(
             description.map(str::to_string),
             Option::<String>::None,
             Option::<String>::None,
+            Option::<String>::None,
+            Some("en-US"),
+            moniker.map(|value| value.to_string()),
+            tags_json,
             Option::<String>::None,
         ],
     )?;
@@ -47,6 +54,8 @@ fn insert_syncs_to_fts5_and_preserves_hidden_rowid() -> Result<()> {
         "winget/Microsoft.VisualStudioCode",
         "Visual Studio Code",
         None,
+        Some("vscode"),
+        Some(&["editor", "code"]),
     )?;
 
     let package_rowid: i64 = conn.query_row(
@@ -68,6 +77,20 @@ fn insert_syncs_to_fts5_and_preserves_hidden_rowid() -> Result<()> {
     assert_eq!(results[0].id.as_ref(), "winget/Microsoft.VisualStudioCode");
     assert_eq!(results[0].name, "Visual Studio Code");
 
+    let moniker_results = database::search(&conn, "vscode")?;
+    assert_eq!(moniker_results.len(), 1);
+    assert_eq!(
+        moniker_results[0].id.as_ref(),
+        "winget/Microsoft.VisualStudioCode"
+    );
+
+    let tag_results = database::search(&conn, "editor")?;
+    assert_eq!(tag_results.len(), 1);
+    assert_eq!(
+        tag_results[0].id.as_ref(),
+        "winget/Microsoft.VisualStudioCode"
+    );
+
     Ok(())
 }
 
@@ -79,6 +102,8 @@ fn update_rewrites_fts5_index() -> Result<()> {
         "winget/Microsoft.VisualStudioCode",
         "Visual Studio Code",
         Some("Code editor"),
+        Some("vscode"),
+        Some(&["editor", "code"]),
     )?;
 
     let package_rowid_before: i64 = conn.query_row(
@@ -125,6 +150,8 @@ fn delete_removes_fts5_entries() -> Result<()> {
         "winget/Contoso.Editor",
         "Contoso Editor",
         Some("A lightweight editor"),
+        Some("contoso-editor"),
+        Some(&["utility"]),
     )?;
 
     assert_eq!(database::search(&conn, "Contoso")?.len(), 1);
