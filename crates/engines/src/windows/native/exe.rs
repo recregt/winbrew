@@ -507,6 +507,17 @@ mod tests {
     }
 
     #[test]
+    fn split_switches_rejects_unterminated_quotes() {
+        let err = split_switches(r#"/S /D="C:\Program Files\Demo"#)
+            .expect_err("unterminated quotes should fail");
+
+        assert!(
+            err.to_string()
+                .contains("unterminated quoted installer switches")
+        );
+    }
+
+    #[test]
     fn has_arg_prefix_detects_case_insensitive_prefixes() {
         let args = vec!["/DIR=C:\\Tools\\App".to_string()];
 
@@ -584,6 +595,54 @@ mod tests {
                 "/NORESTART".to_string(),
                 "/SP-".to_string(),
                 format!(r"/DIR={}", install_dir.display()),
+            ]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn build_install_args_adds_nullsoft_defaults_and_install_dir() {
+        let installer = native_exe_installer(InstallerType::Nullsoft, Some("/S"));
+        let install_dir = native_exe_test_dir("nullsoft");
+
+        let args = build_install_args(&installer, &install_dir, "Contoso.NativeExe")
+            .expect("nullsoft installs should build args");
+
+        assert_eq!(
+            args,
+            vec!["/S".to_string(), format!(r"/D={}", install_dir.display())]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn build_install_args_adds_burn_defaults() {
+        let installer = native_exe_installer(InstallerType::Burn, Some("/quiet"));
+        let install_dir = native_exe_test_dir("burn");
+
+        let args = build_install_args(&installer, &install_dir, "Contoso.NativeExe")
+            .expect("burn installs should build args");
+
+        assert_eq!(args, vec!["/quiet".to_string(), "/norestart".to_string()]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn build_install_args_preserves_generic_exe_switches() {
+        let installer = native_exe_installer(
+            InstallerType::Exe,
+            Some(r#"/quiet /D="C:\Program Files\Demo""#),
+        );
+        let install_dir = native_exe_test_dir("generic-preserve");
+
+        let args = build_install_args(&installer, &install_dir, "Contoso.NativeExe")
+            .expect("generic exe installs should preserve explicit switches");
+
+        assert_eq!(
+            args,
+            vec![
+                "/quiet".to_string(),
+                "/D=C:\\Program Files\\Demo".to_string(),
             ]
         );
     }
