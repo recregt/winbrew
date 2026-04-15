@@ -9,7 +9,7 @@ use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use winbrew_cli::database;
-use winbrew_cli::models::domains::install::InstallerType;
+use winbrew_cli::models::domains::install::{EngineMetadata, InstallerType};
 use winbrew_cli::models::domains::installed::PackageStatus;
 use winbrew_cli::models::shared::hash::HashAlgorithm;
 use winbrew_core::hash::Hasher;
@@ -140,6 +140,26 @@ impl BinaryFixture {
         install_dir
     }
 
+    fn insert_native_exe_package(&self, name: &str, uninstall_command: String) -> PathBuf {
+        let install_dir = self.package_dir(name);
+        fs::create_dir_all(&install_dir).expect("install dir should exist");
+        fs::write(install_dir.join("tool.exe"), b"payload").expect("install file should exist");
+
+        let conn = self.conn();
+        let package = common::InstalledPackageBuilder::new(name)
+            .version("1.0.0")
+            .kind(InstallerType::Exe)
+            .engine_metadata(Some(EngineMetadata::native_exe(
+                Some(uninstall_command),
+                None,
+            )))
+            .status(PackageStatus::Ok)
+            .build(&install_dir);
+
+        database::insert_package(conn, &package).expect("package should insert");
+        install_dir
+    }
+
     fn create_catalog_db_with_hash(
         &self,
         package_name: &str,
@@ -244,6 +264,45 @@ fn remove_runs_through_the_binary() -> Result<()> {
     common::assert_success(&output, "remove command")?;
     common::assert_output_contains(&output, "Successfully removed Contoso.App.")?;
     fixture.assert_dir_missing(package_name)?;
+
+    let conn = fixture.conn();
+    anyhow::ensure!(
+        database::get_package(conn, package_name)?.is_none(),
+        "package should be completely removed from database"
+    );
+
+    Ok(())
+}
+
+/// Integration test for the binary remove flow when the installed package is a native executable.
+///
+/// Scenario:
+/// - Seed a NativeExe package with uninstall metadata in the test database.
+/// - Invoke the CLI through the binary with `remove --yes`.
+///
+/// Expected behavior:
+/// - The command exits successfully.
+/// - The recorded uninstall command runs before filesystem cleanup.
+/// - The package directory is deleted.
+/// - The package row is removed from the database.
+#[test]
+fn remove_native_exe_runs_through_the_binary() -> Result<()> {
+    let fixture = BinaryFixture::new();
+    let package_name = "Contoso.NativeExe";
+    let uninstall_marker = fixture.path().join("nativeexe-uninstall.log");
+    let uninstall_command = format!(
+        r#"powershell -NoProfile -Command "Set-Content -LiteralPath '{}' -Value 'ran'""#,
+        uninstall_marker.display()
+    );
+    let install_dir = fixture.insert_native_exe_package(package_name, uninstall_command);
+
+    let output = fixture.run(&["remove", package_name, "--yes"]);
+
+    common::assert_success(&output, "remove command")?;
+    common::assert_output_contains(&output, "Successfully removed Contoso.NativeExe.")?;
+    anyhow::ensure!(uninstall_marker.exists(), "uninstall command should run");
+    fixture.assert_dir_missing(package_name)?;
+    anyhow::ensure!(!install_dir.exists(), "install directory should be removed");
 
     let conn = fixture.conn();
     anyhow::ensure!(
