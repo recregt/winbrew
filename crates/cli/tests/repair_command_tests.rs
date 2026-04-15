@@ -125,6 +125,27 @@ fn create_catalog_db_with_hash(
     Ok(())
 }
 
+fn create_catalog_db_with_installer(
+    fixture: &RepairFixture,
+    package_name: &str,
+    installer_url: &str,
+    hash: &str,
+    kind: InstallerType,
+    installer_switches: Option<&str>,
+) -> Result<()> {
+    common::seed_catalog_db_with_installer(
+        &fixture.catalog_db_path,
+        package_name,
+        "Synthetic package for isolated repair testing",
+        installer_url,
+        hash,
+        kind,
+        installer_switches,
+    )?;
+
+    Ok(())
+}
+
 #[test]
 fn repair_replays_committed_journal_into_database() {
     let fixture = RepairFixture::new();
@@ -234,6 +255,66 @@ fn repair_reinstalls_missing_package_from_catalog() -> Result<()> {
         install_dir.to_string_lossy().to_string()
     );
     assert!(install_dir.join("bin").join("tool.exe").exists());
+    download_mock.assert();
+
+    Ok(())
+}
+
+#[test]
+fn repair_reinstalls_native_exe_from_catalog() -> Result<()> {
+    let fixture = RepairFixture::new();
+    let package_name = "Winbrew Repair NativeExe";
+    let install_dir = fixture.package_dir(package_name);
+
+    let cmd_path = std::path::PathBuf::from(
+        std::env::var_os("ComSpec").expect("ComSpec should be set on Windows"),
+    );
+    let cmd_bytes = fs::read(&cmd_path)?;
+    let sha512_hash = sha512_hex(&cmd_bytes);
+
+    let mut server = Server::new();
+    let installer_url = format!("{}/repair.exe", server.url());
+    let download_mock = server
+        .mock("GET", "/repair.exe")
+        .with_status(200)
+        .with_body(cmd_bytes)
+        .expect(1)
+        .create();
+
+    if let Some(parent) = fixture.catalog_db_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    create_catalog_db_with_installer(
+        &fixture,
+        package_name,
+        &installer_url,
+        &sha512_hash,
+        InstallerType::Exe,
+        Some("/C exit 0"),
+    )?;
+
+    let conn = fixture.conn();
+    let package = common::InstalledPackageBuilder::new(package_name)
+        .version("0.9.0")
+        .kind(InstallerType::Exe)
+        .build(&install_dir);
+
+    database::insert_package(conn, &package).expect("package should insert");
+
+    repair::run(&fixture.ctx, true).expect("repair should succeed");
+
+    let conn = fixture.conn();
+    let package = database::get_package(conn, package_name)
+        .expect("read package")
+        .expect("package should exist");
+
+    assert_eq!(package.version, "1.0.0");
+    assert_eq!(package.kind, InstallerType::Exe);
+    assert_eq!(package.engine_kind, EngineKind::NativeExe);
+    assert_eq!(
+        package.install_dir,
+        install_dir.to_string_lossy().to_string()
+    );
     download_mock.assert();
 
     Ok(())

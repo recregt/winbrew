@@ -6,13 +6,13 @@ use winbrew_app::install;
 use winbrew_app::install::InstallObserver;
 use winbrew_app::{AppContext, database};
 use winbrew_models::domains::catalog::CatalogPackage;
-use winbrew_models::domains::install::InstallerType;
+use winbrew_models::domains::install::{EngineKind, InstallerType};
 use winbrew_models::domains::installed::PackageStatus;
 use winbrew_models::domains::package::{PackageId, PackageName, PackageRef};
 use winbrew_models::shared::HashAlgorithm as CatalogHashAlgorithm;
 use winbrew_testing::{
     Mock, MockServer, create_dummy_zip_bytes, init_database, md5_hex, reset_install_state,
-    seed_catalog_db, sha1_hex, sha512_hex, test_root,
+    sha1_hex, sha512_hex, test_root,
 };
 
 struct InstallTestFixture {
@@ -40,24 +40,44 @@ impl InstallObserver for NoopInstallObserver {
 
 impl InstallTestFixture {
     fn from_catalog(root: &Path, installer_url: &str, hash: &str) -> Result<Self> {
+        Self::from_catalog_with_installer(
+            root,
+            "Winbrew Test Zip",
+            installer_url,
+            hash,
+            InstallerType::Zip,
+            None,
+        )
+    }
+
+    fn from_catalog_with_installer(
+        root: &Path,
+        package_name: &str,
+        installer_url: &str,
+        hash: &str,
+        kind: InstallerType,
+        installer_switches: Option<&str>,
+    ) -> Result<Self> {
         let config = init_database(root)?;
         reset_install_state(root)?;
 
         let catalog_db_dir = root.join("data").join("db");
         fs::create_dir_all(&catalog_db_dir)?;
-        seed_catalog_db(
+        winbrew_testing::seed_catalog_db_with_installer(
             &catalog_db_dir.join("catalog.db"),
-            "Winbrew Test Zip",
+            package_name,
             "Synthetic package for isolated install testing",
             installer_url,
             hash,
+            kind,
+            installer_switches,
         )?;
 
         let ctx = AppContext::from_config(&config)?;
 
         Ok(Self {
             ctx,
-            package_name: "Winbrew Test Zip".to_string(),
+            package_name: package_name.to_string(),
             server: None,
             download_mock: None,
         })
@@ -154,6 +174,50 @@ fn install_supports_explicit_winget_ids() -> Result<()> {
     assert_eq!(result.name, "Winbrew Test Zip");
     assert_eq!(result.version, "1.0.0");
     fixture.assert_downloaded();
+
+    Ok(())
+}
+
+#[test]
+fn install_runs_native_exe_end_to_end_in_an_isolated_root() -> Result<()> {
+    let test_root = test_root();
+    let root = test_root.path();
+
+    let cmd_path = std::path::PathBuf::from(
+        std::env::var_os("ComSpec").expect("ComSpec should be set on Windows"),
+    );
+    let cmd_bytes = fs::read(&cmd_path)?;
+    let sha512_hash = sha512_hex(&cmd_bytes);
+
+    let mut server = MockServer::new();
+    let installer_url = format!("{}/setup.exe", server.url());
+    let download_mock = server.mock_get("/setup.exe", cmd_bytes);
+
+    let fixture = InstallTestFixture::from_catalog_with_installer(
+        root,
+        "Winbrew Test NativeExe",
+        &installer_url,
+        &sha512_hash,
+        InstallerType::Exe,
+        Some("/C exit 0"),
+    )?;
+
+    let outcome = fixture.run_install(false)?;
+
+    let result = outcome.result;
+    let install_dir = fixture.ctx.paths.packages.join(&fixture.package_name);
+    assert_eq!(result.name, "Winbrew Test NativeExe");
+    assert_eq!(result.version, "1.0.0");
+    assert_eq!(result.install_dir, install_dir.to_string_lossy());
+    assert!(install_dir.exists());
+
+    let conn = database::get_conn()?;
+    let stored = database::get_package(&conn, "Winbrew Test NativeExe")?
+        .expect("package should be marked as installed");
+    assert_eq!(stored.status, PackageStatus::Ok);
+    assert_eq!(stored.kind, InstallerType::Exe);
+    assert_eq!(stored.engine_kind, EngineKind::NativeExe);
+    download_mock.assert();
 
     Ok(())
 }
