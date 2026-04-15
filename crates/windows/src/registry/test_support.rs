@@ -20,6 +20,22 @@ pub fn create_test_uninstall_entry(
     quiet_uninstall_command: Option<&str>,
     uninstall_command: Option<&str>,
 ) -> Result<UninstallEntryGuard> {
+    create_test_uninstall_entry_with_install_location(
+        package_name,
+        Some(install_dir),
+        quiet_uninstall_command,
+        uninstall_command,
+    )
+}
+
+/// Create a temporary uninstall registry entry under HKCU for tests.
+#[doc(hidden)]
+pub fn create_test_uninstall_entry_with_install_location(
+    package_name: &str,
+    install_location: Option<&Path>,
+    quiet_uninstall_command: Option<&str>,
+    uninstall_command: Option<&str>,
+) -> Result<UninstallEntryGuard> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let (root, _) = hkcu
         .create_subkey(UNINSTALL)
@@ -40,13 +56,16 @@ pub fn create_test_uninstall_entry(
             .context("failed to create test uninstall entry")?;
 
         let display_name = package_name.to_string();
-        let install_location = install_dir.to_string_lossy().to_string();
         app_key
             .set_value("DisplayName", &display_name)
             .context("failed to set test uninstall display name")?;
-        app_key
-            .set_value("InstallLocation", &install_location)
-            .context("failed to set test uninstall install location")?;
+
+        if let Some(install_location) = install_location {
+            let install_location = install_location.to_string_lossy().to_string();
+            app_key
+                .set_value("InstallLocation", &install_location)
+                .context("failed to set test uninstall install location")?;
+        }
 
         if let Some(command) = quiet_uninstall_command {
             let quiet_command = command.to_string();

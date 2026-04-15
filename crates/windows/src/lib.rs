@@ -11,5 +11,6 @@ pub use deployment::{
 pub use fs::{PathInfo, create_extracted_file, inspect_path};
 pub use registry::{
     AppInfo, Hive, UninstallEntryGuard, UninstallRoot, collect_installed_apps,
-    create_test_uninstall_entry, uninstall_roots, uninstall_value,
+    create_test_uninstall_entry, create_test_uninstall_entry_with_install_location,
+    uninstall_roots, uninstall_value,
 };
