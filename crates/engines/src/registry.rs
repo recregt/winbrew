@@ -65,7 +65,7 @@ fn msix_install(
     install_dir: &Path,
     package_name: &str,
 ) -> Result<EngineInstallReceipt> {
-    msix::install::install(download_path, install_dir, package_name)
+    msix::install(download_path, install_dir, package_name)
 }
 
 fn native_exe_install(
@@ -115,7 +115,7 @@ fn portable_install(
 }
 
 fn msix_remove(package: &InstalledPackage) -> Result<()> {
-    msix::remove::remove(package)
+    msix::remove(package)
 }
 
 fn native_exe_remove(package: &InstalledPackage) -> Result<()> {
