@@ -13,6 +13,10 @@ type Package struct {
 	Homepage    string
 	License     string
 	Publisher   string
+	Locale      string
+	Moniker     string
+	Tags        []string
+	Bin         json.RawMessage
 
 	Installers []Installer
 

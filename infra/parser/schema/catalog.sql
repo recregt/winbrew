@@ -1,6 +1,6 @@
 -- Canonical catalog schema for parser-generated snapshots.
 -- Parser code and tests include this file directly to avoid schema drift.
-PRAGMA user_version = 2;
+PRAGMA user_version = 3;
 
 CREATE TABLE IF NOT EXISTS schema_meta (
     name  TEXT PRIMARY KEY,
@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 );
 
 INSERT OR REPLACE INTO schema_meta (name, value)
-VALUES ('schema_version', '2');
+VALUES ('schema_version', '3');
 
 CREATE TABLE IF NOT EXISTS catalog_packages (
     id          TEXT PRIMARY KEY,
@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS catalog_packages (
     homepage    TEXT,
     license     TEXT,
     publisher   TEXT,
+    locale      TEXT CHECK (locale IS NULL OR length(trim(locale)) > 0),
+    moniker     TEXT CHECK (moniker IS NULL OR length(trim(moniker)) > 0),
+    tags        TEXT CHECK (tags IS NULL OR json_valid(tags)),
+    bin         TEXT CHECK (bin IS NULL OR json_valid(bin)),
     created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -52,6 +56,8 @@ CREATE TABLE IF NOT EXISTS catalog_packages_raw (
 CREATE VIRTUAL TABLE IF NOT EXISTS catalog_packages_fts USING fts5(
     name,
     description,
+    moniker,
+    tags,
     content=catalog_packages,
     content_rowid=rowid
 );
@@ -77,20 +83,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_catalog_installers_unique ON catalog_insta
 );
 
 CREATE TRIGGER IF NOT EXISTS catalog_packages_ai AFTER INSERT ON catalog_packages BEGIN
-    INSERT INTO catalog_packages_fts(rowid, name, description)
-    VALUES (new.rowid, new.name, COALESCE(new.description, ''));
+    INSERT INTO catalog_packages_fts(rowid, name, description, moniker, tags)
+    VALUES (new.rowid, new.name, COALESCE(new.description, ''), COALESCE(new.moniker, ''), COALESCE(new.tags, ''));
 END;
 
 CREATE TRIGGER IF NOT EXISTS catalog_packages_ad AFTER DELETE ON catalog_packages BEGIN
-    INSERT INTO catalog_packages_fts(catalog_packages_fts, rowid, name, description)
-    VALUES ('delete', old.rowid, old.name, COALESCE(old.description, ''));
+    INSERT INTO catalog_packages_fts(catalog_packages_fts, rowid, name, description, moniker, tags)
+    VALUES ('delete', old.rowid, old.name, COALESCE(old.description, ''), COALESCE(old.moniker, ''), COALESCE(old.tags, ''));
 END;
 
 CREATE TRIGGER IF NOT EXISTS catalog_packages_au AFTER UPDATE ON catalog_packages BEGIN
-    INSERT INTO catalog_packages_fts(catalog_packages_fts, rowid, name, description)
-    VALUES ('delete', old.rowid, old.name, COALESCE(old.description, ''));
-    INSERT INTO catalog_packages_fts(rowid, name, description)
-    VALUES (new.rowid, new.name, COALESCE(new.description, ''));
+    INSERT INTO catalog_packages_fts(catalog_packages_fts, rowid, name, description, moniker, tags)
+    VALUES ('delete', old.rowid, old.name, COALESCE(old.description, ''), COALESCE(old.moniker, ''), COALESCE(old.tags, ''));
+    INSERT INTO catalog_packages_fts(rowid, name, description, moniker, tags)
+    VALUES (new.rowid, new.name, COALESCE(new.description, ''), COALESCE(new.moniker, ''), COALESCE(new.tags, ''));
 END;
 
 CREATE TRIGGER IF NOT EXISTS catalog_packages_update_timestamp

@@ -19,6 +19,11 @@ pub struct ParsedPackage {
 pub fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, ParserError> {
     let raw_json = serde_json::to_string(&raw)?;
     let package_id = PackageId::parse(raw.id.as_str())?;
+    let tags = raw
+        .tags
+        .map(|tags| serde_json::to_string(&tags))
+        .transpose()?;
+    let bin = raw.bin.map(|bin| serde_json::to_string(&bin)).transpose()?;
 
     let package = CatalogPackage {
         id: raw.id.clone().into(),
@@ -33,6 +38,10 @@ pub fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, ParserErro
         homepage: raw.homepage,
         license: raw.license,
         publisher: raw.publisher,
+        locale: raw.locale,
+        moniker: raw.moniker,
+        tags,
+        bin,
     };
     package.validate()?;
 
@@ -117,6 +126,10 @@ mod tests {
             homepage: None,
             license: None,
             publisher: Some("Contoso Ltd.".to_string()),
+            locale: Some("en-US".to_string()),
+            moniker: Some("contoso".to_string()),
+            tags: Some(vec!["utility".to_string()]),
+            bin: Some(serde_json::json!(["tool.exe"])),
             installers: vec![RawFetchedInstaller {
                 url: "https://example.invalid/app.zip".to_string(),
                 hash: "".to_string(),
@@ -138,6 +151,10 @@ mod tests {
             parsed.installers[0].installer_type,
             CatalogInstallerType::Zip
         );
+        assert_eq!(parsed.package.locale.as_deref(), Some("en-US"));
+        assert_eq!(parsed.package.moniker.as_deref(), Some("contoso"));
+        assert!(parsed.package.tags.as_deref().is_some());
+        assert!(parsed.package.bin.as_deref().is_some());
         assert!(parsed.raw_json.contains("Contoso.App"));
         assert!(parsed.raw_json.contains("NestedInstallerType"));
     }
@@ -152,6 +169,10 @@ mod tests {
             homepage: None,
             license: None,
             publisher: Some("Wez Furlong".to_string()),
+            locale: Some("en-US".to_string()),
+            moniker: Some("wezterm".to_string()),
+            tags: Some(vec!["terminal".to_string()]),
+            bin: None,
             installers: vec![RawFetchedInstaller {
                 url: "https://example.invalid/wezterm.zip".to_string(),
                 hash: String::new(),
@@ -187,6 +208,10 @@ mod tests {
                     "homepage": null,
                     "license": null,
                     "publisher": null,
+                    "locale": null,
+                    "moniker": null,
+                    "tags": null,
+                    "bin": null,
                     "installers": []
                 }
             }
@@ -216,6 +241,10 @@ mod tests {
                     "homepage": null,
                     "license": null,
                     "publisher": null,
+                    "locale": null,
+                    "moniker": null,
+                    "tags": null,
+                    "bin": null,
                     "installers": []
                 }
             }

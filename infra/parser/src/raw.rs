@@ -25,6 +25,14 @@ pub struct RawFetchedPackage {
     pub homepage: Option<String>,
     pub license: Option<String>,
     pub publisher: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moniker: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bin: Option<serde_json::Value>,
     #[serde(default)]
     pub installers: Vec<RawFetchedInstaller>,
 }
@@ -97,6 +105,10 @@ mod tests {
                 homepage: None,
                 license: None,
                 publisher: None,
+                locale: None,
+                moniker: None,
+                tags: None,
+                bin: None,
                 installers: vec![RawFetchedInstaller {
                     url: "https://example.invalid/example.zip".to_string(),
                     hash: "sha256:deadbeef".to_string(),
@@ -125,6 +137,10 @@ mod tests {
                 homepage: None,
                 license: None,
                 publisher: None,
+                locale: None,
+                moniker: None,
+                tags: None,
+                bin: None,
                 installers: Vec::new(),
             },
         };

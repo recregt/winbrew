@@ -184,6 +184,10 @@ mod tests {
                 "homepage": null,
                 "license": null,
                 "publisher": "Contoso Ltd.",
+                "locale": "en-US",
+                "moniker": "contoso",
+                "tags": ["utility"],
+                "bin": null,
                 "installers": []
             }
         });

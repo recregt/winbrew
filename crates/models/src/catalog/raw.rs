@@ -29,6 +29,18 @@ pub struct RawCatalogPackage {
     pub license: Option<String>,
     /// Optional publisher string.
     pub publisher: Option<String>,
+    /// Optional package metadata locale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+    /// Optional package moniker or alias.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moniker: Option<String>,
+    /// Optional package search tags encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tags: Option<String>,
+    /// Optional package bin metadata encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bin: Option<String>,
 }
 
 /// Raw installer payload exactly as it is received from the upstream feed.

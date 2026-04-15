@@ -109,8 +109,8 @@ fn insert_catalog_package(
     conn.execute(
         r#"
         INSERT INTO catalog_packages (
-            id, name, version, source, namespace, source_id, description, homepage, license, publisher
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
         "#,
         params![
             package_id.clone(),
@@ -123,6 +123,7 @@ fn insert_catalog_package(
             Option::<String>::None,
             Option::<String>::None,
             Some("Winbrew Ltd."),
+            Some("en-US"),
         ],
     )?;
 

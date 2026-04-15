@@ -43,8 +43,13 @@ func TestWingetManifestResolutionSingleton(t *testing.T) {
 	manifest, err := parseWingetManifest([]byte(`
 PackageIdentifier: Microsoft.WindowsTerminal
 PackageVersion: 1.9.1942.0
+PackageLocale: en-US
 PackageName: Windows Terminal
 Publisher: Microsoft Corporation
+Moniker: wt
+Tags:
+  - terminal
+  - shell
 ShortDescription: Modern terminal
 License: MIT
 Homepage: https://example.invalid
@@ -85,6 +90,15 @@ ManifestVersion: 1.12.0
 	if got, want := pkg.Publisher, "Microsoft Corporation"; got != want {
 		t.Fatalf("package publisher = %q, want %q", got, want)
 	}
+	if got, want := pkg.Locale, "en-US"; got != want {
+		t.Fatalf("package locale = %q, want %q", got, want)
+	}
+	if got, want := pkg.Moniker, "wt"; got != want {
+		t.Fatalf("package moniker = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.Tags), 2; got != want {
+		t.Fatalf("package tags length = %d, want %d", got, want)
+	}
 	if got, want := pkg.Installers[0].Scope, "user"; got != want {
 		t.Fatalf("installer scope = %q, want %q", got, want)
 	}
@@ -103,6 +117,9 @@ func TestWingetManifestResolutionMultiFile(t *testing.T) {
 PackageIdentifier: Contoso.App
 PackageVersion: 2.3.4
 DefaultLocale: en-US
+Moniker: contoso-app
+Tags:
+  - utility
 ManifestType: version
 ManifestVersion: 1.12.0
 `))
@@ -116,6 +133,10 @@ PackageVersion: 2.3.4
 PackageLocale: en-US
 Publisher: Contoso Ltd.
 PackageName: Contoso App
+Moniker: contoso
+Tags:
+  - editor
+  - productivity
 ShortDescription: Contoso app
 Homepage: https://contoso.example
 License: MIT
@@ -154,6 +175,15 @@ ManifestVersion: 1.12.0
 
 	if got, want := pkg.Description, "Contoso app"; got != want {
 		t.Fatalf("package description = %q, want %q", got, want)
+	}
+	if got, want := pkg.Locale, "en-US"; got != want {
+		t.Fatalf("package locale = %q, want %q", got, want)
+	}
+	if got, want := pkg.Moniker, "contoso"; got != want {
+		t.Fatalf("package moniker = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.Tags), 2; got != want {
+		t.Fatalf("package tags length = %d, want %d", got, want)
 	}
 	if got, want := pkg.Installers[0].Scope, "machine"; got != want {
 		t.Fatalf("installer scope = %q, want %q", got, want)
