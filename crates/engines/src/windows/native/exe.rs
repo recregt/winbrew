@@ -1,3 +1,31 @@
+//! Native executable installation and removal for Windows.
+//!
+//! This backend handles installer families that are executed as processes
+//! rather than unpacked as files:
+//!
+//! - generic native `.exe` installers when explicit switches are provided
+//! - Inno Setup installers
+//! - Nullsoft / NSIS installers
+//! - Burn bootstrapper installers
+//!
+//! What this module does:
+//!
+//! - validates the installer path, install directory, and package name before
+//!   starting work
+//! - launches the downloaded installer as a process and treats the Windows
+//!   installer success codes `0`, `1641`, and `3010` as successful outcomes
+//! - captures uninstall metadata from the Windows uninstall registry when it
+//!   can, so later removal can reuse the recorded command
+//! - falls back to direct directory cleanup when uninstall metadata is missing
+//!   or the uninstall command fails
+//!
+//! What this module does not do:
+//!
+//! - it does not extract archives or copy payload files
+//! - it does not infer installer family from URLs alone
+//! - it does not own MSIX / App Installer behavior, which lives in the MSIX
+//!   API adapter
+
 use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::Path;
@@ -13,6 +41,11 @@ use winbrew_windows::uninstall_roots;
 
 const NATIVE_EXE_SUCCESS_EXIT_CODES: &[i32] = &[0, 1641, 3010];
 
+/// Install a native executable package by running the downloaded installer.
+///
+/// The installer family is expected to come from catalog metadata. The backend
+/// validates the inputs, builds family-specific switches, executes the installer
+/// process, and records uninstall metadata when Windows exposes it.
 pub fn install(
     installer: &CatalogInstaller,
     download_path: &Path,
@@ -67,6 +100,12 @@ pub fn install(
     ))
 }
 
+/// Remove a native executable package.
+///
+/// The backend prefers the recorded uninstall command from
+/// `EngineMetadata::NativeExe` when one is available. If the uninstall command
+/// fails or is missing, the module falls back to direct directory cleanup so the
+/// install tree is still removed.
 pub fn remove(package: &InstalledPackage) -> Result<()> {
     validate_package_name(&package.name)?;
     validate_install_dir(Path::new(&package.install_dir))?;
