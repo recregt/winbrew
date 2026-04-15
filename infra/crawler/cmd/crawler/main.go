@@ -23,7 +23,7 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
 	configPath := flag.String("config", "config.yaml", "path to configuration file")
-	wingetOutPath := flag.String("winget-out", "", "path to write the staged Winget source database")
+	wingetOutPath := flag.String("winget-out", "", "path to write the Winget JSONL output file")
 	flag.Parse()
 
 	if *configPath == "" {

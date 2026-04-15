@@ -53,12 +53,12 @@ jobs:
           set -euo pipefail
 
           staging="$(mktemp -d)"
-          winget_db="$staging/winget_source.db"
+          winget_jsonl="$staging/winget_source.jsonl"
           catalog_db="$staging/catalog.db"
           metadata_json="$staging/metadata.json"
 
-          (cd infra/crawler && go run ./cmd/crawler --config config.yaml --winget-out "$winget_db") \
-            | cargo run --locked -p winbrew-infra-parser -- --winget-db "$winget_db" --out "$catalog_db" --metadata "$metadata_json"
+          (cd infra/crawler && go run ./cmd/crawler --config config.yaml --winget-out "$winget_jsonl") \
+            | cargo run --locked -p winbrew-infra-parser -- --winget-jsonl "$winget_jsonl" --out "$catalog_db" --metadata "$metadata_json"
 
           {
             echo "CATALOG_DB=$catalog_db"

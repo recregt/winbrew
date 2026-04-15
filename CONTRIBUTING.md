@@ -116,15 +116,15 @@ Crawler (Go) → Winget DB + JSONL Stream → Parser (Rust) → catalog.db + met
 
 ```powershell
 Set-Location infra/crawler; `
-  go run ./cmd/crawler --winget-out ..\staging\winget_source.db | `
+  go run ./cmd/crawler --winget-out ..\staging\winget_source.jsonl | `
   cargo run --manifest-path ..\..\Cargo.toml -p winbrew-infra-parser -- `
-    --winget-db ..\staging\winget_source.db `
+    --winget-jsonl ..\staging\winget_source.jsonl `
     --out ..\staging\catalog.db `
     --metadata ..\staging\metadata.json
 ```
 
 **Output:** Stages files to `staging/` folder:
-- `winget_source.db` - Raw Winget data
+- `winget_source.jsonl` - Raw Winget data
 - `catalog.db` - Merged catalog snapshot  
 - `metadata.json` - Bundle metadata/hash
 
