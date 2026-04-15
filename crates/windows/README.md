@@ -7,10 +7,11 @@ instead of the Microsoft `windows` projection types directly.
 
 ## What this crate owns
 
-This crate is responsible for the Windows-only boundary around three areas:
+This crate is responsible for the Windows-only boundary around five areas:
 
 - filesystem inspection and extraction helpers
 - registry enumeration for installed applications, uninstall roots, and named uninstall values
+- per-user font registration and session loading helpers
 - MSIX deployment helpers for install and remove flows
 - MSI inventory scanning for package databases and install trees
 
@@ -26,6 +27,9 @@ layout is not part of the contract and can change without breaking consumers.
 | `collect_installed_apps` | Enumerate installed applications from the uninstall registry roots | list / doctor commands |
 | `uninstall_roots` | Iterate over the registry locations that may contain uninstall entries | registry browsing and diagnostics |
 | `uninstall_value` | Read a string value from an uninstall key by key name | MSI install verification |
+| `user_fonts_dir` | Return the per-user Windows font directory | font install / remove helpers |
+| `install_user_font` | Copy a supported font into the user font directory, register it, and load it into the current session | font engine |
+| `remove_user_font` | Unregister a previously installed user font and remove its copied file | font engine |
 | `msix_install` | Install an MSIX package from a downloaded file and return the installed package full name | engine install flow |
 | `msix_installed_package_full_name` | Resolve the installed full name for a package name or family name | MSIX receipt creation |
 | `msix_remove` | Remove an installed MSIX package by full package name | engine remove flow |
@@ -42,10 +46,12 @@ re-exports the stable API from the crate root:
 #![allow(missing_docs)]
 
 mod deployment;
+mod font;
 mod fs;
 mod registry;
 
 pub use deployment::{msi_scan_inventory, msix_install, msix_installed_package_full_name, msix_remove};
+pub use font::{install_user_font, remove_user_font, user_fonts_dir};
 pub use fs::{PathInfo, create_extracted_file, inspect_path};
 pub use registry::{AppInfo, Hive, UninstallRoot, collect_installed_apps, uninstall_roots, uninstall_value};
 ```
@@ -69,6 +75,41 @@ That shape matters for two reasons:
 This is usually enough for cleanup and extraction logic. The struct intentionally
 stays small so callers do not need to think about the lower-level Windows handle
 APIs unless they want to.
+
+## Font helpers
+
+### `user_fonts_dir`
+
+`user_fonts_dir` returns the per-user font directory WinBrew uses for Windows
+font installation: `%LOCALAPPDATA%\Microsoft\Windows\Fonts`.
+
+### `install_user_font`
+
+`install_user_font` copies a supported font file into the user font directory,
+writes the HKCU registration entry under
+`Software\Microsoft\Windows NT\CurrentVersion\Fonts`, and loads the font into
+the current session with `AddFontResourceExW`.
+
+The helper accepts raw `.ttf`, `.otf`, `.ttc`, and `.otc` payloads.
+
+### `remove_user_font`
+
+`remove_user_font` removes the session registration and deletes the copied font
+file from the per-user directory. Unload is best-effort so the helper remains
+idempotent if Windows has already dropped the session resource.
+
+```rust,no_run
+use std::path::Path;
+use winbrew_windows::{install_user_font, remove_user_font, user_fonts_dir};
+
+let installed = install_user_font(Path::new(r"C:\Temp\fixture.ttf")).unwrap();
+println!("installed font: {}", installed.display());
+
+let fonts_dir = user_fonts_dir().unwrap();
+println!("user fonts dir: {}", fonts_dir.display());
+
+remove_user_font(&installed).unwrap();
+```
 
 ### `inspect_path`
 

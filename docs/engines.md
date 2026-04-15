@@ -1,6 +1,8 @@
 # Engine Roadmap and Ownership
 
-This page is the canonical reference for WinBrew package-type support.
+This page is the canonical roadmap for WinBrew package-type support. 
+
+Note that, the engine layer is typically dependent on Windows Crate for the Windows platform helper API and implementation details, see [crates/windows/README.md](../crates/windows/README.md).
 
 Use it to answer these questions:
 
@@ -17,6 +19,8 @@ If this page ever disagrees with a narrower policy document, this page wins for 
 The canonical copy lives here in `docs/engines.md`.
 
 That keeps the design discussion close to the rest of the workspace documentation map while leaving crate docs focused on API surface and module boundaries.
+
+Use this page to track support status and routing decisions. Use the Windows README when you need the caller-facing helper surface or the concrete OS boundary behavior.
 
 `crates/engines/src/lib.rs` should stay a crate facade, not a full roadmap.
 
@@ -90,17 +94,17 @@ WinBrew owns the orchestration and the recorded metadata, but Windows owns the f
 
 In both cases, WinBrew should treat the OS as the execution authority and itself as the observer, normalizer, and persistence layer.
 
-### Undecided execution
+### Out of scope
 
-`Pwa` and `Font` are scaffolded but not yet supported.
+`Pwa` is not supported.
 
-The project still needs to decide whether they will become:
+The project still needs to decide whether it will become:
 
 - a WinBrew-owned file placement engine,
 - a Windows-delegated execution wrapper,
 - or a narrow adapter around existing OS behavior.
 
-Until that decision is made, the registry should keep rejecting them rather than pretending they are implemented.
+Until that decision is made, the registry should keep rejecting it rather than pretending it is implemented.
 
 ## Journal Model
 
@@ -141,7 +145,7 @@ Policy docs should remain policy docs. They can point back here, but they should
 
 ## Next Implementation Target
 
-The nearest follow-up work is hardening the new font backend and finishing any remaining native-exe edge cases.
+The nearest follow-up work is hardening the font backend and finishing any remaining native-exe edge cases.
 
 Why it is the next obvious candidate:
 
