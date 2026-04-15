@@ -13,6 +13,7 @@ pub use winbrew_models as models;
 pub mod catalog;
 pub mod db;
 pub mod env;
+pub mod font;
 pub mod mock;
 pub mod output;
 pub mod package;
@@ -25,6 +26,7 @@ pub use catalog::{
 };
 pub use db::{init_database, reset_install_state, reset_installed_packages};
 pub use env::{TestEnvVar, env_lock};
+pub use font::{system_font_file_name, system_font_path};
 pub use mock::MockServer;
 pub use mockito::Mock;
 pub use output::{

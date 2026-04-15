@@ -9,10 +9,11 @@ use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use winbrew_cli::database;
-use winbrew_cli::models::domains::install::{EngineMetadata, InstallerType};
+use winbrew_cli::models::domains::install::{EngineKind, EngineMetadata, InstallerType};
 use winbrew_cli::models::domains::installed::PackageStatus;
 use winbrew_cli::models::shared::hash::HashAlgorithm;
 use winbrew_core::hash::Hasher;
+use winbrew_testing::{system_font_file_name, system_font_path};
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;
 
@@ -56,7 +57,25 @@ struct BinaryFixture {
     db_path: PathBuf,
     catalog_db_path: PathBuf,
     db_conn: OnceCell<Connection>,
-    catalog_db_conn: OnceCell<Connection>,
+}
+
+fn font_fixture_prefix(root: &Path, base: &str) -> String {
+    let root_suffix = root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("font");
+    let sanitized_suffix: String = root_suffix
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect();
+
+    format!("{}-{}", base, sanitized_suffix)
 }
 
 impl BinaryFixture {
@@ -72,7 +91,6 @@ impl BinaryFixture {
             db_path: resolved_paths.db,
             catalog_db_path: resolved_paths.catalog_db,
             db_conn: OnceCell::new(),
-            catalog_db_conn: OnceCell::new(),
         }
     }
 
@@ -83,12 +101,6 @@ impl BinaryFixture {
     fn conn(&self) -> &Connection {
         self.db_conn.get_or_init(|| {
             Connection::open(&self.db_path).expect("database connection should open")
-        })
-    }
-
-    fn catalog_conn(&self) -> &Connection {
-        self.catalog_db_conn.get_or_init(|| {
-            Connection::open(&self.catalog_db_path).expect("catalog database should open")
         })
     }
 
@@ -166,16 +178,35 @@ impl BinaryFixture {
         installer_url: &str,
         hash: &str,
     ) -> Result<()> {
+        self.create_catalog_db_with_installer(
+            package_name,
+            installer_url,
+            hash,
+            InstallerType::Zip,
+            None,
+        )
+    }
+
+    fn create_catalog_db_with_installer(
+        &self,
+        package_name: &str,
+        installer_url: &str,
+        hash: &str,
+        kind: InstallerType,
+        installer_switches: Option<&str>,
+    ) -> Result<()> {
         if let Some(parent) = self.catalog_db_path.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        common::seed_catalog_package(
-            self.catalog_conn(),
+        common::seed_catalog_db_with_installer(
+            &self.catalog_db_path,
             package_name,
             "Synthetic package for binary install testing",
             installer_url,
             hash,
+            kind,
+            installer_switches,
         )?;
 
         Ok(())
@@ -242,6 +273,55 @@ fn install_runs_through_the_binary() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn install_font_runs_through_the_binary() -> Result<()> {
+    let fixture = BinaryFixture::new();
+    let package_name = "Winbrew Test Font";
+    let font_path = system_font_path()?;
+    let font_bytes = fs::read(&font_path)?;
+    let sha512_hash = sha512_hex(&font_bytes);
+    let font_file_name = system_font_file_name(&font_fixture_prefix(
+        fixture.path(),
+        "winbrew-cli-font-install",
+    ))?;
+
+    let mut server = MockServer::new();
+    let installer_url = format!("{}/{}", server.url(), font_file_name);
+    let download_mock = server.mock_get(&format!("/{}", font_file_name), font_bytes);
+
+    fixture.create_catalog_db_with_installer(
+        package_name,
+        &installer_url,
+        &sha512_hash,
+        InstallerType::Font,
+        None,
+    )?;
+
+    let output = fixture.run(&["install", package_name]);
+
+    common::assert_success(&output, "install command")?;
+    common::assert_output_contains(&output, "Installed Winbrew Test Font 1.0.0 into")?;
+    download_mock.assert();
+
+    let expected_install_dir = PathBuf::from(
+        std::env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA should be set on Windows"),
+    )
+    .join("Microsoft")
+    .join("Windows")
+    .join("Fonts")
+    .join(&font_file_name);
+    anyhow::ensure!(expected_install_dir.exists(), "font should be installed");
+
+    let conn = fixture.conn();
+    let stored = database::get_package(conn, package_name)?
+        .ok_or_else(|| anyhow::anyhow!("package should be marked as installed"))?;
+    assert_eq!(stored.status, PackageStatus::Ok);
+    assert_eq!(stored.kind, InstallerType::Font);
+    assert_eq!(stored.engine_kind, EngineKind::Font);
+
+    Ok(())
+}
+
 /// Integration test for the binary remove flow.
 ///
 /// Scenario:
@@ -303,6 +383,65 @@ fn remove_native_exe_runs_through_the_binary() -> Result<()> {
     anyhow::ensure!(uninstall_marker.exists(), "uninstall command should run");
     fixture.assert_dir_missing(package_name)?;
     anyhow::ensure!(!install_dir.exists(), "install directory should be removed");
+
+    let conn = fixture.conn();
+    anyhow::ensure!(
+        database::get_package(conn, package_name)?.is_none(),
+        "package should be completely removed from database"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn remove_font_runs_through_the_binary() -> Result<()> {
+    let fixture = BinaryFixture::new();
+    let package_name = "Winbrew Test Font";
+    let font_path = system_font_path()?;
+    let font_bytes = fs::read(&font_path)?;
+    let sha512_hash = sha512_hex(&font_bytes);
+    let font_file_name = system_font_file_name(&font_fixture_prefix(
+        fixture.path(),
+        "winbrew-cli-font-remove",
+    ))?;
+
+    let mut server = MockServer::new();
+    let installer_url = format!("{}/{}", server.url(), font_file_name);
+    let download_mock = server.mock_get(&format!("/{}", font_file_name), font_bytes);
+
+    fixture.create_catalog_db_with_installer(
+        package_name,
+        &installer_url,
+        &sha512_hash,
+        InstallerType::Font,
+        None,
+    )?;
+
+    let install_output = fixture.run(&["install", package_name]);
+    common::assert_success(&install_output, "install command")?;
+    download_mock.assert();
+
+    let expected_install_dir = PathBuf::from(
+        std::env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA should be set on Windows"),
+    )
+    .join("Microsoft")
+    .join("Windows")
+    .join("Fonts")
+    .join(&font_file_name);
+
+    let conn = fixture.conn();
+    let stored = database::get_package(conn, package_name)?
+        .ok_or_else(|| anyhow::anyhow!("package should be marked as installed"))?;
+    assert_eq!(stored.status, PackageStatus::Ok);
+    assert_eq!(stored.kind, InstallerType::Font);
+    assert_eq!(stored.engine_kind, EngineKind::Font);
+    anyhow::ensure!(expected_install_dir.exists(), "font should be installed");
+
+    let output = fixture.run(&["remove", package_name, "--yes"]);
+
+    common::assert_success(&output, "remove command")?;
+    common::assert_output_contains(&output, "Successfully removed Winbrew Test Font.")?;
+    anyhow::ensure!(!expected_install_dir.exists(), "font should be removed");
 
     let conn = fixture.conn();
     anyhow::ensure!(

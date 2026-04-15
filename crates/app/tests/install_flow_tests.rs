@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use winbrew_app::install;
 use winbrew_app::install::InstallObserver;
@@ -12,7 +12,7 @@ use winbrew_models::domains::package::{PackageId, PackageName, PackageRef};
 use winbrew_models::shared::HashAlgorithm as CatalogHashAlgorithm;
 use winbrew_testing::{
     Mock, MockServer, create_dummy_zip_bytes, init_database, md5_hex, reset_install_state,
-    sha1_hex, sha512_hex, test_root,
+    sha1_hex, sha512_hex, system_font_file_name, system_font_path, test_root,
 };
 
 struct InstallTestFixture {
@@ -36,6 +36,25 @@ impl InstallObserver for NoopInstallObserver {
     fn on_start(&mut self, _total_bytes: Option<u64>) {}
 
     fn on_progress(&mut self, _downloaded_bytes: u64) {}
+}
+
+fn font_fixture_prefix(root: &Path, base: &str) -> String {
+    let root_suffix = root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("font");
+    let sanitized_suffix: String = root_suffix
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect();
+
+    format!("{}-{}", base, sanitized_suffix)
 }
 
 impl InstallTestFixture {
@@ -90,6 +109,30 @@ impl InstallTestFixture {
         let download_mock = server.mock_get("/test.zip", zip_bytes);
 
         let mut fixture = Self::from_catalog(root, &installer_url, hash)?;
+        fixture.server = Some(server);
+        fixture.download_mock = Some(download_mock);
+        Ok(fixture)
+    }
+
+    fn from_font(root: &Path) -> Result<Self> {
+        let font_path = system_font_path()?;
+        let font_bytes = fs::read(&font_path)?;
+        let sha512_hash = sha512_hex(&font_bytes);
+        let font_file_name =
+            system_font_file_name(&font_fixture_prefix(root, "winbrew-app-font-install"))?;
+
+        let mut server = MockServer::new();
+        let installer_url = format!("{}/{}", server.url(), font_file_name);
+        let download_mock = server.mock_get(&format!("/{}", font_file_name), font_bytes);
+
+        let mut fixture = Self::from_catalog_with_installer(
+            root,
+            "Winbrew Test Font",
+            &installer_url,
+            &sha512_hash,
+            InstallerType::Font,
+            None,
+        )?;
         fixture.server = Some(server);
         fixture.download_mock = Some(download_mock);
         Ok(fixture)
@@ -218,6 +261,40 @@ fn install_runs_native_exe_end_to_end_in_an_isolated_root() -> Result<()> {
     assert_eq!(stored.kind, InstallerType::Exe);
     assert_eq!(stored.engine_kind, EngineKind::NativeExe);
     download_mock.assert();
+
+    Ok(())
+}
+
+#[test]
+fn install_runs_font_end_to_end_in_an_isolated_root() -> Result<()> {
+    let test_root = test_root();
+    let root = test_root.path();
+
+    let fixture = InstallTestFixture::from_font(root)?;
+    let outcome = fixture.run_install(false)?;
+
+    let result = outcome.result;
+    let font_file_name =
+        system_font_file_name(&font_fixture_prefix(root, "winbrew-app-font-install"))?;
+    let expected_install_dir = PathBuf::from(
+        std::env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA should be set on Windows"),
+    )
+    .join("Microsoft")
+    .join("Windows")
+    .join("Fonts")
+    .join(&font_file_name);
+    assert_eq!(result.name, "Winbrew Test Font");
+    assert_eq!(result.version, "1.0.0");
+    assert_eq!(result.install_dir, expected_install_dir.to_string_lossy());
+    assert!(expected_install_dir.exists());
+
+    let conn = database::get_conn()?;
+    let stored = database::get_package(&conn, "Winbrew Test Font")?
+        .expect("package should be marked as installed");
+    assert_eq!(stored.status, PackageStatus::Ok);
+    assert_eq!(stored.kind, InstallerType::Font);
+    assert_eq!(stored.engine_kind, EngineKind::Font);
+    fixture.assert_downloaded();
 
     Ok(())
 }

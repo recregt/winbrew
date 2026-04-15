@@ -2,11 +2,53 @@ use anyhow::Result;
 use std::fs;
 use std::path::Path;
 
-use winbrew_app::database;
+use winbrew_app::install;
+use winbrew_app::install::InstallObserver;
 use winbrew_app::remove;
+use winbrew_app::{AppContext, database};
+use winbrew_models::domains::catalog::CatalogPackage;
 use winbrew_models::domains::install::{EngineMetadata, InstallerType};
 use winbrew_models::domains::installed::{InstalledPackage as Package, PackageStatus};
-use winbrew_testing::{init_database, reset_install_state, test_root};
+use winbrew_models::domains::package::{PackageName, PackageRef};
+use winbrew_testing::{
+    MockServer, init_database, reset_install_state, seed_catalog_db_with_installer, sha512_hex,
+    system_font_file_name, system_font_path, test_root,
+};
+
+struct NoopInstallObserver;
+
+impl InstallObserver for NoopInstallObserver {
+    fn choose_package(
+        &mut self,
+        _query: &str,
+        _matches: &[CatalogPackage],
+    ) -> anyhow::Result<usize> {
+        unreachable!("install should not prompt for an exact match")
+    }
+
+    fn on_start(&mut self, _total_bytes: Option<u64>) {}
+
+    fn on_progress(&mut self, _downloaded_bytes: u64) {}
+}
+
+fn font_fixture_prefix(root: &Path, base: &str) -> String {
+    let root_suffix = root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("font");
+    let sanitized_suffix: String = root_suffix
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect();
+
+    format!("{}-{}", base, sanitized_suffix)
+}
 
 fn sample_package(
     name: &str,
@@ -229,6 +271,58 @@ fn remove_removes_native_exe_package_without_uninstall_metadata() -> Result<()> 
 
     assert!(!install_dir.exists());
     assert!(database::get_package(&conn, &package.name)?.is_none());
+
+    Ok(())
+}
+
+#[test]
+fn remove_removes_font_package_after_install() -> Result<()> {
+    let test_root = test_root();
+    let root = test_root.path();
+    let config = init_database(root)?;
+    reset_install_state(root)?;
+
+    let font_path = system_font_path()?;
+    let font_bytes = fs::read(&font_path)?;
+    let sha512_hash = sha512_hex(&font_bytes);
+    let font_file_name =
+        system_font_file_name(&font_fixture_prefix(root, "winbrew-app-font-remove"))?;
+
+    let mut server = MockServer::new();
+    let installer_url = format!("{}/{}", server.url(), font_file_name);
+    let download_mock = server.mock_get(&format!("/{}", font_file_name), font_bytes);
+
+    let catalog_db_dir = root.join("data").join("db");
+    fs::create_dir_all(&catalog_db_dir)?;
+    seed_catalog_db_with_installer(
+        &catalog_db_dir.join("catalog.db"),
+        "Winbrew Test Font",
+        "Synthetic package for isolated remove testing",
+        &installer_url,
+        &sha512_hash,
+        InstallerType::Font,
+        None,
+    )?;
+
+    let ctx = AppContext::from_config(&config)?;
+    let mut observer = NoopInstallObserver;
+    let outcome = install::run(
+        &ctx,
+        PackageRef::ByName(PackageName::parse("Winbrew Test Font")?),
+        false,
+        &mut observer,
+    )?;
+
+    let install_dir = std::path::PathBuf::from(&outcome.result.install_dir);
+    assert!(install_dir.exists());
+
+    remove::remove("Winbrew Test Font", false)?;
+
+    download_mock.assert();
+    assert!(!install_dir.exists());
+
+    let conn = database::get_conn()?;
+    assert!(database::get_package(&conn, "Winbrew Test Font")?.is_none());
 
     Ok(())
 }
