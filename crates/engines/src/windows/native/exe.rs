@@ -79,19 +79,28 @@ pub fn install(
         );
     }
 
-    let engine_metadata =
-        capture_native_exe_metadata(package_name, install_dir).map(|metadata| match metadata {
-            NativeExeInstallMetadata::QuietOnly(command) => {
-                EngineMetadata::native_exe(Some(command), None)
-            }
-            NativeExeInstallMetadata::QuietAndStandard {
-                quiet_uninstall_command,
-                uninstall_command,
-            } => EngineMetadata::native_exe(Some(quiet_uninstall_command), Some(uninstall_command)),
-            NativeExeInstallMetadata::StandardOnly(command) => {
-                EngineMetadata::native_exe(None, Some(command))
-            }
-        });
+    let captured_metadata = capture_native_exe_metadata(package_name, install_dir);
+
+    if captured_metadata.is_none() {
+        warn!(
+            package = package_name,
+            install_dir = %install_dir.display(),
+            "native executable installer did not expose uninstall metadata"
+        );
+    }
+
+    let engine_metadata = captured_metadata.map(|metadata| match metadata {
+        NativeExeInstallMetadata::QuietOnly(command) => {
+            EngineMetadata::native_exe(Some(command), None)
+        }
+        NativeExeInstallMetadata::QuietAndStandard {
+            quiet_uninstall_command,
+            uninstall_command,
+        } => EngineMetadata::native_exe(Some(quiet_uninstall_command), Some(uninstall_command)),
+        NativeExeInstallMetadata::StandardOnly(command) => {
+            EngineMetadata::native_exe(None, Some(command))
+        }
+    });
 
     Ok(EngineInstallReceipt::new(
         EngineKind::NativeExe,
@@ -110,16 +119,24 @@ pub fn remove(package: &InstalledPackage) -> Result<()> {
     validate_package_name(&package.name)?;
     validate_install_dir(Path::new(&package.install_dir))?;
 
-    if let Some(command) = package
+    let uninstall_command = package
         .engine_metadata
         .as_ref()
-        .and_then(|metadata| metadata.native_exe_uninstall_command())
-        && let Err(err) = run_uninstall_command(command, &package.name)
-    {
+        .and_then(|metadata| metadata.native_exe_uninstall_command());
+
+    if let Some(command) = uninstall_command {
+        if let Err(err) = run_uninstall_command(command, &package.name) {
+            warn!(
+                package = package.name.as_str(),
+                error = %err,
+                "native executable uninstall command failed; falling back to directory cleanup"
+            );
+        }
+    } else {
         warn!(
             package = package.name.as_str(),
-            error = %err,
-            "native executable uninstall command failed; falling back to directory cleanup"
+            install_dir = %package.install_dir,
+            "native executable uninstall metadata was not available; falling back to directory cleanup"
         );
     }
 
@@ -194,8 +211,9 @@ fn capture_native_exe_metadata(
     package_name: &str,
     install_dir: &Path,
 ) -> Option<NativeExeInstallMetadata> {
-    let mut fallback = None;
     let package_name = package_name.trim();
+    let mut best_match: Option<(u8, NativeExeInstallMetadata)> = None;
+    let mut saw_ambiguous_match = false;
 
     for root in uninstall_roots() {
         for key_result in root.key.enum_keys() {
@@ -212,16 +230,16 @@ fn capture_native_exe_metadata(
                 continue;
             }
 
-            let install_location = match app_key.get_value::<String, _>("InstallLocation") {
-                Ok(value) if !value.trim().is_empty() => Some(value),
-                _ => None,
-            };
+            let install_location_exact = match app_key.get_value::<String, _>("InstallLocation") {
+                Ok(value) if !value.trim().is_empty() => {
+                    if !same_install_location(Path::new(&value), install_dir) {
+                        continue;
+                    }
 
-            if let Some(install_location) = install_location
-                && !same_install_location(Path::new(&install_location), install_dir)
-            {
-                continue;
-            }
+                    true
+                }
+                _ => false,
+            };
 
             let quiet_uninstall_command =
                 match app_key.get_value::<String, _>("QuietUninstallString") {
@@ -233,26 +251,62 @@ fn capture_native_exe_metadata(
                 _ => None,
             };
 
-            match (quiet_uninstall_command, uninstall_command) {
-                (Some(quiet_uninstall_command), Some(uninstall_command)) => {
-                    return Some(NativeExeInstallMetadata::QuietAndStandard {
+            let candidate = match (quiet_uninstall_command, uninstall_command) {
+                (Some(quiet_uninstall_command), Some(uninstall_command)) => Some((
+                    native_exe_metadata_priority(install_location_exact, 3),
+                    NativeExeInstallMetadata::QuietAndStandard {
                         quiet_uninstall_command,
                         uninstall_command,
-                    });
+                    },
+                )),
+                (Some(quiet_uninstall_command), None) => Some((
+                    native_exe_metadata_priority(install_location_exact, 2),
+                    NativeExeInstallMetadata::QuietOnly(quiet_uninstall_command),
+                )),
+                (None, Some(uninstall_command)) => Some((
+                    native_exe_metadata_priority(install_location_exact, 1),
+                    NativeExeInstallMetadata::StandardOnly(uninstall_command),
+                )),
+                (None, None) => None,
+            };
+
+            let Some((priority, metadata)) = candidate else {
+                continue;
+            };
+
+            match best_match.as_mut() {
+                Some((best_priority, best_metadata)) => {
+                    if priority > *best_priority {
+                        *best_priority = priority;
+                        *best_metadata = metadata;
+                    } else if priority == *best_priority {
+                        saw_ambiguous_match = true;
+                    }
                 }
-                (Some(quiet_uninstall_command), None) => {
-                    return Some(NativeExeInstallMetadata::QuietOnly(quiet_uninstall_command));
+                None => {
+                    best_match = Some((priority, metadata));
                 }
-                (None, Some(uninstall_command)) => {
-                    fallback
-                        .get_or_insert(NativeExeInstallMetadata::StandardOnly(uninstall_command));
-                }
-                (None, None) => continue,
             }
         }
     }
 
-    fallback
+    if saw_ambiguous_match {
+        warn!(
+            package = package_name,
+            install_dir = %install_dir.display(),
+            "multiple native executable uninstall registry entries matched; using the best available metadata"
+        );
+    }
+
+    best_match.map(|(_, metadata)| metadata)
+}
+
+fn native_exe_metadata_priority(install_location_exact: bool, metadata_priority: u8) -> u8 {
+    if install_location_exact {
+        10 + metadata_priority
+    } else {
+        metadata_priority
+    }
 }
 
 fn same_install_location(left: &Path, right: &Path) -> bool {
@@ -413,7 +467,9 @@ mod tests {
     use winbrew_models::catalog::package::CatalogInstaller;
     use winbrew_models::install::installer::InstallerType;
     use winbrew_models::shared::CatalogId;
-    use winbrew_windows::create_test_uninstall_entry;
+    use winbrew_windows::{
+        create_test_uninstall_entry, create_test_uninstall_entry_with_install_location,
+    };
 
     #[cfg(windows)]
     fn native_exe_installer(kind: InstallerType, switches: Option<&str>) -> CatalogInstaller {
@@ -592,6 +648,65 @@ mod tests {
         ));
 
         drop(registry_entry);
+        let _ = std::fs::remove_dir_all(&install_dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn capture_native_exe_metadata_prefers_exact_install_location_over_locationless_fallback() {
+        let package_name = "Contoso.NativeExe.Preference";
+        let exact_install_dir = native_exe_test_dir("exact-location");
+        let fallback_install_dir = native_exe_test_dir("locationless-fallback");
+        std::fs::create_dir_all(&exact_install_dir).expect("exact install directory should exist");
+        std::fs::create_dir_all(&fallback_install_dir)
+            .expect("fallback install directory should exist");
+
+        let fallback_uninstall_exe = fallback_install_dir.join("uninstall.exe");
+        let fallback_uninstall_command = fallback_uninstall_exe.display().to_string();
+        let fallback_registry_entry = create_test_uninstall_entry_with_install_location(
+            package_name,
+            None,
+            None,
+            Some(fallback_uninstall_command.as_str()),
+        )
+        .expect("locationless fallback uninstall entry should be creatable");
+
+        let exact_uninstall_exe = exact_install_dir.join("uninstall.exe");
+        let exact_uninstall_command = exact_uninstall_exe.display().to_string();
+        let exact_registry_entry = create_test_uninstall_entry(
+            package_name,
+            &exact_install_dir,
+            None,
+            Some(exact_uninstall_command.as_str()),
+        )
+        .expect("exact uninstall entry should be creatable");
+
+        let metadata = capture_native_exe_metadata(package_name, &exact_install_dir)
+            .expect("metadata should be captured");
+
+        assert!(matches!(
+            metadata,
+            NativeExeInstallMetadata::StandardOnly(ref uninstall_command)
+                if uninstall_command == &exact_uninstall_command
+        ));
+
+        drop(exact_registry_entry);
+        drop(fallback_registry_entry);
+        let _ = std::fs::remove_dir_all(&exact_install_dir);
+        let _ = std::fs::remove_dir_all(&fallback_install_dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn capture_native_exe_metadata_returns_none_when_registry_entry_missing() {
+        let package_name = "Contoso.NativeExe.Missing";
+        let install_dir = native_exe_test_dir("missing-metadata");
+        std::fs::create_dir_all(&install_dir).expect("install directory should exist");
+
+        let metadata = capture_native_exe_metadata(package_name, &install_dir);
+
+        assert!(metadata.is_none());
+
         let _ = std::fs::remove_dir_all(&install_dir);
     }
 }
