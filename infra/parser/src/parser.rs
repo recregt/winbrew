@@ -81,6 +81,7 @@ fn parse_installer(
         hash_algorithm,
         installer_type,
         installer_switches: None,
+        scope: None,
         arch: raw.arch.parse::<Architecture>()?,
         kind: installer_kind,
         nested_kind: raw.nested_kind.map(|kind| kind.parse()).transpose()?,
@@ -122,6 +123,7 @@ mod tests {
                 arch: "x64".to_string(),
                 kind: "zip".to_string(),
                 nested_kind: Some("msi".to_string()),
+                scope: None,
             }],
         })
         .expect("package should parse");
@@ -155,6 +157,7 @@ mod tests {
                 arch: "x64".to_string(),
                 kind: "portable".to_string(),
                 nested_kind: None,
+                scope: None,
             }],
         })
         .expect("package should parse");

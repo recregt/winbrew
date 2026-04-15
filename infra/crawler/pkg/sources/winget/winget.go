@@ -98,13 +98,17 @@ func (s *Source) download(ctx context.Context, url, dst string) error {
 
 	if resp.StatusCode == http.StatusNotModified {
 		if _, err := os.Stat(dst); err != nil {
-			return fmt.Errorf("received 304 without cached file: %w", err)
+			return nonRetryableError{err: fmt.Errorf("received 304 without cached file: %w", err)}
 		}
 		return nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status %d for %s", resp.StatusCode, url)
+		err := fmt.Errorf("unexpected status %d for %s", resp.StatusCode, url)
+		if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError && resp.StatusCode != http.StatusTooManyRequests {
+			return nonRetryableError{err: err}
+		}
+		return err
 	}
 
 	tempFile, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".*.tmp")
@@ -146,6 +150,22 @@ func (s *Source) download(ctx context.Context, url, dst string) error {
 	slog.Debug("completed winget download", "url", url, "dst", dst, "bytes", n)
 
 	return nil
+}
+
+type nonRetryableError struct {
+	err error
+}
+
+func (e nonRetryableError) Error() string {
+	return e.err.Error()
+}
+
+func (e nonRetryableError) Unwrap() error {
+	return e.err
+}
+
+func (e nonRetryableError) NonRetryable() bool {
+	return true
 }
 
 type progressReader struct {

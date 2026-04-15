@@ -1,6 +1,14 @@
 -- Canonical catalog schema for parser-generated snapshots.
 -- Parser code and tests include this file directly to avoid schema drift.
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
+
+CREATE TABLE IF NOT EXISTS schema_meta (
+    name  TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+INSERT OR REPLACE INTO schema_meta (name, value)
+VALUES ('schema_version', '2');
 
 CREATE TABLE IF NOT EXISTS catalog_packages (
     id          TEXT PRIMARY KEY,
@@ -27,6 +35,7 @@ CREATE TABLE IF NOT EXISTS catalog_installers (
     hash_algorithm TEXT NOT NULL DEFAULT 'sha256' CHECK (hash_algorithm IN ('md5', 'sha1', 'sha256', 'sha512')),
     installer_type TEXT NOT NULL DEFAULT 'unknown' CHECK (installer_type IN ('msi', 'msix', 'appx', 'exe', 'inno', 'nullsoft', 'wix', 'burn', 'pwa', 'font', 'portable', 'zip', 'nuget', 'scoop', 'unknown')),
     installer_switches TEXT,
+    scope       TEXT CHECK (scope IS NULL OR scope IN ('installed', 'provisioned')),
     arch        TEXT NOT NULL DEFAULT '',
     kind        TEXT NOT NULL DEFAULT '',
     nested_kind TEXT
@@ -58,6 +67,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_catalog_installers_unique ON catalog_insta
     hash_algorithm,
     installer_type,
     IFNULL(installer_switches, ''),
+    IFNULL(scope, ''),
     arch,
     kind,
     IFNULL(nested_kind, '')

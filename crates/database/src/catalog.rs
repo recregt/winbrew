@@ -29,10 +29,10 @@ pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
 
 pub fn get_installers(conn: &Connection, package_id: &str) -> Result<Vec<CatalogInstaller>> {
     let mut stmt = conn.prepare(
-        "SELECT package_id, url, hash, hash_algorithm, installer_type, installer_switches, arch, kind, nested_kind
+        "SELECT package_id, url, hash, hash_algorithm, installer_type, installer_switches, scope, arch, kind, nested_kind
          FROM catalog_installers
          WHERE package_id = ?1
-         ORDER BY arch ASC, kind ASC, installer_type ASC, nested_kind ASC, installer_switches ASC, hash_algorithm ASC, url ASC",
+         ORDER BY scope ASC, arch ASC, kind ASC, installer_type ASC, nested_kind ASC, installer_switches ASC, hash_algorithm ASC, url ASC",
     )?;
 
     stmt.query_map(params![package_id], row_to_installer)?
@@ -53,7 +53,24 @@ pub fn get_package_by_id(conn: &Connection, package_id: &str) -> Result<Option<C
 }
 
 pub fn ensure_schema_version(conn: &Connection) -> Result<()> {
-    let actual_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    let schema_meta_exists: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta')",
+        [],
+        |row| row.get::<_, i64>(0),
+    )? != 0;
+
+    let actual_version: i64 = if schema_meta_exists {
+        let version_text: String = conn.query_row(
+            "SELECT value FROM schema_meta WHERE name = 'schema_version'",
+            [],
+            |row| row.get(0),
+        )?;
+        version_text.parse().with_context(|| {
+            format!("failed to parse schema_meta schema_version value: {version_text}")
+        })?
+    } else {
+        conn.query_row("PRAGMA user_version", [], |row| row.get(0))?
+    };
     let expected_version = i64::from(CATALOG_SCHEMA_VERSION);
 
     if actual_version != expected_version {
@@ -125,6 +142,7 @@ fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
                 )
             })?,
         installer_switches: row.get("installer_switches")?,
+        scope: row.get("scope")?,
         arch: row.get("arch")?,
         kind: row.get("kind")?,
         nested_kind: row.get("nested_kind")?,
@@ -149,7 +167,7 @@ mod tests {
 
     fn create_catalog_installers_table(conn: &Connection) {
         conn.execute_batch(
-            "CREATE TABLE catalog_installers (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    package_id TEXT NOT NULL,\n    url TEXT NOT NULL,\n    hash TEXT,\n    hash_algorithm TEXT NOT NULL DEFAULT 'sha256',\n    installer_type TEXT NOT NULL DEFAULT 'unknown',\n    installer_switches TEXT,\n    arch TEXT NOT NULL DEFAULT '',\n    kind TEXT NOT NULL DEFAULT '',\n    nested_kind TEXT\n);",
+            "CREATE TABLE catalog_installers (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    package_id TEXT NOT NULL,\n    url TEXT NOT NULL,\n    hash TEXT,\n    hash_algorithm TEXT NOT NULL DEFAULT 'sha256',\n    installer_type TEXT NOT NULL DEFAULT 'unknown',\n    installer_switches TEXT,\n    scope TEXT,\n    arch TEXT NOT NULL DEFAULT '',\n    kind TEXT NOT NULL DEFAULT '',\n    nested_kind TEXT\n);",
         )
         .expect("catalog installers table should be created");
     }
@@ -339,10 +357,10 @@ mod tests {
     #[test]
     fn ensure_schema_version_accepts_expected_version() {
         let conn = Connection::open_in_memory().expect("open in-memory database");
-        conn.execute(
-            &format!("PRAGMA user_version = {}", CATALOG_SCHEMA_VERSION),
-            [],
-        )
+        conn.execute_batch(&format!(
+            "CREATE TABLE schema_meta (name TEXT PRIMARY KEY, value TEXT NOT NULL);\nINSERT INTO schema_meta (name, value) VALUES ('schema_version', '{}');",
+            CATALOG_SCHEMA_VERSION
+        ))
         .expect("set schema version");
 
         ensure_schema_version(&conn).expect("schema version should match");

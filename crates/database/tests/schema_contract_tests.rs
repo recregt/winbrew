@@ -172,6 +172,7 @@ fn catalog_contract_matches_canonical_schema() -> Result<()> {
     );
 
     for (object_type, name) in [
+        ("table", "schema_meta"),
         ("table", "catalog_packages"),
         ("table", "catalog_installers"),
         ("table", "catalog_packages_raw"),
@@ -188,7 +189,17 @@ fn catalog_contract_matches_canonical_schema() -> Result<()> {
 
     let installer_columns = table_columns(&conn, "catalog_installers")?;
     assert!(installer_columns.contains("kind"));
+    assert!(installer_columns.contains("scope"));
     assert!(!installer_columns.contains("type"));
+    assert!(!column_notnull(&conn, "catalog_installers", "scope")?);
+    assert_eq!(column_default(&conn, "catalog_installers", "scope")?, None);
+
+    let schema_version: String = conn.query_row(
+        "SELECT value FROM schema_meta WHERE name = 'schema_version'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(schema_version, CATALOG_DB_SCHEMA_VERSION.to_string());
 
     assert_eq!(
         installer_type_check_values(CATALOG_SCHEMA)?,

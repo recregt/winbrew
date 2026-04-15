@@ -78,6 +78,25 @@ func Do(ctx context.Context, maxAttempts int, baseDelay time.Duration, fn func()
 	return DoConfig(ctx, Config{MaxAttempts: maxAttempts, BaseDelay: baseDelay}, fn)
 }
 
+func DoResult[T any](ctx context.Context, maxAttempts int, baseDelay time.Duration, fn func() (T, error)) (T, error) {
+	var result T
+	err := DoConfig(ctx, Config{MaxAttempts: maxAttempts, BaseDelay: baseDelay}, func() error {
+		value, err := fn()
+		if err != nil {
+			return err
+		}
+
+		result = value
+		return nil
+	})
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+
+	return result, nil
+}
+
 func DoConfig(ctx context.Context, cfg Config, fn func() error) error {
 	if cfg.MaxAttempts < 1 {
 		cfg.MaxAttempts = 1

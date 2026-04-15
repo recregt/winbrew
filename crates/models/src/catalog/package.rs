@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::installer_type::CatalogInstallerType;
-use crate::install::{Architecture, InstallerType};
+use crate::install::{Architecture, InstallScope, InstallerType};
 use crate::package::{PackageId, PackageSource};
 use crate::shared::CatalogId;
 use crate::shared::validation::{Validate, ensure_hash, ensure_http_url, ensure_non_empty};
@@ -67,6 +67,9 @@ pub struct CatalogInstaller {
     /// Nested installer format when the installer contains an archive payload.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nested_kind: Option<InstallerType>,
+    /// Optional install scope reported by the source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<InstallScope>,
 }
 
 impl CatalogPackage {
@@ -177,6 +180,7 @@ impl CatalogInstaller {
             hash_algorithm: HashAlgorithm::Sha256,
             installer_type: CatalogInstallerType::Unknown,
             installer_switches: None,
+            scope: None,
             arch: Architecture::X64,
             kind: InstallerType::Exe,
             nested_kind: None,
@@ -215,6 +219,11 @@ impl CatalogInstaller {
 
     pub fn with_nested(mut self, nested_kind: InstallerType) -> Self {
         self.nested_kind = Some(nested_kind);
+        self
+    }
+
+    pub fn with_scope(mut self, scope: InstallScope) -> Self {
+        self.scope = Some(scope);
         self
     }
 }
@@ -295,7 +304,7 @@ impl CatalogPackage {
 mod tests {
     use super::{CatalogInstaller, CatalogPackage};
     use crate::catalog::installer_type::CatalogInstallerType;
-    use crate::install::{Architecture, InstallerType};
+    use crate::install::{Architecture, InstallScope, InstallerType};
     use crate::package::PackageSource;
     use crate::shared::{HashAlgorithm, Version};
 
@@ -335,6 +344,7 @@ mod tests {
         .with_arch(Architecture::Any)
         .with_kind(InstallerType::Zip)
         .with_nested(InstallerType::Msi)
+        .with_scope(InstallScope::Installed)
         .with_hash("deadbeef")
         .with_hash_algorithm(HashAlgorithm::Sha256)
         .with_installer_type(CatalogInstallerType::Zip)
@@ -345,6 +355,7 @@ mod tests {
         assert!(json.contains("\"hash_algorithm\":\"sha256\""));
         assert!(json.contains("\"installer_type\":\"zip\""));
         assert!(json.contains("\"installer_switches\":\"/S\""));
+        assert!(json.contains("\"scope\":\"installed\""));
 
         let restored: CatalogInstaller =
             serde_json::from_str(&json).expect("installer should deserialize");
@@ -353,6 +364,7 @@ mod tests {
         assert_eq!(restored.hash_algorithm, HashAlgorithm::Sha256);
         assert_eq!(restored.installer_type, CatalogInstallerType::Zip);
         assert_eq!(restored.installer_switches.as_deref(), Some("/S"));
+        assert_eq!(restored.scope, Some(InstallScope::Installed));
     }
 
     #[test]

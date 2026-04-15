@@ -45,6 +45,8 @@ pub struct RawFetchedInstaller {
         skip_serializing_if = "Option::is_none"
     )]
     pub nested_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
 }
 
 impl ScoopStreamEnvelope {
@@ -101,6 +103,7 @@ mod tests {
                     arch: "x64".to_string(),
                     kind: "portable".to_string(),
                     nested_kind: None,
+                    scope: None,
                 }],
             },
         };
@@ -143,11 +146,13 @@ mod tests {
                 "hash": "sha256:deadbeef",
                 "arch": "x64",
                 "type": "zip",
-                "NestedInstallerType": "msi"
+                "NestedInstallerType": "msi",
+                "scope": "installed"
             }"#,
         )
         .expect("installer should deserialize");
 
         assert_eq!(installer.nested_kind.as_deref(), Some("msi"));
+        assert_eq!(installer.scope.as_deref(), Some("installed"));
     }
 }
