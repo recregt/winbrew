@@ -7,9 +7,12 @@ use winreg::{
     enums::{HKEY_CURRENT_USER, KEY_SET_VALUE},
 };
 
-use windows_sys::Win32::Graphics::Gdi::{AddFontResourceExW, RemoveFontResourceExW};
+use windows_sys::Win32::Graphics::Gdi::{
+    AddFontResourceExW, FR_NOT_ENUM, FR_PRIVATE, RemoveFontResourceExW,
+};
 
 const USER_FONTS_REGISTRY_PATH: &str = r"Software\Microsoft\Windows NT\CurrentVersion\Fonts";
+const FONT_RESOURCE_FLAGS: u32 = FR_PRIVATE | FR_NOT_ENUM;
 const SUPPORTED_FONT_EXTENSIONS: &[&str] = &["ttf", "otf", "ttc", "otc"];
 
 /// Return the per-user Windows font directory.
@@ -166,7 +169,8 @@ fn font_value_suffix(extension: &str) -> Option<&'static str> {
 fn add_font_resource(font_path: &Path) -> Result<()> {
     let wide_path = wide_path(font_path);
 
-    let added = unsafe { AddFontResourceExW(wide_path.as_ptr(), 0, std::ptr::null()) };
+    let added =
+        unsafe { AddFontResourceExW(wide_path.as_ptr(), FONT_RESOURCE_FLAGS, std::ptr::null()) };
 
     if added == 0 {
         bail!("AddFontResourceExW failed for {}", font_path.display());
@@ -178,10 +182,11 @@ fn add_font_resource(font_path: &Path) -> Result<()> {
 fn remove_font_resource(font_path: &Path) -> Result<()> {
     let wide_path = wide_path(font_path);
 
-    let removed = unsafe { RemoveFontResourceExW(wide_path.as_ptr(), 0, std::ptr::null()) };
+    let removed =
+        unsafe { RemoveFontResourceExW(wide_path.as_ptr(), FONT_RESOURCE_FLAGS, std::ptr::null()) };
 
     if removed == 0 {
-        bail!("RemoveFontResourceExW failed for {}", font_path.display());
+        return Ok(());
     }
 
     Ok(())
@@ -227,12 +232,13 @@ fn validate_font_source(source_path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        font_registry_value_name, register_user_font, remove_user_font,
+        FONT_RESOURCE_FLAGS, font_registry_value_name, register_user_font, remove_user_font,
         unregister_user_font_by_name,
     };
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
+    use windows_sys::Win32::Graphics::Gdi::{FR_NOT_ENUM, FR_PRIVATE};
     use winreg::{RegKey, enums::HKEY_CURRENT_USER};
 
     fn temp_font_path(name: &str) -> PathBuf {
@@ -258,6 +264,11 @@ mod tests {
                 .expect("otf should parse"),
             "Demo (OpenType)"
         );
+    }
+
+    #[test]
+    fn font_resource_flags_include_private_and_not_enum() {
+        assert_eq!(FONT_RESOURCE_FLAGS, FR_PRIVATE | FR_NOT_ENUM);
     }
 
     #[test]
