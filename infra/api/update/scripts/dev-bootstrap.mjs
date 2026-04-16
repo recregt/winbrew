@@ -7,6 +7,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const packageDir = dirname(scriptDir);
 const devVarsPath = join(packageDir, '.dev.vars');
 const generatedConfigPath = join(packageDir, 'wrangler.dev.jsonc');
+const wranglerBinPath = join(packageDir, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
 
 const devVars = readDevVars(devVarsPath);
 const databaseName = devVars.WINBREW_UPDATE_DB_NAME?.trim() || 'winbrew-update';
@@ -78,17 +79,10 @@ function unquote(value) {
 }
 
 function runWrangler(...args) {
-	const pnpmExecPath = process.env.npm_execpath;
-	const result = pnpmExecPath
-		? spawnSync(pnpmExecPath, ['exec', 'wrangler', ...args], {
-				cwd: packageDir,
-				stdio: 'inherit',
-			})
-		: spawnSync('pnpm', ['exec', 'wrangler', ...args], {
-				cwd: packageDir,
-				stdio: 'inherit',
-				shell: process.platform === 'win32',
-			});
+	const result = spawnSync(process.execPath, [wranglerBinPath, ...args], {
+		cwd: packageDir,
+		stdio: 'inherit',
+	});
 
 	if (result.error) {
 		console.error(result.error);
