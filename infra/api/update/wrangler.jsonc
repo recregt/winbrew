@@ -7,12 +7,6 @@
 	"name": "update",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-04-16",
-	"routes": [
-		{
-			"pattern": "api.winbrew.dev/v1/*",
-			"custom_domain": true
-		}
-	],
 	"d1_databases": [
 		{
 			"binding": "DB",
