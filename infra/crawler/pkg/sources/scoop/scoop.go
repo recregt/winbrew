@@ -84,6 +84,7 @@ func (s *Source) Name() string {
 }
 
 func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, backoff time.Duration) (err error) {
+	start := time.Now()
 	writer, flush := bufferJSONLWriter(w)
 	defer func() {
 		if flushErr := flush(); err == nil && flushErr != nil {
@@ -100,6 +101,7 @@ func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, b
 
 	results := make([]bucketResult, len(s.buckets))
 	group, groupCtx := errgroup.WithContext(ctx)
+	slog.Info("scoop crawl started", "buckets", len(s.buckets))
 
 	for i, bucket := range s.buckets {
 		i, bucket := i, bucket
@@ -121,10 +123,13 @@ func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, b
 	if err := group.Wait(); err != nil {
 		return err
 	}
+	syncElapsed := time.Since(start)
+	slog.Info("scoop repo sync phase finished", "buckets", len(s.buckets), "elapsed", syncElapsed)
 
 	succeeded := 0
 	failed := 0
 	var lastErr error
+	writeStart := time.Now()
 
 	for _, result := range results {
 		if result.err != nil {
@@ -147,6 +152,8 @@ func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, b
 
 		succeeded++
 	}
+
+	slog.Info("scoop crawl complete", "buckets", len(s.buckets), "written_buckets", succeeded, "failed_buckets", failed, "sync_elapsed", syncElapsed, "write_elapsed", time.Since(writeStart), "elapsed", time.Since(start))
 
 	if failed > 0 {
 		return fmt.Errorf("partial failure: %d succeeded, %d failed, last error: %w", succeeded, failed, lastErr)
@@ -221,6 +228,7 @@ func scoopEnvelopeFromPackage(pkg normalize.Package) scoopEnvelope {
 }
 
 func writeBucketJSONL(ctx context.Context, enc *json.Encoder, bucketName, bucketDir string) error {
+	start := time.Now()
 	manifestDir := filepath.Join(bucketDir, "bucket")
 
 	if _, err := os.Stat(manifestDir); os.IsNotExist(err) {
@@ -245,6 +253,7 @@ func writeBucketJSONL(ctx context.Context, enc *json.Encoder, bucketName, bucket
 	}
 
 	if len(manifestNames) == 0 {
+		slog.Info("scoop bucket has no manifests", "bucket", bucketName, "manifest_dir", manifestDir)
 		return nil
 	}
 
@@ -260,7 +269,7 @@ func writeBucketJSONL(ctx context.Context, enc *json.Encoder, bucketName, bucket
 	if len(manifestNames) < workerCount {
 		workerCount = len(manifestNames)
 	}
-	slog.Debug("starting manifest workers", "bucket", bucketName, "manifests", len(manifestNames), "workers", workerCount)
+	slog.Info("scoop bucket crawl started", "bucket", bucketName, "manifest_dir", manifestDir, "manifests", len(manifestNames), "workers", workerCount)
 
 	var wg sync.WaitGroup
 	wg.Add(workerCount)
@@ -304,15 +313,21 @@ func writeBucketJSONL(ctx context.Context, enc *json.Encoder, bucketName, bucket
 		return err
 	}
 
+	written := 0
+	skipped := 0
 	for _, result := range results {
 		if result.err != nil {
+			skipped++
 			slog.Warn("skipping manifest", "bucket", bucketName, "manifest", result.manifest, "err", result.err)
 			continue
 		}
+		written++
 		if err := enc.Encode(scoopEnvelopeFromPackage(result.pkg)); err != nil {
 			return fmt.Errorf("failed to encode package %s: %w", result.pkg.ID, err)
 		}
 	}
+
+	slog.Info("scoop bucket crawl complete", "bucket", bucketName, "manifest_dir", manifestDir, "manifests", len(manifestNames), "written", written, "skipped", skipped, "elapsed", time.Since(start))
 
 	return nil
 }
@@ -337,6 +352,8 @@ type archBlock struct {
 }
 
 func readManifest(ctx context.Context, bucketName, dir, filename string) (normalize.Package, error) {
+	start := time.Now()
+	slog.Debug("reading scoop manifest", "bucket", bucketName, "manifest", filename)
 	select {
 	case manifestReadSemaphore <- struct{}{}:
 	case <-ctx.Done():
@@ -369,8 +386,7 @@ func readManifest(ctx context.Context, bucketName, dir, filename string) (normal
 
 	name := strings.TrimSuffix(filename, ".json")
 	id := fmt.Sprintf("scoop/%s/%s", bucketName, name)
-
-	return normalize.Package{
+	pkg := normalize.Package{
 		ID:          id,
 		Name:        name,
 		Version:     m.Version,
@@ -382,7 +398,11 @@ func readManifest(ctx context.Context, bucketName, dir, filename string) (normal
 		Bin:         rawJSONValue(m.Bin),
 		Installers:  resolveInstallers(m),
 		Raw:         append(json.RawMessage(nil), raw.Bytes()...),
-	}, nil
+	}
+
+	slog.Debug("scoop manifest parsed", "bucket", bucketName, "manifest", filename, "id", id, "elapsed", time.Since(start))
+
+	return pkg, nil
 }
 
 func rawJSONValue(value any) json.RawMessage {

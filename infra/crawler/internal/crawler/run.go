@@ -44,6 +44,7 @@ func (s crawlerSources) Close() error {
 }
 
 func Run(ctx context.Context, configPath, wingetOutPath string) error {
+	pipelineStart := time.Now()
 	cfg, err := config.LoadContext(ctx, configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -87,7 +88,24 @@ func Run(ctx context.Context, configPath, wingetOutPath string) error {
 		trimmed = filepath.Join("staging", "winget_source.jsonl")
 	}
 
-	return runPipeline(ctx, cfg, srcs, cacheDir, trimmed)
+	slog.Info("crawler pipeline starting",
+		"config", configPath,
+		"sources", cfg.Sources,
+		"log_level", cfg.LogLevel,
+		"fetch_timeout", cfg.Timeout.Fetch,
+		"retry_max", cfg.Retry.Max,
+		"retry_backoff", cfg.Retry.Backoff,
+		"cache_dir", cacheDir,
+		"winget_out", trimmed,
+	)
+
+	if err := runPipeline(ctx, cfg, srcs, cacheDir, trimmed); err != nil {
+		return err
+	}
+
+	slog.Info("crawler pipeline finished", "elapsed", time.Since(pipelineStart), "winget_out", trimmed)
+
+	return nil
 }
 
 func tunedTransport(responseHeaderTimeout time.Duration) *http.Transport {
@@ -118,13 +136,15 @@ func cappedHeaderTimeout(fetchTimeout time.Duration) time.Duration {
 }
 
 func runPipeline(ctx context.Context, cfg *config.Config, srcs crawlerSources, cacheDir, wingetOutPath string) error {
+	pipelineStart := time.Now()
 	group, groupCtx := errgroup.WithContext(ctx)
 	configuredSources := 0
 
 	if srcs.scoop != nil {
 		configuredSources++
 		group.Go(func() (err error) {
-			slog.Info("streaming source", "name", srcs.scoop.Name())
+			stageStart := time.Now()
+			slog.Info("streaming source started", "name", srcs.scoop.Name())
 			stdoutWriter := bufio.NewWriterSize(os.Stdout, 256*1024)
 			defer func() {
 				if flushErr := stdoutWriter.Flush(); flushErr != nil {
@@ -140,8 +160,11 @@ func runPipeline(ctx context.Context, cfg *config.Config, srcs crawlerSources, c
 				if groupCtx.Err() != nil {
 					return fmt.Errorf("source %s cancelled: %w", srcs.scoop.Name(), groupCtx.Err())
 				}
+				slog.Error("streaming source failed", "name", srcs.scoop.Name(), "elapsed", time.Since(stageStart), "err", err)
 				return fmt.Errorf("failed to stream packages from %s: %w", srcs.scoop.Name(), err)
 			}
+
+			slog.Info("streaming source finished", "name", srcs.scoop.Name(), "elapsed", time.Since(stageStart))
 
 			return nil
 		})
@@ -150,21 +173,25 @@ func runPipeline(ctx context.Context, cfg *config.Config, srcs crawlerSources, c
 	if srcs.winget != nil {
 		configuredSources++
 		group.Go(func() error {
+			downloadStart := time.Now()
 			sourceDBPath := filepath.Join(cacheDir, "winget", "winget_source.db")
 			if err := os.MkdirAll(filepath.Dir(sourceDBPath), 0o750); err != nil {
 				return fmt.Errorf("failed to create winget cache dir: %w", err)
 			}
 
-			slog.Info("downloading winget source db", "name", srcs.winget.Name(), "dst", sourceDBPath)
+			slog.Info("winget source db download started", "name", srcs.winget.Name(), "dst", sourceDBPath)
 			if err := retry.Do(groupCtx, cfg.Retry.Max, cfg.Retry.Backoff, func() error {
 				return srcs.winget.DownloadSourceDB(groupCtx, sourceDBPath)
 			}); err != nil {
 				if groupCtx.Err() != nil {
 					return fmt.Errorf("source %s cancelled: %w", srcs.winget.Name(), groupCtx.Err())
 				}
+				slog.Error("winget source db download failed", "name", srcs.winget.Name(), "dst", sourceDBPath, "elapsed", time.Since(downloadStart), "err", err)
 				return fmt.Errorf("failed to stage %s source db: %w", srcs.winget.Name(), err)
 			}
+			slog.Info("winget source db download finished", "name", srcs.winget.Name(), "dst", sourceDBPath, "elapsed", time.Since(downloadStart))
 
+			writeStart := time.Now()
 			if err := os.MkdirAll(filepath.Dir(wingetOutPath), 0o750); err != nil {
 				return fmt.Errorf("failed to create winget output dir: %w", err)
 			}
@@ -186,13 +213,15 @@ func runPipeline(ctx context.Context, cfg *config.Config, srcs crawlerSources, c
 				}
 			}()
 
-			slog.Info("writing winget JSONL", "name", srcs.winget.Name(), "dst", wingetOutPath)
+			slog.Info("winget JSONL write started", "name", srcs.winget.Name(), "dst", wingetOutPath)
 			if err := srcs.winget.WriteJSONL(groupCtx, sourceDBPath, writer, cfg.Retry.Max, cfg.Retry.Backoff); err != nil {
 				if groupCtx.Err() != nil {
 					return fmt.Errorf("source %s cancelled: %w", srcs.winget.Name(), groupCtx.Err())
 				}
+				slog.Error("winget JSONL write failed", "name", srcs.winget.Name(), "dst", wingetOutPath, "elapsed", time.Since(writeStart), "err", err)
 				return fmt.Errorf("failed to stream packages from %s: %w", srcs.winget.Name(), err)
 			}
+			slog.Info("winget JSONL write finished", "name", srcs.winget.Name(), "dst", wingetOutPath, "elapsed", time.Since(writeStart))
 
 			return nil
 		})
@@ -207,9 +236,9 @@ func runPipeline(ctx context.Context, cfg *config.Config, srcs crawlerSources, c
 	}
 
 	if srcs.winget != nil {
-		slog.Info("pipeline complete", "sources_run", configuredSources, "winget_jsonl", wingetOutPath)
+		slog.Info("pipeline complete", "sources_run", configuredSources, "winget_jsonl", wingetOutPath, "elapsed", time.Since(pipelineStart))
 	} else {
-		slog.Info("pipeline complete", "sources_run", configuredSources)
+		slog.Info("pipeline complete", "sources_run", configuredSources, "elapsed", time.Since(pipelineStart))
 	}
 	return nil
 }
