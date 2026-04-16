@@ -1,13 +1,17 @@
 package publisher
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"database/sql"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/minio/minio-go/v7"
 )
 
@@ -153,6 +157,174 @@ func TestHashFileAndMetadataRoundTrip(t *testing.T) {
 	}
 	if got, want := restored.PackageCount, metadata.PackageCount; got != want {
 		t.Fatalf("PackageCount = %d, want %d", got, want)
+	}
+}
+
+func TestCompressSnapshotToTempRoundTrips(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "catalog.db")
+	rawBytes := bytes.Repeat([]byte("winbrew-catalog-snapshot-"), 128)
+	if err := os.WriteFile(inputPath, rawBytes, 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	compressedPath, compressedSize, err := compressSnapshotToTemp(inputPath)
+	if err != nil {
+		t.Fatalf("compressSnapshotToTemp() error = %v", err)
+	}
+	defer func() {
+		_ = os.Remove(compressedPath)
+	}()
+
+	if compressedSize <= 0 {
+		t.Fatalf("compressed size = %d, want > 0", compressedSize)
+	}
+
+	compressedBytes, err := os.ReadFile(compressedPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+
+	decoder, err := zstd.NewReader(bytes.NewReader(compressedBytes))
+	if err != nil {
+		t.Fatalf("zstd.NewReader() error = %v", err)
+	}
+	defer decoder.Close()
+
+	decompressedBytes, err := io.ReadAll(decoder)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+
+	if !bytes.Equal(decompressedBytes, rawBytes) {
+		t.Fatalf("decompressed snapshot mismatch")
+	}
+}
+
+func TestBuildCatalogPatchSQLReproducesCurrentSnapshot(t *testing.T) {
+	t.Parallel()
+
+	schemaStatements := []string{
+		`CREATE TABLE IF NOT EXISTS catalog_packages (id TEXT PRIMARY KEY, name TEXT NOT NULL, version TEXT NOT NULL, source TEXT NOT NULL, namespace TEXT, source_id TEXT NOT NULL, description TEXT, homepage TEXT, license TEXT, publisher TEXT, locale TEXT, moniker TEXT, tags TEXT, bin TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`,
+		`CREATE TABLE IF NOT EXISTS catalog_installers (id INTEGER PRIMARY KEY AUTOINCREMENT, package_id TEXT NOT NULL, url TEXT NOT NULL, hash TEXT, hash_algorithm TEXT NOT NULL, installer_type TEXT NOT NULL, installer_switches TEXT, scope TEXT, arch TEXT NOT NULL, kind TEXT NOT NULL, nested_kind TEXT);`,
+		`CREATE TABLE IF NOT EXISTS catalog_packages_raw (package_id TEXT PRIMARY KEY, raw TEXT);`,
+		`CREATE TRIGGER IF NOT EXISTS catalog_packages_delete_cleanup AFTER DELETE ON catalog_packages BEGIN DELETE FROM catalog_packages_raw WHERE package_id = old.id; DELETE FROM catalog_installers WHERE package_id = old.id; END;`,
+	}
+
+	previousStatements := []string{
+		`INSERT INTO catalog_packages (rowid, id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, tags, bin, created_at, updated_at) VALUES (1, 'pkg/a', 'Alpha', '1.0.0', 'winget', NULL, 'pkg.a', 'Alpha desc', NULL, NULL, 'Alpha Inc.', NULL, NULL, NULL, NULL, '2026-04-15 10:00:00', '2026-04-15 10:00:00');`,
+		`INSERT INTO catalog_packages_raw (package_id, raw) VALUES ('pkg/a', '{"id":"pkg/a"}');`,
+		`INSERT INTO catalog_installers (id, package_id, url, hash, hash_algorithm, installer_type, installer_switches, scope, arch, kind, nested_kind) VALUES (1, 'pkg/a', 'https://example.invalid/a.exe', 'sha256:old', 'sha256', 'exe', NULL, NULL, 'x64', 'exe', NULL);`,
+		`INSERT INTO catalog_packages (rowid, id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, tags, bin, created_at, updated_at) VALUES (2, 'pkg/b', 'Beta', '1.0.0', 'winget', NULL, 'pkg.b', 'Beta desc', NULL, NULL, 'Beta Inc.', NULL, NULL, NULL, NULL, '2026-04-15 10:00:00', '2026-04-15 10:00:00');`,
+		`INSERT INTO catalog_packages_raw (package_id, raw) VALUES ('pkg/b', '{"id":"pkg/b"}');`,
+		`INSERT INTO catalog_installers (id, package_id, url, hash, hash_algorithm, installer_type, installer_switches, scope, arch, kind, nested_kind) VALUES (2, 'pkg/b', 'https://example.invalid/b.exe', 'sha256:b', 'sha256', 'exe', NULL, NULL, 'x64', 'exe', NULL);`,
+	}
+	currentStatements := []string{
+		`INSERT INTO catalog_packages (rowid, id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, tags, bin, created_at, updated_at) VALUES (1, 'pkg/a', 'Alpha', '1.1.0', 'winget', NULL, 'pkg.a', 'Alpha desc', NULL, NULL, 'Alpha Inc.', NULL, NULL, NULL, NULL, '2026-04-15 10:00:00', '2026-04-16 12:00:00');`,
+		`INSERT INTO catalog_packages_raw (package_id, raw) VALUES ('pkg/a', '{"id":"pkg/a","updated":true}');`,
+		`INSERT INTO catalog_installers (id, package_id, url, hash, hash_algorithm, installer_type, installer_switches, scope, arch, kind, nested_kind) VALUES (1, 'pkg/a', 'https://example.invalid/a.exe', 'sha256:new', 'sha256', 'exe', NULL, NULL, 'x64', 'exe', NULL);`,
+		`INSERT INTO catalog_packages (rowid, id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, tags, bin, created_at, updated_at) VALUES (3, 'pkg/c', 'Gamma', '1.0.0', 'winget', NULL, 'pkg.c', 'Gamma desc', NULL, NULL, 'Gamma Inc.', NULL, NULL, NULL, NULL, '2026-04-16 12:00:00', '2026-04-16 12:00:00');`,
+		`INSERT INTO catalog_packages_raw (package_id, raw) VALUES ('pkg/c', '{"id":"pkg/c"}');`,
+		`INSERT INTO catalog_installers (id, package_id, url, hash, hash_algorithm, installer_type, installer_switches, scope, arch, kind, nested_kind) VALUES (3, 'pkg/c', 'https://example.invalid/c.exe', 'sha256:c', 'sha256', 'exe', NULL, NULL, 'x64', 'exe', NULL);`,
+	}
+
+	openSnapshotDB := func(name string) (*sql.DB, error) {
+		dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", name)
+		return sql.Open("sqlite", dsn)
+	}
+
+	buildSnapshot := func(name string, statements []string) *sql.DB {
+		t.Helper()
+
+		db, err := openSnapshotDB(name)
+		if err != nil {
+			t.Fatalf("open snapshot db: %v", err)
+		}
+
+		for _, statement := range schemaStatements {
+			if _, err := db.Exec(statement); err != nil {
+				t.Fatalf("exec schema statement %q: %v", statement, err)
+			}
+		}
+		for _, statement := range statements {
+			if _, err := db.Exec(statement); err != nil {
+				t.Fatalf("exec snapshot statement %q: %v", statement, err)
+			}
+		}
+
+		return db
+	}
+
+	previousDB := buildSnapshot("publisher_previous", previousStatements)
+	defer previousDB.Close()
+	currentDB := buildSnapshot("publisher_current", currentStatements)
+	defer currentDB.Close()
+
+	patchSQL, err := buildCatalogPatchSQLFromDB(previousDB, currentDB)
+	if err != nil {
+		t.Fatalf("buildCatalogPatchSQL() error = %v", err)
+	}
+
+	if _, err := previousDB.Exec(patchSQL); err != nil {
+		t.Fatalf("exec patch sql: %v", err)
+	}
+
+	gotPackages, gotRaws, gotInstallers, err := loadCatalogSnapshot(previousDB)
+	if err != nil {
+		t.Fatalf("load patched snapshot: %v", err)
+	}
+	wantPackages, wantRaws, wantInstallers, err := loadCatalogSnapshot(currentDB)
+	if err != nil {
+		t.Fatalf("load current snapshot: %v", err)
+	}
+
+	if len(gotPackages) != len(wantPackages) {
+		t.Fatalf("package count = %d, want %d", len(gotPackages), len(wantPackages))
+	}
+	for id, wantPackage := range wantPackages {
+		gotPackage, ok := gotPackages[id]
+		if !ok {
+			t.Fatalf("missing patched package %q", id)
+		}
+		if !packageRecordsEqual(gotPackage, wantPackage) {
+			t.Fatalf("patched package %q mismatch", id)
+		}
+	}
+
+	if len(gotRaws) != len(wantRaws) {
+		t.Fatalf("raw row count = %d, want %d", len(gotRaws), len(wantRaws))
+	}
+	for packageID, wantRaw := range wantRaws {
+		gotRaw, ok := gotRaws[packageID]
+		if !ok {
+			t.Fatalf("missing patched raw row %q", packageID)
+		}
+		if !nullStringEqual(gotRaw, wantRaw) {
+			t.Fatalf("patched raw row %q mismatch", packageID)
+		}
+	}
+
+	if len(gotInstallers) != len(wantInstallers) {
+		t.Fatalf("installer package count = %d, want %d", len(gotInstallers), len(wantInstallers))
+	}
+	for packageID, wantInstallersForPackage := range wantInstallers {
+		gotInstallersForPackage, ok := gotInstallers[packageID]
+		if !ok {
+			t.Fatalf("missing patched installers for %q", packageID)
+		}
+		if len(gotInstallersForPackage) != len(wantInstallersForPackage) {
+			t.Fatalf("installer count for %q = %d, want %d", packageID, len(gotInstallersForPackage), len(wantInstallersForPackage))
+		}
+		for installerID, wantInstaller := range wantInstallersForPackage {
+			gotInstaller, ok := gotInstallersForPackage[installerID]
+			if !ok {
+				t.Fatalf("missing patched installer %d for %q", installerID, packageID)
+			}
+			if !installerRecordsEqual(gotInstaller, wantInstaller) {
+				t.Fatalf("patched installer %d for %q mismatch", installerID, packageID)
+			}
+		}
 	}
 }
 

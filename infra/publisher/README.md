@@ -1,6 +1,6 @@
 # WinBrew Catalog Publisher
 
-The publisher is the deployment stage for the catalog bundle. It validates the local `catalog.db` against its metadata and uploads both artifacts to R2.
+The publisher is the deployment stage for the catalog bundle. It validates the local `catalog.db` against its metadata, compresses it with zstd, and uploads the resulting snapshot plus metadata to R2.
 
 ## What it does
 
@@ -9,7 +9,7 @@ The publisher is the deployment stage for the catalog bundle. It validates the l
 - Verifies that the local metadata hash matches the input database.
 - Reads the remote metadata object from the bucket.
 - Skips publishing when the remote catalog already matches the local hash.
-- Uploads the database to a temporary key, then publishes the metadata and final object when a new bundle is available.
+- Compresses the database with zstd, uploads the compressed snapshot to a temporary key, then publishes the metadata and final object when a new bundle is available.
 - Writes the updated local metadata back to disk after a successful upload.
 - Optionally emits `update_plans.sql` for the production D1 database after a successful publish.
 - Can emit a patch plan for the previous hash when a normalized D1 patch-chain manifest is available.
@@ -20,7 +20,7 @@ The publisher is the deployment stage for the catalog bundle. It validates the l
 
 - `--input`: path to the catalog database. Defaults to `WINBREW_DB_PATH` if set.
 - `--metadata`: path to the local metadata file. Defaults to `metadata.json` beside the input database.
-- `--key`: object key for the database in the bucket. Defaults to `catalog.db`.
+- `--key`: object key for the database in the bucket. Defaults to `catalog.db.zst`.
 - `--update-plans`: optional path for the D1 materialization SQL file. The file is only written after a successful publish.
 - `--patch-chain`: optional normalized JSON manifest of D1 patch artifacts. When present, the publisher can emit a patch plan instead of a fallback full snapshot for the previous hash.
 
@@ -32,11 +32,11 @@ The publisher is the deployment stage for the catalog bundle. It validates the l
 - `R2_SECRET_ACCESS_KEY` / `AWS_SECRET_ACCESS_KEY`: secret key.
 - `R2_REGION`: optional bucket region, defaults to `auto`.
 - `CATALOG_PUBLIC_BASE_URL`: public base URL used to build update-plan snapshot URLs. Defaults to `https://cdn.winbrew.dev`.
-- The patch-chain manifest is expected to contain D1 query rows with `depth`, `file_path`, `size_bytes`, and `reached_previous` fields.
+- The patch-chain manifest is expected to contain D1 query rows with `depth`, `from_hash`, `to_hash`, `file_path`, `size_bytes`, `checksum`, and `reached_previous` fields.
 
 ## Outputs
 
-- Remote object `catalog.db`: the SQLite catalog database, published from a temporary staging key.
+- Remote object `catalog.db.zst`: the zstd-compressed SQLite catalog snapshot, published from a temporary staging key.
 - Remote object `metadata.json`: the metadata sidecar associated with that database.
 - Local metadata file: updated with the previous remote hash after a successful publish.
 - Optional `update_plans.sql`: SQL statements that clear and repopulate the current production D1 update rows.
@@ -46,7 +46,7 @@ The publisher is the deployment stage for the catalog bundle. It validates the l
 
 The publisher expects a bundle produced by the parser:
 
-- `catalog.db` must be the final database file.
+- `catalog.db` must be the final SQLite database file before compression.
 - `metadata.json` must describe that exact database hash.
 - The metadata schema version must match the current parser format.
 

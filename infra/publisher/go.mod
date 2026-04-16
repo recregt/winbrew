@@ -5,6 +5,7 @@ go 1.26.1
 require (
 	github.com/minio/minio-go/v7 v7.0.100
 	github.com/minio/pkg/v3 v3.0.0 // indirect
+	modernc.org/sqlite v1.37.1
 )
 
 require (

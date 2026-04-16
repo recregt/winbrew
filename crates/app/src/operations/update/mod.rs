@@ -266,7 +266,7 @@ mod tests {
     #[test]
     fn metadata_url_is_derived_from_snapshot_url() {
         assert_eq!(
-            metadata_url_for_snapshot_url("https://cdn.example.invalid/releases/catalog.db")
+            metadata_url_for_snapshot_url("https://cdn.example.invalid/releases/catalog.db.zst")
                 .expect("metadata url should be derived"),
             "https://cdn.example.invalid/releases/metadata.json"
         );
@@ -517,6 +517,8 @@ mod tests {
             BTreeMap::from([(String::from("winget"), 1)]),
             full_catalog_hash.clone(),
         );
+        let full_catalog_payload = encode_all(Cursor::new(full_catalog_bytes.clone()), 0)
+            .expect("compress full catalog bytes");
 
         let mut server = MockServer::new();
         let patch_url = format!("{}/patches/0001.sql.zst", server.url());
@@ -527,7 +529,7 @@ mod tests {
             "snapshot": null,
             "patches": [patch_url]
         });
-        let full_snapshot_url = format!("{}/releases/v2.2.0/catalog.db", server.url());
+        let full_snapshot_url = format!("{}/releases/v2.2.0/catalog.db.zst", server.url());
         let full_api_response = serde_json::json!({
             "mode": "full",
             "current": current_hash,
@@ -550,7 +552,7 @@ mod tests {
             serde_json::to_vec(&full_api_response).expect("serialize full api response"),
         );
         let _catalog_mock =
-            server.mock_get("/releases/v2.2.0/catalog.db", full_catalog_bytes.clone());
+            server.mock_get("/releases/v2.2.0/catalog.db.zst", full_catalog_payload);
         let _metadata_mock = server.mock_get(
             "/releases/v2.2.0/metadata.json",
             serde_json::to_vec_pretty(&full_metadata).expect("serialize full metadata"),
@@ -608,9 +610,11 @@ mod tests {
 
         let catalog_bytes = b"catalog-bytes".to_vec();
         let catalog_hash = format!("sha256:{}", sha256_hex(&catalog_bytes));
+        let catalog_payload =
+            encode_all(Cursor::new(catalog_bytes.clone()), 0).expect("compress catalog bytes");
 
         let mut server = MockServer::new();
-        let snapshot_url = format!("{}/catalog.db", server.url());
+        let snapshot_url = format!("{}/catalog.db.zst", server.url());
         let api_response = serde_json::json!({
             "mode": "full",
             "current": "sha256:previous",
@@ -624,7 +628,7 @@ mod tests {
             Matcher::UrlEncoded("current".to_string(), "sha256:previous".to_string()),
             serde_json::to_vec(&api_response).expect("serialize api response"),
         );
-        let _catalog_mock = server.mock_get("/catalog.db", catalog_bytes.clone());
+        let _catalog_mock = server.mock_get("/catalog.db.zst", catalog_payload);
         let metadata = CatalogMetadata::build_from_counts(
             1,
             BTreeMap::from([(String::from("winget"), 1)]),
