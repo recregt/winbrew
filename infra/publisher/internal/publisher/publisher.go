@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -247,10 +248,24 @@ func isMissingObject(err error) bool {
 }
 
 func uploadObjects(ctx context.Context, client *minio.Client, bucketName, inputPath, objectKey string, metadata Metadata) error {
-	if _, err := client.FPutObject(ctx, bucketName, objectKey, inputPath, minio.PutObjectOptions{
+	tempObjectKey := objectTempKeyForObjectKey(objectKey)
+	if _, err := client.FPutObject(ctx, bucketName, tempObjectKey, inputPath, minio.PutObjectOptions{
 		ContentType: "application/octet-stream",
 	}); err != nil {
-		return fmt.Errorf("failed to upload %s to bucket %s: %w", filepath.Base(inputPath), bucketName, err)
+		return fmt.Errorf("failed to upload %s to temporary object %s in bucket %s: %w", filepath.Base(inputPath), tempObjectKey, bucketName, err)
+	}
+	defer func() {
+		_ = client.RemoveObject(ctx, bucketName, tempObjectKey, minio.RemoveObjectOptions{})
+	}()
+
+	if _, err := client.CopyObject(ctx, minio.CopyDestOptions{
+		Bucket: bucketName,
+		Object: objectKey,
+	}, minio.CopySrcOptions{
+		Bucket: bucketName,
+		Object: tempObjectKey,
+	}); err != nil {
+		return fmt.Errorf("failed to publish object %s to bucket %s: %w", objectKey, bucketName, err)
 	}
 
 	metadataBytes, err := metadataBytes(metadata)
@@ -280,4 +295,8 @@ func uploadObjects(ctx context.Context, client *minio.Client, bucketName, inputP
 	}
 
 	return nil
+}
+
+func objectTempKeyForObjectKey(objectKey string) string {
+	return path.Join(path.Dir(objectKey), path.Base(objectKey)+".tmp")
 }

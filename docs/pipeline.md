@@ -8,7 +8,7 @@ The goal is a full offline catalog: Winget manifests are ingested into `catalog.
 
 - Winget `index.db` is a revision anchor, not the source of truth.
 - Winget YAML manifests are the source of truth for installer URLs, hashes, switches, architecture, and scope.
-- The catalog schema is locked around a dedicated `schema_meta` table with version `2`.
+- The catalog schema is locked around a dedicated `schema_meta` table with version `3`.
 - `catalog.db` is the canonical offline artifact that install, search, and update consume.
 - R2 is the delivery plane. It stores versioned artifacts, but it is not the source of truth.
 - `api.winbrew.dev` is the update selection plane. It decides whether the client should fetch a full snapshot or patch chain.
@@ -52,7 +52,7 @@ CREATE TABLE schema_meta (
 	key   TEXT PRIMARY KEY,
 	value TEXT NOT NULL
 );
-INSERT INTO schema_meta VALUES ('version', '2');
+INSERT INTO schema_meta VALUES ('version', '3');
 ```
 
 Rules:

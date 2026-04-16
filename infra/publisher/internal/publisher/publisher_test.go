@@ -100,6 +100,18 @@ func TestMetadataTempKeyForObjectKey(t *testing.T) {
 	}
 }
 
+func TestObjectTempKeyForObjectKey(t *testing.T) {
+	t.Parallel()
+
+	if got, want := objectTempKeyForObjectKey("catalog.db"), "catalog.db.tmp"; got != want {
+		t.Fatalf("objectTempKeyForObjectKey() = %q, want %q", got, want)
+	}
+
+	if got, want := objectTempKeyForObjectKey("release/latest/catalog.db"), "release/latest/catalog.db.tmp"; got != want {
+		t.Fatalf("objectTempKeyForObjectKey() = %q, want %q", got, want)
+	}
+}
+
 func TestHashFileAndMetadataRoundTrip(t *testing.T) {
 	t.Parallel()
 
