@@ -1,56 +1,24 @@
 //! Catalog refresh workflow for the CLI.
 
-use anyhow::{Context, Result, bail};
-use rusqlite::Connection;
-use serde::Deserialize;
-use std::collections::BTreeMap;
-use std::fs;
-use std::fs::File;
-use std::io::{Cursor, Read};
-use std::path::Path;
-use zstd::stream::read::Decoder;
+mod api;
+mod download;
+mod metadata;
+mod patch;
+mod planner;
+mod types;
 
-use crate::core::fs::cleanup_path;
-use crate::core::fs::finalize_temp_file;
-use crate::core::hash::{hash_file, verify_hash};
-use crate::core::network::{Client, build_client, download_url_to_temp_file};
+use anyhow::{Context, Result};
+use std::path::Path;
+
+use self::types::CatalogDownloadPlan;
+
+use crate::core::fs::{cleanup_path, finalize_temp_file};
+use crate::core::network::build_client;
 use crate::core::paths::{ResolvedPaths, ensure_dirs_at};
-use crate::models::catalog::CatalogMetadata;
-use crate::models::domains::shared::HashAlgorithm;
 
 const CATALOG_UPDATE_API_URL: &str = "https://api.winbrew.dev/v1/update";
 const CATALOG_DIRECT_DOWNLOAD_URL: &str = "https://wb-assets.recregt.com/catalog.db";
 const CATALOG_METADATA_DIRECT_DOWNLOAD_URL: &str = "https://wb-assets.recregt.com/metadata.json";
-
-#[derive(Debug, Clone, Deserialize)]
-struct CatalogUpdateResponse {
-    mode: CatalogUpdateMode,
-    current: String,
-    target: String,
-    snapshot: Option<String>,
-    #[serde(default)]
-    patches: Vec<String>,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-enum CatalogUpdateMode {
-    Full,
-    Patch,
-}
-
-#[derive(Debug, Clone)]
-enum CatalogDownloadPlan {
-    Full {
-        catalog_url: String,
-        metadata_url: String,
-        expected_hash: Option<String>,
-    },
-    Patch {
-        patch_urls: Vec<String>,
-        expected_hash: String,
-    },
-}
 
 pub fn refresh_catalog<FStart, FProgress>(
     paths: &ResolvedPaths,
@@ -90,14 +58,21 @@ where
         clear_temp_file(&metadata_temp_path)?;
 
         let client = build_client("winbrew-catalog-downloader")?;
+        let local_metadata = metadata::load_local_catalog_metadata(&metadata_path)?;
 
-        let local_metadata = load_local_catalog_metadata(&metadata_path)?;
-        let download_plan =
-            resolve_catalog_download_plan(&client, update_api_url, local_metadata.as_ref())?;
+        let download_plan = match api::fetch_catalog_update_selection(
+            &client,
+            update_api_url,
+            local_metadata.as_ref(),
+        )? {
+            Some(selection) => planner::plan_catalog_download(local_metadata.as_ref(), selection)?
+                .unwrap_or_else(|| fallback_full_snapshot_plan(None)),
+            None => fallback_full_snapshot_plan(None),
+        };
 
         match &download_plan {
             CatalogDownloadPlan::Full { .. } => {
-                download_catalog_release(
+                download::download_catalog_release(
                     &client,
                     &download_plan,
                     &catalog_temp_path,
@@ -114,7 +89,7 @@ where
                     .as_ref()
                     .context("patch updates require local catalog metadata")?;
 
-                if let Err(err) = apply_catalog_patch_release(
+                if let Err(err) = patch::apply_catalog_patch_release(
                     &client,
                     &catalog_path,
                     &catalog_temp_path,
@@ -126,13 +101,11 @@ where
                     tracing::warn!(error = %err, "patch catalog update failed; falling back to full snapshot");
                     clear_temp_file(&catalog_temp_path)?;
                     clear_temp_file(&metadata_temp_path)?;
-                    download_catalog_release(
+
+                    let fallback_plan = fallback_full_snapshot_plan(Some(expected_hash.clone()));
+                    download::download_catalog_release(
                         &client,
-                        &CatalogDownloadPlan::Full {
-                            catalog_url: CATALOG_DIRECT_DOWNLOAD_URL.to_string(),
-                            metadata_url: CATALOG_METADATA_DIRECT_DOWNLOAD_URL.to_string(),
-                            expected_hash: Some(expected_hash.clone()),
-                        },
+                        &fallback_plan,
                         &catalog_temp_path,
                         &metadata_temp_path,
                         on_start,
@@ -154,314 +127,21 @@ where
     result
 }
 
+fn fallback_full_snapshot_plan(expected_hash: Option<String>) -> CatalogDownloadPlan {
+    CatalogDownloadPlan::Full {
+        catalog_url: CATALOG_DIRECT_DOWNLOAD_URL.to_string(),
+        metadata_url: CATALOG_METADATA_DIRECT_DOWNLOAD_URL.to_string(),
+        expected_hash,
+    }
+}
+
 fn clear_temp_file(path: &Path) -> Result<()> {
     cleanup_path(path).context("failed to clear previous catalog download")
 }
 
-fn load_local_catalog_metadata(path: &Path) -> Result<Option<CatalogMetadata>> {
-    match fs::metadata(path) {
-        Ok(_) => load_catalog_metadata(path).map(Some),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(err).context("failed to inspect local catalog metadata"),
-    }
-}
-
-fn resolve_catalog_download_plan(
-    client: &Client,
-    update_api_url: &str,
-    local_metadata: Option<&CatalogMetadata>,
-) -> Result<CatalogDownloadPlan> {
-    if let Some(plan) =
-        resolve_catalog_download_plan_via_api(client, update_api_url, local_metadata)?
-    {
-        return Ok(plan);
-    }
-
-    Ok(CatalogDownloadPlan::Full {
-        catalog_url: CATALOG_DIRECT_DOWNLOAD_URL.to_string(),
-        metadata_url: CATALOG_METADATA_DIRECT_DOWNLOAD_URL.to_string(),
-        expected_hash: None,
-    })
-}
-
-fn resolve_catalog_download_plan_via_api(
-    client: &Client,
-    update_api_url: &str,
-    local_metadata: Option<&CatalogMetadata>,
-) -> Result<Option<CatalogDownloadPlan>> {
-    let api_url = local_metadata
-        .map(|metadata| format!("{update_api_url}?current={}", metadata.current_hash))
-        .unwrap_or_else(|| update_api_url.to_string());
-
-    let request = client.get(api_url);
-
-    let response = match request.send() {
-        Ok(response) => response,
-        Err(_) => return Ok(None),
-    };
-
-    let response = match response.error_for_status() {
-        Ok(response) => response,
-        Err(_) => return Ok(None),
-    };
-
-    let selection: CatalogUpdateResponse = match response.json() {
-        Ok(selection) => selection,
-        Err(_) => return Ok(None),
-    };
-
-    if selection.target.trim().is_empty() {
-        return Ok(None);
-    }
-
-    match selection.mode {
-        CatalogUpdateMode::Full => {
-            let catalog_url = match selection.snapshot {
-                Some(snapshot) if !snapshot.trim().is_empty() => snapshot,
-                _ => return Ok(None),
-            };
-
-            let metadata_url = metadata_url_for_snapshot_url(&catalog_url)?;
-
-            Ok(Some(CatalogDownloadPlan::Full {
-                catalog_url,
-                metadata_url,
-                expected_hash: Some(selection.target),
-            }))
-        }
-        CatalogUpdateMode::Patch => {
-            let local_metadata = match local_metadata {
-                Some(metadata) => metadata,
-                None => return Ok(None),
-            };
-
-            if local_metadata.current_hash != selection.current {
-                return Ok(None);
-            }
-
-            if selection.patches.is_empty()
-                || selection.patches.iter().any(|url| url.trim().is_empty())
-            {
-                return Ok(None);
-            }
-
-            Ok(Some(CatalogDownloadPlan::Patch {
-                patch_urls: selection.patches,
-                expected_hash: selection.target,
-            }))
-        }
-    }
-}
-
-fn download_catalog_release<FStart, FProgress>(
-    client: &Client,
-    plan: &CatalogDownloadPlan,
-    catalog_temp_path: &Path,
-    metadata_temp_path: &Path,
-    on_start: FStart,
-    on_progress: FProgress,
-) -> Result<()>
-where
-    FStart: FnOnce(Option<u64>),
-    FProgress: FnMut(u64),
-{
-    let CatalogDownloadPlan::Full {
-        catalog_url,
-        metadata_url,
-        expected_hash,
-    } = plan
-    else {
-        bail!("download_catalog_release only supports full snapshot plans");
-    };
-
-    download_url_to_temp_file(
-        client,
-        metadata_url,
-        metadata_temp_path,
-        "catalog metadata asset",
-        |_| {},
-        |_| {},
-        |_| Ok(()),
-    )?;
-
-    let metadata = load_catalog_metadata(metadata_temp_path)?;
-
-    if let Some(expected_hash) = expected_hash
-        && metadata.current_hash.as_str() != expected_hash.as_str()
-    {
-        bail!(
-            "catalog metadata hash mismatch: expected {expected_hash}, got {}",
-            metadata.current_hash
-        );
-    }
-
-    download_url_to_temp_file(
-        client,
-        catalog_url,
-        catalog_temp_path,
-        "catalog asset",
-        on_start,
-        on_progress,
-        |_| Ok(()),
-    )
-    .context("failed to download catalog asset")?;
-
-    verify_catalog_hash(catalog_temp_path, &metadata.current_hash)?;
-
-    Ok(())
-}
-
-fn apply_catalog_patch_release(
-    client: &Client,
-    catalog_path: &Path,
-    catalog_temp_path: &Path,
-    metadata_temp_path: &Path,
-    patch_urls: &[String],
-    expected_hash: &str,
-    previous_hash: &str,
-) -> Result<()> {
-    if !catalog_path.exists() {
-        bail!("cannot apply catalog patch without an existing catalog database");
-    }
-
-    fs::copy(catalog_path, catalog_temp_path)
-        .context("failed to back up local catalog database for patch update")?;
-
-    let connection =
-        Connection::open(catalog_temp_path).context("failed to open catalog patch working copy")?;
-    connection
-        .pragma_update(None, "journal_mode", "DELETE")
-        .context("failed to set catalog patch journal mode")?;
-    connection
-        .execute_batch("PRAGMA foreign_keys = ON;")
-        .context("failed to enable foreign keys for catalog patch update")?;
-
-    for patch_url in patch_urls {
-        let patch_sql = download_catalog_patch_sql(client, patch_url)?;
-        connection
-            .execute_batch(&patch_sql)
-            .with_context(|| format!("failed to apply catalog patch from {patch_url}"))?;
-    }
-
-    let integrity_check: String = connection
-        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
-        .context("failed to run catalog integrity check after patch application")?;
-
-    if integrity_check.trim() != "ok" {
-        bail!("catalog integrity check failed after patch application: {integrity_check}");
-    }
-
-    let metadata =
-        build_catalog_metadata_from_connection(&connection, expected_hash, previous_hash)?;
-
-    drop(connection);
-
-    verify_catalog_hash(catalog_temp_path, &metadata.current_hash)?;
-
-    fs::write(
-        metadata_temp_path,
-        serde_json::to_vec_pretty(&metadata)
-            .context("failed to serialize patched catalog metadata")?,
-    )
-    .context("failed to write patched catalog metadata")?;
-
-    Ok(())
-}
-
-fn download_catalog_patch_sql(client: &Client, patch_url: &str) -> Result<String> {
-    let response = client
-        .get(patch_url.to_string())
-        .send()
-        .with_context(|| format!("failed to send catalog patch request to {patch_url}"))?;
-    let response = response
-        .error_for_status()
-        .with_context(|| format!("catalog patch request failed for {patch_url}"))?;
-
-    let patch_bytes = response
-        .bytes()
-        .with_context(|| format!("failed to read catalog patch response from {patch_url}"))?;
-
-    let mut decoder = Decoder::new(Cursor::new(patch_bytes))
-        .context("failed to decompress catalog patch payload")?;
-    let mut patch_sql = String::new();
-    decoder
-        .read_to_string(&mut patch_sql)
-        .context("failed to decode catalog patch SQL")?;
-
-    Ok(patch_sql)
-}
-
-fn build_catalog_metadata_from_connection(
-    connection: &Connection,
-    current_hash: &str,
-    previous_hash: &str,
-) -> Result<CatalogMetadata> {
-    let package_count: i64 = connection
-        .query_row("SELECT COUNT(*) FROM catalog_packages", [], |row| {
-            row.get(0)
-        })
-        .context("failed to count catalog packages")?;
-    let package_count =
-        usize::try_from(package_count).context("catalog package count does not fit in usize")?;
-
-    let mut source_counts = BTreeMap::new();
-    let mut stmt = connection
-        .prepare(
-            "SELECT source, COUNT(*) FROM catalog_packages GROUP BY source ORDER BY source ASC",
-        )
-        .context("failed to prepare catalog source count query")?;
-    let mut rows = stmt
-        .query([])
-        .context("failed to query catalog source counts")?;
-
-    while let Some(row) = rows
-        .next()
-        .context("failed to read catalog source count row")?
-    {
-        let source: String = row.get(0).context("failed to read catalog source name")?;
-        let count: i64 = row.get(1).context("failed to read catalog source count")?;
-        let count = usize::try_from(count).context("catalog source count does not fit in usize")?;
-        source_counts.insert(source, count);
-    }
-
-    let mut metadata =
-        CatalogMetadata::build_from_counts(package_count, source_counts, current_hash.to_string());
-    metadata.previous_hash = previous_hash.to_string();
-    metadata.validate()?;
-
-    Ok(metadata)
-}
-
-fn metadata_url_for_snapshot_url(snapshot_url: &str) -> Result<String> {
-    let (prefix, _) = snapshot_url
-        .rsplit_once('/')
-        .context("snapshot URL must contain a path segment")?;
-
-    Ok(format!("{prefix}/metadata.json"))
-}
-
-fn load_catalog_metadata(path: &Path) -> Result<CatalogMetadata> {
-    let file = File::open(path).context("failed to open catalog metadata download")?;
-    let metadata: CatalogMetadata =
-        serde_json::from_reader(file).context("failed to decode catalog metadata download")?;
-    metadata.validate()?;
-
-    Ok(metadata)
-}
-
-fn verify_catalog_hash(path: &Path, expected_hash: &str) -> Result<()> {
-    let actual_hash = hash_file(path, HashAlgorithm::Sha256)
-        .context("failed to hash downloaded catalog database")?;
-
-    verify_hash(expected_hash, actual_hash).map_err(Into::into)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
-        load_catalog_metadata, metadata_url_for_snapshot_url, refresh_catalog_with_api_url,
-        verify_catalog_hash,
-    };
+    use super::refresh_catalog_with_api_url;
     use crate::core::hash::Hasher;
     use crate::core::paths::resolved_paths;
     use crate::models::catalog::CatalogMetadata;
@@ -475,7 +155,11 @@ mod tests {
     use winbrew_testing::{Matcher, MockServer};
     use zstd::stream::encode_all;
 
-    const CATALOG_SCHEMA: &str = include_str!("../../../../infra/parser/schema/catalog.sql");
+    use super::metadata::{
+        load_catalog_metadata, metadata_url_for_snapshot_url, verify_catalog_hash,
+    };
+
+    const CATALOG_SCHEMA: &str = include_str!("../../../../../infra/parser/schema/catalog.sql");
 
     fn sha256_hex(bytes: &[u8]) -> String {
         let mut hasher = Hasher::new(HashAlgorithm::Sha256);
