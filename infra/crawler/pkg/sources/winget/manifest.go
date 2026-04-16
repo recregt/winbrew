@@ -5,13 +5,16 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -131,6 +134,12 @@ type wingetWriteResult struct {
 	err error
 }
 
+type wingetPackageSkipSummary struct {
+	count   int
+	sample  []string
+	example string
+}
+
 func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, maxAttempts int, backoff time.Duration) (err error) {
 	start := time.Now()
 	if err := ctx.Err(); err != nil {
@@ -211,11 +220,24 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 
 	written := 0
 	skipped := 0
+	skipSummaries := make(map[string]*wingetPackageSkipSummary)
 
 	for _, result := range results {
 		if result.err != nil {
 			skipped++
-			slog.Warn("skipping winget package", "package", result.id, "err", result.err)
+			reason := classifyWingetPackageSkip(result.err)
+			summary := skipSummaries[reason]
+			if summary == nil {
+				summary = &wingetPackageSkipSummary{}
+				skipSummaries[reason] = summary
+			}
+			summary.count++
+			if summary.example == "" {
+				summary.example = result.err.Error()
+			}
+			if len(summary.sample) < 5 {
+				summary.sample = append(summary.sample, result.id)
+			}
 			continue
 		}
 		written++
@@ -227,6 +249,18 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 			Payload:       result.pkg,
 		}); err != nil {
 			return fmt.Errorf("failed to encode winget package %s: %w", result.pkg.ID, err)
+		}
+	}
+
+	if skipped > 0 {
+		reasons := make([]string, 0, len(skipSummaries))
+		for reason := range skipSummaries {
+			reasons = append(reasons, reason)
+		}
+		sort.Strings(reasons)
+		for _, reason := range reasons {
+			summary := skipSummaries[reason]
+			slog.Warn("winget package skips summarized", "reason", reason, "count", summary.count, "sample_packages", summary.sample, "example_error", summary.example)
 		}
 	}
 
@@ -662,4 +696,45 @@ func bufferJSONLWriter(w io.Writer) (io.Writer, func() error) {
 
 	bw := bufio.NewWriterSize(w, 64*1024)
 	return bw, bw.Flush
+}
+
+func classifyWingetPackageSkip(err error) string {
+	if err == nil {
+		return "none"
+	}
+
+	var statusErr wingetDownloadStatusError
+	if errors.As(err, &statusErr) {
+		switch statusErr.StatusCode {
+		case http.StatusNotFound:
+			return "missing_manifest_404"
+		case http.StatusTooManyRequests:
+			return "download_http_429"
+		default:
+			if statusErr.StatusCode >= http.StatusBadRequest && statusErr.StatusCode < http.StatusInternalServerError {
+				return fmt.Sprintf("download_http_%d", statusErr.StatusCode)
+			}
+			return fmt.Sprintf("download_status_%d", statusErr.StatusCode)
+		}
+	}
+
+	message := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(message, "missing locale manifest"):
+		return "missing_locale_manifest"
+	case strings.Contains(message, "missing installer manifest"):
+		return "missing_installer_manifest"
+	case strings.Contains(message, "missing default locale"):
+		return "missing_default_locale"
+	case strings.Contains(message, "identifier mismatch"):
+		return "identifier_mismatch"
+	case strings.Contains(message, "unsupported winget manifest type"):
+		return "unsupported_manifest_type"
+	case strings.Contains(message, "has no installers"):
+		return "no_installers"
+	case strings.Contains(message, "unsupported winget scope"):
+		return "unsupported_scope"
+	default:
+		return "other"
+	}
 }
