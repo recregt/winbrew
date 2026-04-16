@@ -1,4 +1,8 @@
 //! Catalog refresh workflow for the CLI.
+//!
+//! The update selector stays API-driven. If a patch chain fails, the workflow
+//! re-queries the API for a full snapshot plan instead of falling back to a
+//! hardcoded bucket URL.
 
 mod api;
 mod download;
@@ -7,18 +11,16 @@ mod patch;
 mod planner;
 mod types;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use std::path::Path;
 
 use self::types::CatalogDownloadPlan;
 
 use crate::core::fs::{cleanup_path, finalize_temp_file};
-use crate::core::network::build_client;
+use crate::core::network::{Client, build_client};
 use crate::core::paths::{ResolvedPaths, ensure_dirs_at};
 
 const CATALOG_UPDATE_API_URL: &str = "https://api.winbrew.dev/v1/update";
-const CATALOG_DIRECT_DOWNLOAD_URL: &str = "https://wb-assets.recregt.com/catalog.db";
-const CATALOG_METADATA_DIRECT_DOWNLOAD_URL: &str = "https://wb-assets.recregt.com/metadata.json";
 
 pub fn refresh_catalog<FStart, FProgress>(
     paths: &ResolvedPaths,
@@ -60,15 +62,13 @@ where
         let client = build_client("winbrew-catalog-downloader")?;
         let local_metadata = metadata::load_local_catalog_metadata(&metadata_path)?;
 
-        let download_plan = match api::fetch_catalog_update_selection(
-            &client,
-            update_api_url,
-            local_metadata.as_ref(),
-        )? {
-            Some(selection) => planner::plan_catalog_download(local_metadata.as_ref(), selection)?
-                .unwrap_or_else(|| fallback_full_snapshot_plan(None)),
-            None => fallback_full_snapshot_plan(None),
-        };
+        let selection =
+            api::fetch_catalog_update_selection(&client, update_api_url, local_metadata.as_ref())?;
+        let download_plan =
+            match planner::plan_catalog_download(local_metadata.as_ref(), selection)? {
+                Some(plan) => plan,
+                None => request_full_snapshot_plan(&client, update_api_url)?,
+            };
 
         match &download_plan {
             CatalogDownloadPlan::Full { .. } => {
@@ -102,7 +102,7 @@ where
                     clear_temp_file(&catalog_temp_path)?;
                     clear_temp_file(&metadata_temp_path)?;
 
-                    let fallback_plan = fallback_full_snapshot_plan(Some(expected_hash.clone()));
+                    let fallback_plan = request_full_snapshot_plan(&client, update_api_url)?;
                     download::download_catalog_release(
                         &client,
                         &fallback_plan,
@@ -127,11 +127,15 @@ where
     result
 }
 
-fn fallback_full_snapshot_plan(expected_hash: Option<String>) -> CatalogDownloadPlan {
-    CatalogDownloadPlan::Full {
-        catalog_url: CATALOG_DIRECT_DOWNLOAD_URL.to_string(),
-        metadata_url: CATALOG_METADATA_DIRECT_DOWNLOAD_URL.to_string(),
-        expected_hash,
+fn request_full_snapshot_plan(
+    client: &Client,
+    update_api_url: &str,
+) -> Result<CatalogDownloadPlan> {
+    let selection = api::fetch_full_snapshot_update_selection(client, update_api_url)?;
+
+    match planner::plan_catalog_download(None, selection)? {
+        Some(plan @ CatalogDownloadPlan::Full { .. }) => Ok(plan),
+        _ => bail!("update API did not return a full snapshot plan"),
     }
 }
 
@@ -363,6 +367,130 @@ mod tests {
         assert_eq!(downloaded_metadata.previous_hash, current_hash);
         assert_eq!(downloaded_metadata.package_count, 1);
         assert_eq!(downloaded_metadata.source_counts.get("winget"), Some(&1));
+    }
+
+    #[test]
+    fn refresh_catalog_requeries_api_for_full_snapshot_after_patch_failure() {
+        let temp_dir = tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        let paths = resolved_paths(
+            root,
+            "${root}/packages",
+            "${root}/data",
+            "${root}/data/logs",
+            "${root}/data/cache",
+        );
+
+        let catalog_dir = paths
+            .catalog_db
+            .parent()
+            .expect("catalog dir should exist")
+            .to_path_buf();
+        fs::create_dir_all(&catalog_dir).expect("catalog dir should be created");
+
+        seed_catalog_database(&paths.catalog_db);
+
+        let current_hash = file_hash(&paths.catalog_db);
+        let previous_metadata =
+            CatalogMetadata::build_from_counts(0, BTreeMap::new(), current_hash.clone());
+        fs::write(
+            catalog_dir.join("metadata.json"),
+            serde_json::to_vec_pretty(&previous_metadata).expect("serialize previous metadata"),
+        )
+        .expect("write previous metadata");
+
+        let patch_sql = r#"
+            INSERT INTO catalog_packages (
+                id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, tags, bin, created_at, updated_at
+            ) VALUES (
+                'winget/Contoso.App',
+                'Contoso App',
+                '1.2.3',
+                'winget',
+                NULL,
+                'Contoso.App',
+                'Example package',
+                NULL,
+                NULL,
+                'Contoso Ltd.',
+                'en-US',
+                'contoso',
+                NULL,
+                NULL,
+                '2026-04-14 12:00:00',
+                '2026-04-14 12:34:56'
+            );
+        "#;
+
+        let expected_patch_catalog_path = catalog_dir.join("expected-patch-catalog.db");
+        fs::copy(&paths.catalog_db, &expected_patch_catalog_path).expect("copy catalog database");
+        apply_catalog_patch_sql(&expected_patch_catalog_path, patch_sql);
+        let patch_target_hash = file_hash(&expected_patch_catalog_path);
+
+        let full_catalog_bytes = b"full-catalog-bytes".to_vec();
+        let full_catalog_hash = format!("sha256:{}", sha256_hex(&full_catalog_bytes));
+        let full_metadata = CatalogMetadata::build_from_counts(
+            1,
+            BTreeMap::from([(String::from("winget"), 1)]),
+            full_catalog_hash.clone(),
+        );
+
+        let mut server = MockServer::new();
+        let patch_url = format!("{}/patches/0001.sql.zst", server.url());
+        let patch_api_response = serde_json::json!({
+            "mode": "patch",
+            "current": current_hash.clone(),
+            "target": patch_target_hash,
+            "snapshot": null,
+            "patches": [patch_url]
+        });
+        let full_snapshot_url = format!("{}/releases/v2.2.0/catalog.db", server.url());
+        let full_api_response = serde_json::json!({
+            "mode": "full",
+            "current": current_hash,
+            "target": full_catalog_hash.clone(),
+            "snapshot": full_snapshot_url,
+            "patches": []
+        });
+
+        let _patch_api_mock = server.mock_get_with_query(
+            "/v1/update",
+            Matcher::UrlEncoded(
+                "current".to_string(),
+                previous_metadata.current_hash.clone(),
+            ),
+            serde_json::to_vec(&patch_api_response).expect("serialize patch api response"),
+        );
+        let _patch_mock = server.mock_get_with_status("/patches/0001.sql.zst", 500, "boom");
+        let _full_api_mock = server.mock_get(
+            "/v1/update",
+            serde_json::to_vec(&full_api_response).expect("serialize full api response"),
+        );
+        let _catalog_mock =
+            server.mock_get("/releases/v2.2.0/catalog.db", full_catalog_bytes.clone());
+        let _metadata_mock = server.mock_get(
+            "/releases/v2.2.0/metadata.json",
+            serde_json::to_vec_pretty(&full_metadata).expect("serialize full metadata"),
+        );
+
+        refresh_catalog_with_api_url(
+            &paths,
+            &format!("{}/v1/update", server.url()),
+            |_| {},
+            |_| {},
+        )
+        .expect("refresh should succeed");
+
+        let downloaded_catalog = fs::read(&paths.catalog_db).expect("read downloaded catalog");
+        assert_eq!(downloaded_catalog, full_catalog_bytes);
+        assert_eq!(file_hash(&paths.catalog_db), full_catalog_hash);
+
+        let downloaded_metadata: CatalogMetadata = serde_json::from_slice(
+            &fs::read(catalog_dir.join("metadata.json")).expect("read downloaded metadata"),
+        )
+        .expect("decode downloaded metadata");
+
+        assert_eq!(downloaded_metadata.current_hash, full_catalog_hash);
     }
 
     #[test]
