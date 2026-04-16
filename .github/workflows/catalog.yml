@@ -94,11 +94,11 @@ jobs:
             exit 1
           fi
 
-          schema='$schema'
+          schema_prefix='$'
 
           cat > .generated/wrangler.production.jsonc <<EOF
           {
-            "${schema}": "node_modules/wrangler/config-schema.json",
+            "${schema_prefix}schema": "node_modules/wrangler/config-schema.json",
             "name": "update",
             "d1_databases": [
               {
