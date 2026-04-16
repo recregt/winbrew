@@ -16,6 +16,7 @@ The goal is a full offline catalog: Winget manifests are ingested into `catalog.
 - `metadata.json` is published last through a temp-key and copy-replace flow so clients never see a partial write.
 - Full snapshots are the baseline transport format; package-level deltas are the first incremental optimization.
 - Delta chains fall back to a full snapshot when there are more than 7 patches or when a single patch exceeds 40% of the full snapshot size.
+- The catalog publish workflow queries D1 release lineage and patch artifacts before materializing update plan rows so the worker stays lookup-only at request time.
 - `catalog_packages_fts` stays in place and should be preserved through incremental writes.
 
 ## Source Model

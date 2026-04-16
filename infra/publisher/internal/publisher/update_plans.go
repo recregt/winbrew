@@ -10,14 +10,30 @@ import (
 )
 
 const defaultPublicBaseURL = "https://cdn.winbrew.dev"
+const latestFullRowKeyPrefix = "full:"
 
-func WriteUpdatePlansSQL(outputPath, metadataPath, objectKey string) error {
+func WriteUpdatePlansSQL(outputPath, inputPath, metadataPath, objectKey, patchChainPath string) error {
 	outputPath = strings.TrimSpace(outputPath)
 	if outputPath == "" {
 		return fmt.Errorf("update plans output path cannot be empty")
 	}
 
+	inputPath = strings.TrimSpace(inputPath)
+	if inputPath == "" {
+		return fmt.Errorf("input path cannot be empty")
+	}
+
 	metadata, err := LoadMetadata(metadataPath)
+	if err != nil {
+		return err
+	}
+
+	inputInfo, err := os.Stat(inputPath)
+	if err != nil {
+		return fmt.Errorf("failed to inspect input database size: %w", err)
+	}
+
+	patchChain, err := loadPatchChain(patchChainPath)
 	if err != nil {
 		return err
 	}
@@ -27,7 +43,7 @@ func WriteUpdatePlansSQL(outputPath, metadataPath, objectKey string) error {
 		publicBaseURL = defaultPublicBaseURL
 	}
 
-	sql, err := buildUpdatePlansSQL(publicBaseURL, objectKey, metadata)
+	sql, err := buildUpdatePlansSQL(publicBaseURL, objectKey, metadata, inputInfo.Size(), patchChain)
 	if err != nil {
 		return err
 	}
@@ -39,8 +55,8 @@ func WriteUpdatePlansSQL(outputPath, metadataPath, objectKey string) error {
 	return writeFileAtomic(outputPath, []byte(sql), 0o644)
 }
 
-func buildUpdatePlansSQL(publicBaseURL, objectKey string, metadata Metadata) (string, error) {
-	rows, err := buildUpdatePlanRows(publicBaseURL, objectKey, metadata)
+func buildUpdatePlansSQL(publicBaseURL, objectKey string, metadata Metadata, fullSnapshotBytes int64, patchChain []patchChainArtifact) (string, error) {
+	rows, err := buildUpdatePlanRows(publicBaseURL, objectKey, metadata, fullSnapshotBytes, patchChain)
 	if err != nil {
 		return "", err
 	}
@@ -60,7 +76,7 @@ func buildUpdatePlansSQL(publicBaseURL, objectKey string, metadata Metadata) (st
 	return strings.Join(statements, "\n") + "\n", nil
 }
 
-func buildUpdatePlanRows(publicBaseURL, objectKey string, metadata Metadata) ([]updatePlanSQLRow, error) {
+func buildUpdatePlanRows(publicBaseURL, objectKey string, metadata Metadata, fullSnapshotBytes int64, patchChain []patchChainArtifact) ([]updatePlanSQLRow, error) {
 	if err := metadata.validate(); err != nil {
 		return nil, err
 	}
@@ -88,6 +104,36 @@ func buildUpdatePlanRows(publicBaseURL, objectKey string, metadata Metadata) ([]
 			isLatestFull:    1,
 			isStale:         0,
 		}}, nil
+	}
+
+	if patchRow, ok, err := buildPatchChainRow(publicBaseURL, currentHash, previousHash, patchChain, fullSnapshotBytes); err != nil {
+		return nil, err
+	} else if ok {
+		return []updatePlanSQLRow{
+			{
+				currentHash:     latestFullRowKey(currentHash),
+				mode:            "full",
+				targetHash:      currentHash,
+				snapshotURL:     snapshotURL,
+				patchURLsJSON:   "[]",
+				chainLength:     0,
+				totalPatchBytes: 0,
+				isLatestFull:    1,
+				isStale:         0,
+			},
+			patchRow,
+			{
+				currentHash:     currentHash,
+				mode:            "current",
+				targetHash:      currentHash,
+				snapshotURL:     "",
+				patchURLsJSON:   "[]",
+				chainLength:     0,
+				totalPatchBytes: 0,
+				isLatestFull:    0,
+				isStale:         0,
+			},
+		}, nil
 	}
 
 	return []updatePlanSQLRow{
@@ -123,7 +169,7 @@ type updatePlanSQLRow struct {
 	snapshotURL     string
 	patchURLsJSON   string
 	chainLength     int
-	totalPatchBytes int
+	totalPatchBytes int64
 	isLatestFull    int
 	isStale         int
 }
@@ -182,4 +228,8 @@ func sqlNullableText(value string) string {
 	}
 
 	return sqlText(value)
+}
+
+func latestFullRowKey(currentHash string) string {
+	return latestFullRowKeyPrefix + strings.TrimSpace(currentHash)
 }

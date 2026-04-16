@@ -124,7 +124,7 @@ function mapRowToResponse(row: UpdatePlanRow): UpdatePlanResponse {
 
 			return {
 				mode: 'full',
-				current: row.current_hash,
+				current: row.target_hash,
 				target: row.target_hash,
 				snapshot: row.snapshot_url,
 				patches: [],

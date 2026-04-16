@@ -184,6 +184,8 @@ func TestBuildUpdatePlansSQLIncludesCurrentAndFullRows(t *testing.T) {
 		"https://cdn.example.invalid/base",
 		"catalog/latest.db.zst",
 		metadata,
+		1024,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("buildUpdatePlansSQL() error = %v", err)
@@ -219,6 +221,8 @@ func TestBuildUpdatePlansSQLUsesSingleFullRowWithoutPreviousHash(t *testing.T) {
 		"https://cdn.example.invalid/base",
 		"catalog/latest.db.zst",
 		metadata,
+		1024,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("buildUpdatePlansSQL() error = %v", err)
@@ -230,6 +234,77 @@ func TestBuildUpdatePlansSQLUsesSingleFullRowWithoutPreviousHash(t *testing.T) {
 
 	if !strings.Contains(sql, "VALUES ('sha256:new', 'full', 'sha256:new', 'https://cdn.example.invalid/base/catalog/latest.db.zst', '[]', 0, 0, 1, 0);") {
 		t.Fatalf("sql = %q, want single full row to be present", sql)
+	}
+}
+
+func TestBuildUpdatePlansSQLUsesPatchChainWhenAvailable(t *testing.T) {
+	metadata := Metadata{
+		SchemaVersion:   1,
+		GeneratedAtUnix: 1,
+		CurrentHash:     "sha256:new",
+		PreviousHash:    "sha256:old",
+		PackageCount:    1,
+		SourceCounts:    map[string]int{"scoop": 1},
+	}
+
+	sql, err := buildUpdatePlansSQL(
+		"https://cdn.example.invalid/base",
+		"catalog/latest.db.zst",
+		metadata,
+		3000,
+		[]patchChainArtifact{
+			{Depth: 1, FilePath: "patches/001.sql.zst", SizeBytes: 500, ReachedPrevious: true},
+			{Depth: 0, FilePath: "patches/002.sql.zst", SizeBytes: 400, ReachedPrevious: true},
+		},
+	)
+	if err != nil {
+		t.Fatalf("buildUpdatePlansSQL() error = %v", err)
+	}
+
+	if got, want := strings.Count(sql, "INSERT INTO update_plans"), 3; got != want {
+		t.Fatalf("insert count = %d, want %d", got, want)
+	}
+
+	if !strings.Contains(sql, "VALUES ('full:sha256:new', 'full', 'sha256:new', 'https://cdn.example.invalid/base/catalog/latest.db.zst', '[]', 0, 0, 1, 0);") {
+		t.Fatalf("sql = %q, want synthetic latest full row to be present", sql)
+	}
+
+	if !strings.Contains(sql, "VALUES ('sha256:old', 'patch', 'sha256:new', NULL, '[\"https://cdn.example.invalid/base/patches/001.sql.zst\",\"https://cdn.example.invalid/base/patches/002.sql.zst\"]', 2, 900, 0, 0);") {
+		t.Fatalf("sql = %q, want patch row to be present", sql)
+	}
+
+	if !strings.Contains(sql, "VALUES ('sha256:new', 'current', 'sha256:new', NULL, '[]', 0, 0, 0, 0);") {
+		t.Fatalf("sql = %q, want current row to be present", sql)
+	}
+}
+
+func TestBuildUpdatePlansSQLFallsBackToFullWhenPatchChainIsTooLarge(t *testing.T) {
+	metadata := Metadata{
+		SchemaVersion:   1,
+		GeneratedAtUnix: 1,
+		CurrentHash:     "sha256:new",
+		PreviousHash:    "sha256:old",
+		PackageCount:    1,
+		SourceCounts:    map[string]int{"scoop": 1},
+	}
+
+	sql, err := buildUpdatePlansSQL(
+		"https://cdn.example.invalid/base",
+		"catalog/latest.db.zst",
+		metadata,
+		1000,
+		[]patchChainArtifact{{Depth: 0, FilePath: "patches/001.sql.zst", SizeBytes: 500, ReachedPrevious: true}},
+	)
+	if err != nil {
+		t.Fatalf("buildUpdatePlansSQL() error = %v", err)
+	}
+
+	if got, want := strings.Count(sql, "INSERT INTO update_plans"), 2; got != want {
+		t.Fatalf("insert count = %d, want %d", got, want)
+	}
+
+	if strings.Contains(sql, "'patch'") {
+		t.Fatalf("sql = %q, want full fallback rather than patch row", sql)
 	}
 }
 
