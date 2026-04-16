@@ -209,6 +209,7 @@ Scheduled catalog builds should split work by day:
 
 - Sunday: full build, full crawl, parser rebuild, full snapshot publish
 - weekdays: incremental crawl, incremental parser write, delta publish
+- After a successful publish, the workflow materializes `update_plans` into the production D1 database so the update worker stays lookup-only at request time.
 
 The workflow should stay under GitHub Actions runtime limits by relying on cache reuse, concurrency control, and sharding if the first crawl regularly approaches the job limit.
 

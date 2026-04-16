@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/minio/minio-go/v7"
@@ -166,5 +167,79 @@ func TestLoadMetadataRejectsUnsupportedSchemaVersion(t *testing.T) {
 
 	if _, err := LoadMetadata(path); err == nil {
 		t.Fatal("LoadMetadata() error = nil, want unsupported schema version")
+	}
+}
+
+func TestBuildUpdatePlansSQLIncludesCurrentAndFullRows(t *testing.T) {
+	metadata := Metadata{
+		SchemaVersion:   1,
+		GeneratedAtUnix: 1,
+		CurrentHash:     "sha256:new",
+		PreviousHash:    "sha256:old",
+		PackageCount:    1,
+		SourceCounts:    map[string]int{"scoop": 1},
+	}
+
+	sql, err := buildUpdatePlansSQL(
+		"https://cdn.example.invalid/base",
+		"catalog/latest.db.zst",
+		metadata,
+	)
+	if err != nil {
+		t.Fatalf("buildUpdatePlansSQL() error = %v", err)
+	}
+
+	if got, want := strings.Count(sql, "INSERT INTO update_plans"), 2; got != want {
+		t.Fatalf("insert count = %d, want %d", got, want)
+	}
+
+	if !strings.Contains(sql, "https://cdn.example.invalid/base/catalog/latest.db.zst") {
+		t.Fatalf("sql = %q, want snapshot URL to be present", sql)
+	}
+
+	if !strings.Contains(sql, "VALUES ('sha256:old', 'full', 'sha256:new', 'https://cdn.example.invalid/base/catalog/latest.db.zst', '[]', 0, 0, 1, 0);") {
+		t.Fatalf("sql = %q, want full row to be present", sql)
+	}
+
+	if !strings.Contains(sql, "VALUES ('sha256:new', 'current', 'sha256:new', NULL, '[]', 0, 0, 0, 0);") {
+		t.Fatalf("sql = %q, want current row to be present", sql)
+	}
+}
+
+func TestBuildUpdatePlansSQLUsesSingleFullRowWithoutPreviousHash(t *testing.T) {
+	metadata := Metadata{
+		SchemaVersion:   1,
+		GeneratedAtUnix: 1,
+		CurrentHash:     "sha256:new",
+		PackageCount:    1,
+		SourceCounts:    map[string]int{"scoop": 1},
+	}
+
+	sql, err := buildUpdatePlansSQL(
+		"https://cdn.example.invalid/base",
+		"catalog/latest.db.zst",
+		metadata,
+	)
+	if err != nil {
+		t.Fatalf("buildUpdatePlansSQL() error = %v", err)
+	}
+
+	if got, want := strings.Count(sql, "INSERT INTO update_plans"), 1; got != want {
+		t.Fatalf("insert count = %d, want %d", got, want)
+	}
+
+	if !strings.Contains(sql, "VALUES ('sha256:new', 'full', 'sha256:new', 'https://cdn.example.invalid/base/catalog/latest.db.zst', '[]', 0, 0, 1, 0);") {
+		t.Fatalf("sql = %q, want single full row to be present", sql)
+	}
+}
+
+func TestPublicObjectURLUsesRootBaseURL(t *testing.T) {
+	url, err := publicObjectURL("https://cdn.example.invalid", "catalog/latest.db.zst")
+	if err != nil {
+		t.Fatalf("publicObjectURL() error = %v", err)
+	}
+
+	if got, want := url, "https://cdn.example.invalid/catalog/latest.db.zst"; got != want {
+		t.Fatalf("publicObjectURL() = %q, want %q", got, want)
 	}
 }
