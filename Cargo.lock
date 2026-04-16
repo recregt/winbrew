@@ -2819,6 +2819,7 @@ name = "winbrew-app"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",
@@ -2829,6 +2830,7 @@ dependencies = [
  "winbrew-engines",
  "winbrew-models",
  "winbrew-testing",
+ "zstd",
 ]
 
 [[package]]
