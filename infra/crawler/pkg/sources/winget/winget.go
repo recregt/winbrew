@@ -113,11 +113,11 @@ func (s *Source) download(ctx context.Context, url, dst string) error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("unexpected status %d for %s", resp.StatusCode, url)
+		statusErr := wingetDownloadStatusError{URL: url, StatusCode: resp.StatusCode}
 		if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError && resp.StatusCode != http.StatusTooManyRequests {
-			return nonRetryableError{err: err}
+			return nonRetryableError{err: statusErr}
 		}
-		return err
+		return statusErr
 	}
 
 	tempFile, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".*.tmp")
@@ -163,6 +163,15 @@ func (s *Source) download(ctx context.Context, url, dst string) error {
 
 type nonRetryableError struct {
 	err error
+}
+
+type wingetDownloadStatusError struct {
+	URL        string
+	StatusCode int
+}
+
+func (e wingetDownloadStatusError) Error() string {
+	return fmt.Sprintf("unexpected status %d for %s", e.StatusCode, e.URL)
 }
 
 func (e nonRetryableError) Error() string {

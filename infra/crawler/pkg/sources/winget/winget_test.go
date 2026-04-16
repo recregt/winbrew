@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -34,6 +36,20 @@ func TestWingetManifestPathHelpers(t *testing.T) {
 
 	if got, want := url, "https://raw.githubusercontent.com/microsoft/winget-pkgs/main/manifests/m/Microsoft/WindowsTerminal/1.9.1942.0/Microsoft.WindowsTerminal.installer.yaml"; got != want {
 		t.Fatalf("wingetManifestURL() = %q, want %q", got, want)
+	}
+}
+
+func TestClassifyWingetPackageSkip(t *testing.T) {
+	t.Parallel()
+
+	notFoundErr := fmt.Errorf("failed to fetch winget root manifest for Foo.Bar: %w", nonRetryableError{err: wingetDownloadStatusError{URL: "https://example.invalid", StatusCode: http.StatusNotFound}})
+	if got, want := classifyWingetPackageSkip(notFoundErr), "missing_manifest_404"; got != want {
+		t.Fatalf("classifyWingetPackageSkip(notFoundErr) = %q, want %q", got, want)
+	}
+
+	validationErr := errors.New("winget package Foo.Bar is missing installer manifest")
+	if got, want := classifyWingetPackageSkip(validationErr), "missing_installer_manifest"; got != want {
+		t.Fatalf("classifyWingetPackageSkip(validationErr) = %q, want %q", got, want)
 	}
 }
 
