@@ -76,15 +76,12 @@ jobs:
 
           mkdir -p .generated
 
-          go run ./cmd/publisher --input "$CATALOG_DB" --metadata "$CATALOG_METADATA" --key "catalog/latest.db.zst" --update-plans .generated/update_plans.sql
+          if [ -z "$WINBREW_UPDATE_DB_ID" ]; then
+            echo "WINBREW_UPDATE_DB_ID is required to materialize update_plans"
+            exit 1
+          fi
 
-          if [ -f .generated/update_plans.sql ]; then
-            if [ -z "$WINBREW_UPDATE_DB_ID" ]; then
-              echo "WINBREW_UPDATE_DB_ID is required to materialize update_plans"
-              exit 1
-            fi
-
-            cat > .generated/wrangler.production.jsonc <<EOF
+          cat > .generated/wrangler.production.jsonc <<EOF
 {
   "\$schema": "node_modules/wrangler/config-schema.json",
 	"name": "update",
@@ -97,7 +94,50 @@ jobs:
 	]
 }
 EOF
+
+          current_hash=$(node -e "const fs=require('fs'); const metadata=JSON.parse(fs.readFileSync(process.env.CATALOG_METADATA, 'utf8')); process.stdout.write(metadata.current_hash || '');")
+          previous_hash=$(node -e "const fs=require('fs'); const metadata=JSON.parse(fs.readFileSync(process.env.CATALOG_METADATA, 'utf8')); process.stdout.write(metadata.previous_hash || '');")
+
+          if [ -n "$previous_hash" ] && [ "$previous_hash" != "$current_hash" ]; then
+            query=$(cat <<EOF
+WITH RECURSIVE lineage(hash, parent_hash, depth) AS (
+  SELECT hash, parent_hash, 0 AS depth
+  FROM release_lineage
+  WHERE hash = '$current_hash'
+  UNION ALL
+  SELECT rl.hash, rl.parent_hash, lineage.depth + 1
+  FROM release_lineage rl
+  JOIN lineage ON rl.hash = lineage.parent_hash
+  WHERE lineage.hash <> '$previous_hash'
+)
+SELECT depth, pa.file_path, pa.size_bytes, EXISTS(SELECT 1 FROM lineage WHERE hash = '$previous_hash') AS reached_previous
+FROM lineage
+JOIN patch_artifacts pa ON pa.from_hash = lineage.parent_hash AND pa.to_hash = lineage.hash
+WHERE lineage.hash <> '$previous_hash'
+ORDER BY depth DESC;
+EOF
+)
+
+            npx --yes wrangler@4.83.0 d1 execute DB --remote --config .generated/wrangler.production.jsonc --json --command "$query" > .generated/patch_chain.raw.json
+
+            node <<'NODE'
+const fs = require('fs');
+const raw = JSON.parse(fs.readFileSync('.generated/patch_chain.raw.json', 'utf8'));
+const rows = Array.isArray(raw) && raw[0] && Array.isArray(raw[0].results)
+  ? raw[0].results.map((row) => ({
+      depth: Number(row.depth ?? 0),
+      file_path: String(row.file_path ?? ''),
+      size_bytes: Number(row.size_bytes ?? 0),
+      reached_previous: Boolean(row.reached_previous),
+    }))
+  : [];
+fs.writeFileSync('.generated/patch_chain.json', `${JSON.stringify(rows, null, 2)}\n`);
+NODE
+          else
+            printf '[]\n' > .generated/patch_chain.json
           fi
+
+          go run ./cmd/publisher --input "$CATALOG_DB" --metadata "$CATALOG_METADATA" --key "catalog/latest.db.zst" --update-plans .generated/update_plans.sql --patch-chain .generated/patch_chain.json
 
       - name: Publish update plans to D1
         if: ${{ hashFiles('infra/publisher/.generated/update_plans.sql') != '' }}

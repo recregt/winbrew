@@ -28,7 +28,7 @@ type Config struct {
 	Region          string
 }
 
-func Run(ctx context.Context, inputPath, metadataPath, objectKey, updatePlansPath string) (bool, error) {
+func Run(ctx context.Context, inputPath, metadataPath, objectKey, updatePlansPath, patchChainPath string) (bool, error) {
 	inputPath, metadataPath, objectKey, err := resolveRunInputs(inputPath, metadataPath, objectKey)
 	if err != nil {
 		return false, err
@@ -55,7 +55,7 @@ func Run(ctx context.Context, inputPath, metadataPath, objectKey, updatePlansPat
 	}
 
 	if published && strings.TrimSpace(updatePlansPath) != "" {
-		if err := WriteUpdatePlansSQL(updatePlansPath, metadataPath, objectKey); err != nil {
+		if err := WriteUpdatePlansSQL(updatePlansPath, inputPath, metadataPath, objectKey, patchChainPath); err != nil {
 			return false, err
 		}
 	}

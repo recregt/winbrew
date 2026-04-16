@@ -12,6 +12,7 @@ The publisher is the deployment stage for the catalog bundle. It validates the l
 - Uploads the database to a temporary key, then publishes the metadata and final object when a new bundle is available.
 - Writes the updated local metadata back to disk after a successful upload.
 - Optionally emits `update_plans.sql` for the production D1 database after a successful publish.
+- Can emit a patch plan for the previous hash when a normalized D1 patch-chain manifest is available.
 
 ## Inputs
 
@@ -21,6 +22,7 @@ The publisher is the deployment stage for the catalog bundle. It validates the l
 - `--metadata`: path to the local metadata file. Defaults to `metadata.json` beside the input database.
 - `--key`: object key for the database in the bucket. Defaults to `catalog.db`.
 - `--update-plans`: optional path for the D1 materialization SQL file. The file is only written after a successful publish.
+- `--patch-chain`: optional normalized JSON manifest of D1 patch artifacts. When present, the publisher can emit a patch plan instead of a fallback full snapshot for the previous hash.
 
 ### Environment variables
 
@@ -30,6 +32,7 @@ The publisher is the deployment stage for the catalog bundle. It validates the l
 - `R2_SECRET_ACCESS_KEY` / `AWS_SECRET_ACCESS_KEY`: secret key.
 - `R2_REGION`: optional bucket region, defaults to `auto`.
 - `CATALOG_PUBLIC_BASE_URL`: public base URL used to build update-plan snapshot URLs. Defaults to `https://cdn.winbrew.dev`.
+- The patch-chain manifest is expected to contain D1 query rows with `depth`, `file_path`, `size_bytes`, and `reached_previous` fields.
 
 ## Outputs
 
@@ -37,6 +40,7 @@ The publisher is the deployment stage for the catalog bundle. It validates the l
 - Remote object `metadata.json`: the metadata sidecar associated with that database.
 - Local metadata file: updated with the previous remote hash after a successful publish.
 - Optional `update_plans.sql`: SQL statements that clear and repopulate the current production D1 update rows.
+- Optional patch-chain manifest: normalized D1 query output used to choose a patch plan when the incremental chain is short enough.
 
 ## Publish contract
 

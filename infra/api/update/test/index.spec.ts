@@ -118,6 +118,26 @@ describe('update worker', () => {
 		});
 	});
 
+	it('returns the latest full snapshot target hash even when the row key differs', async () => {
+		await seedPlan({
+			currentHash: 'full:sha256:latest',
+			mode: 'full',
+			targetHash: 'sha256:latest',
+			snapshotUrl: 'https://cdn.winbrew.dev/catalog/latest.db.zst',
+			isLatestFull: true,
+		});
+
+		const response = await SELF.fetch('https://api.winbrew.dev/v1/update');
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({
+			mode: 'full',
+			current: 'sha256:latest',
+			target: 'sha256:latest',
+			snapshot: 'https://cdn.winbrew.dev/catalog/latest.db.zst',
+			patches: [],
+		});
+	});
+
 	it('returns patch chains for recent clients', async () => {
 		await seedPlan({
 			currentHash: 'sha256:current',
