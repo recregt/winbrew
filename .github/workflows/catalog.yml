@@ -24,11 +24,15 @@ jobs:
     timeout-minutes: 120
 
     env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CATALOG_PUBLIC_BASE_URL: ${{ vars.CATALOG_PUBLIC_BASE_URL || 'https://cdn.winbrew.dev' }}
       R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
       R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME || 'winbrew-assets' }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || secrets.AWS_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || secrets.AWS_SECRET_ACCESS_KEY }}
+      WINBREW_UPDATE_DB_NAME: ${{ vars.WINBREW_UPDATE_DB_NAME || 'winbrew-update' }}
+      WINBREW_UPDATE_DB_ID: ${{ vars.WINBREW_UPDATE_DB_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -65,9 +69,40 @@ jobs:
             echo "CATALOG_METADATA=$metadata_json"
           } >> "$GITHUB_ENV"
 
-      - name: Publish catalog bundle to R2
+      - name: Publish catalog bundle to R2 and prepare update plans
         working-directory: infra/publisher
         run: |
           set -euo pipefail
 
-          go run ./cmd/publisher --input "$CATALOG_DB" --metadata "$CATALOG_METADATA"
+          mkdir -p .generated
+
+          go run ./cmd/publisher --input "$CATALOG_DB" --metadata "$CATALOG_METADATA" --key "catalog/latest.db.zst" --update-plans .generated/update_plans.sql
+
+          if [ -f .generated/update_plans.sql ]; then
+            if [ -z "$WINBREW_UPDATE_DB_ID" ]; then
+              echo "WINBREW_UPDATE_DB_ID is required to materialize update_plans"
+              exit 1
+            fi
+
+            cat > .generated/wrangler.production.jsonc <<EOF
+{
+  "\$schema": "node_modules/wrangler/config-schema.json",
+	"name": "update",
+	"d1_databases": [
+		{
+			"binding": "DB",
+      "database_name": "$WINBREW_UPDATE_DB_NAME",
+			"database_id": "$WINBREW_UPDATE_DB_ID"
+		}
+	]
+}
+EOF
+          fi
+
+      - name: Publish update plans to D1
+        if: ${{ hashFiles('infra/publisher/.generated/update_plans.sql') != '' }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 execute DB --remote --config infra/publisher/.generated/wrangler.production.jsonc --file infra/publisher/.generated/update_plans.sql --yes

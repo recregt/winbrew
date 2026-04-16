@@ -11,6 +11,7 @@ The publisher is the deployment stage for the catalog bundle. It validates the l
 - Skips publishing when the remote catalog already matches the local hash.
 - Uploads the database to a temporary key, then publishes the metadata and final object when a new bundle is available.
 - Writes the updated local metadata back to disk after a successful upload.
+- Optionally emits `update_plans.sql` for the production D1 database after a successful publish.
 
 ## Inputs
 
@@ -19,6 +20,7 @@ The publisher is the deployment stage for the catalog bundle. It validates the l
 - `--input`: path to the catalog database. Defaults to `WINBREW_DB_PATH` if set.
 - `--metadata`: path to the local metadata file. Defaults to `metadata.json` beside the input database.
 - `--key`: object key for the database in the bucket. Defaults to `catalog.db`.
+- `--update-plans`: optional path for the D1 materialization SQL file. The file is only written after a successful publish.
 
 ### Environment variables
 
@@ -27,12 +29,14 @@ The publisher is the deployment stage for the catalog bundle. It validates the l
 - `R2_ACCESS_KEY_ID` / `AWS_ACCESS_KEY_ID`: access key.
 - `R2_SECRET_ACCESS_KEY` / `AWS_SECRET_ACCESS_KEY`: secret key.
 - `R2_REGION`: optional bucket region, defaults to `auto`.
+- `CATALOG_PUBLIC_BASE_URL`: public base URL used to build update-plan snapshot URLs. Defaults to `https://cdn.winbrew.dev`.
 
 ## Outputs
 
 - Remote object `catalog.db`: the SQLite catalog database, published from a temporary staging key.
 - Remote object `metadata.json`: the metadata sidecar associated with that database.
 - Local metadata file: updated with the previous remote hash after a successful publish.
+- Optional `update_plans.sql`: SQL statements that clear and repopulate the current production D1 update rows.
 
 ## Publish contract
 

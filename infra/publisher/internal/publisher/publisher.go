@@ -28,28 +28,39 @@ type Config struct {
 	Region          string
 }
 
-func Run(ctx context.Context, inputPath, metadataPath, objectKey string) error {
+func Run(ctx context.Context, inputPath, metadataPath, objectKey, updatePlansPath string) (bool, error) {
 	inputPath, metadataPath, objectKey, err := resolveRunInputs(inputPath, metadataPath, objectKey)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	cfg, err := LoadConfigFromEnv()
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	client, err := newClient(cfg)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	localMetadata, err := loadVerifiedMetadata(inputPath, metadataPath)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return publish(ctx, client, cfg.BucketName, inputPath, metadataPath, objectKey, localMetadata)
+	published, err := publish(ctx, client, cfg.BucketName, inputPath, metadataPath, objectKey, localMetadata)
+	if err != nil {
+		return false, err
+	}
+
+	if published && strings.TrimSpace(updatePlansPath) != "" {
+		if err := WriteUpdatePlansSQL(updatePlansPath, metadataPath, objectKey); err != nil {
+			return false, err
+		}
+	}
+
+	return published, nil
 }
 
 func resolveRunInputs(inputPath, metadataPath, objectKey string) (string, string, string, error) {
@@ -90,23 +101,27 @@ func loadVerifiedMetadata(inputPath, metadataPath string) (Metadata, error) {
 	return localMetadata, nil
 }
 
-func publish(ctx context.Context, client *minio.Client, bucketName, inputPath, metadataPath, objectKey string, localMetadata Metadata) error {
+func publish(ctx context.Context, client *minio.Client, bucketName, inputPath, metadataPath, objectKey string, localMetadata Metadata) (bool, error) {
 	remoteMetadata, err := loadRemoteMetadata(ctx, client, bucketName, metadataKeyForObjectKey(objectKey))
 	if err != nil {
-		return err
+		return false, err
 	}
 	if remoteMetadata != nil && remoteMetadata.CurrentHash == localMetadata.CurrentHash {
-		return nil
+		return false, nil
 	}
 	if remoteMetadata != nil && remoteMetadata.CurrentHash != "" {
 		localMetadata.PreviousHash = remoteMetadata.CurrentHash
 	}
 
 	if err := uploadObjects(ctx, client, bucketName, inputPath, objectKey, localMetadata); err != nil {
-		return err
+		return false, err
 	}
 
-	return SaveMetadata(metadataPath, localMetadata)
+	if err := SaveMetadata(metadataPath, localMetadata); err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 func LoadConfigFromEnv() (Config, error) {

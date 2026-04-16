@@ -141,9 +141,13 @@ Set-Location infra/crawler; `
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 - `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`
+- `WINBREW_UPDATE_DB_ID`
 
 **Optional Repo Variable:**
 - `R2_BUCKET_NAME` (default: `winbrew-assets`)
+- `CATALOG_PUBLIC_BASE_URL` (default: `https://cdn.winbrew.dev`)
+- `WINBREW_UPDATE_DB_NAME` (default: `winbrew-update`)
 
 ## 📊 Exit Codes Reference
 
