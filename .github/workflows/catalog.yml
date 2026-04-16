@@ -97,18 +97,18 @@ jobs:
           schema='$schema'
 
           cat > .generated/wrangler.production.jsonc <<EOF
-{
-	"${schema}": "node_modules/wrangler/config-schema.json",
-	"name": "update",
-	"d1_databases": [
-		{
-			"binding": "DB",
-      "database_name": "$WINBREW_UPDATE_DB_NAME",
-			"database_id": "$WINBREW_UPDATE_DB_ID"
-		}
-	]
-}
-EOF
+          {
+            "${schema}": "node_modules/wrangler/config-schema.json",
+            "name": "update",
+            "d1_databases": [
+              {
+                "binding": "DB",
+                "database_name": "$WINBREW_UPDATE_DB_NAME",
+                "database_id": "$WINBREW_UPDATE_DB_ID"
+              }
+            ]
+          }
+          EOF
 
           go run ./cmd/publisher --input "$CATALOG_DB" --metadata "$CATALOG_METADATA" --key "$CATALOG_OBJECT_KEY" --update-plans .generated/update_plans.sql --patch-chain .generated/patch_chain.json
 
