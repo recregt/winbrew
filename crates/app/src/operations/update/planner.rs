@@ -9,12 +9,34 @@ pub(super) fn plan_catalog_download(
     local_metadata: Option<&CatalogMetadata>,
     selection: CatalogUpdateResponse,
 ) -> Result<Option<CatalogDownloadPlan>> {
-    if selection.target.trim().is_empty() {
-        return Ok(None);
-    }
-
     match selection.mode {
+        CatalogUpdateMode::Current => {
+            let current_hash = if selection.current.trim().is_empty() {
+                selection.target.clone()
+            } else {
+                selection.current.clone()
+            };
+
+            if current_hash.trim().is_empty() {
+                return Ok(None);
+            }
+
+            let target_hash = if selection.target.trim().is_empty() {
+                current_hash.clone()
+            } else {
+                selection.target
+            };
+
+            Ok(Some(CatalogDownloadPlan::Current {
+                current_hash,
+                target_hash,
+            }))
+        }
         CatalogUpdateMode::Full => {
+            if selection.target.trim().is_empty() {
+                return Ok(None);
+            }
+
             let catalog_url = match selection.snapshot {
                 Some(snapshot) if !snapshot.trim().is_empty() => snapshot,
                 _ => return Ok(None),
@@ -29,6 +51,10 @@ pub(super) fn plan_catalog_download(
             }))
         }
         CatalogUpdateMode::Patch => {
+            if selection.target.trim().is_empty() {
+                return Ok(None);
+            }
+
             let local_metadata = match local_metadata {
                 Some(metadata) => metadata,
                 None => return Ok(None),

@@ -71,6 +71,16 @@ where
             };
 
         match &download_plan {
+            CatalogDownloadPlan::Current {
+                current_hash,
+                target_hash,
+            } => {
+                if current_hash != target_hash {
+                    tracing::warn!(current_hash = %current_hash, target_hash = %target_hash, "update worker reported a current plan with mismatched hashes");
+                }
+
+                return Ok(());
+            }
             CatalogDownloadPlan::Full { .. } => {
                 download::download_catalog_release(
                     &client,
@@ -367,6 +377,79 @@ mod tests {
         assert_eq!(downloaded_metadata.previous_hash, current_hash);
         assert_eq!(downloaded_metadata.package_count, 1);
         assert_eq!(downloaded_metadata.source_counts.get("winget"), Some(&1));
+    }
+
+    #[test]
+    fn refresh_catalog_noops_when_api_reports_current_state() {
+        let temp_dir = tempdir().expect("temp dir");
+        let root = temp_dir.path();
+        let paths = resolved_paths(
+            root,
+            "${root}/packages",
+            "${root}/data",
+            "${root}/data/logs",
+            "${root}/data/cache",
+        );
+
+        let catalog_dir = paths
+            .catalog_db
+            .parent()
+            .expect("catalog dir should exist")
+            .to_path_buf();
+        fs::create_dir_all(&catalog_dir).expect("catalog dir should be created");
+
+        seed_catalog_database(&paths.catalog_db);
+
+        let current_hash = file_hash(&paths.catalog_db);
+        let previous_metadata =
+            CatalogMetadata::build_from_counts(0, BTreeMap::new(), current_hash.clone());
+        fs::write(
+            catalog_dir.join("metadata.json"),
+            serde_json::to_vec_pretty(&previous_metadata).expect("serialize previous metadata"),
+        )
+        .expect("write previous metadata");
+
+        let mut server = MockServer::new();
+        let api_response = serde_json::json!({
+            "mode": "current",
+            "current": current_hash,
+            "target": current_hash,
+            "snapshot": null,
+            "patches": []
+        });
+
+        let _api_mock = server.mock_get_with_query(
+            "/v1/update",
+            Matcher::UrlEncoded(
+                "current".to_string(),
+                previous_metadata.current_hash.clone(),
+            ),
+            serde_json::to_vec(&api_response).expect("serialize api response"),
+        );
+
+        refresh_catalog_with_api_url(
+            &paths,
+            &format!("{}/v1/update", server.url()),
+            |_| {},
+            |_| {},
+        )
+        .expect("refresh should succeed");
+
+        assert_eq!(file_hash(&paths.catalog_db), current_hash);
+
+        let downloaded_metadata: CatalogMetadata = serde_json::from_slice(
+            &fs::read(catalog_dir.join("metadata.json")).expect("read downloaded metadata"),
+        )
+        .expect("decode downloaded metadata");
+
+        assert_eq!(
+            downloaded_metadata.current_hash,
+            previous_metadata.current_hash
+        );
+        assert_eq!(
+            downloaded_metadata.package_count,
+            previous_metadata.package_count
+        );
     }
 
     #[test]

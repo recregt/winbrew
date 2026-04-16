@@ -140,21 +140,30 @@ Request shape:
 Worker behavior:
 
 1. read the current request version
-2. inspect the latest `metadata.json` in R2
-3. compare the client state with the current release lineage
+2. look up the precomputed plan in D1
+3. return `current` when the client is already on the latest catalog
 4. return the full snapshot link when the change set is too large or the update chain must reset
 5. return the matching `.sql.zst` patch links when the delta is small enough to apply incrementally
 
-The worker should return CDN URLs, not raw R2 object URLs.
+The worker should return CDN URLs, not raw R2 object URLs, and it should not traverse the release graph at request time.
 
 Delta threshold rules:
 
 - if the patch chain is longer than 7 patches, return the full snapshot
 - if any single patch is larger than 40% of the full snapshot size, return the full snapshot
 - otherwise return the ordered patch chain
-- compute the threshold in the worker, not in the CLI
+- compute the threshold in the publish/materialization step, not at request time
 
 Planned response shape:
+
+```json
+{
+	"mode": "current",
+	"current": "v100",
+	"target": "v100",
+	"patches": []
+}
+```
 
 ```json
 {
@@ -176,14 +185,14 @@ The update flow should:
 
 1. read the local installed catalog version
 2. call `https://api.winbrew.dev/v1/update`
-3. decide whether to download a full snapshot or patch chain from the API response
+3. decide whether to download a full snapshot, patch chain, or no-op current response from the API response
 4. if the patch chain fails, re-query the API for a full snapshot plan instead of using a hardcoded bucket URL
 5. show progress while downloading
 6. verify hashes before applying anything
 7. swap the local DB atomically
 8. run integrity checks and roll back on failure
 
-The existing `crates/app/src/operations/update.rs` flow is the natural home for this behavior, but the update selector should live behind the API instead of being hardcoded into the CLI.
+The existing `crates/app/src/operations/update/mod.rs` flow is the natural home for this behavior, but the update selector should live behind the API instead of being hardcoded into the CLI.
 
 ## Implementation Order
 
@@ -230,7 +239,7 @@ Expected behavior:
 - [crates/database/src/catalog.rs](../crates/database/src/catalog.rs)
 - [infra/publisher/internal/publisher/metadata.go](../infra/publisher/internal/publisher/metadata.go)
 - [infra/publisher/internal/publisher/publisher.go](../infra/publisher/internal/publisher/publisher.go)
-- [crates/app/src/operations/update.rs](../crates/app/src/operations/update.rs)
+- [crates/app/src/operations/update/mod.rs](../crates/app/src/operations/update/mod.rs)
 - [.github/workflows/catalog.yml](../.github/workflows/catalog.yml)
 
 ## Open Questions
