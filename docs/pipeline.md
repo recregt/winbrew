@@ -16,7 +16,7 @@ The goal is a full offline catalog: Winget manifests are ingested into `catalog.
 - `metadata.json` is published last through a temp-key and copy-replace flow so clients never see a partial write.
 - Full snapshots are the baseline transport format; package-level deltas are the first incremental optimization.
 - Delta chains fall back to a full snapshot when there are more than 7 patches or when a single patch exceeds 40% of the full snapshot size.
-- The catalog publish workflow queries D1 release lineage and patch artifacts before materializing update plan rows so the worker stays lookup-only at request time.
+- The catalog publish workflow materializes `release_lineage` and `patch_artifacts` into D1, then materializes update plan rows so the worker stays lookup-only at request time.
 - `catalog_packages_fts` stays in place and should be preserved through incremental writes.
 
 ## Source Model
@@ -210,7 +210,7 @@ Scheduled catalog builds should split work by day:
 
 - Sunday: full build, full crawl, parser rebuild, full snapshot publish
 - weekdays: incremental crawl, incremental parser write, delta publish
-- After a successful publish, the workflow materializes `update_plans` into the production D1 database so the update worker stays lookup-only at request time.
+- After a successful publish, the workflow materializes `release_lineage`, `patch_artifacts`, and `update_plans` into the production D1 database so the update worker stays lookup-only at request time.
 
 The workflow should stay under GitHub Actions runtime limits by relying on cache reuse, concurrency control, and sharding if the first crawl regularly approaches the job limit.
 
@@ -246,6 +246,5 @@ Expected behavior:
 
 ## Open Questions
 
-- Should the first delta format be package-level SQL patches or compressed row-level package diffs?
 - How much manifest cache should live in GitHub Actions cache versus on the crawler host cache?
 - When does it become worth introducing a hard size ceiling or shard boundary for the first full crawl?

@@ -18,7 +18,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-const defaultObjectKey = "catalog.db"
+const defaultObjectKey = "catalog.db.zst"
 
 type Config struct {
 	Endpoint        string
@@ -49,13 +49,26 @@ func Run(ctx context.Context, inputPath, metadataPath, objectKey, updatePlansPat
 		return false, err
 	}
 
-	published, err := publish(ctx, client, cfg.BucketName, inputPath, metadataPath, objectKey, localMetadata)
+	published, fullSnapshotBytes, publishedMetadata, patchChain, err := publish(ctx, client, cfg.BucketName, inputPath, metadataPath, objectKey, localMetadata)
 	if err != nil {
 		return false, err
 	}
 
 	if published && strings.TrimSpace(updatePlansPath) != "" {
-		if err := WriteUpdatePlansSQL(updatePlansPath, inputPath, metadataPath, objectKey, patchChainPath); err != nil {
+		publicBaseURL := strings.TrimSpace(os.Getenv("CATALOG_PUBLIC_BASE_URL"))
+		if publicBaseURL == "" {
+			publicBaseURL = defaultPublicBaseURL
+		}
+
+		releaseMaterializationPath := filepath.Join(filepath.Dir(updatePlansPath), "release_materialization.sql")
+
+		if err := writePatchChain(patchChainPath, patchChain); err != nil {
+			return false, err
+		}
+		if err := writeReleaseMaterialization(releaseMaterializationPath, publicBaseURL, objectKey, publishedMetadata, patchChain); err != nil {
+			return false, err
+		}
+		if err := WriteUpdatePlansSQL(updatePlansPath, metadataPath, objectKey, fullSnapshotBytes, patchChain); err != nil {
 			return false, err
 		}
 	}
@@ -101,27 +114,53 @@ func loadVerifiedMetadata(inputPath, metadataPath string) (Metadata, error) {
 	return localMetadata, nil
 }
 
-func publish(ctx context.Context, client *minio.Client, bucketName, inputPath, metadataPath, objectKey string, localMetadata Metadata) (bool, error) {
+func publish(ctx context.Context, client *minio.Client, bucketName, inputPath, metadataPath, objectKey string, localMetadata Metadata) (bool, int64, Metadata, []patchChainArtifact, error) {
 	remoteMetadata, err := loadRemoteMetadata(ctx, client, bucketName, metadataKeyForObjectKey(objectKey))
 	if err != nil {
-		return false, err
+		return false, 0, Metadata{}, nil, err
 	}
 	if remoteMetadata != nil && remoteMetadata.CurrentHash == localMetadata.CurrentHash {
-		return false, nil
+		return false, 0, Metadata{}, nil, nil
 	}
 	if remoteMetadata != nil && remoteMetadata.CurrentHash != "" {
 		localMetadata.PreviousHash = remoteMetadata.CurrentHash
 	}
 
-	if err := uploadObjects(ctx, client, bucketName, inputPath, objectKey, localMetadata); err != nil {
-		return false, err
+	compressedSnapshotPath, fullSnapshotBytes, err := compressSnapshotToTemp(inputPath)
+	if err != nil {
+		return false, 0, Metadata{}, nil, err
+	}
+	defer func() {
+		_ = os.Remove(compressedSnapshotPath)
+	}()
+
+	publicBaseURL := strings.TrimSpace(os.Getenv("CATALOG_PUBLIC_BASE_URL"))
+	if publicBaseURL == "" {
+		publicBaseURL = defaultPublicBaseURL
+	}
+
+	var patchArtifacts []patchChainArtifact
+	if remoteMetadata != nil {
+		if candidate, err := buildPatchArtifactCandidate(ctx, client, bucketName, publicBaseURL, objectKey, inputPath, localMetadata, remoteMetadata, fullSnapshotBytes); err == nil && candidate != nil {
+			if err := uploadFileAtomic(ctx, client, bucketName, candidate.ObjectKey, candidate.TempPath, "application/octet-stream"); err != nil {
+				return false, 0, Metadata{}, nil, err
+			}
+			defer func() {
+				_ = os.Remove(candidate.TempPath)
+			}()
+			patchArtifacts = []patchChainArtifact{candidate.Artifact}
+		}
+	}
+
+	if err := uploadObjects(ctx, client, bucketName, compressedSnapshotPath, objectKey, localMetadata); err != nil {
+		return false, 0, Metadata{}, nil, err
 	}
 
 	if err := SaveMetadata(metadataPath, localMetadata); err != nil {
-		return false, err
+		return false, 0, Metadata{}, nil, err
 	}
 
-	return true, nil
+	return true, fullSnapshotBytes, localMetadata, patchArtifacts, nil
 }
 
 func LoadConfigFromEnv() (Config, error) {
@@ -262,25 +301,9 @@ func isMissingObject(err error) bool {
 	}
 }
 
-func uploadObjects(ctx context.Context, client *minio.Client, bucketName, inputPath, objectKey string, metadata Metadata) error {
-	tempObjectKey := objectTempKeyForObjectKey(objectKey)
-	if _, err := client.FPutObject(ctx, bucketName, tempObjectKey, inputPath, minio.PutObjectOptions{
-		ContentType: "application/octet-stream",
-	}); err != nil {
-		return fmt.Errorf("failed to upload %s to temporary object %s in bucket %s: %w", filepath.Base(inputPath), tempObjectKey, bucketName, err)
-	}
-	defer func() {
-		_ = client.RemoveObject(ctx, bucketName, tempObjectKey, minio.RemoveObjectOptions{})
-	}()
-
-	if _, err := client.CopyObject(ctx, minio.CopyDestOptions{
-		Bucket: bucketName,
-		Object: objectKey,
-	}, minio.CopySrcOptions{
-		Bucket: bucketName,
-		Object: tempObjectKey,
-	}); err != nil {
-		return fmt.Errorf("failed to publish object %s to bucket %s: %w", objectKey, bucketName, err)
+func uploadObjects(ctx context.Context, client *minio.Client, bucketName, compressedPath, objectKey string, metadata Metadata) error {
+	if err := uploadFileAtomic(ctx, client, bucketName, objectKey, compressedPath, "application/octet-stream"); err != nil {
+		return err
 	}
 
 	metadataBytes, err := metadataBytes(metadata)
@@ -307,6 +330,30 @@ func uploadObjects(ctx context.Context, client *minio.Client, bucketName, inputP
 		Object: tempMetadataKey,
 	}); err != nil {
 		return fmt.Errorf("failed to publish metadata object %s to bucket %s: %w", metadataKey, bucketName, err)
+	}
+
+	return nil
+}
+
+func uploadFileAtomic(ctx context.Context, client *minio.Client, bucketName, objectKey, localPath, contentType string) error {
+	tempObjectKey := objectTempKeyForObjectKey(objectKey)
+	if _, err := client.FPutObject(ctx, bucketName, tempObjectKey, localPath, minio.PutObjectOptions{
+		ContentType: contentType,
+	}); err != nil {
+		return fmt.Errorf("failed to upload %s to temporary object %s in bucket %s: %w", filepath.Base(localPath), tempObjectKey, bucketName, err)
+	}
+	defer func() {
+		_ = client.RemoveObject(ctx, bucketName, tempObjectKey, minio.RemoveObjectOptions{})
+	}()
+
+	if _, err := client.CopyObject(ctx, minio.CopyDestOptions{
+		Bucket: bucketName,
+		Object: objectKey,
+	}, minio.CopySrcOptions{
+		Bucket: bucketName,
+		Object: tempObjectKey,
+	}); err != nil {
+		return fmt.Errorf("failed to publish object %s to bucket %s: %w", objectKey, bucketName, err)
 	}
 
 	return nil

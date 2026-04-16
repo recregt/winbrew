@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -14,9 +15,12 @@ import (
 const maxPatchChainLength = 7
 
 type patchChainArtifact struct {
+	FromHash        string `json:"from_hash,omitempty"`
+	ToHash          string `json:"to_hash,omitempty"`
 	Depth           int    `json:"depth"`
 	FilePath        string `json:"file_path"`
 	SizeBytes       int64  `json:"size_bytes"`
+	Checksum        string `json:"checksum,omitempty"`
 	ReachedPrevious bool   `json:"reached_previous"`
 }
 
@@ -46,6 +50,24 @@ func loadPatchChain(path string) ([]patchChainArtifact, error) {
 	}
 
 	return artifacts, nil
+}
+
+func writePatchChain(path string, artifacts []patchChainArtifact) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+
+	data, err := json.MarshalIndent(artifacts, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to encode patch chain manifest: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return fmt.Errorf("failed to create patch chain directory: %w", err)
+	}
+
+	return writeFileAtomic(path, append(data, '\n'), 0o644)
 }
 
 func buildPatchChainRow(publicBaseURL, currentHash, previousHash string, artifacts []patchChainArtifact, fullSnapshotBytes int64) (updatePlanSQLRow, bool, error) {

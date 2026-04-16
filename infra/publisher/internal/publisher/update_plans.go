@@ -12,28 +12,13 @@ import (
 const defaultPublicBaseURL = "https://cdn.winbrew.dev"
 const latestFullRowKeyPrefix = "full:"
 
-func WriteUpdatePlansSQL(outputPath, inputPath, metadataPath, objectKey, patchChainPath string) error {
+func WriteUpdatePlansSQL(outputPath, metadataPath, objectKey string, fullSnapshotBytes int64, patchChain []patchChainArtifact) error {
 	outputPath = strings.TrimSpace(outputPath)
 	if outputPath == "" {
 		return fmt.Errorf("update plans output path cannot be empty")
 	}
 
-	inputPath = strings.TrimSpace(inputPath)
-	if inputPath == "" {
-		return fmt.Errorf("input path cannot be empty")
-	}
-
 	metadata, err := LoadMetadata(metadataPath)
-	if err != nil {
-		return err
-	}
-
-	inputInfo, err := os.Stat(inputPath)
-	if err != nil {
-		return fmt.Errorf("failed to inspect input database size: %w", err)
-	}
-
-	patchChain, err := loadPatchChain(patchChainPath)
 	if err != nil {
 		return err
 	}
@@ -43,7 +28,7 @@ func WriteUpdatePlansSQL(outputPath, inputPath, metadataPath, objectKey, patchCh
 		publicBaseURL = defaultPublicBaseURL
 	}
 
-	sql, err := buildUpdatePlansSQL(publicBaseURL, objectKey, metadata, inputInfo.Size(), patchChain)
+	sql, err := buildUpdatePlansSQL(publicBaseURL, objectKey, metadata, fullSnapshotBytes, patchChain)
 	if err != nil {
 		return err
 	}
