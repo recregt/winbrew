@@ -132,12 +132,15 @@ type wingetWriteResult struct {
 }
 
 func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, maxAttempts int, backoff time.Duration) (err error) {
+	start := time.Now()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if strings.TrimSpace(dbPath) == "" {
 		return fmt.Errorf("database path cannot be empty")
 	}
+
+	slog.Info("winget JSONL build started", "db_path", dbPath)
 
 	writer, flush := bufferJSONLWriter(w)
 	defer func() {
@@ -147,11 +150,14 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 	}()
 
 	enc := json.NewEncoder(writer)
+	indexStart := time.Now()
 	rows, err := readWingetIndexRows(ctx, dbPath)
 	if err != nil {
 		return err
 	}
+	slog.Info("winget index loaded", "db_path", dbPath, "packages", len(rows), "elapsed", time.Since(indexStart))
 	if len(rows) == 0 {
+		slog.Info("winget JSONL build complete", "db_path", dbPath, "packages", 0, "written", 0, "skipped", 0, "elapsed", time.Since(start))
 		return nil
 	}
 
@@ -161,6 +167,7 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 	if len(rows) < workerCount {
 		workerCount = len(rows)
 	}
+	slog.Info("winget package crawl started", "db_path", dbPath, "packages", len(rows), "workers", workerCount)
 
 	var wg sync.WaitGroup
 	wg.Add(workerCount)
@@ -173,8 +180,15 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 				}
 
 				row := rows[idx]
+				packageStart := time.Now()
 				pkg, err := s.buildPackageSnapshot(ctx, row, maxAttempts, backoff)
 				results[idx] = wingetWriteResult{id: row.id, pkg: pkg, err: err}
+				if err != nil {
+					slog.Debug("winget package crawl failed", "package", row.id, "version", row.version, "elapsed", time.Since(packageStart), "err", err)
+					continue
+				}
+
+				slog.Debug("winget package crawl complete", "package", row.id, "version", row.version, "installers", len(pkg.Installers), "elapsed", time.Since(packageStart))
 			}
 		}()
 	}
@@ -195,11 +209,16 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 		return err
 	}
 
+	written := 0
+	skipped := 0
+
 	for _, result := range results {
 		if result.err != nil {
+			skipped++
 			slog.Warn("skipping winget package", "package", result.id, "err", result.err)
 			continue
 		}
+		written++
 
 		if err := enc.Encode(wingetEnvelope{
 			SchemaVersion: wingetEnvelopeSchemaVersion,
@@ -211,10 +230,13 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 		}
 	}
 
+	slog.Info("winget JSONL build complete", "db_path", dbPath, "packages", len(rows), "written", written, "skipped", skipped, "elapsed", time.Since(start))
+
 	return nil
 }
 
 func readWingetIndexRows(ctx context.Context, dbPath string) ([]wingetIndexRow, error) {
+	start := time.Now()
 	dsn, err := sqliteDSN(dbPath)
 	if err != nil {
 		return nil, err
@@ -248,6 +270,8 @@ func readWingetIndexRows(ctx context.Context, dbPath string) ([]wingetIndexRow, 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate winget rows: %w", err)
 	}
+
+	slog.Debug("winget index query finished", "db_path", dbPath, "packages", len(result), "elapsed", time.Since(start))
 
 	return result, nil
 }

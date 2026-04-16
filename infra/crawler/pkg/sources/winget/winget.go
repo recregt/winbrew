@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 var sourceURL = "https://cdn.winget.microsoft.com/cache/source.msix"
@@ -52,12 +53,15 @@ func (s *Source) Name() string {
 }
 
 func (s *Source) DownloadSourceDB(ctx context.Context, dst string) error {
+	start := time.Now()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if strings.TrimSpace(dst) == "" {
 		return fmt.Errorf("destination path cannot be empty")
 	}
+
+	slog.Info("winget source download started", "url", sourceURL, "dst", dst, "cache_dir", s.cacheDir)
 
 	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
 		return fmt.Errorf("failed to create destination dir: %w", err)
@@ -72,6 +76,8 @@ func (s *Source) DownloadSourceDB(ctx context.Context, dst string) error {
 	if _, err := extractDB(msixPath, dst); err != nil {
 		return fmt.Errorf("failed to extract winget db: %w", err)
 	}
+
+	slog.Info("winget source extracted", "dst", dst, "elapsed", time.Since(start))
 
 	return nil
 }
@@ -96,7 +102,10 @@ func (s *Source) download(ctx context.Context, url, dst string) error {
 	}
 	defer resp.Body.Close()
 
+	slog.Debug("winget download response", "url", url, "dst", dst, "status", resp.StatusCode, "content_length", resp.ContentLength)
+
 	if resp.StatusCode == http.StatusNotModified {
+		slog.Debug("winget download cache hit", "url", url, "dst", dst)
 		if _, err := os.Stat(dst); err != nil {
 			return nonRetryableError{err: fmt.Errorf("received 304 without cached file: %w", err)}
 		}
@@ -147,7 +156,7 @@ func (s *Source) download(ctx context.Context, url, dst string) error {
 		_ = os.WriteFile(dst+".etag", []byte(etag), 0o644)
 	}
 
-	slog.Debug("completed winget download", "url", url, "dst", dst, "bytes", n)
+	slog.Debug("winget download stored", "url", url, "dst", dst, "bytes", n)
 
 	return nil
 }
