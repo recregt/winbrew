@@ -54,26 +54,37 @@ func extractFile(f *zip.File, dst string) (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to open zip entry: %w", err)
 	}
-	defer rc.Close()
+	defer func() {
+		_ = rc.Close()
+	}()
 
 	out, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".*.tmp")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
 	tempPath := out.Name()
+	closed := false
 	defer func() {
+		if !closed {
+			_ = out.Close()
+		}
 		if err != nil {
 			_ = os.Remove(tempPath)
 		}
 	}()
 
-	buf := make([]byte, 32*1024)
-	if _, err = io.CopyBuffer(out, rc, buf); err != nil {
+	if _, err = io.Copy(out, rc); err != nil {
 		return fmt.Errorf("failed to extract file: %w", err)
 	}
 
 	if err = out.Close(); err != nil {
+		closed = true
 		return fmt.Errorf("failed to close temp file: %w", err)
+	}
+	closed = true
+
+	if err = rc.Close(); err != nil {
+		return fmt.Errorf("failed to verify zip entry: %w", err)
 	}
 
 	if err = os.Rename(tempPath, dst); err != nil {
