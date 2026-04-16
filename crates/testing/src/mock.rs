@@ -1,4 +1,4 @@
-use mockito::{Mock, Server, ServerGuard};
+use mockito::{Matcher, Mock, Server, ServerGuard};
 
 pub struct MockServer {
     server: ServerGuard,
@@ -29,6 +29,21 @@ impl MockServer {
         self.server
             .mock("GET", path)
             .with_status(status)
+            .with_body(body)
+            .expect(1)
+            .create()
+    }
+
+    pub fn mock_get_with_query(
+        &mut self,
+        path: &str,
+        query: Matcher,
+        body: impl AsRef<[u8]>,
+    ) -> Mock {
+        self.server
+            .mock("GET", path)
+            .match_query(query)
+            .with_status(200)
             .with_body(body)
             .expect(1)
             .create()
