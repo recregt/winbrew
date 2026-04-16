@@ -13,12 +13,17 @@ pub(super) struct CatalogUpdateResponse {
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub(super) enum CatalogUpdateMode {
+    Current,
     Full,
     Patch,
 }
 
 #[derive(Debug, Clone)]
 pub(super) enum CatalogDownloadPlan {
+    Current {
+        current_hash: String,
+        target_hash: String,
+    },
     Full {
         catalog_url: String,
         metadata_url: String,
