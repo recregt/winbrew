@@ -21,7 +21,7 @@ jobs:
     name: Build and Publish Catalog Bundle
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -37,6 +37,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Compute crawler cache key
+        id: crawler-cache-key
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache crawler data
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/winbrew
+          key: winbrew-crawler-${{ runner.os }}-${{ steps.crawler-cache-key.outputs.date }}
+          restore-keys: |
+            winbrew-crawler-${{ runner.os }}-
 
       - name: Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
