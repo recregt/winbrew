@@ -9,7 +9,7 @@ The publisher is the deployment stage for the catalog bundle. It validates the l
 - Verifies that the local metadata hash matches the input database.
 - Reads the remote metadata object from the bucket.
 - Skips publishing when the remote catalog already matches the local hash.
-- Uploads the database and metadata objects when a new bundle is available.
+- Uploads the database to a temporary key, then publishes the metadata and final object when a new bundle is available.
 - Writes the updated local metadata back to disk after a successful upload.
 
 ## Inputs
@@ -30,7 +30,7 @@ The publisher is the deployment stage for the catalog bundle. It validates the l
 
 ## Outputs
 
-- Remote object `catalog.db`: the SQLite catalog database.
+- Remote object `catalog.db`: the SQLite catalog database, published from a temporary staging key.
 - Remote object `metadata.json`: the metadata sidecar associated with that database.
 - Local metadata file: updated with the previous remote hash after a successful publish.
 
