@@ -33,7 +33,7 @@ jobs:
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || secrets.AWS_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || secrets.AWS_SECRET_ACCESS_KEY }}
       WINBREW_UPDATE_DB_NAME: ${{ vars.WINBREW_UPDATE_DB_NAME || 'winbrew-update' }}
-      WINBREW_UPDATE_DB_ID: ${{ vars.WINBREW_UPDATE_DB_ID }}
+      WINBREW_UPDATE_DB_ID: ${{ secrets.WINBREW_UPDATE_DB_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
