@@ -28,6 +28,7 @@ pub use db::{init_database, reset_install_state, reset_installed_packages};
 pub use env::{TestEnvVar, env_lock};
 pub use font::{system_font_file_name, system_font_path};
 pub use mock::MockServer;
+pub use mockito::Matcher;
 pub use mockito::Mock;
 pub use output::{
     assert_output_contains, assert_output_contains_all, assert_success, output_text, repo_root,
