@@ -62,6 +62,13 @@ beforeEach(async () => {
 });
 
 describe('update worker', () => {
+	it('returns 404 for non-update paths', async () => {
+		const response = await SELF.fetch('https://api.winbrew.dev/');
+
+		expect(response.status).toBe(404);
+		expect(await response.json()).toEqual({ error: 'not found' });
+	});
+
 	it('returns the current state without downloading when the client is current', async () => {
 		await seedPlan({
 			currentHash: 'sha256:current',

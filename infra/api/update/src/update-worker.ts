@@ -30,11 +30,16 @@ const JSON_HEADERS = {
 
 export default {
 	async fetch(request, env, _ctx): Promise<Response> {
+		const url = new URL(request.url);
+
+		if (url.pathname !== '/v1/update') {
+			return jsonError('not found', 404);
+		}
+
 		if (request.method !== 'GET') {
 			return jsonError('method not allowed', 405, { Allow: 'GET' });
 		}
 
-		const url = new URL(request.url);
 		const current = url.searchParams.get('current');
 
 		if (current !== null && current.trim().length === 0) {

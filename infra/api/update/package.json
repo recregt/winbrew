@@ -3,6 +3,9 @@
 	"version": "0.0.0",
 	"private": true,
 	"scripts": {
+		"dev:bootstrap": "wrangler d1 execute winbrew-update --local --file=./migrations/0001_init.sql --yes && wrangler d1 execute winbrew-update --local --file=./seed/local-dev.sql --yes",
+		"predev": "pnpm run dev:bootstrap",
+		"prestart": "pnpm run dev:bootstrap",
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",
 		"start": "wrangler dev",
