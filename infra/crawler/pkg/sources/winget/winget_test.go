@@ -411,3 +411,56 @@ func TestExtractDBRejectsDuplicateEntries(t *testing.T) {
 		t.Fatalf("extractDB() error = %v, want duplicate entry rejection", err)
 	}
 }
+
+func TestExtractDBRejectsCorruptEntryAndCleansTemp(t *testing.T) {
+	t.Parallel()
+
+	var payload bytes.Buffer
+	zipWriter := zip.NewWriter(&payload)
+	entryHeader := &zip.FileHeader{Name: "public/index.db", Method: zip.Store}
+	entry, err := zipWriter.CreateHeader(entryHeader)
+	if err != nil {
+		t.Fatalf("CreateHeader() error = %v", err)
+	}
+	if _, err := io.WriteString(entry, "winget-index-bytes"); err != nil {
+		t.Fatalf("WriteString() error = %v", err)
+	}
+	if err := zipWriter.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	corrupted := append([]byte(nil), payload.Bytes()...)
+	marker := []byte("winget-index-bytes")
+	markerOffset := bytes.Index(corrupted, marker)
+	if markerOffset < 0 {
+		t.Fatal("payload marker not found")
+	}
+	corrupted[markerOffset] ^= 0xFF
+
+	dir := t.TempDir()
+	msixPath := filepath.Join(dir, "winget.msix")
+	if err := os.WriteFile(msixPath, corrupted, 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	dstPath := filepath.Join(dir, "out.db")
+	_, err = extractDB(msixPath, dstPath)
+	if err == nil {
+		t.Fatal("extractDB() error = nil, want checksum failure")
+	}
+	if got := strings.ToLower(err.Error()); !strings.Contains(got, "checksum") && !strings.Contains(got, "verify zip entry") {
+		t.Fatalf("extractDB() error = %v, want checksum verification failure", err)
+	}
+
+	if _, statErr := os.Stat(dstPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("dst file exists after failed extraction: %v", statErr)
+	}
+
+	tempMatches, err := filepath.Glob(filepath.Join(dir, "out.db.*.tmp"))
+	if err != nil {
+		t.Fatalf("Glob() error = %v", err)
+	}
+	if len(tempMatches) != 0 {
+		t.Fatalf("temporary files left behind: %v", tempMatches)
+	}
+}
