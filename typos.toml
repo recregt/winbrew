@@ -1,0 +1,4 @@
+[files]
+extend-exclude = [
+	"infra/api/update/worker-configuration.d.ts",
+]
