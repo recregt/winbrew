@@ -53,6 +53,12 @@ build/Release
 node_modules/
 jspm_packages/
 
+# Local Wrangler dev state and generated files
+
+.dev.vars
+.dev.vars.*
+wrangler.dev.jsonc
+
 # Snowpack dependency directory (https://snowpack.dev/)
 
 web_modules/
