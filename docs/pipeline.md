@@ -177,10 +177,11 @@ The update flow should:
 1. read the local installed catalog version
 2. call `https://api.winbrew.dev/v1/update`
 3. decide whether to download a full snapshot or patch chain from the API response
-4. show progress while downloading
-5. verify hashes before applying anything
-6. swap the local DB atomically
-7. run integrity checks and roll back on failure
+4. if the patch chain fails, re-query the API for a full snapshot plan instead of using a hardcoded bucket URL
+5. show progress while downloading
+6. verify hashes before applying anything
+7. swap the local DB atomically
+8. run integrity checks and roll back on failure
 
 The existing `crates/app/src/operations/update.rs` flow is the natural home for this behavior, but the update selector should live behind the API instead of being hardcoded into the CLI.
 
@@ -212,7 +213,7 @@ Expected behavior:
 
 - always back up the local DB before applying a patch
 - run `PRAGMA integrity_check` after update
-- fall back to the latest full snapshot if a delta chain fails verification or application
+- fall back to the latest full snapshot by re-querying the update API if a delta chain fails verification or application
 - keep install and search local-first and catalog-first
 
 ## Files That Matter
