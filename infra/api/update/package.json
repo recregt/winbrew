@@ -3,12 +3,12 @@
 	"version": "0.0.0",
 	"private": true,
 	"scripts": {
-		"dev:bootstrap": "wrangler d1 execute winbrew-update --local --file=./migrations/0001_init.sql --yes && wrangler d1 execute winbrew-update --local --file=./seed/local-dev.sql --yes",
+		"dev:bootstrap": "node ./scripts/dev-bootstrap.mjs",
 		"predev": "pnpm run dev:bootstrap",
 		"prestart": "pnpm run dev:bootstrap",
 		"deploy": "wrangler deploy",
-		"dev": "wrangler dev",
-		"start": "wrangler dev",
+		"dev": "wrangler dev -c ./wrangler.dev.jsonc",
+		"start": "wrangler dev -c ./wrangler.dev.jsonc",
 		"test": "vitest",
 		"cf-typegen": "wrangler types"
 	},
