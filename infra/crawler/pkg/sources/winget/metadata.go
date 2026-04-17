@@ -345,10 +345,14 @@ func sqliteDSN(dbPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve winget database path: %w", err)
 	}
+	uriPath := filepath.ToSlash(absPath)
+	if len(uriPath) >= 2 && uriPath[1] == ':' {
+		uriPath = "/" + uriPath
+	}
 
 	return (&url.URL{
 		Scheme:   "file",
-		Path:     filepath.ToSlash(absPath),
+		Path:     uriPath,
 		RawQuery: "mode=ro",
 	}).String(), nil
 }

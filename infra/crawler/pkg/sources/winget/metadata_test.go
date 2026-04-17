@@ -3,6 +3,7 @@ package winget
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 )
 
@@ -98,5 +99,21 @@ func TestReadWingetIndexRowsPrefersLatestVersion(t *testing.T) {
 	}
 	if got, want := rows[0].manifestRowID, int64(2); got != want {
 		t.Fatalf("row manifest rowid = %d, want %d", got, want)
+	}
+}
+
+func TestSQLiteDSNPrefixesWindowsDrivePath(t *testing.T) {
+	t.Parallel()
+
+	dsn, err := sqliteDSN(`C:\Users\recregt\AppData\Local\winbrew\winget\winget_source.db`)
+	if err != nil {
+		t.Fatalf("sqliteDSN() error = %v", err)
+	}
+
+	if got, want := dsn, "file:///C:/Users/recregt/AppData/Local/winbrew/winget/winget_source.db?mode=ro"; got != want {
+		t.Fatalf("sqliteDSN() = %q, want %q", got, want)
+	}
+	if !strings.HasPrefix(dsn, "file:///C:/") {
+		t.Fatalf("sqliteDSN() = %q, want Windows drive path to keep the leading slash", dsn)
 	}
 }

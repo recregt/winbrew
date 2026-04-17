@@ -105,6 +105,19 @@ func TestMetadataTempKeyForObjectKey(t *testing.T) {
 	}
 }
 
+func TestSQLiteDSNPrefixesWindowsDrivePath(t *testing.T) {
+	t.Parallel()
+
+	dsn, err := sqliteDSN(`C:\Users\recregt\AppData\Local\winbrew\catalog.db`)
+	if err != nil {
+		t.Fatalf("sqliteDSN() error = %v", err)
+	}
+
+	if got, want := dsn, "file:///C:/Users/recregt/AppData/Local/winbrew/catalog.db?mode=ro"; got != want {
+		t.Fatalf("sqliteDSN() = %q, want %q", got, want)
+	}
+}
+
 func TestObjectTempKeyForObjectKey(t *testing.T) {
 	t.Parallel()
 
