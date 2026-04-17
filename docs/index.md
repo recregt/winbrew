@@ -10,7 +10,8 @@ Use it when you want to answer one of these questions:
 
 ## Start Here
 
-- [README](../README.md) for the user-facing overview and local build path.
+- [README](../README.md) for the user-facing overview and FAQ.
+- [BUILD](BUILD.md) for local build, test, and run steps.
 - [Contributing](../CONTRIBUTING.md) for setup, task commands, and validation.
 - [Create Dependency Boundaries](create-dependence.md) for object ownership and wiring rules.
 
