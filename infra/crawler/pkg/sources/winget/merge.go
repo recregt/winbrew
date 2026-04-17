@@ -39,7 +39,7 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func firstNonEmptyStrings(values ...[]string) []string {
+func firstNonEmptyStrings[T ~[]string](values ...T) []string {
 	for _, value := range values {
 		if len(value) == 0 {
 			continue
