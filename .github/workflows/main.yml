@@ -64,7 +64,7 @@ jobs:
 
       - name: Run Go CI Script
         shell: pwsh
-        run: ./scripts/ci/check-go.ps1 -Module ${{ matrix.module }}
+        run: ./scripts/ci/check/go.ps1 -Module ${{ matrix.module }}
 
   rust-parser:
     name: Rust › Catalog Parser
@@ -81,7 +81,7 @@ jobs:
 
       - name: Run Catalog Parser CI Script
         shell: pwsh
-        run: ./scripts/ci/check-rust-parser.ps1
+        run: ./scripts/ci/check/rust-parser.ps1
 
   doc:
     name: doc
@@ -155,7 +155,7 @@ jobs:
 
       - name: Run Rust CI Script
         shell: pwsh
-        run: ./scripts/ci/check-rust.ps1
+        run: ./scripts/ci/check/rust.ps1
 
       - name: Smoke test CLI
         shell: pwsh

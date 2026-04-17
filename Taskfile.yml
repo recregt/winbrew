@@ -65,27 +65,27 @@ tasks:
   ci:go:crawler:
     desc: Run Go CI checks for the crawler module
     cmds:
-      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-go.ps1 -Module crawler
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check/go.ps1 -Module crawler
 
   ci:go:publisher:
     desc: Run Go CI checks for the catalog bundle publisher flow
     cmds:
-      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-go.ps1 -Module publisher
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check/go.ps1 -Module publisher
 
   ci:parser:
     desc: Run Rust CI checks for the catalog parser
     cmds:
-      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-rust-parser.ps1
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check/rust-parser.ps1
 
   ci:rust:
     desc: Run Rust CI checks for the CLI and binary
     cmds:
-      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-rust.ps1
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check/rust.ps1
 
   ci:rust:fast:
     desc: Run fast Rust CI checks for the CLI and binary without nextest
     cmds:
-      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-rust.ps1 -SkipNextest
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check/rust.ps1 -SkipNextest
 
   ci:verify:
     desc: Run the CI verification task set directly, including bundle validation
