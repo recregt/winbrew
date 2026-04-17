@@ -177,6 +177,40 @@ fn insert_catalog_installer(conn: &Connection, installer_type: &str) -> Result<(
     Ok(())
 }
 
+fn insert_catalog_installer_variant(
+    conn: &Connection,
+    installer_type: &str,
+    platform: Option<&str>,
+    commands: Option<&str>,
+) -> Result<()> {
+    conn.execute(
+        r#"
+        INSERT INTO catalog_installers (
+            package_id, url, hash, hash_algorithm, installer_type, installer_switches, platform, commands, protocols, file_extensions, capabilities, scope, arch, kind, nested_kind
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+        "#,
+        params![
+            "winget/Contoso.App",
+            "https://example.test/app.exe",
+            Option::<String>::None,
+            "sha256",
+            installer_type,
+            Option::<String>::None,
+            platform.map(str::to_string),
+            commands.map(str::to_string),
+            Option::<String>::None,
+            Option::<String>::None,
+            Option::<String>::None,
+            Option::<String>::None,
+            "x64",
+            "exe",
+            Option::<String>::None,
+        ],
+    )?;
+
+    Ok(())
+}
+
 #[test]
 fn catalog_contract_matches_canonical_schema() -> Result<()> {
     let conn = Connection::open_in_memory()?;
@@ -264,6 +298,36 @@ fn catalog_contract_matches_canonical_schema() -> Result<()> {
     }
 
     assert!(insert_catalog_installer(&conn, "nsis").is_err());
+
+    Ok(())
+}
+
+#[test]
+fn catalog_contract_distinguishes_installer_metadata_variants() -> Result<()> {
+    let conn = Connection::open_in_memory()?;
+    conn.execute_batch(CATALOG_SCHEMA)?;
+    insert_catalog_package(&conn)?;
+
+    insert_catalog_installer_variant(
+        &conn,
+        "exe",
+        Some("[\"Windows.Desktop\"]"),
+        Some("[\"contoso\"]"),
+    )?;
+    insert_catalog_installer_variant(
+        &conn,
+        "exe",
+        Some("[\"Windows.Server\"]"),
+        Some("[\"contoso-server\"]"),
+    )?;
+
+    let installer_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM catalog_installers WHERE package_id = 'winget/Contoso.App'",
+        [],
+        |row| row.get(0),
+    )?;
+
+    assert_eq!(installer_count, 2);
 
     Ok(())
 }
