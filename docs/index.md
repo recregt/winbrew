@@ -44,8 +44,8 @@ Use it when you want to answer one of these questions:
 ## Validation
 
 - [Taskfile](../Taskfile.yml) for local task entry points.
-- [Rust CI script](../scripts/ci/check-rust.ps1) for the Windows Rust lane.
-- [Parser CI script](../scripts/ci/check-rust-parser.ps1) for the catalog parser lane.
+- [Rust CI script](../scripts/ci/check/rust.ps1) for the Windows Rust lane.
+- [Parser CI script](../scripts/ci/check/rust-parser.ps1) for the catalog parser lane.
 - [.github/workflows/main.yml](../.github/workflows/main.yml) for the full CI graph.
 
 ## Reading Order

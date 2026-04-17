@@ -166,15 +166,7 @@ jobs:
           nightly_tag="catalog-${{ steps.crawler-cache-key.outputs.tag_date }}-nightly"
           archive_dir="infra/publisher/.generated/nightly"
 
-          rm -rf "$archive_dir"
-          mkdir -p "$archive_dir"
-
-          cp "$CATALOG_DB" "$archive_dir/catalog.db"
-          zstd --quiet --force --keep -19 "$CATALOG_DB" -o "$archive_dir/catalog.db.zst"
-          cp "$CATALOG_METADATA" "$archive_dir/metadata.json"
-          cp infra/publisher/.generated/release_materialization.sql "$archive_dir/release_materialization.sql"
-          cp infra/publisher/.generated/update_plans.sql "$archive_dir/update_plans.sql"
-          cp infra/publisher/.generated/patch_chain.json "$archive_dir/patch_chain.json"
+          bash scripts/ci/package-nightly-release.sh "$CATALOG_DB" "$CATALOG_METADATA" infra/publisher/.generated "$archive_dir"
 
           gh release delete "$nightly_tag" --yes --cleanup-tag >/dev/null 2>&1 || true
           gh release create "$nightly_tag" \
@@ -185,6 +177,4 @@ jobs:
             "$archive_dir/catalog.db" \
             "$archive_dir/catalog.db.zst" \
             "$archive_dir/metadata.json" \
-            "$archive_dir/release_materialization.sql" \
-            "$archive_dir/update_plans.sql" \
-            "$archive_dir/patch_chain.json"
+            "$archive_dir/infra.tar.gz"
