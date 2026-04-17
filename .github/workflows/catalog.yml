@@ -43,7 +43,7 @@ jobs:
         run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
       - name: Cache crawler data
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/winbrew
           key: winbrew-crawler-${{ runner.os }}-${{ steps.crawler-cache-key.outputs.date }}
