@@ -114,16 +114,18 @@ jobs:
 
       - name: Materialize release lineage to D1
         if: ${{ hashFiles('infra/publisher/.generated/release_materialization.sql') != '' }}
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd
         with:
           apiToken: ${{ secrets.D1_ACCESS_TOKEN }}
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
           command: d1 execute DB --remote --config infra/publisher/.generated/wrangler.production.jsonc --file infra/publisher/.generated/release_materialization.sql --yes
 
       - name: Publish update plans to D1
         if: ${{ hashFiles('infra/publisher/.generated/update_plans.sql') != '' }}
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd
         with:
           apiToken: ${{ secrets.D1_ACCESS_TOKEN }}
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
           command: d1 execute DB --remote --config infra/publisher/.generated/wrangler.production.jsonc --file infra/publisher/.generated/update_plans.sql --yes
