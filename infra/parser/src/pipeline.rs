@@ -157,12 +157,16 @@ where
 }
 
 fn hash_file(path: &Path) -> Result<String, ParserError> {
-    let mut file = fs::File::open(path)?;
+    let mut file = fs::File::open(path).map_err(|source| {
+        ParserError::io_with_context(source, format!("opening {}", path.display()))
+    })?;
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 65536];
 
     loop {
-        let read = file.read(&mut buffer)?;
+        let read = file.read(&mut buffer).map_err(|source| {
+            ParserError::io_with_context(source, format!("hashing {}", path.display()))
+        })?;
         if read == 0 {
             break;
         }
