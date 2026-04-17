@@ -242,8 +242,8 @@ mod tests {
             .expect("catalog installers should load with nested kind");
 
         assert_eq!(installers.len(), 2);
-        assert_eq!(installers[0].nested_kind, Some(InstallerType::Msi));
-        assert_eq!(installers[1].nested_kind, Some(InstallerType::Portable));
+        assert_eq!(installers[0].nested_kind, Some(InstallerType::Portable));
+        assert_eq!(installers[1].nested_kind, Some(InstallerType::Msi));
         assert_eq!(installers[0].hash_algorithm, HashAlgorithm::Sha256);
         assert_eq!(installers[1].hash_algorithm, HashAlgorithm::Sha256);
         assert_eq!(installers[0].installer_type, CatalogInstallerType::Zip);
