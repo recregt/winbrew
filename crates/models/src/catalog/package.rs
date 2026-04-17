@@ -48,6 +48,21 @@ pub struct CatalogPackage {
     /// Optional package moniker or alias.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub moniker: Option<String>,
+    /// Optional package platform metadata encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
+    /// Optional package commands encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands: Option<String>,
+    /// Optional package protocols encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocols: Option<String>,
+    /// Optional package file extensions encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_extensions: Option<String>,
+    /// Optional package capabilities encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<String>,
     /// Optional package search tags encoded as JSON text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tags: Option<String>,
@@ -72,6 +87,21 @@ pub struct CatalogInstaller {
     /// Silent-install or package-manager switches when the source provides them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub installer_switches: Option<String>,
+    /// Optional installer platform metadata encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
+    /// Optional installer commands encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands: Option<String>,
+    /// Optional installer protocols encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocols: Option<String>,
+    /// Optional installer file extensions encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_extensions: Option<String>,
+    /// Optional installer capabilities encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<String>,
     /// Architecture target for the installer.
     pub arch: Architecture,
     /// Raw installer format used by the engine-facing model, distinct from `installer_type`.
@@ -148,6 +178,26 @@ impl CatalogPackage {
             ensure_non_empty("catalog_package.moniker", moniker)?;
         }
 
+        if let Some(platform) = self.platform.as_deref() {
+            ensure_non_empty("catalog_package.platform", platform)?;
+        }
+
+        if let Some(commands) = self.commands.as_deref() {
+            ensure_non_empty("catalog_package.commands", commands)?;
+        }
+
+        if let Some(protocols) = self.protocols.as_deref() {
+            ensure_non_empty("catalog_package.protocols", protocols)?;
+        }
+
+        if let Some(file_extensions) = self.file_extensions.as_deref() {
+            ensure_non_empty("catalog_package.file_extensions", file_extensions)?;
+        }
+
+        if let Some(capabilities) = self.capabilities.as_deref() {
+            ensure_non_empty("catalog_package.capabilities", capabilities)?;
+        }
+
         if let Some(tags) = self.tags.as_deref() {
             ensure_non_empty("catalog_package.tags", tags)?;
         }
@@ -193,6 +243,26 @@ impl CatalogInstaller {
             ensure_non_empty("catalog_installer.installer_switches", installer_switches)?;
         }
 
+        if let Some(platform) = self.platform.as_deref() {
+            ensure_non_empty("catalog_installer.platform", platform)?;
+        }
+
+        if let Some(commands) = self.commands.as_deref() {
+            ensure_non_empty("catalog_installer.commands", commands)?;
+        }
+
+        if let Some(protocols) = self.protocols.as_deref() {
+            ensure_non_empty("catalog_installer.protocols", protocols)?;
+        }
+
+        if let Some(file_extensions) = self.file_extensions.as_deref() {
+            ensure_non_empty("catalog_installer.file_extensions", file_extensions)?;
+        }
+
+        if let Some(capabilities) = self.capabilities.as_deref() {
+            ensure_non_empty("catalog_installer.capabilities", capabilities)?;
+        }
+
         if let Some(scope) = self.scope.as_deref() {
             let normalized_scope = scope.trim().to_ascii_lowercase();
             if !matches!(normalized_scope.as_str(), "user" | "machine") {
@@ -223,6 +293,11 @@ impl CatalogInstaller {
             hash_algorithm: HashAlgorithm::Sha256,
             installer_type: CatalogInstallerType::Unknown,
             installer_switches: None,
+            platform: None,
+            commands: None,
+            protocols: None,
+            file_extensions: None,
+            capabilities: None,
             scope: None,
             arch: Architecture::X64,
             kind: InstallerType::Exe,
@@ -291,6 +366,11 @@ impl CatalogPackage {
             publisher: None,
             locale: None,
             moniker: None,
+            platform: None,
+            commands: None,
+            protocols: None,
+            file_extensions: None,
+            capabilities: None,
             tags: None,
             bin: None,
         }

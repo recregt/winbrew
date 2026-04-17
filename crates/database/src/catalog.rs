@@ -15,7 +15,7 @@ pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
     }
 
     let mut stmt = conn.prepare(
-        "SELECT p.id, p.name, p.version, p.source, p.namespace, p.source_id, p.created_at, p.updated_at, p.description, p.homepage, p.license, p.publisher, p.locale, p.moniker, p.tags, p.bin
+        "SELECT p.id, p.name, p.version, p.source, p.namespace, p.source_id, p.created_at, p.updated_at, p.description, p.homepage, p.license, p.publisher, p.locale, p.moniker, p.platform, p.commands, p.protocols, p.file_extensions, p.capabilities, p.tags, p.bin
          FROM catalog_packages p
          JOIN catalog_packages_fts fts ON p.rowid = fts.rowid
          WHERE catalog_packages_fts MATCH ?1
@@ -29,7 +29,7 @@ pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
 
 pub fn get_installers(conn: &Connection, package_id: &str) -> Result<Vec<CatalogInstaller>> {
     let mut stmt = conn.prepare(
-        "SELECT package_id, url, hash, hash_algorithm, installer_type, installer_switches, scope, arch, kind, nested_kind
+        "SELECT package_id, url, hash, hash_algorithm, installer_type, installer_switches, platform, commands, protocols, file_extensions, capabilities, scope, arch, kind, nested_kind
          FROM catalog_installers
          WHERE package_id = ?1
          ORDER BY scope ASC, arch ASC, kind ASC, installer_type ASC, nested_kind ASC, installer_switches ASC, hash_algorithm ASC, url ASC",
@@ -42,7 +42,7 @@ pub fn get_installers(conn: &Connection, package_id: &str) -> Result<Vec<Catalog
 
 pub fn get_package_by_id(conn: &Connection, package_id: &str) -> Result<Option<CatalogPackage>> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher, locale, moniker, tags, bin
+        "SELECT id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher, locale, moniker, platform, commands, protocols, file_extensions, capabilities, tags, bin
          FROM catalog_packages
          WHERE id = ?1",
     )?;
@@ -107,6 +107,11 @@ fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
         publisher: row.get("publisher")?,
         locale: row.get("locale")?,
         moniker: row.get("moniker")?,
+        platform: row.get("platform")?,
+        commands: row.get("commands")?,
+        protocols: row.get("protocols")?,
+        file_extensions: row.get("file_extensions")?,
+        capabilities: row.get("capabilities")?,
         tags: row.get("tags")?,
         bin: row.get("bin")?,
     };
@@ -146,6 +151,11 @@ fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
                 )
             })?,
         installer_switches: row.get("installer_switches")?,
+        platform: row.get("platform")?,
+        commands: row.get("commands")?,
+        protocols: row.get("protocols")?,
+        file_extensions: row.get("file_extensions")?,
+        capabilities: row.get("capabilities")?,
         scope: row.get("scope")?,
         arch: row.get("arch")?,
         kind: row.get("kind")?,
@@ -171,7 +181,7 @@ mod tests {
 
     fn create_catalog_installers_table(conn: &Connection) {
         conn.execute_batch(
-            "CREATE TABLE catalog_installers (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    package_id TEXT NOT NULL,\n    url TEXT NOT NULL,\n    hash TEXT,\n    hash_algorithm TEXT NOT NULL DEFAULT 'sha256',\n    installer_type TEXT NOT NULL DEFAULT 'unknown',\n    installer_switches TEXT,\n    scope TEXT,\n    arch TEXT NOT NULL DEFAULT '',\n    kind TEXT NOT NULL DEFAULT '',\n    nested_kind TEXT\n);",
+            "CREATE TABLE catalog_installers (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    package_id TEXT NOT NULL,\n    url TEXT NOT NULL,\n    hash TEXT,\n    hash_algorithm TEXT NOT NULL DEFAULT 'sha256',\n    installer_type TEXT NOT NULL DEFAULT 'unknown',\n    installer_switches TEXT,\n    platform TEXT,\n    commands TEXT,\n    protocols TEXT,\n    file_extensions TEXT,\n    capabilities TEXT,\n    scope TEXT,\n    arch TEXT NOT NULL DEFAULT '',\n    kind TEXT NOT NULL DEFAULT '',\n    nested_kind TEXT\n);",
         )
         .expect("catalog installers table should be created");
     }

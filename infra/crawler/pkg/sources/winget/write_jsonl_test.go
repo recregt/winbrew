@@ -33,6 +33,11 @@ func TestWingetStagingCountsWrittenAndSkippedPackages(t *testing.T) {
 		"PackageName: Contoso App",
 		"Publisher: Contoso Ltd.",
 		"Moniker: contoso",
+		"Platform: Windows.Desktop",
+		"Commands: contoso",
+		"Protocols: contoso-protocol",
+		"FileExtensions: .app",
+		"Capabilities: internetClient",
 		"Tags:",
 		"  - utility",
 		"ShortDescription: Contoso app",
@@ -44,6 +49,11 @@ func TestWingetStagingCountsWrittenAndSkippedPackages(t *testing.T) {
 		"    InstallerUrl: https://download.contoso.invalid/app.exe",
 		"    InstallerSha256: 0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
 		"    Scope: machine",
+		"    Platform: Windows.Desktop",
+		"    Commands: contoso-installer",
+		"    Protocols: contoso-installer-protocol",
+		"    FileExtensions: .exe",
+		"    Capabilities: internetClient",
 		"    InstallerSwitches:",
 		"      SilentWithProgress: /contoso-install",
 		"ManifestType: singleton",
@@ -128,8 +138,26 @@ func TestWingetStagingCountsWrittenAndSkippedPackages(t *testing.T) {
 	if got, want := envelope.Payload.ID, "winget/Contoso.App"; got != want {
 		t.Fatalf("envelope package id = %q, want %q", got, want)
 	}
+	if got, want := len(envelope.Payload.Platform), 1; got != want {
+		t.Fatalf("package platform length = %d, want %d", got, want)
+	}
+	if got, want := envelope.Payload.Platform[0], "Windows.Desktop"; got != want {
+		t.Fatalf("package platform[0] = %q, want %q", got, want)
+	}
+	if got, want := len(envelope.Payload.Commands), 1; got != want {
+		t.Fatalf("package commands length = %d, want %d", got, want)
+	}
+	if got, want := envelope.Payload.Commands[0], "contoso"; got != want {
+		t.Fatalf("package commands[0] = %q, want %q", got, want)
+	}
 	if got, want := len(envelope.Payload.Installers), 1; got != want {
 		t.Fatalf("merged installer count = %d, want %d", got, want)
+	}
+	if got, want := len(envelope.Payload.Installers[0].Platform), 1; got != want {
+		t.Fatalf("installer platform length = %d, want %d", got, want)
+	}
+	if got, want := envelope.Payload.Installers[0].Platform[0], "Windows.Desktop"; got != want {
+		t.Fatalf("installer platform[0] = %q, want %q", got, want)
 	}
 	if got, want := envelope.Payload.Installers[0].InstallerSwitches, "/contoso-install"; got != want {
 		t.Fatalf("merged installer switches = %q, want %q", got, want)

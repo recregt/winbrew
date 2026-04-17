@@ -9,7 +9,7 @@ use crate::shared::ModelError;
 
 pub const SCHEMA_VERSION: u32 = 1;
 /// Schema version for the generated SQLite catalog database.
-pub const CATALOG_DB_SCHEMA_VERSION: u32 = 3;
+pub const CATALOG_DB_SCHEMA_VERSION: u32 = 4;
 
 /// Summary metadata for a generated catalog snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize)]

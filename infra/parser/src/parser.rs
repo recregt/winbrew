@@ -22,6 +22,11 @@ pub(crate) struct ParsedPackage {
 pub(crate) fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, ParserError> {
     let raw_json = serde_json::to_string(&raw)?;
     let package_id = PackageId::parse(raw.id.as_str())?;
+    let platform = to_json_text(raw.platform)?;
+    let commands = to_json_text(raw.commands)?;
+    let protocols = to_json_text(raw.protocols)?;
+    let file_extensions = to_json_text(raw.file_extensions)?;
+    let capabilities = to_json_text(raw.capabilities)?;
     let tags = raw
         .tags
         .map(|tags| serde_json::to_string(&tags))
@@ -43,6 +48,11 @@ pub(crate) fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, Par
         publisher: raw.publisher,
         locale: raw.locale,
         moniker: raw.moniker,
+        platform,
+        commands,
+        protocols,
+        file_extensions,
+        capabilities,
         tags,
         bin,
     };
@@ -85,6 +95,11 @@ fn parse_installer(
     let hash = raw.hash;
     let installer_kind = raw.kind.parse::<InstallerType>()?;
     let installer_type = CatalogInstallerType::normalize(package_source, installer_kind, &raw.url);
+    let platform = to_json_text(raw.platform)?;
+    let commands = to_json_text(raw.commands)?;
+    let protocols = to_json_text(raw.protocols)?;
+    let file_extensions = to_json_text(raw.file_extensions)?;
+    let capabilities = to_json_text(raw.capabilities)?;
 
     let installer = CatalogInstaller {
         package_id: package_id.into(),
@@ -93,6 +108,11 @@ fn parse_installer(
         hash_algorithm,
         installer_type,
         installer_switches: raw.installer_switches,
+        platform,
+        commands,
+        protocols,
+        file_extensions,
+        capabilities,
         scope: raw.scope,
         arch: raw.arch.parse::<Architecture>()?,
         kind: installer_kind,
@@ -108,6 +128,12 @@ fn validate_envelope(envelope: ScoopStreamEnvelope) -> Result<RawFetchedPackage,
         .validate()
         .map_err(|err| ParserError::Contract(err.to_string()))?;
     Ok(envelope.payload)
+}
+
+fn to_json_text<T: serde::Serialize>(value: Option<T>) -> Result<Option<String>, ParserError> {
+    value
+        .map(|value| serde_json::to_string(&value).map_err(ParserError::from))
+        .transpose()
 }
 
 #[cfg(test)]
@@ -132,6 +158,11 @@ mod tests {
             publisher: Some("Contoso Ltd.".to_string()),
             locale: Some("en-US".to_string()),
             moniker: Some("contoso".to_string()),
+            platform: Some(vec!["Windows.Desktop".to_string()]),
+            commands: Some(vec!["contoso".to_string()]),
+            protocols: Some(vec!["contoso-protocol".to_string()]),
+            file_extensions: Some(vec![".app".to_string()]),
+            capabilities: Some(vec!["internetClient".to_string()]),
             tags: Some(vec!["utility".to_string()]),
             bin: Some(serde_json::json!(["tool.exe"])),
             installers: vec![RawFetchedInstaller {
@@ -142,6 +173,11 @@ mod tests {
                 nested_kind: Some("msi".to_string()),
                 installer_switches: Some("/S".to_string()),
                 scope: Some("user".to_string()),
+                platform: Some(vec!["Windows.Desktop".to_string()]),
+                commands: Some(vec!["contoso-installer".to_string()]),
+                protocols: Some(vec!["contoso-installer-protocol".to_string()]),
+                file_extensions: Some(vec![".exe".to_string()]),
+                capabilities: Some(vec!["internetClient".to_string()]),
             }],
         })
         .expect("package should parse");
@@ -162,6 +198,23 @@ mod tests {
         );
         assert_eq!(parsed.package.locale.as_deref(), Some("en-US"));
         assert_eq!(parsed.package.moniker.as_deref(), Some("contoso"));
+        assert_eq!(
+            parsed.package.platform.as_deref(),
+            Some("[\"Windows.Desktop\"]")
+        );
+        assert_eq!(parsed.package.commands.as_deref(), Some("[\"contoso\"]"));
+        assert_eq!(
+            parsed.package.protocols.as_deref(),
+            Some("[\"contoso-protocol\"]")
+        );
+        assert_eq!(
+            parsed.package.file_extensions.as_deref(),
+            Some("[\".app\"]")
+        );
+        assert_eq!(
+            parsed.package.capabilities.as_deref(),
+            Some("[\"internetClient\"]")
+        );
         assert!(parsed.package.tags.as_deref().is_some());
         assert!(parsed.package.bin.as_deref().is_some());
         assert!(parsed.raw_json.contains("Contoso.App"));
@@ -180,6 +233,11 @@ mod tests {
             publisher: Some("Wez Furlong".to_string()),
             locale: Some("en-US".to_string()),
             moniker: Some("wezterm".to_string()),
+            platform: Some(vec!["Windows.Desktop".to_string()]),
+            commands: Some(vec!["wezterm".to_string()]),
+            protocols: Some(vec!["wezterm".to_string()]),
+            file_extensions: Some(vec![".zip".to_string()]),
+            capabilities: Some(vec!["internetClient".to_string()]),
             tags: Some(vec!["terminal".to_string()]),
             bin: None,
             installers: vec![RawFetchedInstaller {
@@ -190,6 +248,11 @@ mod tests {
                 nested_kind: None,
                 installer_switches: None,
                 scope: None,
+                platform: Some(vec!["Windows.Desktop".to_string()]),
+                commands: Some(vec!["wezterm-installer".to_string()]),
+                protocols: Some(vec!["wezterm-installer".to_string()]),
+                file_extensions: Some(vec![".exe".to_string()]),
+                capabilities: Some(vec!["internetClient".to_string()]),
             }],
         })
         .expect("package should parse");
@@ -199,6 +262,14 @@ mod tests {
         assert_eq!(
             parsed.installers[0].installer_type,
             CatalogInstallerType::Zip
+        );
+        assert_eq!(
+            parsed.installers[0].platform.as_deref(),
+            Some("[\"Windows.Desktop\"]")
+        );
+        assert_eq!(
+            parsed.installers[0].commands.as_deref(),
+            Some("[\"wezterm-installer\"]")
         );
     }
 
@@ -220,6 +291,11 @@ mod tests {
                     "publisher": null,
                     "locale": null,
                     "moniker": null,
+                    "platform": null,
+                    "commands": null,
+                    "protocols": null,
+                    "file_extensions": null,
+                    "capabilities": null,
                     "tags": null,
                     "bin": null,
                     "installers": []
@@ -253,6 +329,11 @@ mod tests {
                     "publisher": null,
                     "locale": null,
                     "moniker": null,
+                    "platform": null,
+                    "commands": null,
+                    "protocols": null,
+                    "file_extensions": null,
+                    "capabilities": null,
                     "tags": null,
                     "bin": null,
                     "installers": []

@@ -1,6 +1,6 @@
 -- Canonical catalog schema for parser-generated snapshots.
 -- Parser code and tests include this file directly to avoid schema drift.
-PRAGMA user_version = 3;
+PRAGMA user_version = 4;
 
 CREATE TABLE IF NOT EXISTS schema_meta (
     name  TEXT PRIMARY KEY,
@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 );
 
 INSERT OR REPLACE INTO schema_meta (name, value)
-VALUES ('schema_version', '3');
+VALUES ('schema_version', '4');
 
 CREATE TABLE IF NOT EXISTS catalog_packages (
     id          TEXT PRIMARY KEY,
@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS catalog_packages (
     locale      TEXT CHECK (locale IS NULL OR length(trim(locale)) > 0),
     moniker     TEXT CHECK (moniker IS NULL OR length(trim(moniker)) > 0),
     tags        TEXT CHECK (tags IS NULL OR json_valid(tags)),
+    platform    TEXT CHECK (platform IS NULL OR json_valid(platform)),
+    commands    TEXT CHECK (commands IS NULL OR json_valid(commands)),
+    protocols   TEXT CHECK (protocols IS NULL OR json_valid(protocols)),
+    file_extensions TEXT CHECK (file_extensions IS NULL OR json_valid(file_extensions)),
+    capabilities TEXT CHECK (capabilities IS NULL OR json_valid(capabilities)),
     bin         TEXT CHECK (bin IS NULL OR json_valid(bin)),
     created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -40,6 +45,11 @@ CREATE TABLE IF NOT EXISTS catalog_installers (
     -- Normalized installer family used for filtering and source-aware browse flows.
     installer_type TEXT NOT NULL DEFAULT 'unknown' CHECK (installer_type IN ('msi', 'msix', 'appx', 'exe', 'inno', 'nullsoft', 'wix', 'burn', 'pwa', 'font', 'portable', 'zip', 'msstore', 'nuget', 'scoop', 'unknown')),
     installer_switches TEXT,
+    platform    TEXT CHECK (platform IS NULL OR json_valid(platform)),
+    commands    TEXT CHECK (commands IS NULL OR json_valid(commands)),
+    protocols   TEXT CHECK (protocols IS NULL OR json_valid(protocols)),
+    file_extensions TEXT CHECK (file_extensions IS NULL OR json_valid(file_extensions)),
+    capabilities TEXT CHECK (capabilities IS NULL OR json_valid(capabilities)),
     -- Winget manifest scope when the source provides one.
     scope       TEXT CHECK (scope IS NULL OR scope IN ('machine', 'user')),
     arch        TEXT NOT NULL DEFAULT '',

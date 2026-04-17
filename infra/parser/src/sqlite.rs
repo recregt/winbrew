@@ -7,8 +7,8 @@ use crate::error::ParserError;
 use crate::parser::ParsedPackage;
 
 const PACKAGE_UPSERT: &str = r#"
-INSERT INTO catalog_packages(id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher, locale, moniker, tags, bin)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+INSERT INTO catalog_packages(id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher, locale, moniker, platform, commands, protocols, file_extensions, capabilities, tags, bin)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
 ON CONFLICT(id) DO UPDATE SET
     name=excluded.name,
     version=excluded.version,
@@ -22,6 +22,11 @@ ON CONFLICT(id) DO UPDATE SET
     publisher=excluded.publisher,
     locale=excluded.locale,
     moniker=excluded.moniker,
+    platform=excluded.platform,
+    commands=excluded.commands,
+    protocols=excluded.protocols,
+    file_extensions=excluded.file_extensions,
+    capabilities=excluded.capabilities,
     tags=excluded.tags,
     bin=excluded.bin
 "#;
@@ -36,8 +41,8 @@ ON CONFLICT(package_id) DO UPDATE SET
 const DELETE_INSTALLERS: &str = "DELETE FROM catalog_installers WHERE package_id = ?1";
 
 const INSTALLER_INSERT: &str = r#"
-INSERT INTO catalog_installers(package_id, url, hash, hash_algorithm, installer_type, installer_switches, scope, arch, kind, nested_kind)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+INSERT INTO catalog_installers(package_id, url, hash, hash_algorithm, installer_type, installer_switches, platform, commands, protocols, file_extensions, capabilities, scope, arch, kind, nested_kind)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
 "#;
 
 const SCHEMA: &str = include_str!("../schema/catalog.sql");
@@ -122,6 +127,11 @@ impl CatalogWriter {
                 parsed.package.publisher.as_deref(),
                 parsed.package.locale.as_deref(),
                 parsed.package.moniker.as_deref(),
+                parsed.package.platform.as_deref(),
+                parsed.package.commands.as_deref(),
+                parsed.package.protocols.as_deref(),
+                parsed.package.file_extensions.as_deref(),
+                parsed.package.capabilities.as_deref(),
                 parsed.package.tags.as_deref(),
                 parsed.package.bin.as_deref(),
             ])
@@ -182,6 +192,11 @@ impl CatalogWriter {
                     installer.hash_algorithm.as_str(),
                     installer.installer_type.as_str(),
                     installer.installer_switches.as_deref(),
+                    installer.platform.as_deref(),
+                    installer.commands.as_deref(),
+                    installer.protocols.as_deref(),
+                    installer.file_extensions.as_deref(),
+                    installer.capabilities.as_deref(),
                     installer.scope.as_deref(),
                     installer.arch.to_string(),
                     installer.kind.to_string(),
