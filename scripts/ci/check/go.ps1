@@ -7,7 +7,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $ModulePath = Join-Path $RepoRoot "infra\$Module"
 $LintConfigPath = Join-Path $RepoRoot 'infra\golangci.yml'
 

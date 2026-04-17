@@ -3,7 +3,7 @@ param()
 
 $ErrorActionPreference = 'Stop'
 
-$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $ParserManifest = Join-Path $RepoRoot 'infra\parser\Cargo.toml'
 $HostTarget = (& rustc -vV | Select-String '^host: ' | ForEach-Object { $_.ToString().Split(': ', 2)[1].Trim() })
 
