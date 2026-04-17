@@ -20,64 +20,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"infra/crawler/internal/models"
 	"infra/crawler/internal/retry"
 )
-
-type FlexibleStringSlice []string
-
-func (f *FlexibleStringSlice) UnmarshalYAML(node *yaml.Node) error {
-	if node == nil {
-		*f = nil
-		return nil
-	}
-
-	if node.Kind == yaml.AliasNode && node.Alias != nil {
-		node = node.Alias
-	}
-
-	switch node.Kind {
-	case yaml.SequenceNode:
-		var values []string
-		if err := node.Decode(&values); err != nil {
-			return err
-		}
-
-		result := make([]string, 0, len(values))
-		for _, value := range values {
-			if trimmed := strings.TrimSpace(value); trimmed != "" {
-				result = append(result, trimmed)
-			}
-		}
-
-		if len(result) == 0 {
-			*f = nil
-			return nil
-		}
-
-		*f = result
-		return nil
-	case yaml.ScalarNode:
-		if node.Tag == "!!null" {
-			*f = nil
-			return nil
-		}
-
-		var single string
-		if err := node.Decode(&single); err != nil {
-			return err
-		}
-
-		if trimmed := strings.TrimSpace(single); trimmed != "" {
-			*f = FlexibleStringSlice{trimmed}
-			return nil
-		}
-
-		*f = nil
-		return nil
-	default:
-		return fmt.Errorf("unsupported Platform YAML kind: %d", node.Kind)
-	}
-}
 
 const (
 	wingetEnvelopeSchemaVersion = 1
@@ -88,46 +33,54 @@ const (
 )
 
 type wingetManifest struct {
-	PackageIdentifier   string                    `yaml:"PackageIdentifier"`
-	PackageVersion      string                    `yaml:"PackageVersion"`
-	PackageLocale       string                    `yaml:"PackageLocale,omitempty"`
-	DefaultLocale       string                    `yaml:"DefaultLocale,omitempty"`
-	Moniker             string                    `yaml:"Moniker,omitempty"`
-	Tags                []string                  `yaml:"Tags,omitempty"`
-	Publisher           string                    `yaml:"Publisher,omitempty"`
-	PackageName         string                    `yaml:"PackageName,omitempty"`
-	ShortDescription    string                    `yaml:"ShortDescription,omitempty"`
-	Description         string                    `yaml:"Description,omitempty"`
-	Homepage            string                    `yaml:"Homepage,omitempty"`
-	License             string                    `yaml:"License,omitempty"`
-	ManifestType        string                    `yaml:"ManifestType"`
-	ManifestVersion     string                    `yaml:"ManifestVersion"`
-	Architecture        string                    `yaml:"Architecture,omitempty"`
-	InstallerLocale     string                    `yaml:"InstallerLocale,omitempty"`
-	Platform            FlexibleStringSlice       `yaml:"Platform,omitempty"`
-	MinimumOSVersion    string                    `yaml:"MinimumOSVersion,omitempty"`
-	InstallerType       string                    `yaml:"InstallerType,omitempty"`
-	InstallerUrl        string                    `yaml:"InstallerUrl,omitempty"`
-	InstallerSha256     string                    `yaml:"InstallerSha256,omitempty"`
-	SignatureSha256     string                    `yaml:"SignatureSha256,omitempty"`
-	NestedInstallerType string                    `yaml:"NestedInstallerType,omitempty"`
-	Scope               string                    `yaml:"Scope,omitempty"`
-	InstallerSwitches   *wingetManifestSwitches   `yaml:"InstallerSwitches,omitempty"`
-	Installers          []wingetManifestInstaller `yaml:"Installers,omitempty"`
+	PackageIdentifier   string                     `yaml:"PackageIdentifier"`
+	PackageVersion      string                     `yaml:"PackageVersion"`
+	PackageLocale       string                     `yaml:"PackageLocale,omitempty"`
+	DefaultLocale       string                     `yaml:"DefaultLocale,omitempty"`
+	Moniker             string                     `yaml:"Moniker,omitempty"`
+	Tags                models.FlexibleStringSlice `yaml:"Tags,omitempty"`
+	Publisher           string                     `yaml:"Publisher,omitempty"`
+	PackageName         string                     `yaml:"PackageName,omitempty"`
+	ShortDescription    string                     `yaml:"ShortDescription,omitempty"`
+	Description         string                     `yaml:"Description,omitempty"`
+	Homepage            string                     `yaml:"Homepage,omitempty"`
+	License             string                     `yaml:"License,omitempty"`
+	ManifestType        string                     `yaml:"ManifestType"`
+	ManifestVersion     string                     `yaml:"ManifestVersion"`
+	Architecture        string                     `yaml:"Architecture,omitempty"`
+	InstallerLocale     string                     `yaml:"InstallerLocale,omitempty"`
+	Commands            models.FlexibleStringSlice `yaml:"Commands,omitempty"`
+	Protocols           models.FlexibleStringSlice `yaml:"Protocols,omitempty"`
+	FileExtensions      models.FlexibleStringSlice `yaml:"FileExtensions,omitempty"`
+	Capabilities        models.FlexibleStringSlice `yaml:"Capabilities,omitempty"`
+	Platform            models.FlexibleStringSlice `yaml:"Platform,omitempty"`
+	MinimumOSVersion    string                     `yaml:"MinimumOSVersion,omitempty"`
+	InstallerType       string                     `yaml:"InstallerType,omitempty"`
+	InstallerUrl        string                     `yaml:"InstallerUrl,omitempty"`
+	InstallerSha256     string                     `yaml:"InstallerSha256,omitempty"`
+	SignatureSha256     string                     `yaml:"SignatureSha256,omitempty"`
+	NestedInstallerType string                     `yaml:"NestedInstallerType,omitempty"`
+	Scope               string                     `yaml:"Scope,omitempty"`
+	InstallerSwitches   *wingetManifestSwitches    `yaml:"InstallerSwitches,omitempty"`
+	Installers          []wingetManifestInstaller  `yaml:"Installers,omitempty"`
 }
 
 type wingetManifestInstaller struct {
-	Architecture        string                  `yaml:"Architecture,omitempty"`
-	InstallerLocale     string                  `yaml:"InstallerLocale,omitempty"`
-	Platform            FlexibleStringSlice     `yaml:"Platform,omitempty"`
-	MinimumOSVersion    string                  `yaml:"MinimumOSVersion,omitempty"`
-	InstallerType       string                  `yaml:"InstallerType,omitempty"`
-	InstallerUrl        string                  `yaml:"InstallerUrl,omitempty"`
-	InstallerSha256     string                  `yaml:"InstallerSha256,omitempty"`
-	SignatureSha256     string                  `yaml:"SignatureSha256,omitempty"`
-	NestedInstallerType string                  `yaml:"NestedInstallerType,omitempty"`
-	Scope               string                  `yaml:"Scope,omitempty"`
-	InstallerSwitches   *wingetManifestSwitches `yaml:"InstallerSwitches,omitempty"`
+	Architecture        string                     `yaml:"Architecture,omitempty"`
+	InstallerLocale     string                     `yaml:"InstallerLocale,omitempty"`
+	Commands            models.FlexibleStringSlice `yaml:"Commands,omitempty"`
+	Protocols           models.FlexibleStringSlice `yaml:"Protocols,omitempty"`
+	FileExtensions      models.FlexibleStringSlice `yaml:"FileExtensions,omitempty"`
+	Capabilities        models.FlexibleStringSlice `yaml:"Capabilities,omitempty"`
+	Platform            models.FlexibleStringSlice `yaml:"Platform,omitempty"`
+	MinimumOSVersion    string                     `yaml:"MinimumOSVersion,omitempty"`
+	InstallerType       string                     `yaml:"InstallerType,omitempty"`
+	InstallerUrl        string                     `yaml:"InstallerUrl,omitempty"`
+	InstallerSha256     string                     `yaml:"InstallerSha256,omitempty"`
+	SignatureSha256     string                     `yaml:"SignatureSha256,omitempty"`
+	NestedInstallerType string                     `yaml:"NestedInstallerType,omitempty"`
+	Scope               string                     `yaml:"Scope,omitempty"`
+	InstallerSwitches   *wingetManifestSwitches    `yaml:"InstallerSwitches,omitempty"`
 }
 
 type wingetManifestSwitches struct {

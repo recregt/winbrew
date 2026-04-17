@@ -16,6 +16,14 @@ func TestWingetManifestResolutionSingleton(t *testing.T) {
 		"Publisher: Microsoft Corporation",
 		"Moniker: wt",
 		"Platform: Windows.Desktop",
+		"Commands: wt",
+		"Protocols:",
+		"  - ms-windows-store",
+		"  - https",
+		"FileExtensions: .txt",
+		"Capabilities:",
+		"  - internetClient",
+		"  - internetClientServer",
 		"Tags:",
 		"  - terminal",
 		"  - shell",
@@ -48,6 +56,30 @@ func TestWingetManifestResolutionSingleton(t *testing.T) {
 	}
 	if got, want := manifest.Platform[0], "Windows.Desktop"; got != want {
 		t.Fatalf("manifest platform[0] = %q, want %q", got, want)
+	}
+	if got, want := len(manifest.Commands), 1; got != want {
+		t.Fatalf("manifest commands length = %d, want %d", got, want)
+	}
+	if got, want := manifest.Commands[0], "wt"; got != want {
+		t.Fatalf("manifest commands[0] = %q, want %q", got, want)
+	}
+	if got, want := len(manifest.Protocols), 2; got != want {
+		t.Fatalf("manifest protocols length = %d, want %d", got, want)
+	}
+	if got, want := manifest.Protocols[0], "ms-windows-store"; got != want {
+		t.Fatalf("manifest protocols[0] = %q, want %q", got, want)
+	}
+	if got, want := len(manifest.FileExtensions), 1; got != want {
+		t.Fatalf("manifest file extensions length = %d, want %d", got, want)
+	}
+	if got, want := manifest.FileExtensions[0], ".txt"; got != want {
+		t.Fatalf("manifest file extensions[0] = %q, want %q", got, want)
+	}
+	if got, want := len(manifest.Capabilities), 2; got != want {
+		t.Fatalf("manifest capabilities length = %d, want %d", got, want)
+	}
+	if got, want := manifest.Capabilities[0], "internetClient"; got != want {
+		t.Fatalf("manifest capabilities[0] = %q, want %q", got, want)
 	}
 
 	pkg, err := buildWingetPackageSnapshot(wingetIndexRow{
@@ -132,10 +164,23 @@ ManifestVersion: 1.12.0
 	installerYAML := strings.Join([]string{
 		"PackageIdentifier: Contoso.App",
 		"PackageVersion: 2.3.4",
+		"Commands:",
+		"  - contoso",
+		"Protocols: contoso-protocol",
+		"FileExtensions:",
+		"  - .app",
+		"  - .apx",
+		"Capabilities: internetClient",
 		"Installers:",
 		"  - Architecture: x64",
 		"    Platform:",
 		"      - Windows.Desktop",
+		"    Commands:",
+		"      - contoso-installer",
+		"    Protocols: contoso-installer-protocol",
+		"    FileExtensions: .exe",
+		"    Capabilities:",
+		"      - internetClient",
 		"    InstallerType: exe",
 		"    InstallerUrl: https://example.invalid/app.exe",
 		"    InstallerSha256: 0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
@@ -155,6 +200,54 @@ ManifestVersion: 1.12.0
 	}
 	if got, want := installer.Installers[0].Platform[0], "Windows.Desktop"; got != want {
 		t.Fatalf("installer platform[0] = %q, want %q", got, want)
+	}
+	if got, want := len(installer.Installers[0].Commands), 1; got != want {
+		t.Fatalf("installer nested commands length = %d, want %d", got, want)
+	}
+	if got, want := installer.Installers[0].Commands[0], "contoso-installer"; got != want {
+		t.Fatalf("installer nested commands[0] = %q, want %q", got, want)
+	}
+	if got, want := len(installer.Installers[0].Protocols), 1; got != want {
+		t.Fatalf("installer nested protocols length = %d, want %d", got, want)
+	}
+	if got, want := installer.Installers[0].Protocols[0], "contoso-installer-protocol"; got != want {
+		t.Fatalf("installer nested protocols[0] = %q, want %q", got, want)
+	}
+	if got, want := len(installer.Installers[0].FileExtensions), 1; got != want {
+		t.Fatalf("installer nested file extensions length = %d, want %d", got, want)
+	}
+	if got, want := installer.Installers[0].FileExtensions[0], ".exe"; got != want {
+		t.Fatalf("installer nested file extensions[0] = %q, want %q", got, want)
+	}
+	if got, want := len(installer.Installers[0].Capabilities), 1; got != want {
+		t.Fatalf("installer nested capabilities length = %d, want %d", got, want)
+	}
+	if got, want := installer.Installers[0].Capabilities[0], "internetClient"; got != want {
+		t.Fatalf("installer nested capabilities[0] = %q, want %q", got, want)
+	}
+	if got, want := len(installer.Commands), 1; got != want {
+		t.Fatalf("installer commands length = %d, want %d", got, want)
+	}
+	if got, want := installer.Commands[0], "contoso"; got != want {
+		t.Fatalf("installer commands[0] = %q, want %q", got, want)
+	}
+	if got, want := len(installer.Protocols), 1; got != want {
+		t.Fatalf("installer protocols length = %d, want %d", got, want)
+	}
+	if got, want := installer.Protocols[0], "contoso-protocol"; got != want {
+		t.Fatalf("installer protocols[0] = %q, want %q", got, want)
+	}
+	if got, want := len(installer.FileExtensions), 2; got != want {
+		t.Fatalf("installer file extensions length = %d, want %d", got, want)
+	}
+	if got, want := installer.FileExtensions[0], ".app"; got != want {
+		t.Fatalf("installer file extensions[0] = %q, want %q", got, want)
+	}
+	if got, want := len(installer.Capabilities), 1; got != want {
+		t.Fatalf("installer capabilities length = %d, want %d", got, want)
+	}
+	if got, want := installer.Capabilities[0], "internetClient"; got != want {
+		t.Fatalf("installer capabilities[0] = %q, want %q", got, want)
 	}
 
 	pkg, err := buildWingetPackageSnapshot(wingetIndexRow{
