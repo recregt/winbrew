@@ -82,7 +82,6 @@ func buildReleaseMaterializationSQL(publicBaseURL, objectKey string, metadata Me
 
 	statements := []string{
 		"PRAGMA foreign_keys = ON;",
-		"BEGIN;",
 		fmt.Sprintf(
 			"INSERT INTO release_lineage (hash, parent_hash, is_snapshot, snapshot_url, metadata_url) VALUES (%s, %s, 1, %s, %s) ON CONFLICT(hash) DO UPDATE SET parent_hash = excluded.parent_hash, is_snapshot = excluded.is_snapshot, snapshot_url = excluded.snapshot_url, metadata_url = excluded.metadata_url;",
 			sqlText(currentHash),
@@ -109,7 +108,6 @@ func buildReleaseMaterializationSQL(publicBaseURL, objectKey string, metadata Me
 		)
 	}
 
-	statements = append(statements, "COMMIT;")
 	return strings.Join(statements, "\n") + "\n", nil
 }
 
