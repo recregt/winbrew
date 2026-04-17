@@ -119,8 +119,8 @@ fn insert_catalog_package(conn: &Connection) -> Result<()> {
     conn.execute(
         r#"
         INSERT INTO catalog_packages (
-                id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, tags, bin
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, platform, commands, protocols, file_extensions, capabilities, tags, bin
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
         "#,
         params![
             "winget/Contoso.App",
@@ -136,6 +136,11 @@ fn insert_catalog_package(conn: &Connection) -> Result<()> {
                 Some("en-US"),
                 Option::<String>::None,
                 Option::<String>::None,
+            Option::<String>::None,
+            Option::<String>::None,
+            Option::<String>::None,
+            Option::<String>::None,
+            Option::<String>::None,
                 Option::<String>::None,
         ],
     )?;
@@ -147,8 +152,8 @@ fn insert_catalog_installer(conn: &Connection, installer_type: &str) -> Result<(
     conn.execute(
         r#"
         INSERT INTO catalog_installers (
-            package_id, url, hash, hash_algorithm, installer_type, installer_switches, arch, kind, nested_kind
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            package_id, url, hash, hash_algorithm, installer_type, installer_switches, platform, commands, protocols, file_extensions, capabilities, scope, arch, kind, nested_kind
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
         "#,
         params![
             "winget/Contoso.App",
@@ -156,6 +161,12 @@ fn insert_catalog_installer(conn: &Connection, installer_type: &str) -> Result<(
             Option::<String>::None,
             "sha256",
             installer_type,
+            Option::<String>::None,
+            Option::<String>::None,
+            Option::<String>::None,
+            Option::<String>::None,
+            Option::<String>::None,
+            Option::<String>::None,
             Option::<String>::None,
             "x64",
             "exe",
@@ -195,12 +206,27 @@ fn catalog_contract_matches_canonical_schema() -> Result<()> {
     let installer_columns = table_columns(&conn, "catalog_installers")?;
     assert!(installer_columns.contains("kind"));
     assert!(installer_columns.contains("scope"));
+    assert!(installer_columns.contains("platform"));
+    assert!(installer_columns.contains("commands"));
+    assert!(installer_columns.contains("protocols"));
+    assert!(installer_columns.contains("file_extensions"));
+    assert!(installer_columns.contains("capabilities"));
     assert!(!installer_columns.contains("type"));
     assert!(!column_notnull(&conn, "catalog_installers", "scope")?);
     assert_eq!(column_default(&conn, "catalog_installers", "scope")?, None);
 
     let package_columns = table_columns(&conn, "catalog_packages")?;
-    for column in ["locale", "moniker", "tags", "bin"] {
+    for column in [
+        "locale",
+        "moniker",
+        "platform",
+        "commands",
+        "protocols",
+        "file_extensions",
+        "capabilities",
+        "tags",
+        "bin",
+    ] {
         assert!(
             package_columns.contains(column),
             "missing package column {column}"

@@ -30,6 +30,16 @@ pub struct RawFetchedPackage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub moniker: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocols: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_extensions: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bin: Option<serde_json::Value>,
@@ -57,6 +67,16 @@ pub struct RawFetchedInstaller {
     pub installer_switches: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocols: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_extensions: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Vec<String>>,
 }
 
 impl ScoopStreamEnvelope {
@@ -109,6 +129,11 @@ mod tests {
                 publisher: None,
                 locale: None,
                 moniker: None,
+                platform: None,
+                commands: None,
+                protocols: None,
+                file_extensions: None,
+                capabilities: None,
                 tags: None,
                 bin: None,
                 installers: vec![RawFetchedInstaller {
@@ -119,6 +144,11 @@ mod tests {
                     nested_kind: None,
                     installer_switches: None,
                     scope: None,
+                    platform: None,
+                    commands: None,
+                    protocols: None,
+                    file_extensions: None,
+                    capabilities: None,
                 }],
             },
         };
@@ -142,6 +172,11 @@ mod tests {
                 publisher: None,
                 locale: None,
                 moniker: None,
+                platform: None,
+                commands: None,
+                protocols: None,
+                file_extensions: None,
+                capabilities: None,
                 tags: None,
                 bin: None,
                 installers: Vec::new(),
@@ -167,7 +202,12 @@ mod tests {
                 "type": "zip",
                 "NestedInstallerType": "msi",
                 "installer_switches": "/S",
-                "scope": "user"
+                "scope": "user",
+                "platform": ["Windows.Desktop"],
+                "commands": ["tool"],
+                "protocols": ["contoso"],
+                "file_extensions": [".zip"],
+                "capabilities": ["internetClient"]
             }"#,
         )
         .expect("installer should deserialize");
@@ -175,5 +215,25 @@ mod tests {
         assert_eq!(installer.nested_kind.as_deref(), Some("msi"));
         assert_eq!(installer.installer_switches.as_deref(), Some("/S"));
         assert_eq!(installer.scope.as_deref(), Some("user"));
+        assert_eq!(
+            installer.platform.as_deref(),
+            Some(&["Windows.Desktop".to_string()][..])
+        );
+        assert_eq!(
+            installer.commands.as_deref(),
+            Some(&["tool".to_string()][..])
+        );
+        assert_eq!(
+            installer.protocols.as_deref(),
+            Some(&["contoso".to_string()][..])
+        );
+        assert_eq!(
+            installer.file_extensions.as_deref(),
+            Some(&[".zip".to_string()][..])
+        );
+        assert_eq!(
+            installer.capabilities.as_deref(),
+            Some(&["internetClient".to_string()][..])
+        );
     }
 }

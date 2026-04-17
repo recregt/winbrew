@@ -35,6 +35,21 @@ pub struct RawCatalogPackage {
     /// Optional package moniker or alias.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub moniker: Option<String>,
+    /// Optional package platform metadata encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
+    /// Optional package commands encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands: Option<String>,
+    /// Optional package protocols encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocols: Option<String>,
+    /// Optional package file extensions encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_extensions: Option<String>,
+    /// Optional package capabilities encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<String>,
     /// Optional package search tags encoded as JSON text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tags: Option<String>,
@@ -59,6 +74,21 @@ pub struct RawCatalogInstaller {
     /// Raw silent-install or package-manager switches.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub installer_switches: Option<String>,
+    /// Raw platform metadata encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
+    /// Raw commands encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands: Option<String>,
+    /// Raw protocols encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocols: Option<String>,
+    /// Raw file extensions encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_extensions: Option<String>,
+    /// Raw capabilities encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<String>,
     /// Raw architecture string.
     pub arch: String,
     /// Raw installer kind string.

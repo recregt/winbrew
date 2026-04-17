@@ -132,6 +132,11 @@ mod tests {
                 "publisher": "Contoso Ltd.",
                 "locale": "en-US",
                 "moniker": "contoso",
+                "platform": ["Windows.Desktop"],
+                "commands": ["contoso"],
+                "protocols": ["contoso-protocol"],
+                "file_extensions": [".app"],
+                "capabilities": ["internetClient"],
                 "tags": ["utility"],
                 "bin": null,
                 "installers": [
@@ -142,7 +147,12 @@ mod tests {
                         "type": "exe",
                         "NestedInstallerType": "portable",
                         "installer_switches": "/S",
-                        "scope": "machine"
+                        "scope": "machine",
+                        "platform": ["Windows.Desktop"],
+                        "commands": ["contoso-installer"],
+                        "protocols": ["contoso-installer-protocol"],
+                        "file_extensions": [".exe"],
+                        "capabilities": ["internetClient"]
                     }
                 ]
             }
@@ -161,12 +171,49 @@ mod tests {
         assert_eq!(package.package.source_id, "Contoso.App");
         assert_eq!(package.package.name, "Contoso App");
         assert_eq!(package.package.publisher.as_deref(), Some("Contoso Ltd."));
+        assert_eq!(
+            package.package.platform.as_deref(),
+            Some("[\"Windows.Desktop\"]")
+        );
+        assert_eq!(package.package.commands.as_deref(), Some("[\"contoso\"]"));
+        assert_eq!(
+            package.package.protocols.as_deref(),
+            Some("[\"contoso-protocol\"]")
+        );
+        assert_eq!(
+            package.package.file_extensions.as_deref(),
+            Some("[\".app\"]")
+        );
+        assert_eq!(
+            package.package.capabilities.as_deref(),
+            Some("[\"internetClient\"]")
+        );
         assert_eq!(package.installers.len(), 1);
         assert_eq!(package.installers[0].arch, Architecture::X64);
         assert_eq!(package.installers[0].kind, InstallerType::Exe);
         assert_eq!(
             package.installers[0].nested_kind,
             Some(InstallerType::Portable)
+        );
+        assert_eq!(
+            package.installers[0].platform.as_deref(),
+            Some("[\"Windows.Desktop\"]")
+        );
+        assert_eq!(
+            package.installers[0].commands.as_deref(),
+            Some("[\"contoso-installer\"]")
+        );
+        assert_eq!(
+            package.installers[0].protocols.as_deref(),
+            Some("[\"contoso-installer-protocol\"]")
+        );
+        assert_eq!(
+            package.installers[0].file_extensions.as_deref(),
+            Some("[\".exe\"]")
+        );
+        assert_eq!(
+            package.installers[0].capabilities.as_deref(),
+            Some("[\"internetClient\"]")
         );
         assert_eq!(
             package.installers[0].installer_switches.as_deref(),

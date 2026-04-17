@@ -110,11 +110,71 @@ func TestWingetManifestResolutionSingleton(t *testing.T) {
 	if got, want := len(pkg.Tags), 2; got != want {
 		t.Fatalf("package tags length = %d, want %d", got, want)
 	}
+	if got, want := len(pkg.Platform), 1; got != want {
+		t.Fatalf("package platform length = %d, want %d", got, want)
+	}
+	if got, want := pkg.Platform[0], "Windows.Desktop"; got != want {
+		t.Fatalf("package platform[0] = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.Commands), 1; got != want {
+		t.Fatalf("package commands length = %d, want %d", got, want)
+	}
+	if got, want := pkg.Commands[0], "wt"; got != want {
+		t.Fatalf("package commands[0] = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.Protocols), 2; got != want {
+		t.Fatalf("package protocols length = %d, want %d", got, want)
+	}
+	if got, want := pkg.Protocols[0], "ms-windows-store"; got != want {
+		t.Fatalf("package protocols[0] = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.FileExtensions), 1; got != want {
+		t.Fatalf("package file extensions length = %d, want %d", got, want)
+	}
+	if got, want := pkg.FileExtensions[0], ".txt"; got != want {
+		t.Fatalf("package file extensions[0] = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.Capabilities), 2; got != want {
+		t.Fatalf("package capabilities length = %d, want %d", got, want)
+	}
+	if got, want := pkg.Capabilities[0], "internetClient"; got != want {
+		t.Fatalf("package capabilities[0] = %q, want %q", got, want)
+	}
 	if got, want := pkg.Installers[0].Scope, "user"; got != want {
 		t.Fatalf("installer scope = %q, want %q", got, want)
 	}
 	if got, want := pkg.Installers[0].InstallerSwitches, "/terminal-default"; got != want {
 		t.Fatalf("installer switches = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.Installers[0].Platform), 1; got != want {
+		t.Fatalf("installer platform length = %d, want %d", got, want)
+	}
+	if got, want := pkg.Installers[0].Platform[0], "Windows.Desktop"; got != want {
+		t.Fatalf("installer platform[0] = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.Installers[0].Commands), 1; got != want {
+		t.Fatalf("installer commands length = %d, want %d", got, want)
+	}
+	if got, want := pkg.Installers[0].Commands[0], "wt"; got != want {
+		t.Fatalf("installer commands[0] = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.Installers[0].Protocols), 2; got != want {
+		t.Fatalf("installer protocols length = %d, want %d", got, want)
+	}
+	if got, want := pkg.Installers[0].Protocols[0], "ms-windows-store"; got != want {
+		t.Fatalf("installer protocols[0] = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.Installers[0].FileExtensions), 1; got != want {
+		t.Fatalf("installer file extensions length = %d, want %d", got, want)
+	}
+	if got, want := pkg.Installers[0].FileExtensions[0], ".txt"; got != want {
+		t.Fatalf("installer file extensions[0] = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.Installers[0].Capabilities), 2; got != want {
+		t.Fatalf("installer capabilities length = %d, want %d", got, want)
+	}
+	if got, want := pkg.Installers[0].Capabilities[0], "internetClient"; got != want {
+		t.Fatalf("installer capabilities[0] = %q, want %q", got, want)
 	}
 	if got, want := pkg.Installers[1].Arch, ""; got != want {
 		t.Fatalf("installer arch = %q, want %q", got, want)
@@ -269,6 +329,33 @@ ManifestVersion: 1.12.0
 	if got, want := pkg.Moniker, "contoso"; got != want {
 		t.Fatalf("package moniker = %q, want %q", got, want)
 	}
+	if got, want := len(pkg.Platform), 0; got != want {
+		t.Fatalf("package platform length = %d, want %d", got, want)
+	}
+	if got, want := len(pkg.Commands), 1; got != want {
+		t.Fatalf("package commands length = %d, want %d", got, want)
+	}
+	if got, want := pkg.Commands[0], "contoso"; got != want {
+		t.Fatalf("package commands[0] = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.Protocols), 1; got != want {
+		t.Fatalf("package protocols length = %d, want %d", got, want)
+	}
+	if got, want := pkg.Protocols[0], "contoso-protocol"; got != want {
+		t.Fatalf("package protocols[0] = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.FileExtensions), 2; got != want {
+		t.Fatalf("package file extensions length = %d, want %d", got, want)
+	}
+	if got, want := pkg.FileExtensions[0], ".app"; got != want {
+		t.Fatalf("package file extensions[0] = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.Capabilities), 1; got != want {
+		t.Fatalf("package capabilities length = %d, want %d", got, want)
+	}
+	if got, want := pkg.Capabilities[0], "internetClient"; got != want {
+		t.Fatalf("package capabilities[0] = %q, want %q", got, want)
+	}
 	if got, want := len(pkg.Tags), 2; got != want {
 		t.Fatalf("package tags length = %d, want %d", got, want)
 	}
@@ -277,6 +364,12 @@ ManifestVersion: 1.12.0
 	}
 	if got, want := pkg.Installers[0].InstallerSwitches, "/app-installer"; got != want {
 		t.Fatalf("installer switches = %q, want %q", got, want)
+	}
+	if got, want := len(pkg.Installers[0].Platform), 1; got != want {
+		t.Fatalf("installer platform length = %d, want %d", got, want)
+	}
+	if got, want := pkg.Installers[0].Platform[0], "Windows.Desktop"; got != want {
+		t.Fatalf("installer platform[0] = %q, want %q", got, want)
 	}
 	if got, want := pkg.Installers[0].Arch, "x64"; got != want {
 		t.Fatalf("installer arch = %q, want %q", got, want)

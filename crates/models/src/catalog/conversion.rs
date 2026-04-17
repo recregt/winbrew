@@ -31,6 +31,11 @@ impl From<&Package> for CatalogPackage {
             publisher: package.publisher.clone(),
             locale: None,
             moniker: None,
+            platform: None,
+            commands: None,
+            protocols: None,
+            file_extensions: None,
+            capabilities: None,
             tags: None,
             bin: None,
         }
@@ -58,6 +63,11 @@ impl TryFrom<RawCatalogPackage> for CatalogPackage {
             publisher: raw.publisher,
             locale: raw.locale,
             moniker: raw.moniker,
+            platform: raw.platform,
+            commands: raw.commands,
+            protocols: raw.protocols,
+            file_extensions: raw.file_extensions,
+            capabilities: raw.capabilities,
             tags: raw.tags,
             bin: raw.bin,
         };
@@ -78,6 +88,11 @@ impl TryFrom<RawCatalogInstaller> for CatalogInstaller {
             hash_algorithm: raw.hash_algorithm,
             installer_type: raw.installer_type,
             installer_switches: raw.installer_switches,
+            platform: raw.platform,
+            commands: raw.commands,
+            protocols: raw.protocols,
+            file_extensions: raw.file_extensions,
+            capabilities: raw.capabilities,
             arch: raw.arch.parse()?,
             kind: raw.kind.parse()?,
             nested_kind: raw.nested_kind.map(|kind| kind.parse()).transpose()?,
@@ -112,6 +127,11 @@ mod tests {
             publisher: Some("Contoso Ltd.".to_string()),
             locale: Some("en-US".to_string()),
             moniker: Some("contoso".to_string()),
+            platform: Some("[\"Windows.Desktop\"]".to_string()),
+            commands: Some("[\"contoso\"]".to_string()),
+            protocols: Some("[\"contoso-protocol\"]".to_string()),
+            file_extensions: Some("[\".app\"]".to_string()),
+            capabilities: Some("[\"internetClient\"]".to_string()),
             tags: Some("[\"utility\"]".to_string()),
             bin: Some("[\"tool.exe\"]".to_string()),
         };
@@ -124,6 +144,17 @@ mod tests {
         assert_eq!(converted.version.to_string(), "1.2.3");
         assert_eq!(converted.locale.as_deref(), Some("en-US"));
         assert_eq!(converted.moniker.as_deref(), Some("contoso"));
+        assert_eq!(converted.platform.as_deref(), Some("[\"Windows.Desktop\"]"));
+        assert_eq!(converted.commands.as_deref(), Some("[\"contoso\"]"));
+        assert_eq!(
+            converted.protocols.as_deref(),
+            Some("[\"contoso-protocol\"]")
+        );
+        assert_eq!(converted.file_extensions.as_deref(), Some("[\".app\"]"));
+        assert_eq!(
+            converted.capabilities.as_deref(),
+            Some("[\"internetClient\"]")
+        );
         assert_eq!(converted.tags.as_deref(), Some("[\"utility\"]"));
         assert_eq!(converted.bin.as_deref(), Some("[\"tool.exe\"]"));
     }
@@ -137,6 +168,11 @@ mod tests {
             hash_algorithm: crate::shared::HashAlgorithm::Sha256,
             installer_type: CatalogInstallerType::Zip,
             installer_switches: Some("/S".to_string()),
+            platform: Some("[\"Windows.Desktop\"]".to_string()),
+            commands: Some("[\"contoso\"]".to_string()),
+            protocols: Some("[\"contoso-protocol\"]".to_string()),
+            file_extensions: Some("[\".exe\"]".to_string()),
+            capabilities: Some("[\"internetClient\"]".to_string()),
             arch: String::default(),
             kind: "portable".to_string(),
             nested_kind: Some("msi".to_string()),
@@ -150,6 +186,17 @@ mod tests {
         assert_eq!(converted.kind, InstallerType::Portable);
         assert_eq!(converted.nested_kind, Some(InstallerType::Msi));
         assert_eq!(converted.scope.as_deref(), Some("machine"));
+        assert_eq!(converted.platform.as_deref(), Some("[\"Windows.Desktop\"]"));
+        assert_eq!(converted.commands.as_deref(), Some("[\"contoso\"]"));
+        assert_eq!(
+            converted.protocols.as_deref(),
+            Some("[\"contoso-protocol\"]")
+        );
+        assert_eq!(converted.file_extensions.as_deref(), Some("[\".exe\"]"));
+        assert_eq!(
+            converted.capabilities.as_deref(),
+            Some("[\"internetClient\"]")
+        );
         assert_eq!(
             converted.hash_algorithm,
             crate::shared::HashAlgorithm::Sha256

@@ -344,6 +344,10 @@ func (m wingetManifest) resolveInstallers() ([]wingetInstallerSnapshot, error) {
 		installers = []wingetManifestInstaller{{
 			Architecture:        m.Architecture,
 			InstallerLocale:     m.InstallerLocale,
+			Commands:            m.Commands,
+			Protocols:           m.Protocols,
+			FileExtensions:      m.FileExtensions,
+			Capabilities:        m.Capabilities,
 			Platform:            m.Platform,
 			MinimumOSVersion:    m.MinimumOSVersion,
 			InstallerType:       m.InstallerType,
@@ -378,6 +382,11 @@ func (installer wingetManifestInstaller) resolve(defaults wingetManifest) (winge
 	installerURL := strings.TrimSpace(firstNonEmpty(installer.InstallerUrl, defaults.InstallerUrl))
 	installerHash := strings.TrimSpace(firstNonEmpty(installer.InstallerSha256, defaults.InstallerSha256))
 	nestedInstallerType := normalizeWingetInstallerType(firstNonEmpty(installer.NestedInstallerType, defaults.NestedInstallerType))
+	commands := firstNonEmptyStrings(installer.Commands, defaults.Commands)
+	protocols := firstNonEmptyStrings(installer.Protocols, defaults.Protocols)
+	fileExtensions := firstNonEmptyStrings(installer.FileExtensions, defaults.FileExtensions)
+	capabilities := firstNonEmptyStrings(installer.Capabilities, defaults.Capabilities)
+	platform := firstNonEmptyStrings(installer.Platform, defaults.Platform)
 	scope, err := resolveWingetScope(firstNonEmpty(installer.Scope, defaults.Scope))
 	if err != nil {
 		return wingetInstallerSnapshot{}, err
@@ -396,6 +405,11 @@ func (installer wingetManifestInstaller) resolve(defaults wingetManifest) (winge
 		Hash:              installerHash,
 		Arch:              architecture,
 		Type:              installerType,
+		Commands:          commands,
+		Protocols:         protocols,
+		FileExtensions:    fileExtensions,
+		Capabilities:      capabilities,
+		Platform:          platform,
 		NestedKind:        nestedInstallerType,
 		Scope:             scope,
 		InstallerSwitches: installerSwitches,
