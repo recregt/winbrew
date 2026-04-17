@@ -61,7 +61,7 @@ func (s *Source) DownloadSourceDB(ctx context.Context, dst string) error {
 		return fmt.Errorf("destination path cannot be empty")
 	}
 
-	slog.Info("winget source download started", "url", sourceURL, "dst", dst, "cache_dir", s.cacheDir)
+	slog.Info("winget source archive download started", "url", sourceURL, "dst", dst, "cache_dir", s.cacheDir)
 
 	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
 		return fmt.Errorf("failed to create destination dir: %w", err)
@@ -77,7 +77,7 @@ func (s *Source) DownloadSourceDB(ctx context.Context, dst string) error {
 		return fmt.Errorf("failed to extract winget db: %w", err)
 	}
 
-	slog.Info("winget source extracted", "dst", dst, "elapsed", time.Since(start))
+	slog.Info("winget source archive extracted", "dst", dst, "elapsed", time.Since(start))
 
 	return nil
 }

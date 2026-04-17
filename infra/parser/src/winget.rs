@@ -81,7 +81,10 @@ where
 
         match parse_package(envelope.payload) {
             Ok(parsed) => on_package(parsed)?,
-            Err(err) => eprintln!("skipping winget package on line {}: {err}", line_number),
+            Err(err) => eprintln!(
+                "[parser] skipping winget package on line {}: {err}",
+                line_number
+            ),
         }
     }
 

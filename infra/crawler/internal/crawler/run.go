@@ -179,17 +179,17 @@ func runPipeline(ctx context.Context, cfg *config.Config, srcs crawlerSources, c
 				return fmt.Errorf("failed to create winget cache dir: %w", err)
 			}
 
-			slog.Info("winget source db download started", "name", srcs.winget.Name(), "dst", sourceDBPath)
+			slog.Info("winget source staging started", "name", srcs.winget.Name(), "dst", sourceDBPath, "purpose", "download and extract source.msix into a local SQLite database for package resolution")
 			if err := retry.Do(groupCtx, cfg.Retry.Max, cfg.Retry.Backoff, func() error {
 				return srcs.winget.DownloadSourceDB(groupCtx, sourceDBPath)
 			}); err != nil {
 				if groupCtx.Err() != nil {
 					return fmt.Errorf("source %s cancelled: %w", srcs.winget.Name(), groupCtx.Err())
 				}
-				slog.Error("winget source db download failed", "name", srcs.winget.Name(), "dst", sourceDBPath, "elapsed", time.Since(downloadStart), "err", err)
+				slog.Error("winget source staging failed", "name", srcs.winget.Name(), "dst", sourceDBPath, "elapsed", time.Since(downloadStart), "err", err)
 				return fmt.Errorf("failed to stage %s source db: %w", srcs.winget.Name(), err)
 			}
-			slog.Info("winget source db download finished", "name", srcs.winget.Name(), "dst", sourceDBPath, "elapsed", time.Since(downloadStart))
+			slog.Info("winget source staging complete", "name", srcs.winget.Name(), "dst", sourceDBPath, "elapsed", time.Since(downloadStart))
 
 			writeStart := time.Now()
 			if err := os.MkdirAll(filepath.Dir(wingetOutPath), 0o750); err != nil {
@@ -213,15 +213,15 @@ func runPipeline(ctx context.Context, cfg *config.Config, srcs crawlerSources, c
 				}
 			}()
 
-			slog.Info("winget JSONL write started", "name", srcs.winget.Name(), "dst", wingetOutPath)
+			slog.Info("winget package resolution started", "name", srcs.winget.Name(), "src_db", sourceDBPath, "dst", wingetOutPath, "purpose", "query the Winget index, fetch raw manifests, and write one merged JSONL stream")
 			if err := srcs.winget.WriteJSONL(groupCtx, sourceDBPath, writer, cfg.Retry.Max, cfg.Retry.Backoff); err != nil {
 				if groupCtx.Err() != nil {
 					return fmt.Errorf("source %s cancelled: %w", srcs.winget.Name(), groupCtx.Err())
 				}
-				slog.Error("winget JSONL write failed", "name", srcs.winget.Name(), "dst", wingetOutPath, "elapsed", time.Since(writeStart), "err", err)
+				slog.Error("winget package resolution failed", "name", srcs.winget.Name(), "dst", wingetOutPath, "elapsed", time.Since(writeStart), "err", err)
 				return fmt.Errorf("failed to stream packages from %s: %w", srcs.winget.Name(), err)
 			}
-			slog.Info("winget JSONL write finished", "name", srcs.winget.Name(), "dst", wingetOutPath, "elapsed", time.Since(writeStart))
+			slog.Info("winget package resolution complete", "name", srcs.winget.Name(), "dst", wingetOutPath, "elapsed", time.Since(writeStart))
 
 			return nil
 		})

@@ -40,25 +40,51 @@ impl RunConfig {
 }
 
 pub fn run<R: BufRead>(reader: R, config: RunConfig) -> Result<CatalogMetadata, ParserError> {
+    eprintln!(
+        "[parser] starting catalog materialization winget_jsonl={} out={} metadata={}",
+        config.winget_jsonl_path.display(),
+        config.output_db_path.display(),
+        config.metadata_path.display(),
+    );
+
     let mut writer = CatalogWriter::open(&config.output_db_path)?;
     let mut stats = CatalogStats::default();
 
+    eprintln!("[parser] ingesting scoop JSONL from stdin");
     stream_scoop_packages(reader, |package| {
         stats.record(&package);
         writer.write_package(&package)
     })?;
+    eprintln!("[parser] scoop ingestion complete");
 
+    eprintln!(
+        "[parser] ingesting winget JSONL from {}",
+        config.winget_jsonl_path.display()
+    );
     read_winget_packages(&config.winget_jsonl_path, |package| {
         stats.record(&package);
         writer.write_package(&package)
     })?;
+    eprintln!("[parser] winget ingestion complete");
 
+    eprintln!(
+        "[parser] finalizing catalog database at {}",
+        config.output_db_path.display()
+    );
     writer.finish()?;
 
     let current_hash = hash_file(&config.output_db_path)?;
     let metadata =
         CatalogMetadata::build_from_counts(stats.package_count, stats.source_counts, current_hash);
+    eprintln!(
+        "[parser] writing catalog metadata to {}",
+        config.metadata_path.display()
+    );
     write_metadata(&config.metadata_path, &metadata)?;
+    eprintln!(
+        "[parser] catalog materialization complete packages={} sources={:?}",
+        metadata.package_count, metadata.source_counts
+    );
 
     Ok(metadata)
 }
@@ -120,7 +146,10 @@ where
 
         match parse_package(envelope.payload) {
             Ok(parsed) => on_package(parsed)?,
-            Err(err) => eprintln!("skipping scoop package on line {}: {err}", line_number),
+            Err(err) => eprintln!(
+                "[parser] skipping scoop package on line {}: {err}",
+                line_number
+            ),
         }
     }
 
