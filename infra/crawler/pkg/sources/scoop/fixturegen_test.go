@@ -43,7 +43,7 @@ func collectRealScoopPackages(ctx context.Context, cacheDir string) ([]normalize
 		{name: "extras", url: "https://github.com/ScoopInstaller/Extras"},
 	}
 
-	preferrredManifests := []string{"vscode.json", "neovim.json", "git.json", "7zip.json"}
+	preferredManifests := []string{"vscode.json", "neovim.json", "git.json", "7zip.json"}
 	selected := make([]normalize.Package, 0, 2)
 
 	for _, bucket := range buckets {
@@ -53,7 +53,7 @@ func collectRealScoopPackages(ctx context.Context, cacheDir string) ([]normalize
 		}
 
 		manifestDir := filepath.Join(repoDir, "bucket")
-		for _, manifestName := range preferrredManifests {
+		for _, manifestName := range preferredManifests {
 			if len(selected) >= 2 {
 				break
 			}
