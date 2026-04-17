@@ -43,6 +43,7 @@ VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
 const SCHEMA: &str = include_str!("../schema/catalog.sql");
 
 pub struct CatalogWriter {
+    catalog_db_path: PathBuf,
     connection: Connection,
     committed: bool,
 }
@@ -52,6 +53,8 @@ impl CatalogWriter {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
+
+        let catalog_db_path = path.to_path_buf();
 
         let mut cleanup_paths = Vec::with_capacity(3);
         cleanup_paths.push(path.to_path_buf());
@@ -69,46 +72,100 @@ impl CatalogWriter {
         let connection = Connection::open_with_flags(
             path,
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
-        )?;
-        connection.execute_batch(
-            "PRAGMA foreign_keys=ON; PRAGMA journal_mode=DELETE; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-2000; PRAGMA temp_store=MEMORY; BEGIN IMMEDIATE;",
-        )?;
-        connection.execute_batch(SCHEMA)?;
+        )
+        .map_err(|source| ParserError::CatalogDb {
+            path: catalog_db_path.clone(),
+            source,
+        })?;
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys=ON; PRAGMA journal_mode=DELETE; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-2000; PRAGMA temp_store=MEMORY; BEGIN IMMEDIATE;",
+            )
+            .map_err(|source| ParserError::CatalogDb {
+                path: catalog_db_path.clone(),
+                source,
+            })?;
+        connection
+            .execute_batch(SCHEMA)
+            .map_err(|source| ParserError::CatalogDb {
+                path: catalog_db_path.clone(),
+                source,
+            })?;
 
         Ok(Self {
+            catalog_db_path,
             connection,
             committed: false,
         })
     }
 
     pub fn write_package(&mut self, parsed: &ParsedPackage) -> Result<(), ParserError> {
-        let mut package_stmt = self.connection.prepare(PACKAGE_UPSERT)?;
-        let mut raw_stmt = self.connection.prepare(RAW_UPSERT)?;
-        let mut delete_installers_stmt = self.connection.prepare(DELETE_INSTALLERS)?;
-        let mut installer_stmt = self.connection.prepare(INSTALLER_INSERT)?;
+        let mut package_stmt =
+            self.connection
+                .prepare(PACKAGE_UPSERT)
+                .map_err(|source| ParserError::CatalogDb {
+                    path: self.catalog_db_path.clone(),
+                    source,
+                })?;
+        let mut raw_stmt =
+            self.connection
+                .prepare(RAW_UPSERT)
+                .map_err(|source| ParserError::CatalogDb {
+                    path: self.catalog_db_path.clone(),
+                    source,
+                })?;
+        let mut delete_installers_stmt =
+            self.connection
+                .prepare(DELETE_INSTALLERS)
+                .map_err(|source| ParserError::CatalogDb {
+                    path: self.catalog_db_path.clone(),
+                    source,
+                })?;
+        let mut installer_stmt = self
+            .connection
+            .prepare(INSTALLER_INSERT)
+            .map_err(|source| ParserError::CatalogDb {
+                path: self.catalog_db_path.clone(),
+                source,
+            })?;
 
-        package_stmt.execute(params![
-            parsed.package.id.as_str(),
-            parsed.package.name.as_str(),
-            parsed.package.version.to_string(),
-            parsed.package.source.as_str(),
-            parsed.package.namespace.as_deref(),
-            parsed.package.source_id.as_str(),
-            parsed.package.description.as_deref(),
-            parsed.package.homepage.as_deref(),
-            parsed.package.license.as_deref(),
-            parsed.package.publisher.as_deref(),
-            parsed.package.locale.as_deref(),
-            parsed.package.moniker.as_deref(),
-            parsed.package.tags.as_deref(),
-            parsed.package.bin.as_deref(),
-        ])?;
+        package_stmt
+            .execute(params![
+                parsed.package.id.as_str(),
+                parsed.package.name.as_str(),
+                parsed.package.version.to_string(),
+                parsed.package.source.as_str(),
+                parsed.package.namespace.as_deref(),
+                parsed.package.source_id.as_str(),
+                parsed.package.description.as_deref(),
+                parsed.package.homepage.as_deref(),
+                parsed.package.license.as_deref(),
+                parsed.package.publisher.as_deref(),
+                parsed.package.locale.as_deref(),
+                parsed.package.moniker.as_deref(),
+                parsed.package.tags.as_deref(),
+                parsed.package.bin.as_deref(),
+            ])
+            .map_err(|source| ParserError::CatalogDb {
+                path: self.catalog_db_path.clone(),
+                source,
+            })?;
 
-        raw_stmt.execute(params![
-            parsed.package.id.as_str(),
-            parsed.raw_json.as_str()
-        ])?;
-        delete_installers_stmt.execute(params![parsed.package.id.as_str()])?;
+        raw_stmt
+            .execute(params![
+                parsed.package.id.as_str(),
+                parsed.raw_json.as_str()
+            ])
+            .map_err(|source| ParserError::CatalogDb {
+                path: self.catalog_db_path.clone(),
+                source,
+            })?;
+        delete_installers_stmt
+            .execute(params![parsed.package.id.as_str()])
+            .map_err(|source| ParserError::CatalogDb {
+                path: self.catalog_db_path.clone(),
+                source,
+            })?;
 
         let mut installers: Vec<_> = parsed.installers.iter().collect();
         installers.sort_by(|left, right| {
@@ -147,25 +204,35 @@ impl CatalogWriter {
                 Some(installer.hash.as_str())
             };
 
-            installer_stmt.execute(params![
-                parsed.package.id.as_str(),
-                installer.url.as_str(),
-                hash,
-                installer.hash_algorithm.as_str(),
-                installer.installer_type.as_str(),
-                installer.installer_switches.as_deref(),
-                installer.scope.as_deref(),
-                installer.arch.to_string(),
-                installer.kind.to_string(),
-                installer.nested_kind.map(|kind| kind.as_str()),
-            ])?;
+            installer_stmt
+                .execute(params![
+                    parsed.package.id.as_str(),
+                    installer.url.as_str(),
+                    hash,
+                    installer.hash_algorithm.as_str(),
+                    installer.installer_type.as_str(),
+                    installer.installer_switches.as_deref(),
+                    installer.scope.as_deref(),
+                    installer.arch.to_string(),
+                    installer.kind.to_string(),
+                    installer.nested_kind.map(|kind| kind.as_str()),
+                ])
+                .map_err(|source| ParserError::CatalogDb {
+                    path: self.catalog_db_path.clone(),
+                    source,
+                })?;
         }
 
         Ok(())
     }
 
     pub fn finish(mut self) -> Result<(), ParserError> {
-        self.connection.execute_batch("COMMIT;")?;
+        self.connection
+            .execute_batch("COMMIT;")
+            .map_err(|source| ParserError::CatalogDb {
+                path: self.catalog_db_path.clone(),
+                source,
+            })?;
         self.committed = true;
         Ok(())
     }

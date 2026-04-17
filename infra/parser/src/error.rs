@@ -1,4 +1,5 @@
 use std::io;
+use std::path::PathBuf;
 
 use rusqlite::Error as SqliteError;
 use thiserror::Error;
@@ -23,8 +24,12 @@ pub enum ParserError {
     #[error("failed to read or write parser artifact")]
     Io(#[from] io::Error),
 
-    #[error("failed to access winget source database")]
-    Sqlite(#[from] SqliteError),
+    #[error("failed to access catalog database at {path}")]
+    CatalogDb {
+        path: PathBuf,
+        #[source]
+        source: SqliteError,
+    },
 
     #[error(transparent)]
     Model(#[from] ModelError),
