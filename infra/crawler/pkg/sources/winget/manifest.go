@@ -100,7 +100,7 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 		return fmt.Errorf("database path cannot be empty")
 	}
 
-	slog.Info("winget JSONL build started", "db_path", dbPath)
+	slog.Info("winget package resolution started", "db_path", dbPath, "purpose", "query the Winget index, fetch raw manifests from winget-pkgs, and write merged JSONL")
 
 	writer, flush := bufferJSONLWriter(w)
 	defer func() {
@@ -115,9 +115,9 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 	if err != nil {
 		return err
 	}
-	slog.Info("winget index loaded", "db_path", dbPath, "packages", len(rows), "elapsed", time.Since(indexStart))
+	slog.Info("winget package index loaded", "db_path", dbPath, "packages", len(rows), "elapsed", time.Since(indexStart))
 	if len(rows) == 0 {
-		slog.Info("winget JSONL build complete", "db_path", dbPath, "packages", 0, "written", 0, "skipped", 0, "elapsed", time.Since(start))
+		slog.Info("winget package resolution complete", "db_path", dbPath, "packages", 0, "written", 0, "skipped", 0, "elapsed", time.Since(start))
 		return nil
 	}
 
@@ -127,7 +127,7 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 	if len(rows) < workerCount {
 		workerCount = len(rows)
 	}
-	slog.Info("winget package crawl started", "db_path", dbPath, "packages", len(rows), "workers", workerCount)
+	slog.Info("winget manifest fanout started", "db_path", dbPath, "packages", len(rows), "workers", workerCount)
 
 	var wg sync.WaitGroup
 	wg.Add(workerCount)
@@ -215,7 +215,7 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 		}
 	}
 
-	slog.Info("winget JSONL build complete", "db_path", dbPath, "packages", len(rows), "written", written, "skipped", skipped, "elapsed", time.Since(start))
+	slog.Info("winget package resolution complete", "db_path", dbPath, "packages", len(rows), "written", written, "skipped", skipped, "elapsed", time.Since(start))
 
 	return nil
 }
