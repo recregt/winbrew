@@ -1,188 +1,155 @@
 # WinBrew
 
-[![CI](https://github.com/recregt/winbrew/actions/workflows/main.yml/badge.svg)](https://github.com/recregt/winbrew/actions)
+![Rust](https://img.shields.io/badge/Rust-000000?style=flat&logo=rust&logoColor=white)
+![Go](https://img.shields.io/badge/Go-00ADD8?style=flat&logo=go&logoColor=white)
+![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows&logoColor=white)
+![Cloudflare](https://img.shields.io/badge/Cloudflare-F38020?style=flat&logo=Cloudflare&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE-MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE-APACHE)
 
-A modern package manager for Windows that installs, tracks, and cleanly removes software.
+WinBrew is a catalog-first package manager for Windows. It resolves packages from a local SQLite catalog, delegates installs to Windows-native or filesystem engines, and keeps state under a managed root.
 
 > [!IMPORTANT]
-> This project is currently in active development. Public releases are not being
-> published yet, and there is no supported end-user installer flow.
+> This project is still under active development. Public end-user releases are not published yet, and there is no supported installer flow.
+>
+> For the architecture map, start with [docs/index.md](docs/index.md).
 
-For the architecture and documentation map, start with [docs/index.md](docs/index.md). For engine-specific behavior and ownership, see [docs/engines.md](docs/engines.md).
+## Frequently Asked Questions
 
-## Build From Source
+### What is WinBrew?
+WinBrew is a Windows package manager that tries to make package search, installation, tracking, and cleanup deterministic. It does not query upstream package sites at runtime for every operation; instead, it works from a locally stored catalog snapshot.
 
-WinBrew is intended to be built from source while development is ongoing. If
-you want to try it locally, use the steps below.
+That makes WinBrew closer to a managed package system than a thin wrapper around an existing package manager.
 
-### Prerequisites
+### Why should I use WinBrew instead of Winget or Scoop?
+If one ecosystem already covers your needs, Winget or Scoop may be enough. WinBrew is aimed at people who want a single local catalog that can unify multiple sources, work offline once synced, keep install state in one managed root, and track recovery data per package.
 
-- Windows 10 or Windows 11
-- Git
-- Rust toolchain from [rust-toolchain.toml](rust-toolchain.toml)
-- Go toolchain for repo-local helper tasks
-- [go-task](https://taskfile.dev/)
-- PowerShell 7 or later
+The trade-off is that WinBrew is opinionated about its catalog model. In return, searches and installs are more deterministic because they are based on the same local database.
 
-### 1. Clone the repository
+### How up to date are the packages?
+WinBrew is snapshot-based, not live-query-based. The current catalog is whatever the latest successfully published snapshot contains, and the update pipeline can deliver either a full snapshot or a patch chain depending on the release plan.
 
-```powershell
-git clone https://github.com/recregt/winbrew.git
-Set-Location winbrew
-```
+That means freshness depends on the upstream sources and on the last successful publish, not on a real-time lookup against Winget or GitHub.
 
-### 2. Install local tooling
+### If the catalog is rebuilt from scratch every night, how do I access older package versions?
+It is not rebuilt from scratch every night. The pipeline publishes catalog artifacts on a schedule, and historical versions are reachable through archived catalog snapshots and retained release lineage when those artifacts are kept.
 
-These tools are used by the repository tasks and local checks:
+If a version was once published, the right place to look is the historical catalog artifact for that publish date, not a live upstream search. WinBrew does not yet ship a package-time-travel browser in the CLI.
 
-```powershell
-task tools:install-lefthook
-task tools:install-nextest
-task tools:install-golangci-lint
-lefthook install
-```
+### Why do you use Go and Rust together in a monorepo? Isn't that complex?
+It is more complex than using one language everywhere, but the split is deliberate. The crawler and publisher are Go-based, while the parser, CLI, core library, database layer, models, and engines are Rust-based.
 
-### 3. Verify the Rust toolchain
+The monorepo keeps the contract between producer and consumer in one place. That reduces drift in the catalog schema, update flow, and CI wiring, which would be harder to control if the pieces lived in separate repositories.
 
-The repository pins the Rust channel in `rust-toolchain.toml`, so the local
-toolchain should match that file before you build.
+### What does "Unified Catalog" mean if Winget and Scoop package IDs are different?
+It means the catalog normalizes multiple sources into one model without pretending their upstream IDs are the same. WinBrew keeps the source as part of the identity: Winget stays `winget/<id>`, Scoop stays `scoop/<bucket>/<id>`, Chocolatey stays `chocolatey/<id>`, and WinBrew stays `winbrew/<id>`.
 
-```powershell
-rustup show
-cargo --version
-task check
-```
+Search is still unified because name-based queries can match across sources. If more than one package matches, the CLI asks you to choose.
 
-### 4. Run the Rust checks
+### Does WinBrew host the package payloads itself?
+No. WinBrew hosts the catalog bundle and the update metadata, not the actual installer payloads.
 
-```powershell
-task ci:rust
-task test:nextest
-```
+The installers still live on the upstream hosts that published them. WinBrew stores the metadata needed to find, verify, and install them.
 
-`task ci:rust` runs formatting, clippy, docs, and the CLI test suite. `task
-test:nextest` is useful when you want the Rust tests without the extra CI
-wrapping.
+### Isn't a 35 MB database too large?
+Not for what it does. The database is not just package names; it contains normalized package metadata, installer details, search data, and update information.
 
-### 5. Build the CLI binary
+SQLite buys you indexed queries, schema enforcement, atomic updates, and a clean way to publish stable snapshots. For an offline-first catalog, that is usually a better trade than JSON, YAML, or XML.
 
-```powershell
-cargo build --locked -p winbrew-bin --bin winbrew
-```
+### Why use SQLite instead of JSON, YAML, or XML?
+Because the catalog is an operational database, not a config file. WinBrew needs fast local search, indexed filtering, atomic refreshes, schema versioning, and patch-friendly update behavior.
 
-That produces the local `winbrew` executable under `target\debug`. If you want
-an optimized local build, use:
+JSON, YAML, and XML are great interchange formats, but they are a poor fit for a large runtime catalog that must be queried and updated safely under transaction semantics.
 
-```powershell
-task dev:run-release -- version
-```
+### Can I search without internet access?
+Yes, as long as the catalog is already present. `winbrew search` queries the local `catalog.db`, so internet access is only needed to fetch or refresh the catalog.
 
-The task name says `release`, but it only means a local `--release` build. It is
-not a published release artifact.
+If the catalog is missing, WinBrew will tell you to run `winbrew update` first.
 
-### 6. Run locally
+### Does WinBrew track my searches or do telemetry?
+No, the network traffic WinBrew does perform is for catalog updates, installer downloads, and the update API. That is different from telemetry.
 
-The repository provides a dev root so local runs do not pollute your profile:
+### Why is there no pre-built CLI binary yet? Only the catalog is ready!
+Because the project is still changing and the supported flow is source-first. Releases are not published yet, and the repository still expects you to build the CLI locally while the catalog/update contracts continue to evolve.
 
-```powershell
-task dev:run -- version
-task dev:run -- doctor
-task dev:run -- list
-```
+The local CLI binary exists as `winbrew-bin`, but the repo does not currently ship a public end-user installer or pre-built release artifact.
 
-You can pass any WinBrew arguments after `--`, for example `task dev:run --
-install firefox` or `task dev:run -- search git`.
+### Can I use WinBrew from a USB drive or portable location?
+Only partially. The CLI can run from wherever you place the binary, and the managed root can be redirected with `WINBREW_PATHS_ROOT`, which helps for portable-style setups.
 
-### 7. Reset the dev root
+That said, WinBrew is not designed as a fully portable app suite. Some install engines are machine-bound, and installed packages still depend on the target Windows system.
 
-```powershell
-task dev:clean
-```
+### Why only Windows? Will you add Linux or macOS package support later?
+The current engine layer is built around Windows-specific behavior: Windows Installer, App Installer, registry-aware cleanup, fonts, path conventions, and Windows-only helpers. Linux and macOS are not in scope today.
 
-This removes the repo-local `target\winbrew-dev` tree.
+Adding APT or Homebrew support would be a separate product-level effort, not a small feature toggle. There is no equivalent cross-platform roadmap in the current repository.
 
-### Basic Usage
+### Can I connect my company's private package repository?
+Not as a generic plug-in feed today. The current ingestion pipeline is built around Winget and Scoop, and the runtime update flow points at WinBrew's own update gateway.
 
-The commands below are available after you build and run WinBrew locally.
+If you need private packages, the current path is to extend the pipeline or mirror those packages into a supported source model. It is not a config-only feature yet.
 
-| Command | Description |
-| :--- | :--- |
-| `winbrew config` | Inspect or update runtime configuration |
-| `winbrew doctor` | Check system health and configuration |
-| `winbrew info <pkg>` | Show package details |
-| `winbrew install <pkg>` | Install a package |
-| `winbrew list` | List installed packages |
-| `winbrew remove <pkg>` | Remove a package and its leftovers |
-| `winbrew search <query>` | Search for a package |
-| `winbrew update` | Refresh the catalog data |
-| `winbrew version` | Print the binary version |
-| `winbrew repair` | Repair installed state and recovery trails |
+### Can I install paid or licensed software with WinBrew?
+Yes, if the package is present in the supported source model and you are allowed to install it. The catalog model already handles proprietary software metadata.
 
-### File Layout
+WinBrew does not bypass license checks, payment gates, or vendor terms. It only automates discovery, verification, and installation of packages you are entitled to use.
 
-By default, WinBrew isolates everything within the current user's local app data directory:
+### Is WinBrew safe?
+It is designed to reduce risk, not to magically make third-party software trustworthy. WinBrew validates the catalog bundle hash, verifies installer hashes, and rejects legacy checksum algorithms by default.
 
-`%LOCALAPPDATA%\winbrew`
+That said, the trust model still depends on upstream package sources and the publish pipeline. If a source is malicious or compromised, no package manager can eliminate that risk entirely.
 
-```text
-%LOCALAPPDATA%\winbrew
-├── packages    # Installed applications
-└── data
-    ├── db      # SQLite metadata (winbrew.db, catalog.db)
-    ├── pkgdb   # Per-package recovery journals
-    ├── logs    # Rolling execution logs
-    ├── cache   # Downloaded installers/temporary files
-    └── winbrew.toml  # Persisted runtime configuration
-```
+### How does the actual installation work?
+WinBrew first resolves a package against the catalog, then selects the best installer, downloads the payload, verifies it, and hands it to the right engine.
 
-Package-scoped evidence, when emitted, is documented in
-[docs/managed-paths-policy.md](docs/managed-paths-policy.md) and uses
-`data/logs/packages/<package-key>/`.
+For MSI, MSIX, native EXE, and font packages, the final install step is delegated to Windows-native mechanisms. For ZIP and portable packages, WinBrew handles the file-system work itself.
 
-## Configuration
+### If the same package exists in both Winget and Scoop, will there be a conflict?
+Not at the catalog level. WinBrew keeps the source as part of the identity, so the Winget and Scoop entries remain separate records even if they share the same visible name.
 
-Settings are stored in `%LOCALAPPDATA%\winbrew\data\winbrew.toml` by default.
+If you search by name and more than one record matches, the CLI asks you to choose which one you meant. If you want to be explicit, use the source-tagged ID.
 
-Set `WINBREW_PATHS_ROOT` or `[paths].root` to use a different install root.
+### Will WinBrew break my existing Winget or Scoop installation?
+No. WinBrew keeps its own managed root and does not rewrite Winget or Scoop's databases, folders, or settings.
 
-```toml
-[core]
-log_level = "info"
-auto_update = true
-confirm_remove = true
+You can still run into application-level overlap if multiple package managers install the same software, but that is not the same as WinBrew damaging your existing Winget or Scoop installation.
 
-[paths]
-root = "C:\\Users\\<you>\\AppData\\Local\\winbrew"
-```
+### How do I know nobody slipped a malicious or fake package link into the catalog?
+You cannot get an absolute guarantee from any package manager that relies on third-party sources. WinBrew reduces the attack surface by publishing controlled catalog bundles, verifying metadata hashes, and verifying installer hashes before installation.
 
-*Note: You can override any setting using environment variables with the `WINBREW_` prefix (e.g., `WINBREW_CORE_LOG_LEVEL=debug`).*
+That makes accidental corruption and casual tampering harder. It does not make the upstream ecosystem magically safe if a source is intentionally compromised.
 
-## Development
+### Is WinBrew a background service that keeps running and eating RAM?
+No. The client is not a persistent daemon or Windows service. It runs when you invoke a command and exits when the command is done.
 
-Development setup and contributor tasks are documented in
-[CONTRIBUTING.md](CONTRIBUTING.md).
+There is a separate update worker in the infrastructure layer, but that is not a process that runs on your machine all the time.
 
-The full docs map lives in [docs/index.md](docs/index.md), and engine-specific guidance lives in [docs/engines.md](docs/engines.md).
+### If I stop using WinBrew or delete it, what happens to the packages I installed? Is there vendor lock-in?
+Installed packages remain installed unless you remove them. WinBrew keeps its own metadata in SQLite and per-package journal files, but deleting WinBrew does not automatically uninstall the applications it previously managed.
 
-If you want the shortest path to a clean local environment, use the following
-task sequence after cloning:
+That means the lock-in is low. You can cleanly remove packages with WinBrew before uninstalling WinBrew itself, or you can leave the packages in place and manage them through the underlying Windows mechanisms.
 
-```powershell
-task tools:install-lefthook
-task tools:install-nextest
-task tools:install-golangci-lint
-lefthook install
-task check
-task ci:rust
-task ci:smoke
-```
+### Do I need Administrator rights or UAC for search or installation?
+Search, update checks, configuration, and other read-only operations do not require elevated rights. They work from your user context and the local catalog.
 
-Detailed technical docs for the catalog pipeline live in:
+Installation and removal depend on the package and the engine. User-scoped or portable installs often do not need UAC, while machine-wide MSI/MSIX or system-integrated installs may prompt Windows for elevation.
 
-- [infra/crawler/README.md](infra/crawler/README.md)
-- [infra/parser/README.md](infra/parser/README.md)
-- [infra/publisher/README.md](infra/publisher/README.md)
+### Will it work behind a strict corporate proxy or firewall?
+Only if the network can reach the endpoints WinBrew needs. The client talks to the update API, CDN-hosted catalog artifacts, and the package hosts that actually serve installers.
 
-## License
+If those destinations are blocked, updates and installs will fail. If the catalog is already present, offline search can still work.
 
-WinBrew is dual-licensed under **[MIT](LICENSE-MIT)** and **[Apache-2.0](LICENSE-APACHE)**.
+### Does WinBrew use a single point of failure somewhere?
+For local search and install, the client is not a single point of failure once the catalog is already present. For catalog refresh, the update gateway, CDN, D1 materialization, and publisher pipeline are central dependencies by design.
+
+That is an intentional trade-off: the local client is resilient once synced, but catalog refresh depends on the update plane being available.
+
+### The developer could leave tomorrow. Would the system break?
+No. The client is not a permanent service and WinBrew is not embedded into the Windows boot path.
+
+If development stopped, the catalog and update experience would eventually stall, but the machine itself would not stop working and the software you already installed would keep running.
+
+### I do not code. How can I contribute?
+You can still help a lot. Good non-code contributions include writing reproducible bug reports, testing on different Windows versions, validating catalog behavior, improving documentation, checking package metadata, and filing issues with clear logs and steps.
+
+If you want a low-friction way to help, start with docs review and issue reproduction. If you later want to move closer to the codebase, the best entry points are usually tests, fixtures, and documentation corrections.
