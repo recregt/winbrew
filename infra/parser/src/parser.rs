@@ -7,16 +7,19 @@ use winbrew_models::shared::HashAlgorithm;
 use winbrew_models::shared::version::Version;
 
 use crate::error::ParserError;
-use crate::raw::{RawFetchedInstaller, RawFetchedPackage, ScoopStreamEnvelope};
+use crate::raw::{RawFetchedInstaller, RawFetchedPackage};
+
+#[cfg(test)]
+use crate::raw::ScoopStreamEnvelope;
 
 #[derive(Debug, Clone)]
-pub struct ParsedPackage {
+pub(crate) struct ParsedPackage {
     pub package: CatalogPackage,
     pub installers: Vec<CatalogInstaller>,
     pub raw_json: String,
 }
 
-pub fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, ParserError> {
+pub(crate) fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, ParserError> {
     let raw_json = serde_json::to_string(&raw)?;
     let package_id = PackageId::parse(raw.id.as_str())?;
     let tags = raw
@@ -58,13 +61,13 @@ pub fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, ParserErro
     })
 }
 
-pub fn parse_packages(
-    raw_packages: Vec<RawFetchedPackage>,
-) -> Result<Vec<ParsedPackage>, ParserError> {
+#[cfg(test)]
+fn parse_packages(raw_packages: Vec<RawFetchedPackage>) -> Result<Vec<ParsedPackage>, ParserError> {
     raw_packages.into_iter().map(parse_package).collect()
 }
 
-pub fn parse_packages_json(input: &str) -> Result<Vec<ParsedPackage>, ParserError> {
+#[cfg(test)]
+fn parse_packages_json(input: &str) -> Result<Vec<ParsedPackage>, ParserError> {
     let envelopes: Vec<ScoopStreamEnvelope> = serde_json::from_str(input)?;
     let raw_packages = envelopes
         .into_iter()
@@ -99,6 +102,7 @@ fn parse_installer(
     Ok(installer)
 }
 
+#[cfg(test)]
 fn validate_envelope(envelope: ScoopStreamEnvelope) -> Result<RawFetchedPackage, ParserError> {
     envelope
         .validate()
