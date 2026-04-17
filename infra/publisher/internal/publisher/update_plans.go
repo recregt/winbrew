@@ -48,8 +48,11 @@ func buildUpdatePlansSQL(publicBaseURL, objectKey string, metadata Metadata, ful
 
 	statements := []string{
 		"PRAGMA foreign_keys = ON;",
-		"DELETE FROM update_plans;",
 	}
+	statements = append(statements, d1SchemaBootstrapStatements()...)
+	statements = append(statements,
+		"DELETE FROM update_plans;",
+	)
 
 	for _, row := range rows {
 		statements = append(statements, row.insertStatement())

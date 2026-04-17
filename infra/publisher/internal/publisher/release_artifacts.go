@@ -82,6 +82,9 @@ func buildReleaseMaterializationSQL(publicBaseURL, objectKey string, metadata Me
 
 	statements := []string{
 		"PRAGMA foreign_keys = ON;",
+	}
+	statements = append(statements, d1SchemaBootstrapStatements()...)
+	statements = append(statements,
 		fmt.Sprintf(
 			"INSERT INTO release_lineage (hash, parent_hash, is_snapshot, snapshot_url, metadata_url) VALUES (%s, %s, 1, %s, %s) ON CONFLICT(hash) DO UPDATE SET parent_hash = excluded.parent_hash, is_snapshot = excluded.is_snapshot, snapshot_url = excluded.snapshot_url, metadata_url = excluded.metadata_url;",
 			sqlText(currentHash),
@@ -89,7 +92,7 @@ func buildReleaseMaterializationSQL(publicBaseURL, objectKey string, metadata Me
 			sqlText(snapshotURL),
 			sqlText(metadataURL),
 		),
-	}
+	)
 
 	for _, artifact := range patchArtifacts {
 		if strings.TrimSpace(artifact.FromHash) == "" || strings.TrimSpace(artifact.ToHash) == "" || strings.TrimSpace(artifact.FilePath) == "" || strings.TrimSpace(artifact.Checksum) == "" {
