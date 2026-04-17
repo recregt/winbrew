@@ -1,39 +1,44 @@
 package winget
 
 import (
+	"strings"
 	"testing"
 )
 
 func TestWingetManifestResolutionSingleton(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := parseWingetManifest([]byte(`
-PackageIdentifier: Microsoft.WindowsTerminal
-PackageVersion: 1.9.1942.0
-PackageLocale: en-US
-PackageName: Windows Terminal
-Publisher: Microsoft Corporation
-Moniker: wt
-Tags:
-  - terminal
-  - shell
-ShortDescription: Modern terminal
-License: MIT
-Homepage: https://example.invalid
-Installers:
-  - Architecture: x64
-    InstallerType: msix
-    InstallerUrl: https://example.invalid/terminal.msixbundle
-    InstallerSha256: ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789
-    Scope: user
-  - Architecture: arm
-    InstallerType: zip
-    InstallerUrl: https://example.invalid/terminal.zip
-    InstallerSha256: 0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF
-    NestedInstallerType: portable
-ManifestType: singleton
-ManifestVersion: 1.12.0
-`))
+	manifestYAML := strings.Join([]string{
+		"PackageIdentifier: Microsoft.WindowsTerminal",
+		"PackageVersion: 1.9.1942.0",
+		"PackageLocale: en-US",
+		"PackageName: Windows Terminal",
+		"Publisher: Microsoft Corporation",
+		"Moniker: wt",
+		"Tags:",
+		"  - terminal",
+		"  - shell",
+		"ShortDescription: Modern terminal",
+		"License: MIT",
+		"Homepage: https://example.invalid",
+		"Installers:",
+		"  - Architecture: x64",
+		"    InstallerType: msix",
+		"    InstallerUrl: https://example.invalid/terminal.msixbundle",
+		"    InstallerSha256: ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789",
+		"    Scope: user",
+		"    InstallerSwitches:",
+		"      SilentWithProgress: /terminal-default",
+		"  - Architecture: arm",
+		"    InstallerType: zip",
+		"    InstallerUrl: https://example.invalid/terminal.zip",
+		"    InstallerSha256: 0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+		"    NestedInstallerType: portable",
+		"ManifestType: singleton",
+		"ManifestVersion: 1.12.0",
+	}, "\n")
+
+	manifest, err := parseWingetManifest([]byte(manifestYAML))
 	if err != nil {
 		t.Fatalf("parseWingetManifest() error = %v", err)
 	}
@@ -68,6 +73,9 @@ ManifestVersion: 1.12.0
 	}
 	if got, want := pkg.Installers[0].Scope, "user"; got != want {
 		t.Fatalf("installer scope = %q, want %q", got, want)
+	}
+	if got, want := pkg.Installers[0].InstallerSwitches, "/terminal-default"; got != want {
+		t.Fatalf("installer switches = %q, want %q", got, want)
 	}
 	if got, want := pkg.Installers[1].Arch, ""; got != want {
 		t.Fatalf("installer arch = %q, want %q", got, want)
@@ -114,18 +122,22 @@ ManifestVersion: 1.12.0
 		t.Fatalf("parseWingetManifest(locale) error = %v", err)
 	}
 
-	installer, err := parseWingetManifest([]byte(`
-PackageIdentifier: Contoso.App
-PackageVersion: 2.3.4
-Installers:
-  - Architecture: x64
-    InstallerType: exe
-    InstallerUrl: https://example.invalid/app.exe
-    InstallerSha256: 0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF
-    Scope: machine
-ManifestType: installer
-ManifestVersion: 1.12.0
-`))
+	installerYAML := strings.Join([]string{
+		"PackageIdentifier: Contoso.App",
+		"PackageVersion: 2.3.4",
+		"Installers:",
+		"  - Architecture: x64",
+		"    InstallerType: exe",
+		"    InstallerUrl: https://example.invalid/app.exe",
+		"    InstallerSha256: 0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+		"    Scope: machine",
+		"    InstallerSwitches:",
+		"      SilentWithProgress: /app-installer",
+		"ManifestType: installer",
+		"ManifestVersion: 1.12.0",
+	}, "\n")
+
+	installer, err := parseWingetManifest([]byte(installerYAML))
 	if err != nil {
 		t.Fatalf("parseWingetManifest(installer) error = %v", err)
 	}
@@ -154,6 +166,9 @@ ManifestVersion: 1.12.0
 	}
 	if got, want := pkg.Installers[0].Scope, "machine"; got != want {
 		t.Fatalf("installer scope = %q, want %q", got, want)
+	}
+	if got, want := pkg.Installers[0].InstallerSwitches, "/app-installer"; got != want {
+		t.Fatalf("installer switches = %q, want %q", got, want)
 	}
 	if got, want := pkg.Installers[0].Arch, "x64"; got != want {
 		t.Fatalf("installer arch = %q, want %q", got, want)

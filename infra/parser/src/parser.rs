@@ -89,7 +89,7 @@ fn parse_installer(
         hash,
         hash_algorithm,
         installer_type,
-        installer_switches: None,
+        installer_switches: raw.installer_switches,
         scope: raw.scope,
         arch: raw.arch.parse::<Architecture>()?,
         kind: installer_kind,
@@ -136,6 +136,7 @@ mod tests {
                 arch: "x64".to_string(),
                 kind: "zip".to_string(),
                 nested_kind: Some("msi".to_string()),
+                installer_switches: Some("/S".to_string()),
                 scope: Some("user".to_string()),
             }],
         })
@@ -145,6 +146,10 @@ mod tests {
         assert_eq!(parsed.installers[0].arch, Architecture::X64);
         assert_eq!(parsed.installers[0].kind, InstallerType::Zip);
         assert_eq!(parsed.installers[0].nested_kind, Some(InstallerType::Msi));
+        assert_eq!(
+            parsed.installers[0].installer_switches.as_deref(),
+            Some("/S")
+        );
         assert_eq!(parsed.installers[0].scope.as_deref(), Some("user"));
         assert_eq!(parsed.installers[0].hash_algorithm, HashAlgorithm::Sha256);
         assert_eq!(
@@ -179,6 +184,7 @@ mod tests {
                 arch: "x64".to_string(),
                 kind: "portable".to_string(),
                 nested_kind: None,
+                installer_switches: None,
                 scope: None,
             }],
         })

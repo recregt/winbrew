@@ -54,6 +54,8 @@ pub struct RawFetchedInstaller {
     )]
     pub nested_kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installer_switches: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
 }
 
@@ -115,6 +117,7 @@ mod tests {
                     arch: "x64".to_string(),
                     kind: "portable".to_string(),
                     nested_kind: None,
+                    installer_switches: None,
                     scope: None,
                 }],
             },
@@ -163,12 +166,14 @@ mod tests {
                 "arch": "x64",
                 "type": "zip",
                 "NestedInstallerType": "msi",
+                "installer_switches": "/S",
                 "scope": "user"
             }"#,
         )
         .expect("installer should deserialize");
 
         assert_eq!(installer.nested_kind.as_deref(), Some("msi"));
+        assert_eq!(installer.installer_switches.as_deref(), Some("/S"));
         assert_eq!(installer.scope.as_deref(), Some("user"));
     }
 }
