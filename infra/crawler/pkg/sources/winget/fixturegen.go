@@ -7,60 +7,66 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
+	"strings"
 	"sync"
-	"testing"
 	"time"
 )
 
-func TestRefreshParserFixtures(t *testing.T) {
-	if os.Getenv("WINBREW_REFRESH_PARSER_FIXTURES") == "" {
-		t.Skip("set WINBREW_REFRESH_PARSER_FIXTURES=1 to regenerate parser fixtures")
-	}
+const fixtureWorkerCount = 8
 
-	fixturesDir := parserFixturesDir(t)
-	if err := os.MkdirAll(fixturesDir, 0o750); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
-
-	cacheDir := t.TempDir()
-	packages, err := collectRealWingetPackages(context.Background(), cacheDir)
-	if err != nil {
-		t.Fatalf("collectRealWingetPackages() error = %v", err)
-	}
-
-	if err := writeWingetFixture(filepath.Join(fixturesDir, "winget_packages.jsonl"), packages); err != nil {
-		t.Fatalf("writeWingetFixture() error = %v", err)
-	}
+var fixtureWantedIDs = []string{
+	"Microsoft.VisualStudioCode",
+	"Microsoft.PowerToys",
+	"Git.Git",
+	"Microsoft.WindowsTerminal",
 }
 
-func collectRealWingetPackages(ctx context.Context, cacheDir string) ([]wingetEnvelope, error) {
+func GenerateFixtures(ctx context.Context, outputPath string, count int) error {
+	outputPath = strings.TrimSpace(outputPath)
+	if outputPath == "" {
+		return fmt.Errorf("output path cannot be empty")
+	}
+	if count <= 0 {
+		return fmt.Errorf("count must be greater than zero")
+	}
+
+	cacheDir, err := os.MkdirTemp("", "winbrew-winget-fixtures-*")
+	if err != nil {
+		return fmt.Errorf("create temp cache dir: %w", err)
+	}
+	defer func() {
+		_ = os.RemoveAll(cacheDir)
+	}()
+
 	client := &http.Client{Timeout: 10 * time.Minute}
 	source, err := New(client, filepath.Join(cacheDir, "winget"))
 	if err != nil {
-		return nil, fmt.Errorf("create source: %w", err)
+		return fmt.Errorf("create source: %w", err)
 	}
 	defer source.Close()
 
 	dbPath := filepath.Join(cacheDir, "winget_source.db")
 	if err := source.DownloadSourceDB(ctx, dbPath); err != nil {
-		return nil, fmt.Errorf("download source db: %w", err)
+		return fmt.Errorf("download source db: %w", err)
 	}
 
+	packages, err := collectRealWingetPackages(ctx, source, dbPath, count)
+	if err != nil {
+		return err
+	}
+
+	if err := writeWingetFixture(outputPath, packages); err != nil {
+		return fmt.Errorf("write fixture: %w", err)
+	}
+
+	return nil
+}
+
+func collectRealWingetPackages(ctx context.Context, source *Source, dbPath string, targetCount int) ([]wingetEnvelope, error) {
 	rows, err := readWingetIndexRows(ctx, dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("read index rows: %w", err)
-	}
-
-	const targetCount = 371
-	const workerCount = 8
-
-	wantedIDs := []string{
-		"Microsoft.VisualStudioCode",
-		"Microsoft.PowerToys",
-		"Git.Git",
-		"Microsoft.WindowsTerminal",
 	}
 
 	candidateRows := make([]wingetIndexRow, 0, len(rows))
@@ -76,7 +82,7 @@ func collectRealWingetPackages(ctx context.Context, cacheDir string) ([]wingetEn
 		candidateRows = append(candidateRows, row)
 	}
 
-	for _, wantedID := range wantedIDs {
+	for _, wantedID := range fixtureWantedIDs {
 		row, ok := findWingetRow(rows, wantedID)
 		if !ok {
 			continue
@@ -96,10 +102,10 @@ func collectRealWingetPackages(ctx context.Context, cacheDir string) ([]wingetEn
 	defer cancel()
 
 	rowCh := make(chan wingetIndexRow)
-	resultCh := make(chan wingetEnvelope, workerCount)
+	resultCh := make(chan wingetEnvelope, fixtureWorkerCount)
 	var workers sync.WaitGroup
 
-	for i := 0; i < workerCount; i++ {
+	for i := 0; i < fixtureWorkerCount; i++ {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
@@ -175,6 +181,10 @@ func findWingetRow(rows []wingetIndexRow, wantedID string) (wingetIndexRow, bool
 }
 
 func writeWingetFixture(path string, packages []wingetEnvelope) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return fmt.Errorf("create fixture dir: %w", err)
+	}
+
 	file, err := os.Create(path)
 	if err != nil {
 		return err
@@ -189,16 +199,4 @@ func writeWingetFixture(path string, packages []wingetEnvelope) error {
 	}
 
 	return nil
-}
-
-func parserFixturesDir(t *testing.T) string {
-	t.Helper()
-
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller() failed")
-	}
-
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
-	return filepath.Join(repoRoot, "infra", "parser", "tests", "fixtures")
 }
