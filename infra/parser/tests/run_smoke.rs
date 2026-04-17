@@ -98,9 +98,9 @@ fn run_builds_catalog_metadata_from_public_api() -> Result<(), Box<dyn std::erro
 
     let metadata_text = fs::read_to_string(&metadata_path)?;
     let decoded: Value = serde_json::from_str(&metadata_text)?;
-    assert_eq!(decoded["package_count"], 4);
-    assert_eq!(decoded["source_counts"]["scoop"], 2);
-    assert_eq!(decoded["source_counts"]["winget"], 2);
+    assert_eq!(decoded["package_count"], expected_package_count);
+    assert_eq!(decoded["source_counts"]["scoop"], scoop_package_count);
+    assert_eq!(decoded["source_counts"]["winget"], winget_package_count);
 
     let connection = Connection::open(&output_db_path)?;
     let package_count: i64 =
