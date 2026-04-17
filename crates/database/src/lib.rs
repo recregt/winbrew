@@ -16,7 +16,7 @@ pub use winbrew_core as core;
 pub mod catalog;
 pub mod config;
 pub mod connection;
-pub mod errors;
+pub mod error;
 pub mod installed_packages;
 pub mod journal;
 pub mod migration;
@@ -33,7 +33,7 @@ use winbrew_core::paths::ResolvedPaths;
 
 pub type DbConnection = PooledConnection<SqliteConnectionManager>;
 
-pub use errors::{CatalogNotFoundError, CatalogSchemaVersionMismatchError};
+pub use error::{CatalogNotFoundError, CatalogSchemaVersionMismatchError};
 
 pub use catalog::{get_installers, get_package_by_id, search};
 pub use config::{
