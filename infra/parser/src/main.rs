@@ -29,7 +29,7 @@ fn parse_args() -> Result<RunConfig, String> {
     while let Some(arg) = args.next() {
         let arg_text = arg.to_string_lossy();
         match arg_text.as_ref() {
-            "--winget-jsonl" | "--winget-db" => {
+            "--winget-jsonl" => {
                 let value = args
                     .next()
                     .ok_or_else(|| "--winget-jsonl requires a value".to_string())?;
