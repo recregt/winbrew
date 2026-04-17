@@ -400,6 +400,14 @@ func TestBuildUpdatePlansSQLIncludesCurrentAndFullRows(t *testing.T) {
 		t.Fatalf("sql = %q, want no explicit transaction statements", sql)
 	}
 
+	if !strings.Contains(sql, "CREATE TABLE IF NOT EXISTS schema_meta") {
+		t.Fatalf("sql = %q, want schema bootstrap to be present", sql)
+	}
+
+	if !strings.Contains(sql, "CREATE TABLE IF NOT EXISTS update_plans") {
+		t.Fatalf("sql = %q, want update_plans bootstrap to be present", sql)
+	}
+
 	if !strings.Contains(sql, "https://cdn.example.invalid/base/catalog/latest.db.zst") {
 		t.Fatalf("sql = %q, want snapshot URL to be present", sql)
 	}
@@ -520,7 +528,7 @@ func TestBuildUpdatePlansSQLFallsBackToFullWhenPatchChainIsTooLarge(t *testing.T
 		t.Fatalf("sql = %q, want no explicit transaction statements", sql)
 	}
 
-	if strings.Contains(sql, "'patch'") {
+	if strings.Contains(sql, "VALUES ('sha256:old', 'patch', 'sha256:new'") {
 		t.Fatalf("sql = %q, want full fallback rather than patch row", sql)
 	}
 }
@@ -551,8 +559,84 @@ func TestBuildReleaseMaterializationSQLDoesNotWrapTransaction(t *testing.T) {
 		t.Fatalf("sql = %q, want no explicit transaction statements", sql)
 	}
 
+	if !strings.Contains(sql, "CREATE TABLE IF NOT EXISTS release_lineage") {
+		t.Fatalf("sql = %q, want release_lineage bootstrap to be present", sql)
+	}
+
+	if !strings.Contains(sql, "CREATE TABLE IF NOT EXISTS patch_artifacts") {
+		t.Fatalf("sql = %q, want patch_artifacts bootstrap to be present", sql)
+	}
+
+	if !strings.Contains(sql, "CREATE TABLE IF NOT EXISTS update_plans") {
+		t.Fatalf("sql = %q, want update_plans bootstrap to be present", sql)
+	}
+
 	if !strings.Contains(sql, "INSERT INTO release_lineage") {
 		t.Fatalf("sql = %q, want release lineage insert to be present", sql)
+	}
+}
+
+func TestGeneratedD1SQLBootstrapsEmptyDatabase(t *testing.T) {
+	releaseMetadata := Metadata{
+		SchemaVersion:   1,
+		GeneratedAtUnix: 1,
+		CurrentHash:     "sha256:new",
+		PreviousHash:    "sha256:old",
+		PackageCount:    1,
+		SourceCounts:    map[string]int{"scoop": 1},
+	}
+
+	releaseSQL, err := buildReleaseMaterializationSQL(
+		"https://cdn.example.invalid/base",
+		"catalog/latest.db.zst",
+		releaseMetadata,
+		[]patchChainArtifact{{FromHash: "sha256:old", ToHash: "sha256:new", FilePath: "patches/001.sql.zst", SizeBytes: 500, Checksum: "sha256:patch", ReachedPrevious: true}},
+	)
+	if err != nil {
+		t.Fatalf("buildReleaseMaterializationSQL() error = %v", err)
+	}
+
+	updateSQL, err := buildUpdatePlansSQL(
+		"https://cdn.example.invalid/base",
+		"catalog/latest.db.zst",
+		releaseMetadata,
+		1024,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("buildUpdatePlansSQL() error = %v", err)
+	}
+
+	db := openTestPublisherDB(t)
+	defer db.Close()
+
+	execSQLScript(t, db, releaseSQL)
+	execSQLScript(t, db, updateSQL)
+}
+
+func openTestPublisherDB(t *testing.T) *sql.DB {
+	t.Helper()
+
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "publisher-bootstrap.db"))
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+
+	return db
+}
+
+func execSQLScript(t *testing.T, db *sql.DB, script string) {
+	t.Helper()
+
+	for _, statement := range strings.Split(script, "\n") {
+		statement = strings.TrimSpace(statement)
+		if statement == "" {
+			continue
+		}
+
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("db.Exec(%q) error = %v", statement, err)
+		}
 	}
 }
 
