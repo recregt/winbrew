@@ -56,20 +56,33 @@ type wingetManifest struct {
 	SignatureSha256     string                    `yaml:"SignatureSha256,omitempty"`
 	NestedInstallerType string                    `yaml:"NestedInstallerType,omitempty"`
 	Scope               string                    `yaml:"Scope,omitempty"`
+	InstallerSwitches   *wingetManifestSwitches   `yaml:"InstallerSwitches,omitempty"`
 	Installers          []wingetManifestInstaller `yaml:"Installers,omitempty"`
 }
 
 type wingetManifestInstaller struct {
-	Architecture        string `yaml:"Architecture,omitempty"`
-	InstallerLocale     string `yaml:"InstallerLocale,omitempty"`
-	Platform            string `yaml:"Platform,omitempty"`
-	MinimumOSVersion    string `yaml:"MinimumOSVersion,omitempty"`
-	InstallerType       string `yaml:"InstallerType,omitempty"`
-	InstallerUrl        string `yaml:"InstallerUrl,omitempty"`
-	InstallerSha256     string `yaml:"InstallerSha256,omitempty"`
-	SignatureSha256     string `yaml:"SignatureSha256,omitempty"`
-	NestedInstallerType string `yaml:"NestedInstallerType,omitempty"`
-	Scope               string `yaml:"Scope,omitempty"`
+	Architecture        string                  `yaml:"Architecture,omitempty"`
+	InstallerLocale     string                  `yaml:"InstallerLocale,omitempty"`
+	Platform            string                  `yaml:"Platform,omitempty"`
+	MinimumOSVersion    string                  `yaml:"MinimumOSVersion,omitempty"`
+	InstallerType       string                  `yaml:"InstallerType,omitempty"`
+	InstallerUrl        string                  `yaml:"InstallerUrl,omitempty"`
+	InstallerSha256     string                  `yaml:"InstallerSha256,omitempty"`
+	SignatureSha256     string                  `yaml:"SignatureSha256,omitempty"`
+	NestedInstallerType string                  `yaml:"NestedInstallerType,omitempty"`
+	Scope               string                  `yaml:"Scope,omitempty"`
+	InstallerSwitches   *wingetManifestSwitches `yaml:"InstallerSwitches,omitempty"`
+}
+
+type wingetManifestSwitches struct {
+	Silent             string `yaml:"Silent,omitempty"`
+	SilentWithProgress string `yaml:"SilentWithProgress,omitempty"`
+	Interactive        string `yaml:"Interactive,omitempty"`
+	InstallLocation    string `yaml:"InstallLocation,omitempty"`
+	Log                string `yaml:"Log,omitempty"`
+	Upgrade            string `yaml:"Upgrade,omitempty"`
+	Custom             string `yaml:"Custom,omitempty"`
+	Repair             string `yaml:"Repair,omitempty"`
 }
 
 type wingetEnvelope struct {
@@ -330,6 +343,7 @@ func (m wingetManifest) resolveInstallers() ([]wingetInstallerSnapshot, error) {
 			SignatureSha256:     m.SignatureSha256,
 			NestedInstallerType: m.NestedInstallerType,
 			Scope:               m.Scope,
+			InstallerSwitches:   m.InstallerSwitches,
 		}}
 	}
 
@@ -359,6 +373,7 @@ func (installer wingetManifestInstaller) resolve(defaults wingetManifest) (winge
 	if err != nil {
 		return wingetInstallerSnapshot{}, err
 	}
+	installerSwitches := resolveWingetInstallerSwitches(defaults.InstallerSwitches, installer.InstallerSwitches)
 
 	if installerURL == "" {
 		return wingetInstallerSnapshot{}, fmt.Errorf("winget installer for %s is missing InstallerUrl", defaults.PackageIdentifier)
@@ -368,15 +383,60 @@ func (installer wingetManifestInstaller) resolve(defaults wingetManifest) (winge
 	}
 
 	snapshot := wingetInstallerSnapshot{
-		URL:        installerURL,
-		Hash:       installerHash,
-		Arch:       architecture,
-		Type:       installerType,
-		NestedKind: nestedInstallerType,
-		Scope:      scope,
+		URL:               installerURL,
+		Hash:              installerHash,
+		Arch:              architecture,
+		Type:              installerType,
+		NestedKind:        nestedInstallerType,
+		Scope:             scope,
+		InstallerSwitches: installerSwitches,
 	}
 
 	return snapshot, nil
+}
+
+func resolveWingetInstallerSwitches(defaults, overrides *wingetManifestSwitches) string {
+	if defaults == nil && overrides == nil {
+		return ""
+	}
+
+	merged := wingetManifestSwitches{}
+	if defaults != nil {
+		merged = *defaults
+	}
+	if overrides != nil {
+		merged = wingetManifestSwitches{
+			Silent:             firstNonEmpty(overrides.Silent, merged.Silent),
+			SilentWithProgress: firstNonEmpty(overrides.SilentWithProgress, merged.SilentWithProgress),
+			Interactive:        firstNonEmpty(overrides.Interactive, merged.Interactive),
+			InstallLocation:    firstNonEmpty(overrides.InstallLocation, merged.InstallLocation),
+			Log:                firstNonEmpty(overrides.Log, merged.Log),
+			Upgrade:            firstNonEmpty(overrides.Upgrade, merged.Upgrade),
+			Custom:             firstNonEmpty(overrides.Custom, merged.Custom),
+			Repair:             firstNonEmpty(overrides.Repair, merged.Repair),
+		}
+	}
+
+	return merged.preferred()
+}
+
+func (switches wingetManifestSwitches) preferred() string {
+	for _, candidate := range []string{
+		switches.SilentWithProgress,
+		switches.Silent,
+		switches.Custom,
+		switches.Interactive,
+		switches.Repair,
+		switches.Upgrade,
+		switches.Log,
+		switches.InstallLocation,
+	} {
+		if trimmed := strings.TrimSpace(candidate); trimmed != "" {
+			return trimmed
+		}
+	}
+
+	return ""
 }
 
 func normalizeWingetArchitecture(value string) string {

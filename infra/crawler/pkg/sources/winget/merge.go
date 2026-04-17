@@ -20,12 +20,13 @@ type wingetPackageSnapshot struct {
 }
 
 type wingetInstallerSnapshot struct {
-	URL        string `json:"url"`
-	Hash       string `json:"hash,omitempty"`
-	Arch       string `json:"arch,omitempty"`
-	Type       string `json:"type"`
-	NestedKind string `json:"NestedInstallerType,omitempty"`
-	Scope      string `json:"scope,omitempty"`
+	URL               string `json:"url"`
+	Hash              string `json:"hash,omitempty"`
+	Arch              string `json:"arch,omitempty"`
+	Type              string `json:"type"`
+	NestedKind        string `json:"NestedInstallerType,omitempty"`
+	Scope             string `json:"scope,omitempty"`
+	InstallerSwitches string `json:"installer_switches,omitempty"`
 }
 
 func firstNonEmpty(values ...string) string {

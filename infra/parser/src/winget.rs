@@ -141,6 +141,7 @@ mod tests {
                         "arch": "x64",
                         "type": "exe",
                         "NestedInstallerType": "portable",
+                        "installer_switches": "/S",
                         "scope": "machine"
                     }
                 ]
@@ -166,6 +167,10 @@ mod tests {
         assert_eq!(
             package.installers[0].nested_kind,
             Some(InstallerType::Portable)
+        );
+        assert_eq!(
+            package.installers[0].installer_switches.as_deref(),
+            Some("/S")
         );
         assert_eq!(package.installers[0].scope.as_deref(), Some("machine"));
         assert_eq!(package.installers[0].hash_algorithm, HashAlgorithm::Sha256);

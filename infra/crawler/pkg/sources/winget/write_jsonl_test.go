@@ -26,27 +26,29 @@ func TestWingetStagingCountsWrittenAndSkippedPackages(t *testing.T) {
 		t.Fatalf("input package count = %d, want %d", got, want)
 	}
 
-	successManifest := `
-PackageIdentifier: Contoso.App
-PackageVersion: 1.0.0
-PackageLocale: en-US
-PackageName: Contoso App
-Publisher: Contoso Ltd.
-Moniker: contoso
-Tags:
-  - utility
-ShortDescription: Contoso app
-Homepage: https://contoso.example
-License: MIT
-Installers:
-  - Architecture: x64
-    InstallerType: exe
-    InstallerUrl: https://download.contoso.invalid/app.exe
-    InstallerSha256: 0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF
-    Scope: machine
-ManifestType: singleton
-ManifestVersion: 1.12.0
-`
+	successManifest := strings.Join([]string{
+		"PackageIdentifier: Contoso.App",
+		"PackageVersion: 1.0.0",
+		"PackageLocale: en-US",
+		"PackageName: Contoso App",
+		"Publisher: Contoso Ltd.",
+		"Moniker: contoso",
+		"Tags:",
+		"  - utility",
+		"ShortDescription: Contoso app",
+		"Homepage: https://contoso.example",
+		"License: MIT",
+		"Installers:",
+		"  - Architecture: x64",
+		"    InstallerType: exe",
+		"    InstallerUrl: https://download.contoso.invalid/app.exe",
+		"    InstallerSha256: 0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+		"    Scope: machine",
+		"    InstallerSwitches:",
+		"      SilentWithProgress: /contoso-install",
+		"ManifestType: singleton",
+		"ManifestVersion: 1.12.0",
+	}, "\n")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/manifests/c/Contoso/App/1.0.0/Contoso.App.yaml"):
@@ -128,6 +130,9 @@ ManifestVersion: 1.12.0
 	}
 	if got, want := len(envelope.Payload.Installers), 1; got != want {
 		t.Fatalf("merged installer count = %d, want %d", got, want)
+	}
+	if got, want := envelope.Payload.Installers[0].InstallerSwitches, "/contoso-install"; got != want {
+		t.Fatalf("merged installer switches = %q, want %q", got, want)
 	}
 }
 
