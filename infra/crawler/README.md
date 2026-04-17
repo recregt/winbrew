@@ -7,7 +7,7 @@ The crawler is the ingestion stage for the catalog pipeline. It fetches upstream
 - Loads and validates `config.yaml`.
 - Builds source clients for the configured sources (`scoop`, `winget`).
 - Streams Scoop packages as JSONL to `stdout`.
-- Writes the Winget JSONL artifact to `--winget-out`.
+- Merges Winget `index.db` discovery rows with raw manifest YAML, then writes the merged Winget JSONL artifact to `--winget-out`.
 - Keeps logs on `stderr` so the JSONL stream stays clean.
 - Uses retry, timeout, and cache settings from the config file.
 
@@ -34,9 +34,9 @@ The config controls:
 The crawler does not build the catalog database itself. Its job is to produce two artifacts that the parser can consume:
 
 1. a JSONL stream of Scoop packages
-2. a Winget JSONL file on disk
+2. a merged Winget JSONL file on disk
 
-The parser merges those inputs into the final catalog bundle.
+The parser turns those inputs into the final catalog bundle.
 
 ## Errors and exit codes
 

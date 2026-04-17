@@ -29,6 +29,8 @@ The Winget feed has three relevant layers:
 
 The pipeline should treat the first two as discovery and revision inputs, then enrich the data from manifests before writing the catalog.
 
+In practice, that enrichment happens in the crawler: it merges the staged index rows with manifest YAML and emits one Winget JSONL stream for the parser.
+
 ## Ingest Strategy
 
 The crawler should be manifest-aware.
