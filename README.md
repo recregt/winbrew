@@ -131,6 +131,13 @@ Installed packages remain installed unless you remove them. WinBrew keeps its ow
 
 That means the lock-in is low. You can cleanly remove packages with WinBrew before uninstalling WinBrew itself, or you can leave the packages in place and manage them through the underlying Windows mechanisms.
 
+### What happens if an install is interrupted or the catalog state is inconsistent?
+WinBrew writes per-package recovery journals under `data/pkgdb/<package-key>/journal.jsonl`. If a package install is interrupted, a committed journal can be replayed to rebuild package state, SQLite remains the normal runtime index, and disk is the source of truth for file content checks.
+
+`winbrew doctor` classifies missing SQLite, missing journals, conflicts, and disk drift. `winbrew repair` replays committed journals first and then handles cleanup or higher-risk fixes with confirmation when needed.
+
+Committed journals are retained for the package lifetime, so recovery information survives partial installs and process crashes.
+
 ### Do I need Administrator rights or UAC for search or installation?
 Search, update checks, configuration, and other read-only operations do not require elevated rights. They work from your user context and the local catalog.
 
