@@ -15,6 +15,7 @@ func TestWingetManifestResolutionSingleton(t *testing.T) {
 		"PackageName: Windows Terminal",
 		"Publisher: Microsoft Corporation",
 		"Moniker: wt",
+		"Platform: Windows.Desktop",
 		"Tags:",
 		"  - terminal",
 		"  - shell",
@@ -41,6 +42,12 @@ func TestWingetManifestResolutionSingleton(t *testing.T) {
 	manifest, err := parseWingetManifest([]byte(manifestYAML))
 	if err != nil {
 		t.Fatalf("parseWingetManifest() error = %v", err)
+	}
+	if got, want := len(manifest.Platform), 1; got != want {
+		t.Fatalf("manifest platform length = %d, want %d", got, want)
+	}
+	if got, want := manifest.Platform[0], "Windows.Desktop"; got != want {
+		t.Fatalf("manifest platform[0] = %q, want %q", got, want)
 	}
 
 	pkg, err := buildWingetPackageSnapshot(wingetIndexRow{
@@ -127,6 +134,8 @@ ManifestVersion: 1.12.0
 		"PackageVersion: 2.3.4",
 		"Installers:",
 		"  - Architecture: x64",
+		"    Platform:",
+		"      - Windows.Desktop",
 		"    InstallerType: exe",
 		"    InstallerUrl: https://example.invalid/app.exe",
 		"    InstallerSha256: 0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
@@ -140,6 +149,12 @@ ManifestVersion: 1.12.0
 	installer, err := parseWingetManifest([]byte(installerYAML))
 	if err != nil {
 		t.Fatalf("parseWingetManifest(installer) error = %v", err)
+	}
+	if got, want := len(installer.Installers[0].Platform), 1; got != want {
+		t.Fatalf("installer platform length = %d, want %d", got, want)
+	}
+	if got, want := installer.Installers[0].Platform[0], "Windows.Desktop"; got != want {
+		t.Fatalf("installer platform[0] = %q, want %q", got, want)
 	}
 
 	pkg, err := buildWingetPackageSnapshot(wingetIndexRow{
