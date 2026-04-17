@@ -29,7 +29,7 @@ import (
 const (
 	wingetEnvelopeSchemaVersion = 1
 	wingetEnvelopeKind          = "package"
-	wingetManifestRepoBaseURL   = "https://raw.githubusercontent.com/microsoft/winget-pkgs/main"
+	wingetManifestRepoBaseURL   = "https://raw.githubusercontent.com/microsoft/winget-pkgs/master"
 	wingetManifestCacheRoot     = "winget-manifests"
 	wingetManifestMaxSize       = 1 << 20
 	wingetIndexQuery            = `

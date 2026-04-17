@@ -35,7 +35,7 @@ func TestWingetManifestPathHelpers(t *testing.T) {
 		t.Fatalf("wingetManifestURL() error = %v", err)
 	}
 
-	if got, want := url, "https://raw.githubusercontent.com/microsoft/winget-pkgs/main/manifests/m/Microsoft/WindowsTerminal/1.9.1942.0/Microsoft.WindowsTerminal.installer.yaml"; got != want {
+	if got, want := url, "https://raw.githubusercontent.com/microsoft/winget-pkgs/master/manifests/m/Microsoft/WindowsTerminal/1.9.1942.0/Microsoft.WindowsTerminal.installer.yaml"; got != want {
 		t.Fatalf("wingetManifestURL() = %q, want %q", got, want)
 	}
 }
