@@ -72,20 +72,25 @@ jobs:
           set -euo pipefail
 
           staging="$(mktemp -d)"
+          scoop_jsonl="$staging/scoop_source.jsonl"
           winget_jsonl="$staging/winget_source.jsonl"
           catalog_db="$staging/catalog.db"
           metadata_json="$staging/metadata.json"
 
           echo "Running crawler"
-          (cd infra/crawler && go run ./cmd/crawler --config config.yaml --winget-out "$winget_jsonl")
+          (cd infra/crawler && go run ./cmd/crawler --config config.yaml --winget-out "$winget_jsonl") \
+            | tee "$scoop_jsonl" \
+            | cargo run --locked -p winbrew-infra-parser -- --winget-jsonl "$winget_jsonl" --out "$catalog_db" --metadata "$metadata_json"
+
+          if [ ! -s "$scoop_jsonl" ]; then
+            echo "::error::crawler produced no scoop JSONL output"
+            exit 1
+          fi
 
           if [ ! -s "$winget_jsonl" ]; then
             echo "::error::crawler produced no winget JSONL output"
             exit 1
           fi
-
-          echo "Running parser"
-          cargo run --locked -p winbrew-infra-parser -- --winget-jsonl "$winget_jsonl" --out "$catalog_db" --metadata "$metadata_json"
 
           if [ ! -s "$catalog_db" ]; then
             echo "::error::parser did not produce a catalog database"
