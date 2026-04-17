@@ -170,11 +170,11 @@ jobs:
           mkdir -p "$archive_dir"
 
           cp "$CATALOG_DB" "$archive_dir/catalog.db"
+          zstd --quiet --force --keep -19 "$CATALOG_DB" -o "$archive_dir/catalog.db.zst"
           cp "$CATALOG_METADATA" "$archive_dir/metadata.json"
           cp infra/publisher/.generated/release_materialization.sql "$archive_dir/release_materialization.sql"
           cp infra/publisher/.generated/update_plans.sql "$archive_dir/update_plans.sql"
           cp infra/publisher/.generated/patch_chain.json "$archive_dir/patch_chain.json"
-          cp infra/publisher/.generated/wrangler.production.jsonc "$archive_dir/wrangler.production.jsonc"
 
           gh release delete "$nightly_tag" --yes --cleanup-tag >/dev/null 2>&1 || true
           gh release create "$nightly_tag" \
@@ -183,8 +183,8 @@ jobs:
             --prerelease \
             --notes "Nightly catalog archive for $nightly_date." \
             "$archive_dir/catalog.db" \
+            "$archive_dir/catalog.db.zst" \
             "$archive_dir/metadata.json" \
             "$archive_dir/release_materialization.sql" \
             "$archive_dir/update_plans.sql" \
-            "$archive_dir/patch_chain.json" \
-            "$archive_dir/wrangler.production.jsonc"
+            "$archive_dir/patch_chain.json"
