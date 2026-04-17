@@ -43,7 +43,7 @@ That means:
 
 The first full crawl can be slow because it fan-outs across a large manifest set. Incremental crawls should only be fast when the crawler can prove that a package or manifest changed.
 
-The catalog database schema version is currently `2`. Version `1` catalog files are intentionally invalid and must be rebuilt from the parser output.
+The catalog database schema version is currently `1`.
 
 Rules:
 
