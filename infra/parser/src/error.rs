@@ -1,3 +1,4 @@
+use std::error::Error as StdError;
 use std::io;
 use std::path::PathBuf;
 
@@ -69,6 +70,18 @@ pub enum ParserError {
 }
 
 impl ParserError {
+    /// Returns a stable machine-readable code for the error variant.
+    pub fn error_code(&self) -> &'static str {
+        match self {
+            Self::Decode(_) => "decode_error",
+            Self::Contract(_) => "contract_violation",
+            Self::LineDecode { .. } => "line_decode_error",
+            Self::Io(_) | Self::IoContext { .. } => "io_error",
+            Self::CatalogDb { .. } => "catalog_db_error",
+            Self::Model(_) => "model_validation_error",
+        }
+    }
+
     /// Returns a parser error with extra context appended to contract errors.
     pub fn context(self, msg: impl Into<String>) -> Self {
         let msg = msg.into();
@@ -126,6 +139,24 @@ impl ParserError {
         )
     }
 
+    /// Returns the wrapped source error if this variant has one.
+    pub fn inner_error(&self) -> Option<&(dyn StdError + 'static)> {
+        match self {
+            Self::Decode(source) => Some(source),
+            Self::LineDecode { source, .. } => Some(source),
+            Self::Io(source) => Some(source),
+            Self::IoContext { source, .. } => Some(source),
+            Self::CatalogDb { source, .. } => Some(source),
+            Self::Model(source) => Some(source),
+            Self::Contract(_) => None,
+        }
+    }
+
+    /// Attempts to downcast the wrapped source error to a concrete type.
+    pub fn downcast_ref<T: StdError + 'static>(&self) -> Option<&T> {
+        self.inner_error()?.downcast_ref::<T>()
+    }
+
     /// Returns a coarse category for telemetry or metrics.
     pub fn category(&self) -> ErrorCategory {
         match self {
@@ -163,6 +194,32 @@ mod tests {
         );
         assert!(
             ParserError::io_with_context(std::io::Error::other("boom"), "open").is_recoverable()
+        );
+    }
+
+    #[test]
+    fn exposes_machine_readable_error_codes() {
+        assert_eq!(
+            ParserError::Contract("bad".to_string()).error_code(),
+            "contract_violation"
+        );
+        assert_eq!(
+            ParserError::catalog_db("catalog.db", SqliteError::InvalidQuery).error_code(),
+            "catalog_db_error"
+        );
+    }
+
+    #[test]
+    fn exposes_inner_errors() {
+        let error =
+            ParserError::io_with_context(std::io::Error::other("boom"), "opening catalog.db");
+
+        assert!(error.inner_error().is_some());
+        assert!(error.downcast_ref::<std::io::Error>().is_some());
+        assert!(
+            ParserError::Contract("bad".to_string())
+                .inner_error()
+                .is_none()
         );
     }
 
