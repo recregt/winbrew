@@ -6,8 +6,10 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -108,12 +110,26 @@ func TestMetadataTempKeyForObjectKey(t *testing.T) {
 func TestSQLiteDSNPrefixesWindowsDrivePath(t *testing.T) {
 	t.Parallel()
 
-	dsn, err := sqliteDSN(`C:\Users\recregt\AppData\Local\winbrew\catalog.db`)
+	dbPath := filepath.Join(t.TempDir(), "catalog.db")
+	if runtime.GOOS == "windows" {
+		dbPath = `C:\Users\recregt\AppData\Local\winbrew\catalog.db`
+	}
+
+	dsn, err := sqliteDSN(dbPath)
 	if err != nil {
 		t.Fatalf("sqliteDSN() error = %v", err)
 	}
 
-	if got, want := dsn, "file:///C:/Users/recregt/AppData/Local/winbrew/catalog.db?mode=ro"; got != want {
+	absPath, err := filepath.Abs(dbPath)
+	if err != nil {
+		t.Fatalf("filepath.Abs() error = %v", err)
+	}
+	wantPath := filepath.ToSlash(absPath)
+	if runtime.GOOS == "windows" && len(wantPath) >= 2 && wantPath[1] == ':' {
+		wantPath = "/" + wantPath
+	}
+
+	if got, want := dsn, (&url.URL{Scheme: "file", Path: wantPath, RawQuery: "mode=ro"}).String(); got != want {
 		t.Fatalf("sqliteDSN() = %q, want %q", got, want)
 	}
 }
