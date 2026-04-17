@@ -396,6 +396,10 @@ func TestBuildUpdatePlansSQLIncludesCurrentAndFullRows(t *testing.T) {
 		t.Fatalf("insert count = %d, want %d", got, want)
 	}
 
+	if strings.Contains(sql, "BEGIN;") || strings.Contains(sql, "COMMIT;") {
+		t.Fatalf("sql = %q, want no explicit transaction statements", sql)
+	}
+
 	if !strings.Contains(sql, "https://cdn.example.invalid/base/catalog/latest.db.zst") {
 		t.Fatalf("sql = %q, want snapshot URL to be present", sql)
 	}
@@ -433,6 +437,10 @@ func TestBuildUpdatePlansSQLUsesSingleFullRowWithoutPreviousHash(t *testing.T) {
 		t.Fatalf("insert count = %d, want %d", got, want)
 	}
 
+	if strings.Contains(sql, "BEGIN;") || strings.Contains(sql, "COMMIT;") {
+		t.Fatalf("sql = %q, want no explicit transaction statements", sql)
+	}
+
 	if !strings.Contains(sql, "VALUES ('sha256:new', 'full', 'sha256:new', 'https://cdn.example.invalid/base/catalog/latest.db.zst', '[]', 0, 0, 1, 0);") {
 		t.Fatalf("sql = %q, want single full row to be present", sql)
 	}
@@ -464,6 +472,10 @@ func TestBuildUpdatePlansSQLUsesPatchChainWhenAvailable(t *testing.T) {
 
 	if got, want := strings.Count(sql, "INSERT INTO update_plans"), 3; got != want {
 		t.Fatalf("insert count = %d, want %d", got, want)
+	}
+
+	if strings.Contains(sql, "BEGIN;") || strings.Contains(sql, "COMMIT;") {
+		t.Fatalf("sql = %q, want no explicit transaction statements", sql)
 	}
 
 	if !strings.Contains(sql, "VALUES ('full:sha256:new', 'full', 'sha256:new', 'https://cdn.example.invalid/base/catalog/latest.db.zst', '[]', 0, 0, 1, 0);") {
@@ -504,8 +516,43 @@ func TestBuildUpdatePlansSQLFallsBackToFullWhenPatchChainIsTooLarge(t *testing.T
 		t.Fatalf("insert count = %d, want %d", got, want)
 	}
 
+	if strings.Contains(sql, "BEGIN;") || strings.Contains(sql, "COMMIT;") {
+		t.Fatalf("sql = %q, want no explicit transaction statements", sql)
+	}
+
 	if strings.Contains(sql, "'patch'") {
 		t.Fatalf("sql = %q, want full fallback rather than patch row", sql)
+	}
+}
+
+func TestBuildReleaseMaterializationSQLDoesNotWrapTransaction(t *testing.T) {
+	t.Parallel()
+
+	metadata := Metadata{
+		SchemaVersion:   1,
+		GeneratedAtUnix: 1,
+		CurrentHash:     "sha256:new",
+		PreviousHash:    "sha256:old",
+		PackageCount:    1,
+		SourceCounts:    map[string]int{"scoop": 1},
+	}
+
+	sql, err := buildReleaseMaterializationSQL(
+		"https://cdn.example.invalid/base",
+		"catalog/latest.db.zst",
+		metadata,
+		[]patchChainArtifact{{FromHash: "sha256:old", ToHash: "sha256:new", FilePath: "patches/001.sql.zst", SizeBytes: 500, Checksum: "sha256:patch", ReachedPrevious: true}},
+	)
+	if err != nil {
+		t.Fatalf("buildReleaseMaterializationSQL() error = %v", err)
+	}
+
+	if strings.Contains(sql, "BEGIN;") || strings.Contains(sql, "COMMIT;") {
+		t.Fatalf("sql = %q, want no explicit transaction statements", sql)
+	}
+
+	if !strings.Contains(sql, "INSERT INTO release_lineage") {
+		t.Fatalf("sql = %q, want release lineage insert to be present", sql)
 	}
 }
 
