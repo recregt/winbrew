@@ -167,6 +167,19 @@ impl CatalogWriter {
                         .as_deref()
                         .cmp(&right.installer_switches.as_deref()),
                 )
+                .then(left.platform.as_deref().cmp(&right.platform.as_deref()))
+                .then(left.commands.as_deref().cmp(&right.commands.as_deref()))
+                .then(left.protocols.as_deref().cmp(&right.protocols.as_deref()))
+                .then(
+                    left.file_extensions
+                        .as_deref()
+                        .cmp(&right.file_extensions.as_deref()),
+                )
+                .then(
+                    left.capabilities
+                        .as_deref()
+                        .cmp(&right.capabilities.as_deref()),
+                )
                 .then(left.scope.as_deref().cmp(&right.scope.as_deref()))
                 .then(left.arch.as_str().cmp(right.arch.as_str()))
                 .then(left.kind.as_str().cmp(right.kind.as_str()))

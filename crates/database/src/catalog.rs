@@ -32,7 +32,7 @@ pub fn get_installers(conn: &Connection, package_id: &str) -> Result<Vec<Catalog
         "SELECT package_id, url, hash, hash_algorithm, installer_type, installer_switches, platform, commands, protocols, file_extensions, capabilities, scope, arch, kind, nested_kind
          FROM catalog_installers
          WHERE package_id = ?1
-         ORDER BY scope ASC, arch ASC, kind ASC, installer_type ASC, nested_kind ASC, installer_switches ASC, hash_algorithm ASC, url ASC",
+         ORDER BY scope ASC, arch ASC, kind ASC, installer_type ASC, nested_kind ASC, installer_switches ASC, platform ASC, commands ASC, protocols ASC, file_extensions ASC, capabilities ASC, hash_algorithm ASC, url ASC",
     )?;
 
     stmt.query_map(params![package_id], row_to_installer)?
