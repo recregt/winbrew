@@ -73,24 +73,15 @@ impl CatalogWriter {
             path,
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
         )
-        .map_err(|source| ParserError::CatalogDb {
-            path: catalog_db_path.clone(),
-            source,
-        })?;
+        .map_err(|source| ParserError::from((catalog_db_path.clone(), source)))?;
         connection
             .execute_batch(
                 "PRAGMA foreign_keys=ON; PRAGMA journal_mode=DELETE; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-2000; PRAGMA temp_store=MEMORY; BEGIN IMMEDIATE;",
             )
-            .map_err(|source| ParserError::CatalogDb {
-                path: catalog_db_path.clone(),
-                source,
-            })?;
+            .map_err(|source| ParserError::from((catalog_db_path.clone(), source)))?;
         connection
             .execute_batch(SCHEMA)
-            .map_err(|source| ParserError::CatalogDb {
-                path: catalog_db_path.clone(),
-                source,
-            })?;
+            .map_err(|source| ParserError::from((catalog_db_path.clone(), source)))?;
 
         Ok(Self {
             catalog_db_path,
@@ -100,34 +91,22 @@ impl CatalogWriter {
     }
 
     pub fn write_package(&mut self, parsed: &ParsedPackage) -> Result<(), ParserError> {
-        let mut package_stmt =
-            self.connection
-                .prepare(PACKAGE_UPSERT)
-                .map_err(|source| ParserError::CatalogDb {
-                    path: self.catalog_db_path.clone(),
-                    source,
-                })?;
-        let mut raw_stmt =
-            self.connection
-                .prepare(RAW_UPSERT)
-                .map_err(|source| ParserError::CatalogDb {
-                    path: self.catalog_db_path.clone(),
-                    source,
-                })?;
-        let mut delete_installers_stmt =
-            self.connection
-                .prepare(DELETE_INSTALLERS)
-                .map_err(|source| ParserError::CatalogDb {
-                    path: self.catalog_db_path.clone(),
-                    source,
-                })?;
+        let mut package_stmt = self
+            .connection
+            .prepare(PACKAGE_UPSERT)
+            .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
+        let mut raw_stmt = self
+            .connection
+            .prepare(RAW_UPSERT)
+            .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
+        let mut delete_installers_stmt = self
+            .connection
+            .prepare(DELETE_INSTALLERS)
+            .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
         let mut installer_stmt = self
             .connection
             .prepare(INSTALLER_INSERT)
-            .map_err(|source| ParserError::CatalogDb {
-                path: self.catalog_db_path.clone(),
-                source,
-            })?;
+            .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
 
         package_stmt
             .execute(params![
@@ -146,26 +125,17 @@ impl CatalogWriter {
                 parsed.package.tags.as_deref(),
                 parsed.package.bin.as_deref(),
             ])
-            .map_err(|source| ParserError::CatalogDb {
-                path: self.catalog_db_path.clone(),
-                source,
-            })?;
+            .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
 
         raw_stmt
             .execute(params![
                 parsed.package.id.as_str(),
                 parsed.raw_json.as_str()
             ])
-            .map_err(|source| ParserError::CatalogDb {
-                path: self.catalog_db_path.clone(),
-                source,
-            })?;
+            .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
         delete_installers_stmt
             .execute(params![parsed.package.id.as_str()])
-            .map_err(|source| ParserError::CatalogDb {
-                path: self.catalog_db_path.clone(),
-                source,
-            })?;
+            .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
 
         let mut installers: Vec<_> = parsed.installers.iter().collect();
         installers.sort_by(|left, right| {
@@ -217,10 +187,7 @@ impl CatalogWriter {
                     installer.kind.to_string(),
                     installer.nested_kind.map(|kind| kind.as_str()),
                 ])
-                .map_err(|source| ParserError::CatalogDb {
-                    path: self.catalog_db_path.clone(),
-                    source,
-                })?;
+                .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
         }
 
         Ok(())
@@ -229,10 +196,7 @@ impl CatalogWriter {
     pub fn finish(mut self) -> Result<(), ParserError> {
         self.connection
             .execute_batch("COMMIT;")
-            .map_err(|source| ParserError::CatalogDb {
-                path: self.catalog_db_path.clone(),
-                source,
-            })?;
+            .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
         self.committed = true;
         Ok(())
     }
