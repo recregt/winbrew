@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::installer_type::CatalogInstallerType;
@@ -112,6 +114,31 @@ pub struct CatalogInstaller {
     /// Optional install scope reported by the source, usually `user` or `machine` for Winget.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
+}
+
+/// Canonical identity for a catalog installer row.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CanonicalInstallerKey {
+    /// Package id this installer belongs to.
+    pub package_id: String,
+    /// Download URL for the installer payload.
+    pub url: String,
+    /// Expected checksum or empty string when checksumless installs are allowed.
+    pub hash: String,
+    /// Checksum algorithm used to verify the installer.
+    pub hash_algorithm: String,
+    /// Normalized installer family used for catalog browsing and filtering.
+    pub installer_type: String,
+    /// Silent-install or package-manager switches when the source provides them.
+    pub installer_switches: Option<String>,
+    /// Optional install scope reported by the source.
+    pub scope: Option<String>,
+    /// Architecture target for the installer.
+    pub arch: String,
+    /// Raw installer format used by the engine-facing model, distinct from `installer_type`.
+    pub kind: String,
+    /// Nested installer format when the installer contains an archive payload.
+    pub nested_kind: Option<String>,
 }
 
 impl CatalogPackage {
@@ -275,12 +302,112 @@ impl CatalogInstaller {
 
         Ok(())
     }
+
+    /// Return the canonical identity used to deduplicate installer rows.
+    pub fn canonical_key(&self) -> CanonicalInstallerKey {
+        CanonicalInstallerKey {
+            package_id: self.package_id.to_string(),
+            url: self.url.clone(),
+            hash: self.hash.clone(),
+            hash_algorithm: self.hash_algorithm.as_str().to_string(),
+            installer_type: self.installer_type.as_str().to_string(),
+            installer_switches: self.installer_switches.clone(),
+            scope: self.scope.clone(),
+            arch: self.arch.as_str().to_string(),
+            kind: self.kind.to_string(),
+            nested_kind: self.nested_kind.map(|kind| kind.to_string()),
+        }
+    }
+
+    /// Merge metadata-only fields from another installer that shares the same canonical key.
+    pub fn merge_metadata_from(&mut self, other: &Self) -> Result<(), ModelError> {
+        if self.canonical_key() != other.canonical_key() {
+            return Err(ModelError::invalid_contract(
+                "catalog_installer.merge",
+                "cannot merge installers with different canonical keys",
+            ));
+        }
+
+        self.platform = merge_json_text_array(
+            self.platform.take(),
+            other.platform.as_deref(),
+            "catalog_installer.platform",
+        )?;
+        self.commands = merge_json_text_array(
+            self.commands.take(),
+            other.commands.as_deref(),
+            "catalog_installer.commands",
+        )?;
+        self.protocols = merge_json_text_array(
+            self.protocols.take(),
+            other.protocols.as_deref(),
+            "catalog_installer.protocols",
+        )?;
+        self.file_extensions = merge_json_text_array(
+            self.file_extensions.take(),
+            other.file_extensions.as_deref(),
+            "catalog_installer.file_extensions",
+        )?;
+        self.capabilities = merge_json_text_array(
+            self.capabilities.take(),
+            other.capabilities.as_deref(),
+            "catalog_installer.capabilities",
+        )?;
+
+        Ok(())
+    }
 }
 
 impl Validate for CatalogInstaller {
     fn validate(&self) -> Result<(), ModelError> {
         CatalogInstaller::validate(self)
     }
+}
+
+fn merge_json_text_array(
+    left: Option<String>,
+    right: Option<&str>,
+    field: &'static str,
+) -> Result<Option<String>, ModelError> {
+    let mut values = BTreeSet::new();
+
+    if let Some(value) = left.as_deref() {
+        collect_json_text_array(field, value, &mut values)?;
+    }
+
+    if let Some(value) = right {
+        collect_json_text_array(field, value, &mut values)?;
+    }
+
+    if values.is_empty() {
+        return Ok(None);
+    }
+
+    let merged: Vec<String> = values.into_iter().collect();
+    let json = serde_json::to_string(&merged)
+        .map_err(|err| ModelError::invalid_contract(field, err.to_string()))?;
+
+    Ok(Some(json))
+}
+
+fn collect_json_text_array(
+    field: &'static str,
+    json: &str,
+    values: &mut BTreeSet<String>,
+) -> Result<(), ModelError> {
+    let entries: Vec<String> = serde_json::from_str(json)
+        .map_err(|err| ModelError::invalid_contract(field, err.to_string()))?;
+
+    for entry in entries {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        values.insert(trimmed.to_string());
+    }
+
+    Ok(())
 }
 
 #[cfg(any(test, debug_assertions))]
@@ -533,6 +660,101 @@ mod tests {
         assert_eq!(installer.hash_algorithm, HashAlgorithm::Sha256);
         assert_eq!(installer.installer_type, CatalogInstallerType::Unknown);
         assert_eq!(installer.installer_switches, None);
+    }
+
+    #[test]
+    fn canonical_key_distinguishes_nested_kind_presence() {
+        let base = CatalogInstaller::test_builder(
+            "winget/Contoso.App".into(),
+            "https://example.test/app.zip",
+        )
+        .with_hash("sha256:deadbeef")
+        .with_hash_algorithm(HashAlgorithm::Sha256)
+        .with_installer_type(CatalogInstallerType::Zip)
+        .with_arch(Architecture::Any)
+        .with_kind(InstallerType::Zip);
+
+        let mut nested = base.clone();
+        nested.nested_kind = Some(InstallerType::Msi);
+
+        assert_ne!(base.canonical_key(), nested.canonical_key());
+    }
+
+    #[test]
+    fn merge_metadata_unions_arrays_deterministically() {
+        let mut left = CatalogInstaller::test_builder(
+            "winget/Contoso.App".into(),
+            "https://example.test/app.zip",
+        )
+        .with_hash("sha256:deadbeef")
+        .with_hash_algorithm(HashAlgorithm::Sha256)
+        .with_installer_type(CatalogInstallerType::Zip)
+        .with_arch(Architecture::Any)
+        .with_kind(InstallerType::Zip);
+        left.nested_kind = Some(InstallerType::Msi);
+        left.platform = Some("[\"Windows.Server\", \"Windows.Desktop\"]".to_string());
+        left.commands = Some("[\"contoso\"]".to_string());
+        left.protocols = Some("[\"contoso-protocol\"]".to_string());
+        left.file_extensions = Some("[\".exe\"]".to_string());
+        left.capabilities = Some("[\"internetClient\"]".to_string());
+
+        let mut right = left.clone();
+        right.platform = Some("[\"Windows.Desktop\", \"Windows.LTSC\"]".to_string());
+        right.commands = Some("[\"contoso-server\", \"contoso\"]".to_string());
+        right.protocols = Some("[\"contoso-protocol\", \"contoso-shell\"]".to_string());
+        right.file_extensions = Some("[\".msi\", \".exe\"]".to_string());
+        right.capabilities = Some("[\"internetClient\", \"internetClientServer\"]".to_string());
+
+        left.merge_metadata_from(&right)
+            .expect("merge should succeed");
+
+        assert_eq!(
+            left.platform.as_deref(),
+            Some("[\"Windows.Desktop\",\"Windows.LTSC\",\"Windows.Server\"]")
+        );
+        assert_eq!(
+            left.commands.as_deref(),
+            Some("[\"contoso\",\"contoso-server\"]")
+        );
+        assert_eq!(
+            left.protocols.as_deref(),
+            Some("[\"contoso-protocol\",\"contoso-shell\"]")
+        );
+        assert_eq!(left.file_extensions.as_deref(), Some("[\".exe\",\".msi\"]"));
+        assert_eq!(
+            left.capabilities.as_deref(),
+            Some("[\"internetClient\",\"internetClientServer\"]")
+        );
+    }
+
+    #[test]
+    fn merge_metadata_preserves_present_side_when_other_is_missing() {
+        let mut left = CatalogInstaller::test_builder(
+            "winget/Contoso.App".into(),
+            "https://example.test/app.zip",
+        )
+        .with_hash("sha256:deadbeef")
+        .with_hash_algorithm(HashAlgorithm::Sha256)
+        .with_installer_type(CatalogInstallerType::Zip)
+        .with_arch(Architecture::Any)
+        .with_kind(InstallerType::Zip);
+        left.nested_kind = None;
+
+        let mut right = left.clone();
+        right.platform = Some("[\"Windows.Desktop\"]".to_string());
+        right.commands = None;
+        right.protocols = Some("[\"contoso-protocol\"]".to_string());
+        right.file_extensions = None;
+        right.capabilities = None;
+
+        left.merge_metadata_from(&right)
+            .expect("merge should succeed");
+
+        assert_eq!(left.platform.as_deref(), Some("[\"Windows.Desktop\"]"));
+        assert_eq!(left.commands, None);
+        assert_eq!(left.protocols.as_deref(), Some("[\"contoso-protocol\"]"));
+        assert_eq!(left.file_extensions, None);
+        assert_eq!(left.capabilities, None);
     }
 
     #[test]

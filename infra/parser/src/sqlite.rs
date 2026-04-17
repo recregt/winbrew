@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -5,6 +7,7 @@ use rusqlite::{Connection, OpenFlags, params};
 
 use crate::error::ParserError;
 use crate::parser::ParsedPackage;
+use winbrew_models::catalog::CanonicalInstallerKey;
 
 const PACKAGE_UPSERT: &str = r#"
 INSERT INTO catalog_packages(id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher, locale, moniker, platform, commands, protocols, file_extensions, capabilities, tags, bin)
@@ -147,48 +150,7 @@ impl CatalogWriter {
             .execute(params![parsed.package.id.as_str()])
             .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
 
-        let mut installers: Vec<_> = parsed.installers.iter().collect();
-        installers.sort_by(|left, right| {
-            left.url
-                .cmp(&right.url)
-                .then(left.hash.cmp(&right.hash))
-                .then(
-                    left.hash_algorithm
-                        .as_str()
-                        .cmp(right.hash_algorithm.as_str()),
-                )
-                .then(
-                    left.installer_type
-                        .as_str()
-                        .cmp(right.installer_type.as_str()),
-                )
-                .then(
-                    left.installer_switches
-                        .as_deref()
-                        .cmp(&right.installer_switches.as_deref()),
-                )
-                .then(left.platform.as_deref().cmp(&right.platform.as_deref()))
-                .then(left.commands.as_deref().cmp(&right.commands.as_deref()))
-                .then(left.protocols.as_deref().cmp(&right.protocols.as_deref()))
-                .then(
-                    left.file_extensions
-                        .as_deref()
-                        .cmp(&right.file_extensions.as_deref()),
-                )
-                .then(
-                    left.capabilities
-                        .as_deref()
-                        .cmp(&right.capabilities.as_deref()),
-                )
-                .then(left.scope.as_deref().cmp(&right.scope.as_deref()))
-                .then(left.arch.as_str().cmp(right.arch.as_str()))
-                .then(left.kind.as_str().cmp(right.kind.as_str()))
-                .then(
-                    left.nested_kind
-                        .map(|kind| kind.as_str())
-                        .cmp(&right.nested_kind.map(|kind| kind.as_str())),
-                )
-        });
+        let installers = merge_installers(&parsed.installers)?;
 
         for installer in installers {
             let hash = if installer.hash.trim().is_empty() {
@@ -235,5 +197,160 @@ impl Drop for CatalogWriter {
         if !self.committed {
             let _ = self.connection.execute_batch("ROLLBACK;");
         }
+    }
+}
+
+fn merge_installers(
+    installers: &[winbrew_models::catalog::package::CatalogInstaller],
+) -> Result<Vec<winbrew_models::catalog::package::CatalogInstaller>, ParserError> {
+    let mut merged_by_key: HashMap<
+        CanonicalInstallerKey,
+        winbrew_models::catalog::package::CatalogInstaller,
+    > = HashMap::with_capacity(installers.len());
+
+    for installer in installers {
+        let key = installer.canonical_key();
+
+        match merged_by_key.entry(key) {
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(installer.clone());
+            }
+            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                entry.get_mut().merge_metadata_from(installer)?;
+            }
+        }
+    }
+
+    let mut merged: Vec<_> = merged_by_key.into_values().collect();
+    merged.sort_by(compare_installers);
+
+    Ok(merged)
+}
+
+fn compare_installers(
+    left: &winbrew_models::catalog::package::CatalogInstaller,
+    right: &winbrew_models::catalog::package::CatalogInstaller,
+) -> Ordering {
+    left.url
+        .cmp(&right.url)
+        .then(left.hash.cmp(&right.hash))
+        .then(
+            left.hash_algorithm
+                .as_str()
+                .cmp(right.hash_algorithm.as_str()),
+        )
+        .then(
+            left.installer_type
+                .as_str()
+                .cmp(right.installer_type.as_str()),
+        )
+        .then(
+            left.installer_switches
+                .as_deref()
+                .cmp(&right.installer_switches.as_deref()),
+        )
+        .then(left.scope.as_deref().cmp(&right.scope.as_deref()))
+        .then(left.arch.as_str().cmp(right.arch.as_str()))
+        .then(left.kind.as_str().cmp(right.kind.as_str()))
+        .then(
+            left.nested_kind
+                .map(|kind| kind.as_str())
+                .cmp(&right.nested_kind.map(|kind| kind.as_str())),
+        )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::merge_installers;
+    use winbrew_models::catalog::CatalogInstallerType;
+    use winbrew_models::catalog::package::CatalogInstaller;
+    use winbrew_models::install::{Architecture, InstallerType};
+    use winbrew_models::shared::HashAlgorithm;
+
+    fn installer(
+        nested_kind: Option<InstallerType>,
+        platform: Option<&str>,
+        commands: Option<&str>,
+    ) -> CatalogInstaller {
+        let mut installer = CatalogInstaller::test_builder(
+            "winget/Contoso.App".into(),
+            "https://example.test/app.zip",
+        )
+        .with_hash("sha256:deadbeef")
+        .with_hash_algorithm(HashAlgorithm::Sha256)
+        .with_installer_type(CatalogInstallerType::Zip)
+        .with_arch(Architecture::X64)
+        .with_kind(InstallerType::Zip);
+
+        installer.nested_kind = nested_kind;
+        installer.platform = platform.map(|value| value.to_string());
+        installer.commands = commands.map(|value| value.to_string());
+        installer.protocols = None;
+        installer.file_extensions = None;
+        installer.capabilities = None;
+        installer.scope = Some("machine".to_string());
+
+        installer
+    }
+
+    #[test]
+    fn merge_installers_unions_metadata_only_duplicates() {
+        let mut left = installer(
+            Some(InstallerType::Msi),
+            Some("[\"Windows.Desktop\"]"),
+            Some("[\"contoso\"]"),
+        );
+        let right = installer(
+            Some(InstallerType::Msi),
+            Some("[\"Windows.Server\", \"Windows.Desktop\"]"),
+            Some("[\"contoso-server\", \"contoso\"]"),
+        );
+
+        left.merge_metadata_from(&right)
+            .expect("merge should succeed");
+
+        assert_eq!(
+            left.platform.as_deref(),
+            Some("[\"Windows.Desktop\",\"Windows.Server\"]")
+        );
+        assert_eq!(
+            left.commands.as_deref(),
+            Some("[\"contoso\",\"contoso-server\"]")
+        );
+    }
+
+    #[test]
+    fn merge_installers_keeps_distinct_nested_kind_separate() {
+        let installers = vec![
+            installer(None, Some("[\"Windows.Desktop\"]"), Some("[\"contoso\"]")),
+            installer(
+                Some(InstallerType::Msi),
+                Some("[\"Windows.Desktop\"]"),
+                Some("[\"contoso\"]"),
+            ),
+        ];
+
+        let merged = merge_installers(&installers).expect("merge should succeed");
+
+        assert_eq!(merged.len(), 2);
+        assert_ne!(merged[0].nested_kind, merged[1].nested_kind);
+    }
+
+    #[test]
+    fn merge_installers_preserves_missing_metadata_when_only_one_side_has_values() {
+        let installers = vec![
+            installer(Some(InstallerType::Msi), None, None),
+            installer(
+                Some(InstallerType::Msi),
+                Some("[\"Windows.Desktop\"]"),
+                None,
+            ),
+        ];
+
+        let merged = merge_installers(&installers).expect("merge should succeed");
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].platform.as_deref(), Some("[\"Windows.Desktop\"]"));
+        assert_eq!(merged[0].commands, None);
     }
 }

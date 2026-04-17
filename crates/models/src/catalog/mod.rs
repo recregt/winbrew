@@ -20,5 +20,5 @@ pub mod raw;
 
 pub use installer_type::CatalogInstallerType;
 pub use metadata::CatalogMetadata;
-pub use package::{CatalogInstaller, CatalogPackage};
+pub use package::{CanonicalInstallerKey, CatalogInstaller, CatalogPackage};
 pub use raw::{RawCatalogInstaller, RawCatalogPackage};
