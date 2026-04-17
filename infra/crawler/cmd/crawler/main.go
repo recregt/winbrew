@@ -22,6 +22,25 @@ func main() {
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	exitOnErr := func(err error) {
+		if errors.Is(err, context.Canceled) {
+			slog.Info("crawler cancelled by user")
+			os.Exit(130)
+		}
+		slog.Error("crawler failed", "err", err)
+		os.Exit(1)
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "tools" {
+		if err := runTools(ctx, os.Args[2:]); err != nil {
+			exitOnErr(err)
+		}
+		return
+	}
+
 	configPath := flag.String("config", "config.yaml", "path to configuration file")
 	wingetOutPath := flag.String("winget-out", "", "path to write the Winget JSONL output file")
 	flag.Parse()
@@ -32,15 +51,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-
 	if err := crawler.Run(ctx, *configPath, *wingetOutPath); err != nil {
-		if errors.Is(err, context.Canceled) {
-			slog.Info("crawler cancelled by user")
-			os.Exit(130)
-		}
-		slog.Error("crawler failed", "err", err)
-		os.Exit(1)
+		exitOnErr(err)
 	}
 }

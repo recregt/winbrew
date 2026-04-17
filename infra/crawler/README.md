@@ -29,6 +29,17 @@ The config controls:
 - `--winget-out`: staged Winget JSONL file.
 - `stderr`: structured logs and diagnostics.
 
+## Helper Tools
+
+The hidden `tools generate-fixtures` command can pull real Winget packages into a JSONL fixture for parser tests:
+
+```powershell
+Set-Location infra/crawler
+go run ./cmd/crawler tools generate-fixtures --count=500 --output ..\parser\tests\fixtures\new_world.jsonl
+```
+
+Use whatever `--count` matches the fixture you want to commit.
+
 ## Runtime model
 
 The crawler does not build the catalog database itself. Its job is to produce two artifacts that the parser can consume:
