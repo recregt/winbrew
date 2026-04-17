@@ -116,7 +116,7 @@ jobs:
         if: ${{ hashFiles('infra/publisher/.generated/release_materialization.sql') != '' }}
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
+          apiToken: ${{ secrets.D1_ACCESS_TOKEN }}
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           command: d1 execute DB --remote --config infra/publisher/.generated/wrangler.production.jsonc --file infra/publisher/.generated/release_materialization.sql --yes
 
@@ -124,6 +124,6 @@ jobs:
         if: ${{ hashFiles('infra/publisher/.generated/update_plans.sql') != '' }}
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
+          apiToken: ${{ secrets.D1_ACCESS_TOKEN }}
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           command: d1 execute DB --remote --config infra/publisher/.generated/wrangler.production.jsonc --file infra/publisher/.generated/update_plans.sql --yes
