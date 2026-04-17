@@ -76,8 +76,26 @@ jobs:
           catalog_db="$staging/catalog.db"
           metadata_json="$staging/metadata.json"
 
-          (cd infra/crawler && go run ./cmd/crawler --config config.yaml --winget-out "$winget_jsonl") \
-            | cargo run --locked -p winbrew-infra-parser -- --winget-jsonl "$winget_jsonl" --out "$catalog_db" --metadata "$metadata_json"
+          echo "Running crawler"
+          (cd infra/crawler && go run ./cmd/crawler --config config.yaml --winget-out "$winget_jsonl")
+
+          if [ ! -s "$winget_jsonl" ]; then
+            echo "::error::crawler produced no winget JSONL output"
+            exit 1
+          fi
+
+          echo "Running parser"
+          cargo run --locked -p winbrew-infra-parser -- --winget-jsonl "$winget_jsonl" --out "$catalog_db" --metadata "$metadata_json"
+
+          if [ ! -s "$catalog_db" ]; then
+            echo "::error::parser did not produce a catalog database"
+            exit 1
+          fi
+
+          if [ ! -s "$metadata_json" ]; then
+            echo "::error::parser did not produce metadata"
+            exit 1
+          fi
 
           {
             echo "CATALOG_DB=$catalog_db"
