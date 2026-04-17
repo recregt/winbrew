@@ -6,7 +6,7 @@ on:
     - cron: '0 6 * * *' # every day at 6:00 UTC
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: catalog-publish
@@ -40,7 +40,9 @@ jobs:
 
       - name: Compute crawler cache key
         id: crawler-cache-key
-        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          echo "tag_date=$(date -u +%Y.%m.%d)" >> "$GITHUB_OUTPUT"
 
       - name: Cache crawler data
         uses: actions/cache@v5
@@ -129,3 +131,37 @@ jobs:
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4"
           command: d1 execute DB --remote --config infra/publisher/.generated/wrangler.production.jsonc --file infra/publisher/.generated/update_plans.sql --yes
+
+      - name: Archive nightly release
+        if: ${{ hashFiles('infra/publisher/.generated/update_plans.sql') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          nightly_date="${{ steps.crawler-cache-key.outputs.date }}"
+          nightly_tag="catalog-${{ steps.crawler-cache-key.outputs.tag_date }}-nightly"
+          archive_dir="infra/publisher/.generated/nightly"
+
+          rm -rf "$archive_dir"
+          mkdir -p "$archive_dir"
+
+          cp "$CATALOG_DB" "$archive_dir/catalog.db"
+          cp "$CATALOG_METADATA" "$archive_dir/metadata.json"
+          cp infra/publisher/.generated/release_materialization.sql "$archive_dir/release_materialization.sql"
+          cp infra/publisher/.generated/update_plans.sql "$archive_dir/update_plans.sql"
+          cp infra/publisher/.generated/patch_chain.json "$archive_dir/patch_chain.json"
+          cp infra/publisher/.generated/wrangler.production.jsonc "$archive_dir/wrangler.production.jsonc"
+
+          gh release delete "$nightly_tag" --yes --cleanup-tag >/dev/null 2>&1 || true
+          gh release create "$nightly_tag" \
+            --target "$GITHUB_SHA" \
+            --title "$nightly_tag" \
+            --prerelease \
+            --notes "Nightly catalog archive for $nightly_date." \
+            "$archive_dir/catalog.db" \
+            "$archive_dir/metadata.json" \
+            "$archive_dir/release_materialization.sql" \
+            "$archive_dir/update_plans.sql" \
+            "$archive_dir/patch_chain.json" \
+            "$archive_dir/wrangler.production.jsonc"
