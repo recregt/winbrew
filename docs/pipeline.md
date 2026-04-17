@@ -43,6 +43,8 @@ That means:
 
 The first full crawl can be slow because it fan-outs across a large manifest set. Incremental crawls should only be fast when the crawler can prove that a package or manifest changed.
 
+The catalog database schema version is currently `2`. Version `1` catalog files are intentionally invalid and must be rebuilt from the parser output.
+
 Rules:
 
 - keep `scope` optional for now
@@ -72,6 +74,8 @@ Important rules:
 - add `scope` as a first-class selector dimension if the upstream manifest exposes it
 - do not hide scope inside `installer_switches`
 - keep `hash` and `hash_algorithm` as the payload verification contract
+- treat `platform`, `commands`, `protocols`, `file_extensions`, and `capabilities` as mergeable metadata, not installer identity
+- deduplicate installers by the canonical identity columns only
 - add a separate signature field only if the upstream feed exposes a distinct signer or signature hash
 
 The parser should emit one installer row per installer variant, not collapse architecture-specific or scope-specific entries into a single record.

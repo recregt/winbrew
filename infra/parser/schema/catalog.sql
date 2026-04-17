@@ -1,6 +1,6 @@
 -- Canonical catalog schema for parser-generated snapshots.
 -- Parser code and tests include this file directly to avoid schema drift.
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
 
 CREATE TABLE IF NOT EXISTS schema_meta (
     name  TEXT PRIMARY KEY,
@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 );
 
 INSERT OR REPLACE INTO schema_meta (name, value)
-VALUES ('schema_version', '1');
+VALUES ('schema_version', '2');
 
 CREATE TABLE IF NOT EXISTS catalog_packages (
     id          TEXT PRIMARY KEY,
@@ -86,11 +86,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_catalog_installers_unique ON catalog_insta
     hash_algorithm,
     installer_type,
     IFNULL(installer_switches, ''),
-    IFNULL(platform, ''),
-    IFNULL(commands, ''),
-    IFNULL(protocols, ''),
-    IFNULL(file_extensions, ''),
-    IFNULL(capabilities, ''),
     IFNULL(scope, ''),
     arch,
     kind,
