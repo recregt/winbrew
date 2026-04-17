@@ -54,7 +54,9 @@ The installers still live on the upstream hosts that published them. WinBrew sto
 ### Isn't a 35 MB database too large?
 Not for what it does. The database is not just package names; it contains normalized package metadata, installer details, search data, and update information.
 
-SQLite buys you indexed queries, schema enforcement, atomic updates, and a clean way to publish stable snapshots. For an offline-first catalog, that is usually a better trade than JSON, YAML, or XML.
+SQLite buys you indexed queries, schema enforcement, atomic updates, and a clean way to publish stable snapshots. The release pipeline also uses zstd compression, and the release archive can carry both the raw `catalog.db` and the compressed `catalog.db.zst` so you can choose whichever form you want.
+
+For an offline-first catalog, that is usually a better trade than JSON, YAML, or XML.
 
 ### Why use SQLite instead of JSON, YAML, or XML?
 Because the catalog is an operational database, not a config file. WinBrew needs fast local search, indexed filtering, atomic refreshes, schema versioning, and patch-friendly update behavior.
