@@ -1,18 +1,18 @@
 use crate::core::paths::{ResolvedPaths, resolved_paths};
 use crate::database;
+use crate::models::domains::install::EngineKind;
 use crate::models::domains::install::InstallerType;
 use crate::models::domains::installed::{InstalledPackage, PackageStatus};
+use crate::models::domains::inventory::{
+    MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
+    MsiRegistryRecord, MsiShortcutRecord,
+};
 use crate::models::domains::reporting::{
     DiagnosisSeverity, RecoveryActionGroup, RecoveryIssueKind,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::{TempDir, tempdir};
-use winbrew_models::domains::install::EngineKind;
-use winbrew_models::domains::inventory::{
-    MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
-    MsiRegistryRecord, MsiShortcutRecord,
-};
 
 fn sample_package(name: &str, install_dir: &std::path::Path) -> InstalledPackage {
     InstalledPackage {

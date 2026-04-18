@@ -1,15 +1,12 @@
 use std::fmt;
 use std::mem::MaybeUninit;
 
+use crate::registry::read_product_type;
 use winbrew_models::domains::install::Architecture;
 use windows_sys::Win32::System::SystemInformation::{
     GetNativeSystemInfo, PROCESSOR_ARCHITECTURE_AMD64, PROCESSOR_ARCHITECTURE_ARM64,
     PROCESSOR_ARCHITECTURE_INTEL, SYSTEM_INFO,
 };
-use winreg::{RegKey, enums::HKEY_LOCAL_MACHINE};
-
-const PRODUCT_OPTIONS_KEY: &str = r"SYSTEM\CurrentControlSet\Control\ProductOptions";
-const PRODUCT_TYPE_VALUE: &str = "ProductType";
 
 /// Host family used for platform-aware installer selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,13 +42,7 @@ impl fmt::Display for HostKind {
 /// be read, the function falls back to `HostKind::Normal` instead of blocking
 /// install flows.
 pub fn host_kind() -> HostKind {
-    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let product_type = hklm
-        .open_subkey(PRODUCT_OPTIONS_KEY)
-        .ok()
-        .and_then(|key| key.get_value::<String, _>(PRODUCT_TYPE_VALUE).ok());
-
-    product_type
+    read_product_type()
         .as_deref()
         .map(classify_product_type)
         .unwrap_or(HostKind::Normal)

@@ -2,16 +2,11 @@ use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use winreg::{
-    RegKey,
-    enums::{HKEY_CURRENT_USER, KEY_SET_VALUE},
-};
-
+use crate::registry::{register_user_font_value, unregister_user_font_value};
 use windows_sys::Win32::Graphics::Gdi::{
     AddFontResourceExW, FR_NOT_ENUM, FR_PRIVATE, RemoveFontResourceExW,
 };
 
-const USER_FONTS_REGISTRY_PATH: &str = r"Software\Microsoft\Windows NT\CurrentVersion\Fonts";
 const FONT_RESOURCE_FLAGS: u32 = FR_PRIVATE | FR_NOT_ENUM;
 const SUPPORTED_FONT_EXTENSIONS: &[&str] = &["ttf", "otf", "ttc", "otc"];
 
@@ -102,32 +97,13 @@ fn register_user_font(font_path: &Path) -> Result<String> {
     let value_name = font_registry_value_name(font_path)?;
     let value_data = font_path.to_string_lossy().to_string();
 
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let (fonts_key, _) = hkcu
-        .create_subkey(USER_FONTS_REGISTRY_PATH)
-        .context("failed to create Windows fonts registry key")?;
-
-    fonts_key
-        .set_value(&value_name, &value_data)
-        .with_context(|| format!("failed to write registry entry '{}'", value_name))?;
+    register_user_font_value(&value_name, &value_data)?;
 
     Ok(value_name)
 }
 
 fn unregister_user_font_by_name(value_name: &str) -> Result<()> {
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-
-    let Ok(fonts_key) = hkcu.open_subkey_with_flags(USER_FONTS_REGISTRY_PATH, KEY_SET_VALUE) else {
-        return Ok(());
-    };
-
-    match fonts_key.delete_value(value_name) {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(err) => {
-            Err(err).with_context(|| format!("failed to remove registry entry '{}'", value_name))
-        }
-    }
+    unregister_user_font_value(value_name)
 }
 
 fn font_registry_value_name(font_path: &Path) -> Result<String> {
@@ -235,6 +211,7 @@ mod tests {
         FONT_RESOURCE_FLAGS, font_registry_value_name, register_user_font, remove_user_font,
         unregister_user_font_by_name,
     };
+    use crate::registry::user_fonts::USER_FONTS_REGISTRY_PATH;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -279,7 +256,7 @@ mod tests {
         let value_name = register_user_font(&font_path).expect("registry entry should be written");
 
         let fonts_key = RegKey::predef(HKEY_CURRENT_USER)
-            .open_subkey(super::USER_FONTS_REGISTRY_PATH)
+            .open_subkey(USER_FONTS_REGISTRY_PATH)
             .expect("fonts key should exist");
         let stored_path: String = fonts_key
             .get_value(&value_name)
@@ -290,7 +267,7 @@ mod tests {
         unregister_user_font_by_name(&value_name).expect("registry entry should be removed");
 
         let fonts_key = RegKey::predef(HKEY_CURRENT_USER)
-            .open_subkey(super::USER_FONTS_REGISTRY_PATH)
+            .open_subkey(USER_FONTS_REGISTRY_PATH)
             .expect("fonts key should still exist");
         assert!(fonts_key.get_value::<String, _>(&value_name).is_err());
 
@@ -305,7 +282,7 @@ mod tests {
         let value_name = register_user_font(&font_path).expect("registry entry should be written");
         assert!(
             RegKey::predef(HKEY_CURRENT_USER)
-                .open_subkey(super::USER_FONTS_REGISTRY_PATH)
+                .open_subkey(USER_FONTS_REGISTRY_PATH)
                 .expect("fonts key should exist")
                 .get_value::<String, _>(&value_name)
                 .is_ok()
@@ -315,7 +292,7 @@ mod tests {
 
         assert!(!font_path.exists());
         let fonts_key = RegKey::predef(HKEY_CURRENT_USER)
-            .open_subkey(super::USER_FONTS_REGISTRY_PATH)
+            .open_subkey(USER_FONTS_REGISTRY_PATH)
             .expect("fonts key should exist");
         assert!(fonts_key.get_value::<String, _>(&value_name).is_err());
     }
