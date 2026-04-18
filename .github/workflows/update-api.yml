@@ -55,4 +55,4 @@ jobs:
         run: pnpm test -- --run
 
       - name: Deploy worker
-        run: pnpm deploy
+        run: pnpm exec wrangler deploy -c ./wrangler.jsonc

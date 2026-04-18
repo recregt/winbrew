@@ -8,6 +8,10 @@ This package hosts the D1-backed update gateway used by the CLI.
 - Requests with `current=` can return `current`, `full`, or `patch` plans.
 - Any other path returns `404`.
 
+## Production Endpoint
+
+The production route is configured on `api.winbrew.dev/v1/update` in [wrangler.jsonc](wrangler.jsonc). Wrangler still prints the `workers.dev` hostname after deploy, but Cloudflare routes live traffic for the configured route to this worker.
+
 ## Local Development
 
 Run the worker from this directory:
@@ -29,7 +33,7 @@ That keeps `wrangler dev` usable without any manual D1 setup.
 
 Pushes to `main` that change files under `infra/api/update/` deploy this worker automatically through [.github/workflows/update-api.yml](../../../.github/workflows/update-api.yml).
 
-The workflow runs `pnpm test -- --run` before `pnpm run deploy` and expects these secrets in GitHub:
+The workflow runs `pnpm test -- --run` before `pnpm exec wrangler deploy -c ./wrangler.jsonc` and expects these secrets in GitHub:
 
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
