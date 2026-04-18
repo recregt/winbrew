@@ -1,8 +1,46 @@
 //! Catalog refresh workflow for the CLI.
 //!
-//! The update selector stays API-driven. If a patch chain fails, the workflow
-//! re-queries the API for a full snapshot plan instead of falling back to a
-//! hardcoded bucket URL.
+//! # Overview
+//!
+//! The refresh workflow is API-driven and runs in four phases:
+//!
+//! 1. Preparation: ensure the catalog directories exist and clear stale temp files.
+//! 2. Selection: load local metadata if present, query the update API, and turn the
+//!    response into a `current`, `patch`, or `full` plan.
+//! 3. Execution: current plans return immediately, full plans download and verify a
+//!    full snapshot, and patch plans apply incremental SQL patches to a working copy.
+//! 4. Finalization: atomically rename the refreshed temp files into place and clean
+//!    up any leftover temporary artifacts.
+//!
+//! # API Surface
+//!
+//! - `refresh_catalog` is the production entry point used by the CLI and targets the
+//!   default update API.
+//! - `refresh_catalog_with_api_url` is a doc-hidden test hook that lets integration
+//!   tests point the workflow at a mock server.
+//! - `api` builds safe update URLs and fetches the update selection payload.
+//! - `planner` converts the selection response plus local metadata into a concrete
+//!   `CatalogDownloadPlan`.
+//! - `download` handles the full snapshot download, decompression, and final hash
+//!   verification.
+//! - `patch` applies incremental SQL patches against a working copy and writes the
+//!   refreshed metadata.
+//! - `metadata` loads local metadata, derives metadata URLs, and validates hashes.
+//!
+//! # Fallback Behavior
+//!
+//! If a patch application fails, the workflow clears the temp files, re-queries the
+//! API for a full snapshot plan, and retries through the snapshot path.
+//!
+//! # Cleanup
+//!
+//! Temporary files are removed on both success and failure. The final catalog and
+//! metadata files are only replaced after the new versions have been fully built.
+//!
+//! # Concurrency
+//!
+//! This module does not take a file lock. If multiple CLI processes can target the
+//! same catalog root concurrently, that lock belongs at a higher layer.
 
 mod api;
 mod download;
