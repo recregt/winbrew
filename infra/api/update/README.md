@@ -25,6 +25,15 @@ Local bootstrap values live in [.dev.vars](.dev.vars). `WINBREW_UPDATE_DB_NAME` 
 
 That keeps `wrangler dev` usable without any manual D1 setup.
 
+## GitHub Actions
+
+Pushes to `main` that change files under `infra/api/update/` deploy this worker automatically through [.github/workflows/update-api.yml](../../../.github/workflows/update-api.yml).
+
+The workflow runs `pnpm test -- --run` before `pnpm deploy` and expects these secrets in GitHub:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
 ## Tests
 
 Run the package test suite with:
