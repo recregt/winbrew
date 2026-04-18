@@ -10,7 +10,7 @@ use std::io;
 use thiserror::Error;
 
 use super::state::InstallStateError;
-use crate::catalog::{self, InstallerSelectionError};
+use crate::catalog::{self, InstallerSelectionError, SelectionContext};
 use crate::core::cancel::CancellationError;
 use crate::core::hash::HashError;
 use crate::models::catalog::CatalogInstaller;
@@ -25,9 +25,9 @@ use crate::windows::HostProfile;
 /// failure reasons for the install workflow.
 pub(crate) fn select_installer(
     installers: &[CatalogInstaller],
-    host_profile: HostProfile,
+    selection_context: SelectionContext,
 ) -> std::result::Result<CatalogInstaller, InstallerSelectionError> {
-    catalog::select_installer(installers, host_profile)
+    catalog::select_installer(installers, selection_context)
 }
 
 /// User-facing error type produced by the install pipeline.
@@ -59,6 +59,9 @@ pub enum InstallError {
     #[error("no installer matches this host ({host})")]
     NoCompatibleInstaller { host: HostProfile },
 
+    #[error("no installer matches this host's install scope ({host})")]
+    NoScopeCompatibleInstaller { host: HostProfile },
+
     #[error("cancelled")]
     Cancelled,
 
@@ -79,9 +82,9 @@ impl InstallError {
             Self::ChecksumMismatch { .. } | Self::LegacyChecksumAlgorithm { .. } => {
                 InstallFailureClass::Verification
             }
-            Self::NoInstallers | Self::NoCompatibleInstaller { .. } => {
-                InstallFailureClass::Preflight
-            }
+            Self::NoInstallers
+            | Self::NoCompatibleInstaller { .. }
+            | Self::NoScopeCompatibleInstaller { .. } => InstallFailureClass::Preflight,
             Self::Cancelled => InstallFailureClass::Cancelled,
             Self::Unexpected(_) => InstallFailureClass::Runtime,
         }
@@ -122,8 +125,11 @@ impl From<InstallerSelectionError> for InstallError {
     fn from(value: InstallerSelectionError) -> Self {
         match value {
             InstallerSelectionError::NoInstallers => Self::NoInstallers,
-            InstallerSelectionError::NoCompatibleInstaller { host } => {
+            InstallerSelectionError::PlatformMismatch { host } => {
                 Self::NoCompatibleInstaller { host }
+            }
+            InstallerSelectionError::ScopeMismatch { host } => {
+                Self::NoScopeCompatibleInstaller { host }
             }
         }
     }
@@ -194,13 +200,24 @@ mod tests {
         let err = InstallError::from(InstallerSelectionError::NoInstallers);
         assert!(matches!(err, InstallError::NoInstallers));
 
-        let err = InstallError::from(InstallerSelectionError::NoCompatibleInstaller {
+        let err = InstallError::from(InstallerSelectionError::PlatformMismatch {
             host: HostProfile {
                 is_server: true,
                 architecture: Architecture::Arm64,
             },
         });
         assert!(matches!(err, InstallError::NoCompatibleInstaller { .. }));
+
+        let err = InstallError::from(InstallerSelectionError::ScopeMismatch {
+            host: HostProfile {
+                is_server: false,
+                architecture: Architecture::X64,
+            },
+        });
+        assert!(matches!(
+            err,
+            InstallError::NoScopeCompatibleInstaller { .. }
+        ));
     }
 
     #[test]

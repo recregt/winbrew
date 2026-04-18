@@ -97,10 +97,13 @@ pub fn run<O: InstallObserver>(
         catalog::resolve_catalog_package_ref(&catalog_conn, &package_ref, |query, matches| {
             observer.borrow_mut().choose_package(query, matches)
         })?;
-    let host_profile = crate::windows::host_profile();
+    let selection_context = crate::catalog::SelectionContext::new(
+        crate::windows::host_profile(),
+        crate::windows::is_elevated(),
+    );
     let installer = types::select_installer(
         &database::get_installers(&catalog_conn, &package.id)?,
-        host_profile,
+        selection_context,
     )?;
     let engine = engines::resolve_engine_for_installer(&installer)?;
     let package_version = package.version.to_string();

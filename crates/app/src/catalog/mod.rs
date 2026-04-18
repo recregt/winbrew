@@ -8,7 +8,8 @@
 //! Responsibilities are split into two focused submodules:
 //!
 //! - `search` resolves package references and interactive package queries.
-//! - `select` chooses the best installer for the current machine architecture.
+//! - `select` chooses the best installer for the current host platform,
+//!   installation scope, and architecture.
 //!
 //! Keeping these concerns together makes the catalog rules easy to audit while
 //! still leaving the CLI layer unaware of database and ranking details.
@@ -17,4 +18,4 @@ mod search;
 mod select;
 
 pub(crate) use search::{resolve_catalog_package_ref, search_packages};
-pub(crate) use select::{InstallerSelectionError, select_installer};
+pub(crate) use select::{InstallerSelectionError, SelectionContext, select_installer};

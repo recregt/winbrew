@@ -2,12 +2,17 @@ use std::fmt;
 
 use crate::registry::read_product_type;
 use winbrew_models::domains::install::Architecture;
+use windows_sys::Win32::Foundation::CloseHandle;
+use windows_sys::Win32::Security::{
+    GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
+};
 use windows_sys::Win32::System::SystemInformation::{
     GetNativeSystemInfo, PROCESSOR_ARCHITECTURE_AMD64, PROCESSOR_ARCHITECTURE_ARM64,
     PROCESSOR_ARCHITECTURE_INTEL, SYSTEM_INFO,
 };
+use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
-const NORMAL_PLATFORM_TAGS: &[&str] = &["windows.desktop", "windows.ltsc"];
+const NORMAL_PLATFORM_TAGS: &[&str] = &["windows.desktop", "windows.ltsc", "windows.universal"];
 const SERVER_PLATFORM_TAGS: &[&str] = &["windows.server"];
 
 /// Combined host family and native architecture snapshot used for installer selection.
@@ -52,6 +57,35 @@ pub fn host_profile() -> HostProfile {
             .unwrap_or(false),
         architecture: native_architecture(),
     }
+}
+
+/// Return `true` when the current process is running elevated.
+pub fn is_elevated() -> bool {
+    let mut token = core::ptr::null_mut();
+
+    let token_opened =
+        unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } != 0;
+    if !token_opened {
+        return false;
+    }
+
+    let mut elevation = TOKEN_ELEVATION { TokenIsElevated: 0 };
+    let mut return_length = 0u32;
+    let queried = unsafe {
+        GetTokenInformation(
+            token,
+            TokenElevation,
+            &mut elevation as *mut TOKEN_ELEVATION as *mut core::ffi::c_void,
+            core::mem::size_of::<TOKEN_ELEVATION>() as u32,
+            &mut return_length,
+        )
+    } != 0;
+
+    unsafe {
+        CloseHandle(token);
+    }
+
+    queried && elevation.TokenIsElevated != 0
 }
 
 fn classify_product_type(product_type: &str) -> bool {
@@ -122,7 +156,7 @@ mod tests {
     fn host_profile_exposes_platform_tags_by_family() {
         assert_eq!(
             host_profile(false, Architecture::X64).platform_tags(),
-            &["windows.desktop", "windows.ltsc"]
+            &["windows.desktop", "windows.ltsc", "windows.universal"]
         );
         assert_eq!(
             host_profile(true, Architecture::Arm64).platform_tags(),
