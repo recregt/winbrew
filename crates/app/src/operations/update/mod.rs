@@ -22,6 +22,11 @@ use crate::core::paths::{ResolvedPaths, ensure_dirs_at};
 
 const CATALOG_UPDATE_API_URL: &str = "https://api.winbrew.dev/v1/update";
 
+/// Refreshes the local catalog using the default update API endpoint.
+///
+/// This is the production entry point used by the CLI. It delegates to the
+/// injected-URL helper so tests can exercise the same workflow against a mock
+/// server.
 pub fn refresh_catalog<FStart, FProgress>(
     paths: &ResolvedPaths,
     on_start: FStart,
@@ -34,6 +39,12 @@ where
     refresh_catalog_with_api_url(paths, CATALOG_UPDATE_API_URL, on_start, on_progress)
 }
 
+/// Refreshes the local catalog using a caller-provided update API URL.
+///
+/// This is the same workflow as [`refresh_catalog`], but it keeps the API URL
+/// injectable so integration tests can point the refresh logic at a mock
+/// server. The function stays public for that reason, but it is hidden from the
+/// generated API docs because it is not part of the intended CLI surface.
 #[doc(hidden)]
 pub fn refresh_catalog_with_api_url<FStart, FProgress>(
     paths: &ResolvedPaths,
