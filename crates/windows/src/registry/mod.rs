@@ -1,14 +1,18 @@
 use anyhow::Result;
 use regex::RegexBuilder;
 
+mod product_options;
 mod test_support;
 mod uninstall;
+pub(crate) mod user_fonts;
 
+pub(crate) use product_options::read_product_type;
 pub use test_support::{
     UninstallEntryGuard, create_test_uninstall_entry,
     create_test_uninstall_entry_with_install_location,
 };
 pub use uninstall::{Hive, UninstallRoot, uninstall_roots};
+pub(crate) use user_fonts::{register_user_font_value, unregister_user_font_value};
 
 /// Display information collected from uninstall registry entries.
 #[derive(Debug, Eq, PartialEq)]

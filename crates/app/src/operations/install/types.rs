@@ -15,9 +15,9 @@ use crate::core::cancel::CancellationError;
 use crate::core::hash::HashError;
 use crate::models::catalog::CatalogInstaller;
 use crate::models::domains::install::Architecture;
+use crate::models::domains::install::InstallFailureClass;
 use crate::models::domains::shared::HashAlgorithm;
-use winbrew_models::domains::install::InstallFailureClass;
-use winbrew_windows::{HostKind, host_architecture, host_kind};
+use crate::windows::{HostKind, host_architecture, host_kind};
 
 /// Runtime host profile used by installer selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
