@@ -29,7 +29,7 @@ That keeps `wrangler dev` usable without any manual D1 setup.
 
 Pushes to `main` that change files under `infra/api/update/` deploy this worker automatically through [.github/workflows/update-api.yml](../../../.github/workflows/update-api.yml).
 
-The workflow runs `pnpm test -- --run` before `pnpm deploy` and expects these secrets in GitHub:
+The workflow runs `pnpm test -- --run` before `pnpm run deploy` and expects these secrets in GitHub:
 
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
