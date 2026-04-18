@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 use std::collections::BTreeMap;
-use std::fs;
 use std::fs::File;
 use std::path::Path;
 
@@ -12,18 +11,19 @@ use url::Url;
 
 /// Tries to load the local catalog metadata file if it already exists.
 ///
-/// This is the refresh-path entry point for on-disk metadata. It first checks
-/// whether `path` exists and only attempts to open and validate the file when
-/// the file is present.
+/// This is the refresh-path entry point for on-disk metadata. It performs a
+/// single open attempt and only validates the file when the open succeeds,
+/// which avoids a separate existence check and the TOCTOU window that comes
+/// with it.
 ///
 /// Returns `Ok(None)` when the file is missing, which is the normal cold-start
 /// case for a first refresh. Any other filesystem, parse, or validation failure
 /// is returned as an error so callers can surface the problem.
 pub(super) fn load_local_catalog_metadata(path: &Path) -> Result<Option<CatalogMetadata>> {
-    match fs::metadata(path) {
-        Ok(_) => load_catalog_metadata(path).map(Some),
+    match File::open(path) {
+        Ok(file) => load_catalog_metadata_from_file(file).map(Some),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(err).context("failed to inspect local catalog metadata"),
+        Err(err) => Err(err).context("failed to open local catalog metadata"),
     }
 }
 
@@ -38,6 +38,10 @@ pub(super) fn load_local_catalog_metadata(path: &Path) -> Result<Option<CatalogM
 /// rules.
 pub(super) fn load_catalog_metadata(path: &Path) -> Result<CatalogMetadata> {
     let file = File::open(path).context("failed to open catalog metadata download")?;
+    load_catalog_metadata_from_file(file)
+}
+
+fn load_catalog_metadata_from_file(file: File) -> Result<CatalogMetadata> {
     let metadata: CatalogMetadata =
         serde_json::from_reader(file).context("failed to decode catalog metadata download")?;
     metadata.validate()?;
