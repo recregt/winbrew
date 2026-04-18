@@ -29,6 +29,7 @@ layout is not part of the contract and can change without breaking consumers.
 | `uninstall_value` | Read a string value from an uninstall key by key name | MSI install verification |
 | `HostProfile` | Snapshot of the current host family and native architecture | platform-aware installer selection |
 | `host_profile` | Return the current host snapshot | installer selection and download routing |
+| `is_elevated` | Return whether the current process is elevated | scope-aware installer selection |
 | `user_fonts_dir` | Return the per-user Windows font directory | font install / remove helpers |
 | `install_user_font` | Copy a supported font into the user font directory, register it, and load it into the current session | font engine |
 | `remove_user_font` | Unregister a previously installed user font and remove its copied file | font engine |
@@ -57,7 +58,7 @@ pub use deployment::{msi_scan_inventory, msix_install, msix_installed_package_fu
 pub use font::{install_user_font, remove_user_font, user_fonts_dir};
 pub use fs::{PathInfo, create_extracted_file, inspect_path};
 pub use registry::{AppInfo, UninstallEntry, collect_installed_apps, collect_uninstall_entries, uninstall_value};
-pub use system::{HostProfile, host_profile};
+pub use system::{HostProfile, host_profile, is_elevated};
 ```
 
 ## System helpers
@@ -68,7 +69,11 @@ pub use system::{HostProfile, host_profile};
 into one snapshot. Call `host_profile()` once, then inspect `is_server` and
 `architecture` when you need to branch. The snapshot also exposes
 `platform_tags()` so installer selection can map the host family to the catalog
-labels WinBrew accepts.
+labels WinBrew accepts. Normal hosts currently accept `windows.desktop`,
+`windows.ltsc`, and `windows.universal`; server hosts accept `windows.server`.
+
+Use `is_elevated()` when you need to decide whether machine-scope installers
+should be preferred over user-scope installers.
 
 ```rust,no_run
 use winbrew_windows::host_profile;

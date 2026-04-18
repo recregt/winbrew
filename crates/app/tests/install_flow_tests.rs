@@ -15,7 +15,7 @@ use winbrew_testing::{
     reset_install_state, seed_catalog_db_with_installers, sha1_hex, sha512_hex,
     system_font_file_name, system_font_path, test_root,
 };
-use winbrew_windows::host_profile;
+use winbrew_windows::{host_profile, is_elevated};
 
 struct InstallTestFixture {
     ctx: AppContext,
@@ -98,6 +98,7 @@ impl InstallTestFixture {
                 installer_switches,
                 arch: Architecture::Any,
                 platform: None,
+                scope: None,
             }],
         )
     }
@@ -249,7 +250,7 @@ fn install_supports_explicit_winget_ids() -> Result<()> {
 }
 
 #[test]
-fn install_selects_the_host_matching_architecture_variant() -> Result<()> {
+fn install_selects_the_host_matching_platform_and_scope_variant() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
 
@@ -264,36 +265,40 @@ fn install_selects_the_host_matching_architecture_variant() -> Result<()> {
     let host_platform = if current_host_profile.is_server {
         "Windows.Server"
     } else {
-        "Windows.Desktop"
+        "Windows.Universal"
     };
     let platform_value = format!(r#"["{host_platform}"]"#);
+    let elevated = is_elevated();
 
     let matching_bytes = create_dummy_zip_bytes()?;
     let matching_hash = sha512_hex(&matching_bytes);
     let mut server = MockServer::new();
-    let matching_url = format!("{}/matching.zip", server.url());
-    let matching_mock = server.mock_get("/matching.zip", matching_bytes);
-    let fallback_url = format!("{}/fallback.zip", server.url());
+    let machine_url = format!("{}/machine.zip", server.url());
+    let machine_mock = server.mock_get("/machine.zip", matching_bytes.clone());
+    let user_url = format!("{}/user.zip", server.url());
+    let user_mock = server.mock_get("/user.zip", matching_bytes);
 
     let fixture = InstallTestFixture::from_catalog_with_installers(
         root,
         "Winbrew Test Host Selection",
         &[
             CatalogInstallerSeed {
-                url: &matching_url,
+                url: &machine_url,
                 hash: &matching_hash,
                 kind: InstallerType::Zip,
                 installer_switches: None,
                 arch: current_architecture,
                 platform: Some(platform_value.as_str()),
+                scope: Some("machine"),
             },
             CatalogInstallerSeed {
-                url: &fallback_url,
+                url: &user_url,
                 hash: &matching_hash,
                 kind: InstallerType::Zip,
                 installer_switches: None,
                 arch: different_architecture(current_architecture),
                 platform: Some(platform_value.as_str()),
+                scope: Some("user"),
             },
         ],
     )?;
@@ -301,7 +306,12 @@ fn install_selects_the_host_matching_architecture_variant() -> Result<()> {
     let outcome = fixture.run_install(false)?;
 
     assert_eq!(outcome.result.name, "Winbrew Test Host Selection");
-    matching_mock.assert();
+
+    if elevated {
+        machine_mock.assert();
+    } else {
+        user_mock.assert();
+    }
 
     Ok(())
 }

@@ -49,12 +49,6 @@ impl UninstallRoot {
 /// The iterator includes the standard machine, WOW6432Node, and user uninstall
 /// locations when they are present. Missing roots are skipped, so callers can
 /// iterate lazily without allocating a collection first.
-///
-/// # Example
-///
-/// ```no_run
-/// use winbrew_windows::uninstall_roots;
-///
 pub(super) fn uninstall_roots() -> impl Iterator<Item = UninstallRoot> {
     [
         (Hive::LocalMachine, UNINSTALL),

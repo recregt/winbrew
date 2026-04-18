@@ -15,6 +15,7 @@ pub struct CatalogInstallerSeed<'a> {
     pub installer_switches: Option<&'a str>,
     pub arch: Architecture,
     pub platform: Option<&'a str>,
+    pub scope: Option<&'a str>,
 }
 
 pub fn catalog_package_id(package_name: &str) -> String {
@@ -279,8 +280,8 @@ fn insert_catalog_installer(
     conn.execute(
             r#"
             INSERT INTO catalog_installers (
-                package_id, url, hash, hash_algorithm, installer_type, installer_switches, platform, arch, kind
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                package_id, url, hash, hash_algorithm, installer_type, installer_switches, platform, scope, arch, kind
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
             "#,
             params![
                 package_id,
@@ -296,6 +297,7 @@ fn insert_catalog_installer(
                 installer_type.as_str(),
                 installer.installer_switches.map(|value| value.to_string()),
                 installer.platform.map(|value| value.to_string()),
+                installer.scope.map(|value| value.to_string()),
                 installer.arch.as_str(),
                 installer.kind.as_str(),
             ],

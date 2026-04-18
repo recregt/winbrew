@@ -115,6 +115,17 @@ pub fn run(ctx: &CommandContext, query: &[String], ignore_checksum_security: boo
                     "Refresh the catalog or pick a package variant built for this machine.",
                 ));
             }
+            InstallError::NoScopeCompatibleInstaller { host } => {
+                let message = format!(
+                    "No installer in the catalog matches the required install scope on this host ({host})."
+                );
+                ui.error(&message);
+                ui.notice("Hint: run from an elevated terminal or choose a user-scope installer.");
+                return Err(reported_with_hint(
+                    message,
+                    "Run from an elevated terminal or choose a user-scope installer.",
+                ));
+            }
             InstallError::Cancelled => {
                 ui.notice("Cancelling and cleaning up...");
                 return Err(cancelled());

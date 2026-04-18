@@ -186,8 +186,11 @@ where
     }
 
     let installers = crate::database::get_installers(&catalog_conn, &package.id)?;
-    let host_profile = crate::windows::host_profile();
-    let installer = install::types::select_installer(&installers, host_profile)?;
+    let selection_context = crate::catalog::SelectionContext::new(
+        crate::windows::host_profile(),
+        crate::windows::is_elevated(),
+    );
+    let installer = install::types::select_installer(&installers, selection_context)?;
     let engine = engines::resolve_engine_for_installer(&installer)?;
 
     if engine_requires_reinstall_only(engine) {
