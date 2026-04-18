@@ -9,6 +9,34 @@ use crate::core::network::Client;
 
 use super::metadata::{build_catalog_metadata_from_connection, verify_catalog_hash};
 
+/// Applies one or more SQL patch files to an existing catalog database.
+///
+/// This is the incremental refresh path used when the update API returns a
+/// patch plan. The function works on a temporary copy of the current catalog,
+/// applies each patch URL in order, verifies the database integrity, rebuilds
+/// catalog metadata, and validates the final catalog hash before writing the
+/// updated metadata JSON.
+///
+/// # Workflow
+/// 1. Confirm that the source catalog already exists.
+/// 2. Copy the source catalog to the temporary patch working copy.
+/// 3. Open the working copy with foreign keys enabled and `DELETE` journaling.
+/// 4. Download and decompress each patch URL as zstd-compressed SQL.
+/// 5. Execute each patch sequentially against the working copy.
+/// 6. Run `PRAGMA integrity_check` to verify the patched database.
+/// 7. Rebuild metadata from the patched database state.
+/// 8. Verify the patched database hash matches the rebuilt metadata hash.
+/// 9. Write the refreshed metadata JSON to `metadata_temp_path`.
+///
+/// # Errors
+/// Returns an error when the source catalog is missing, when the working copy
+/// cannot be created or opened, when any patch download or SQL execution
+/// fails, when the integrity check fails, when hash verification fails, or
+/// when metadata serialization or writing fails.
+///
+/// # Safety
+/// The source `catalog_path` is never modified directly. All patching happens
+/// on the temporary working copy, which the caller finalizes separately.
 pub(super) fn apply_catalog_patch_release(
     client: &Client,
     catalog_path: &Path,
@@ -66,6 +94,15 @@ pub(super) fn apply_catalog_patch_release(
     Ok(())
 }
 
+/// Downloads and decompresses a single zstd-compressed catalog patch SQL file.
+///
+/// The patch payload is read fully into memory, decompressed, and returned as
+/// UTF-8 SQL text ready for execution against the working copy database.
+///
+/// # Errors
+/// Returns an error when the HTTP request fails, when the server returns a
+/// non-success status, when the response body cannot be read, when the payload
+/// cannot be decompressed, or when the SQL text cannot be decoded.
 fn download_catalog_patch_sql(client: &Client, patch_url: &str) -> Result<String> {
     let response = client
         .get(patch_url.to_string())
