@@ -141,9 +141,27 @@ pub(super) fn build_catalog_metadata_from_connection(
 
 #[cfg(test)]
 mod tests {
-    use super::{load_local_catalog_metadata, metadata_url_for_snapshot_url};
+    use super::{
+        load_catalog_metadata, load_local_catalog_metadata, metadata_url_for_snapshot_url,
+        verify_catalog_hash,
+    };
+    use crate::core::hash::Hasher;
+    use crate::models::catalog::CatalogMetadata;
+    use crate::models::domains::shared::HashAlgorithm;
+    use std::collections::BTreeMap;
     use std::fs;
     use tempfile::tempdir;
+
+    fn sha256_hex(bytes: &[u8]) -> String {
+        let mut hasher = Hasher::new(HashAlgorithm::Sha256);
+        hasher.update(bytes);
+
+        hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    }
 
     #[test]
     fn load_local_catalog_metadata_returns_none_when_file_is_missing() {
@@ -178,6 +196,67 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("snapshot URL must contain a path segment")
+        );
+    }
+
+    #[test]
+    fn load_catalog_metadata_reads_valid_metadata() {
+        let temp_dir = tempdir().expect("temp dir");
+        let path = temp_dir.path().join("metadata.json");
+        let metadata = CatalogMetadata::build_from_counts(
+            2,
+            BTreeMap::from([(String::from("scoop"), 1)]),
+            String::from("sha256:abc"),
+        );
+
+        fs::write(
+            &path,
+            serde_json::to_vec_pretty(&metadata).expect("serialize metadata"),
+        )
+        .expect("write metadata");
+
+        let loaded = load_catalog_metadata(&path).expect("load metadata");
+
+        assert_eq!(loaded.current_hash, metadata.current_hash);
+        assert_eq!(loaded.package_count, metadata.package_count);
+        assert_eq!(loaded.source_counts.get("scoop"), Some(&1));
+    }
+
+    #[test]
+    fn verify_catalog_hash_accepts_matching_hash() {
+        let temp_dir = tempdir().expect("temp dir");
+        let path = temp_dir.path().join("catalog.db");
+        let contents = b"catalog-bytes";
+
+        fs::write(&path, contents).expect("write catalog");
+
+        let expected_hash = format!("sha256:{}", sha256_hex(contents));
+
+        verify_catalog_hash(&path, &expected_hash).expect("hash should match");
+    }
+
+    #[test]
+    fn verify_catalog_hash_rejects_mismatch() {
+        let temp_dir = tempdir().expect("temp dir");
+        let path = temp_dir.path().join("catalog.db");
+
+        fs::write(&path, b"catalog-bytes").expect("write catalog");
+
+        let err = verify_catalog_hash(
+            &path,
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        )
+        .expect_err("hash mismatch should fail");
+
+        assert!(err.to_string().contains("checksum mismatch"));
+    }
+
+    #[test]
+    fn metadata_url_is_derived_from_snapshot_url() {
+        assert_eq!(
+            metadata_url_for_snapshot_url("https://cdn.example.invalid/releases/catalog.db.zst")
+                .expect("metadata url should be derived"),
+            "https://cdn.example.invalid/releases/metadata.json"
         );
     }
 }
