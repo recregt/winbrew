@@ -5,6 +5,20 @@ use crate::models::catalog::CatalogMetadata;
 use super::metadata::metadata_url_for_snapshot_url;
 use super::types::{CatalogDownloadPlan, CatalogUpdateMode, CatalogUpdateResponse};
 
+/// Converts the update API response into a concrete catalog download plan.
+///
+/// The planner is intentionally small and deterministic: it validates the API
+/// payload against the caller's local metadata, then maps the response into one
+/// of three outcomes.
+///
+/// - `Current`: the catalog is already up to date and no download is needed.
+/// - `Full`: the workflow should download a full snapshot plus its metadata.
+/// - `Patch`: the workflow should apply one or more incremental SQL patches to
+///   the existing local catalog.
+///
+/// The function returns `Ok(None)` when the response is incomplete or
+/// incompatible with the local catalog state, which lets the caller fall back
+/// to a full snapshot request.
 pub(super) fn plan_catalog_download(
     local_metadata: Option<&CatalogMetadata>,
     selection: CatalogUpdateResponse,
