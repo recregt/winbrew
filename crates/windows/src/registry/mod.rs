@@ -11,7 +11,7 @@ pub use test_support::{
     UninstallEntryGuard, create_test_uninstall_entry,
     create_test_uninstall_entry_with_install_location,
 };
-pub use uninstall::{Hive, UninstallRoot, uninstall_roots};
+pub use uninstall::{UninstallRoot, uninstall_roots};
 pub(crate) use user_fonts::{register_user_font_value, unregister_user_font_value};
 
 /// Display information collected from uninstall registry entries.
@@ -59,9 +59,9 @@ pub fn collect_installed_apps(filter: Option<&str>) -> Result<Vec<AppInfo>> {
     let mut apps = Vec::new();
 
     for root in uninstall_roots() {
-        for key_result in root.key.enum_keys() {
+        for key_result in root.key().enum_keys() {
             let Ok(key_name) = key_result else { continue };
-            let Ok(app_key) = root.key.open_subkey(&key_name) else {
+            let Ok(app_key) = root.key().open_subkey(&key_name) else {
                 continue;
             };
 
@@ -103,7 +103,7 @@ pub fn collect_installed_apps(filter: Option<&str>) -> Result<Vec<AppInfo>> {
 /// completes so the engine can store the final path reported by Windows.
 pub fn uninstall_value(key_name: &str, value_name: &str) -> Option<String> {
     for root in uninstall_roots() {
-        let Ok(app_key) = root.key.open_subkey(key_name) else {
+        let Ok(app_key) = root.key().open_subkey(key_name) else {
             continue;
         };
 

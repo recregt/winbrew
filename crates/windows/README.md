@@ -27,8 +27,8 @@ layout is not part of the contract and can change without breaking consumers.
 | `collect_installed_apps` | Enumerate installed applications from the uninstall registry roots | list / doctor commands |
 | `uninstall_roots` | Iterate over the registry locations that may contain uninstall entries | registry browsing and diagnostics |
 | `uninstall_value` | Read a string value from an uninstall key by key name | MSI install verification |
-| `host_kind` | Return whether the current host is a normal desktop machine or a server SKU | platform-aware installer selection |
-| `host_architecture` | Return the native Windows processor architecture | installer selection and download routing |
+| `HostProfile` | Snapshot of the current host family and native architecture | platform-aware installer selection |
+| `host_profile` | Return the current host snapshot | installer selection and download routing |
 | `user_fonts_dir` | Return the per-user Windows font directory | font install / remove helpers |
 | `install_user_font` | Copy a supported font into the user font directory, register it, and load it into the current session | font engine |
 | `remove_user_font` | Unregister a previously installed user font and remove its copied file | font engine |
@@ -51,28 +51,37 @@ mod deployment;
 mod font;
 mod fs;
 mod registry;
+mod system;
 
 pub use deployment::{msi_scan_inventory, msix_install, msix_installed_package_full_name, msix_remove};
 pub use font::{install_user_font, remove_user_font, user_fonts_dir};
 pub use fs::{PathInfo, create_extracted_file, inspect_path};
 pub use registry::{AppInfo, Hive, UninstallRoot, collect_installed_apps, uninstall_roots, uninstall_value};
-pub use system::{HostKind, host_architecture, host_kind};
+pub use system::{HostProfile, host_profile};
 ```
 
 ## System helpers
 
-### `host_kind`
+### `HostProfile`
 
-`host_kind` classifies the current Windows host as either `normal` or `server`.
-It reads the Windows `ProductType` registry value and falls back to `normal`
-when the machine profile cannot be read.
+`HostProfile` combines the current Windows host family and native architecture
+into one snapshot. Call `host_profile()` once, then inspect `is_server` and
+`architecture` when you need to branch. The snapshot also exposes
+`platform_tags()` so installer selection can map the host family to the catalog
+labels WinBrew accepts.
 
-### `host_architecture`
+```rust,no_run
+use winbrew_windows::host_profile;
 
-`host_architecture` uses `GetNativeSystemInfo` to return the native host
-architecture as WinBrew's catalog architecture enum. It reports `x64`, `x86`,
-`arm64`, or `any` when Windows exposes an architecture WinBrew does not map
-explicitly.
+let profile = host_profile();
+println!("host: {profile}");
+println!("server: {}", profile.is_server);
+println!("architecture: {}", profile.architecture);
+```
+
+If Windows cannot read the product-type registry value, the helper falls back
+to a normal client host. Unknown processor architecture codes still map to
+`Architecture::Any`.
 
 That shape matters for two reasons:
 
@@ -163,7 +172,7 @@ let _file = create_extracted_file(Path::new(r"C:\Temp\extract\tool.exe")).unwrap
 
 ## Registry helpers
 
-### `Hive`, `UninstallRoot`, and `uninstall_roots`
+### `UninstallRoot` and `uninstall_roots`
 
 The uninstall registry data comes from three common locations:
 
@@ -171,17 +180,17 @@ The uninstall registry data comes from three common locations:
 - `HKLM\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall`
 - `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall`
 
-`Hive` identifies whether a root is backed by `HKLM` or `HKCU`.
 `UninstallRoot` is a snapshot of one discoverable registry branch together with
-its label and key handle. `uninstall_roots()` returns only the roots that exist
-on the current machine, so callers can iterate lazily without allocating a full
-collection first.
+its key handle. The snapshot exposes `key()` for enumeration and
+`registry_path()` for diagnostics. `uninstall_roots()` returns only the roots
+that exist on the current machine, so callers can iterate lazily without
+allocating a full collection first.
 
 ```rust,no_run
 use winbrew_windows::uninstall_roots;
 
 for root in uninstall_roots() {
-    println!("{} -> {}", root.hive, root.label);
+  println!("{}", root.registry_path());
 }
 ```
 

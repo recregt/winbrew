@@ -7,54 +7,60 @@ use windows_sys::Win32::System::SystemInformation::{
     PROCESSOR_ARCHITECTURE_INTEL, SYSTEM_INFO,
 };
 
-/// Host family used for platform-aware installer selection.
+const NORMAL_PLATFORM_TAGS: &[&str] = &["windows.desktop", "windows.ltsc"];
+const SERVER_PLATFORM_TAGS: &[&str] = &["windows.server"];
+
+/// Combined host family and native architecture snapshot used for installer selection.
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HostKind {
-    /// Client, workstation, or desktop Windows.
-    Normal,
-    /// Server-class Windows.
-    Server,
+pub struct HostProfile {
+    /// `true` when Windows reports a server-class product type.
+    pub is_server: bool,
+    /// Native CPU architecture reported by Windows.
+    pub architecture: Architecture,
 }
 
-impl HostKind {
-    /// Return the Winget platform labels accepted for this host family.
+impl HostProfile {
+    /// Return the Winget platform labels accepted for this host profile.
     pub fn platform_tags(self) -> &'static [&'static str] {
-        match self {
-            Self::Normal => &["windows.desktop", "windows.ltsc"],
-            Self::Server => &["windows.server"],
+        if self.is_server {
+            SERVER_PLATFORM_TAGS
+        } else {
+            NORMAL_PLATFORM_TAGS
         }
     }
 }
 
-impl fmt::Display for HostKind {
+impl fmt::Display for HostProfile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Normal => "normal",
-            Self::Server => "server",
-        })
+        let host_family = if self.is_server { "server" } else { "normal" };
+
+        write!(f, "{host_family} {}", self.architecture)
     }
 }
 
-/// Return the current host family for platform-aware catalog selection.
+/// Return the current Windows host profile for platform-aware catalog selection.
 ///
 /// The helper is best-effort: if the Windows product-type registry key cannot
-/// be read, the function falls back to `HostKind::Normal` instead of blocking
-/// install flows.
-pub fn host_kind() -> HostKind {
-    read_product_type()
-        .as_deref()
-        .map(classify_product_type)
-        .unwrap_or(HostKind::Normal)
+/// be read, the host family falls back to `normal` instead of blocking install
+/// flows.
+pub fn host_profile() -> HostProfile {
+    HostProfile {
+        is_server: read_product_type()
+            .as_deref()
+            .map(classify_product_type)
+            .unwrap_or(false),
+        architecture: native_architecture(),
+    }
 }
 
-/// Return the native CPU architecture reported by Windows.
-///
-/// The helper uses `GetNativeSystemInfo` so the result reflects the host rather
-/// than the current process emulation layer. Unknown processor architecture
-/// codes fall back to `Architecture::Any`.
-#[must_use]
-pub fn host_architecture() -> Architecture {
+fn classify_product_type(product_type: &str) -> bool {
+    let trimmed = product_type.trim();
+
+    trimmed.eq_ignore_ascii_case("servernt") || trimmed.eq_ignore_ascii_case("lanmannt")
+}
+
+fn native_architecture() -> Architecture {
     let mut system_info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
 
     unsafe {
@@ -62,16 +68,6 @@ pub fn host_architecture() -> Architecture {
     }
 
     architecture_from_native_system_info(system_info)
-}
-
-fn classify_product_type(product_type: &str) -> HostKind {
-    let trimmed = product_type.trim();
-
-    if trimmed.eq_ignore_ascii_case("servernt") || trimmed.eq_ignore_ascii_case("lanmannt") {
-        HostKind::Server
-    } else {
-        HostKind::Normal
-    }
 }
 
 fn architecture_from_native_system_info(system_info: SYSTEM_INFO) -> Architecture {
@@ -87,7 +83,7 @@ fn architecture_from_native_system_info(system_info: SYSTEM_INFO) -> Architectur
 
 #[cfg(test)]
 mod tests {
-    use super::{HostKind, architecture_from_native_system_info, classify_product_type};
+    use super::{HostProfile, architecture_from_native_system_info, classify_product_type};
     use winbrew_models::domains::install::Architecture;
     use windows_sys::Win32::System::SystemInformation::{
         PROCESSOR_ARCHITECTURE_AMD64, PROCESSOR_ARCHITECTURE_ARM64, PROCESSOR_ARCHITECTURE_INTEL,
@@ -100,19 +96,38 @@ mod tests {
         system_info
     }
 
+    fn host_profile(is_server: bool, architecture: Architecture) -> HostProfile {
+        HostProfile {
+            is_server,
+            architecture,
+        }
+    }
+
     #[test]
     fn classifies_server_product_types() {
-        assert_eq!(classify_product_type("ServerNT"), HostKind::Server);
-        assert_eq!(classify_product_type("LanmanNT"), HostKind::Server);
-        assert_eq!(classify_product_type("WinNT"), HostKind::Normal);
+        assert!(classify_product_type("ServerNT"));
+        assert!(classify_product_type("LanmanNT"));
+        assert!(!classify_product_type("WinNT"));
     }
 
     #[test]
     fn classifies_server_product_types_case_insensitively_and_with_whitespace() {
-        assert_eq!(classify_product_type("  SERVERNT  "), HostKind::Server);
-        assert_eq!(classify_product_type("  lanmannt"), HostKind::Server);
-        assert_eq!(classify_product_type(""), HostKind::Normal);
-        assert_eq!(classify_product_type("Unknown"), HostKind::Normal);
+        assert!(classify_product_type("  SERVERNT  "));
+        assert!(classify_product_type("  lanmannt"));
+        assert!(!classify_product_type(""));
+        assert!(!classify_product_type("Unknown"));
+    }
+
+    #[test]
+    fn host_profile_exposes_platform_tags_by_family() {
+        assert_eq!(
+            host_profile(false, Architecture::X64).platform_tags(),
+            &["windows.desktop", "windows.ltsc"]
+        );
+        assert_eq!(
+            host_profile(true, Architecture::Arm64).platform_tags(),
+            &["windows.server"]
+        );
     }
 
     #[test]
