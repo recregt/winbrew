@@ -1,5 +1,4 @@
 pub mod config;
-pub mod context;
 pub mod doctor;
 pub mod info;
 pub mod install;
@@ -11,4 +10,5 @@ pub mod search;
 pub mod update;
 pub mod version;
 
-pub use context::AppContext;
+pub use crate::context;
+pub use crate::context::AppContext;

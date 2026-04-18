@@ -7,6 +7,8 @@
 
 #![cfg(windows)]
 
+pub mod context;
+
 pub use winbrew_core as core;
 pub use winbrew_database as database;
 pub use winbrew_engines as engines;
@@ -15,7 +17,7 @@ pub use winbrew_models as models;
 mod catalog;
 pub mod operations;
 
+pub use context::AppContext;
 pub use operations::{
-    AppContext, config, context, doctor, info, install, list, remove, repair, report, search,
-    update, version,
+    config, doctor, info, install, list, remove, repair, report, search, update, version,
 };
