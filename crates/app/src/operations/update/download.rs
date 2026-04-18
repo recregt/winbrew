@@ -9,6 +9,23 @@ use crate::core::network::{Client, download_url_to_temp_file};
 use super::metadata::{load_catalog_metadata, verify_catalog_hash};
 use super::types::CatalogDownloadPlan;
 
+/// Downloads a full catalog snapshot through the two-stage update flow.
+///
+/// The function keeps the refresh sequence strict and explicit:
+/// 1. download the metadata JSON into `metadata_temp_path`
+/// 2. parse the metadata and confirm its `current_hash` when the plan carries an expected hash
+/// 3. download the compressed catalog snapshot into a sibling `.zst` temp file
+/// 4. decompress the snapshot into `catalog_temp_path`
+/// 5. verify the final database hash against the metadata hash
+///
+/// The caller owns the final metadata and catalog temp files. This function only
+/// removes the internal compressed snapshot temp file it creates while
+/// processing the release.
+///
+/// # Errors
+/// Returns an error when the plan is not `Full`, when either download fails,
+/// when the metadata hash does not match the expected hash, when decompression
+/// fails, or when the final catalog hash check fails.
 pub(super) fn download_catalog_release<FStart, FProgress>(
     client: &Client,
     plan: &CatalogDownloadPlan,
@@ -84,6 +101,15 @@ fn compressed_snapshot_temp_path(catalog_temp_path: &Path) -> PathBuf {
     catalog_temp_path.with_file_name(format!("{file_name}.zst"))
 }
 
+/// Decompresses a Zstandard-compressed catalog snapshot into `output_path`.
+///
+/// The file is streamed through a buffered writer and then flushed and synced so
+/// a successful return means the temporary output is fully materialized on disk.
+///
+/// # Errors
+/// Returns an error if the compressed input cannot be opened, if the decoder
+/// cannot be created, if the output file cannot be created, if decompression or
+/// flushing fails, or if the output file cannot be synced.
 fn decompress_catalog_snapshot(compressed_path: &Path, output_path: &Path) -> Result<()> {
     let compressed_file =
         File::open(compressed_path).context("failed to open compressed catalog snapshot")?;
@@ -105,4 +131,63 @@ fn decompress_catalog_snapshot(compressed_path: &Path, output_path: &Path) -> Re
         .context("failed to sync catalog snapshot temp file")?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::types::CatalogDownloadPlan;
+    use super::{compressed_snapshot_temp_path, download_catalog_release};
+    use crate::core::network::build_client;
+    use crate::models::catalog::CatalogMetadata;
+    use std::collections::BTreeMap;
+    use tempfile::tempdir;
+    use winbrew_testing::MockServer;
+
+    #[test]
+    fn download_catalog_release_removes_internal_compressed_temp_file_on_decompression_failure() {
+        let temp_dir = tempdir().expect("temp dir");
+        let catalog_temp_path = temp_dir.path().join("catalog.db");
+        let metadata_temp_path = temp_dir.path().join("metadata.json");
+        let client = build_client("winbrew-app-tests").expect("build client");
+        let mut server = MockServer::new();
+
+        let metadata = CatalogMetadata::build_from_counts(
+            1,
+            BTreeMap::from([(String::from("winget"), 1)]),
+            String::from("sha256:expected"),
+        );
+        let metadata_url = format!("{}/metadata.json", server.url());
+        let catalog_url = format!("{}/catalog.db.zst", server.url());
+
+        let _metadata_mock = server.mock_get(
+            "/metadata.json",
+            serde_json::to_vec_pretty(&metadata).expect("serialize metadata"),
+        );
+        let _catalog_mock = server.mock_get("/catalog.db.zst", b"not valid zstd");
+
+        let plan = CatalogDownloadPlan::Full {
+            catalog_url,
+            metadata_url,
+            expected_hash: Some(String::from("sha256:expected")),
+        };
+
+        let result = download_catalog_release(
+            &client,
+            &plan,
+            &catalog_temp_path,
+            &metadata_temp_path,
+            |_| {},
+            |_| {},
+        );
+
+        let error = result.expect_err("expected decompression failure");
+
+        assert!(
+            error
+                .to_string()
+                .contains("failed to decompress catalog snapshot")
+        );
+        assert!(!compressed_snapshot_temp_path(&catalog_temp_path).exists());
+        assert!(metadata_temp_path.exists());
+    }
 }
