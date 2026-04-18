@@ -12,6 +12,7 @@ build = "build.rs"
 anyhow.workspace = true
 rusqlite = { version = "0.39", default-features = false, features = ["bundled", "modern_sqlite", "unlock_notify"] }
 serde.workspace = true
+url = "2"
 winbrew-core = { path = "../core" }
 winbrew-models = { path = "../models" }
 winbrew-database = { path = "../database" }
