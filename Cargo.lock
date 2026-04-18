@@ -2838,6 +2838,7 @@ dependencies = [
  "winbrew-engines",
  "winbrew-models",
  "winbrew-testing",
+ "winbrew-windows",
  "zstd",
 ]
 

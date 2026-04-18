@@ -10,29 +10,42 @@ use std::io;
 use thiserror::Error;
 
 use super::state::InstallStateError;
-use crate::catalog;
+use crate::catalog::{self, InstallerSelectionError};
 use crate::core::cancel::CancellationError;
 use crate::core::hash::HashError;
 use crate::models::catalog::CatalogInstaller;
+use crate::models::domains::install::Architecture;
 use crate::models::domains::shared::HashAlgorithm;
 use winbrew_models::domains::install::InstallFailureClass;
+use winbrew_windows::{HostKind, host_architecture, host_kind};
 
-/// Raised when a package has no installers to choose from.
-#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
-#[error("catalog package has no installers")]
-pub enum InstallerSelectionError {
-    NoInstallers,
+/// Runtime host profile used by installer selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct HostProfile {
+    kind: HostKind,
+    architecture: Architecture,
+}
+
+impl HostProfile {
+    /// Capture the current host family and architecture.
+    pub(crate) fn current() -> Self {
+        Self {
+            kind: host_kind(),
+            architecture: host_architecture(),
+        }
+    }
 }
 
 /// Select the installer that the catalog policy considers best for the package.
 ///
 /// The underlying catalog layer owns the actual ranking logic. This helper only
-/// converts the absence of a usable installer into a stable error type for the
-/// install workflow.
+/// forwards the current host profile and preserves the selector's explicit
+/// failure reasons for the install workflow.
 pub(crate) fn select_installer(
     installers: &[CatalogInstaller],
+    host_profile: HostProfile,
 ) -> std::result::Result<CatalogInstaller, InstallerSelectionError> {
-    catalog::select_installer(installers).ok_or(InstallerSelectionError::NoInstallers)
+    catalog::select_installer(installers, host_profile.kind, host_profile.architecture)
 }
 
 /// User-facing error type produced by the install pipeline.
@@ -58,6 +71,15 @@ pub enum InstallError {
     #[error("{algorithm} checksums are disabled by default for security")]
     LegacyChecksumAlgorithm { algorithm: HashAlgorithm },
 
+    #[error("catalog package has no installers")]
+    NoInstallers,
+
+    #[error("no installer matches this host ({host_kind} {host_architecture})")]
+    NoCompatibleInstaller {
+        host_kind: HostKind,
+        host_architecture: Architecture,
+    },
+
     #[error("cancelled")]
     Cancelled,
 
@@ -77,6 +99,9 @@ impl InstallError {
             | Self::CurrentlyUpdating { .. } => InstallFailureClass::Preflight,
             Self::ChecksumMismatch { .. } | Self::LegacyChecksumAlgorithm { .. } => {
                 InstallFailureClass::Verification
+            }
+            Self::NoInstallers | Self::NoCompatibleInstaller { .. } => {
+                InstallFailureClass::Preflight
             }
             Self::Cancelled => InstallFailureClass::Cancelled,
             Self::Unexpected(_) => InstallFailureClass::Runtime,
@@ -116,7 +141,16 @@ impl From<CancellationError> for InstallError {
 
 impl From<InstallerSelectionError> for InstallError {
     fn from(value: InstallerSelectionError) -> Self {
-        Self::Unexpected(Error::new(value))
+        match value {
+            InstallerSelectionError::NoInstallers => Self::NoInstallers,
+            InstallerSelectionError::NoCompatibleInstaller {
+                host_kind,
+                host_architecture,
+            } => Self::NoCompatibleInstaller {
+                host_kind,
+                host_architecture,
+            },
+        }
     }
 }
 
@@ -147,10 +181,13 @@ impl From<Error> for InstallError {
 #[cfg(test)]
 mod tests {
     use super::{InstallError, InstallStateError};
+    use crate::catalog::InstallerSelectionError;
     use crate::core::cancel::CancellationError;
     use crate::core::hash::HashError;
+    use crate::models::domains::install::Architecture;
+    use crate::models::domains::install::InstallFailureClass;
     use crate::models::domains::shared::HashAlgorithm;
-    use winbrew_models::domains::install::InstallFailureClass;
+    use crate::windows::HostKind;
 
     #[test]
     fn maps_state_conflicts_to_user_facing_errors() {
@@ -175,6 +212,18 @@ mod tests {
         let err = InstallError::from(CancellationError);
 
         assert!(matches!(err, InstallError::Cancelled));
+    }
+
+    #[test]
+    fn maps_selection_failures_to_user_facing_errors() {
+        let err = InstallError::from(InstallerSelectionError::NoInstallers);
+        assert!(matches!(err, InstallError::NoInstallers));
+
+        let err = InstallError::from(InstallerSelectionError::NoCompatibleInstaller {
+            host_kind: HostKind::Server,
+            host_architecture: Architecture::Arm64,
+        });
+        assert!(matches!(err, InstallError::NoCompatibleInstaller { .. }));
     }
 
     #[test]

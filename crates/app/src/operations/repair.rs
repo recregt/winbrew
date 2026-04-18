@@ -186,7 +186,8 @@ where
     }
 
     let installers = crate::database::get_installers(&catalog_conn, &package.id)?;
-    let installer = install::types::select_installer(&installers)?;
+    let host_profile = install::types::HostProfile::current();
+    let installer = install::types::select_installer(&installers, host_profile)?;
     let engine = engines::resolve_engine_for_installer(&installer)?;
 
     if engine_requires_reinstall_only(engine) {

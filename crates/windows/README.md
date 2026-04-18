@@ -27,6 +27,8 @@ layout is not part of the contract and can change without breaking consumers.
 | `collect_installed_apps` | Enumerate installed applications from the uninstall registry roots | list / doctor commands |
 | `uninstall_roots` | Iterate over the registry locations that may contain uninstall entries | registry browsing and diagnostics |
 | `uninstall_value` | Read a string value from an uninstall key by key name | MSI install verification |
+| `host_kind` | Return whether the current host is a normal desktop machine or a server SKU | platform-aware installer selection |
+| `host_architecture` | Return the native Windows processor architecture | installer selection and download routing |
 | `user_fonts_dir` | Return the per-user Windows font directory | font install / remove helpers |
 | `install_user_font` | Copy a supported font into the user font directory, register it, and load it into the current session | font engine |
 | `remove_user_font` | Unregister a previously installed user font and remove its copied file | font engine |
@@ -54,7 +56,23 @@ pub use deployment::{msi_scan_inventory, msix_install, msix_installed_package_fu
 pub use font::{install_user_font, remove_user_font, user_fonts_dir};
 pub use fs::{PathInfo, create_extracted_file, inspect_path};
 pub use registry::{AppInfo, Hive, UninstallRoot, collect_installed_apps, uninstall_roots, uninstall_value};
+pub use system::{HostKind, host_architecture, host_kind};
 ```
+
+## System helpers
+
+### `host_kind`
+
+`host_kind` classifies the current Windows host as either `normal` or `server`.
+It reads the Windows `ProductType` registry value and falls back to `normal`
+when the machine profile cannot be read.
+
+### `host_architecture`
+
+`host_architecture` uses `GetNativeSystemInfo` to return the native host
+architecture as WinBrew's catalog architecture enum. It reports `x64`, `x86`,
+`arm64`, or `any` when Windows exposes an architecture WinBrew does not map
+explicitly.
 
 That shape matters for two reasons:
 

@@ -6,14 +6,16 @@ use winbrew_app::install;
 use winbrew_app::install::InstallObserver;
 use winbrew_app::{AppContext, database};
 use winbrew_models::domains::catalog::CatalogPackage;
-use winbrew_models::domains::install::{EngineKind, InstallerType};
+use winbrew_models::domains::install::{Architecture, EngineKind, InstallerType};
 use winbrew_models::domains::installed::PackageStatus;
 use winbrew_models::domains::package::{PackageId, PackageName, PackageRef};
 use winbrew_models::shared::HashAlgorithm as CatalogHashAlgorithm;
 use winbrew_testing::{
-    Mock, MockServer, create_dummy_zip_bytes, init_database, md5_hex, reset_install_state,
-    sha1_hex, sha512_hex, system_font_file_name, system_font_path, test_root,
+    CatalogInstallerSeed, Mock, MockServer, create_dummy_zip_bytes, init_database, md5_hex,
+    reset_install_state, seed_catalog_db_with_installers, sha1_hex, sha512_hex,
+    system_font_file_name, system_font_path, test_root,
 };
+use winbrew_windows::{HostKind, host_architecture, host_kind};
 
 struct InstallTestFixture {
     ctx: AppContext,
@@ -57,6 +59,15 @@ fn font_fixture_prefix(root: &Path, base: &str) -> String {
     format!("{}-{}", base, sanitized_suffix)
 }
 
+fn different_architecture(architecture: Architecture) -> Architecture {
+    match architecture {
+        Architecture::X64 => Architecture::X86,
+        Architecture::X86 => Architecture::X64,
+        Architecture::Arm64 => Architecture::X64,
+        Architecture::Any => Architecture::X64,
+    }
+}
+
 impl InstallTestFixture {
     fn from_catalog(root: &Path, installer_url: &str, hash: &str) -> Result<Self> {
         Self::from_catalog_with_installer(
@@ -77,19 +88,35 @@ impl InstallTestFixture {
         kind: InstallerType,
         installer_switches: Option<&str>,
     ) -> Result<Self> {
+        Self::from_catalog_with_installers(
+            root,
+            package_name,
+            &[CatalogInstallerSeed {
+                url: installer_url,
+                hash,
+                kind,
+                installer_switches,
+                arch: Architecture::Any,
+                platform: None,
+            }],
+        )
+    }
+
+    fn from_catalog_with_installers(
+        root: &Path,
+        package_name: &str,
+        installers: &[CatalogInstallerSeed<'_>],
+    ) -> Result<Self> {
         let config = init_database(root)?;
         reset_install_state(root)?;
 
         let catalog_db_dir = root.join("data").join("db");
         fs::create_dir_all(&catalog_db_dir)?;
-        winbrew_testing::seed_catalog_db_with_installer(
+        seed_catalog_db_with_installers(
             &catalog_db_dir.join("catalog.db"),
             package_name,
             "Synthetic package for isolated install testing",
-            installer_url,
-            hash,
-            kind,
-            installer_switches,
+            installers,
         )?;
 
         let ctx = AppContext::from_config(&config)?;
@@ -217,6 +244,63 @@ fn install_supports_explicit_winget_ids() -> Result<()> {
     assert_eq!(result.name, "Winbrew Test Zip");
     assert_eq!(result.version, "1.0.0");
     fixture.assert_downloaded();
+
+    Ok(())
+}
+
+#[test]
+fn install_selects_the_host_matching_architecture_variant() -> Result<()> {
+    let test_root = test_root();
+    let root = test_root.path();
+
+    let current_architecture = host_architecture();
+    assert_ne!(
+        current_architecture,
+        Architecture::Any,
+        "native architecture should be detectable"
+    );
+
+    let current_host_kind = host_kind();
+    let host_platform = match current_host_kind {
+        HostKind::Server => "Windows.Server",
+        HostKind::Normal => "Windows.Desktop",
+    };
+    let platform_value = format!(r#"["{host_platform}"]"#);
+
+    let matching_bytes = create_dummy_zip_bytes()?;
+    let matching_hash = sha512_hex(&matching_bytes);
+    let mut server = MockServer::new();
+    let matching_url = format!("{}/matching.zip", server.url());
+    let matching_mock = server.mock_get("/matching.zip", matching_bytes);
+    let fallback_url = format!("{}/fallback.zip", server.url());
+
+    let fixture = InstallTestFixture::from_catalog_with_installers(
+        root,
+        "Winbrew Test Host Selection",
+        &[
+            CatalogInstallerSeed {
+                url: &matching_url,
+                hash: &matching_hash,
+                kind: InstallerType::Zip,
+                installer_switches: None,
+                arch: current_architecture,
+                platform: Some(platform_value.as_str()),
+            },
+            CatalogInstallerSeed {
+                url: &fallback_url,
+                hash: &matching_hash,
+                kind: InstallerType::Zip,
+                installer_switches: None,
+                arch: different_architecture(current_architecture),
+                platform: Some(platform_value.as_str()),
+            },
+        ],
+    )?;
+
+    let outcome = fixture.run_install(false)?;
+
+    assert_eq!(outcome.result.name, "Winbrew Test Host Selection");
+    matching_mock.assert();
 
     Ok(())
 }
