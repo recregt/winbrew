@@ -1,5 +1,4 @@
 use std::fmt;
-use std::mem::MaybeUninit;
 
 use crate::registry::read_product_type;
 use winbrew_models::domains::install::Architecture;
@@ -9,6 +8,7 @@ use windows_sys::Win32::System::SystemInformation::{
 };
 
 /// Host family used for platform-aware installer selection.
+#[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HostKind {
     /// Client, workstation, or desktop Windows.
@@ -53,19 +53,24 @@ pub fn host_kind() -> HostKind {
 /// The helper uses `GetNativeSystemInfo` so the result reflects the host rather
 /// than the current process emulation layer. Unknown processor architecture
 /// codes fall back to `Architecture::Any`.
+#[must_use]
 pub fn host_architecture() -> Architecture {
-    let mut system_info = MaybeUninit::<SYSTEM_INFO>::uninit();
+    let mut system_info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
 
     unsafe {
-        GetNativeSystemInfo(system_info.as_mut_ptr());
-        architecture_from_native_system_info(system_info.assume_init())
+        GetNativeSystemInfo(&mut system_info as *mut SYSTEM_INFO);
     }
+
+    architecture_from_native_system_info(system_info)
 }
 
 fn classify_product_type(product_type: &str) -> HostKind {
-    match product_type.trim().to_ascii_lowercase().as_str() {
-        "servernt" | "lanmannt" => HostKind::Server,
-        _ => HostKind::Normal,
+    let trimmed = product_type.trim();
+
+    if trimmed.eq_ignore_ascii_case("servernt") || trimmed.eq_ignore_ascii_case("lanmannt") {
+        HostKind::Server
+    } else {
+        HostKind::Normal
     }
 }
 
@@ -100,6 +105,14 @@ mod tests {
         assert_eq!(classify_product_type("ServerNT"), HostKind::Server);
         assert_eq!(classify_product_type("LanmanNT"), HostKind::Server);
         assert_eq!(classify_product_type("WinNT"), HostKind::Normal);
+    }
+
+    #[test]
+    fn classifies_server_product_types_case_insensitively_and_with_whitespace() {
+        assert_eq!(classify_product_type("  SERVERNT  "), HostKind::Server);
+        assert_eq!(classify_product_type("  lanmannt"), HostKind::Server);
+        assert_eq!(classify_product_type(""), HostKind::Normal);
+        assert_eq!(classify_product_type("Unknown"), HostKind::Normal);
     }
 
     #[test]
