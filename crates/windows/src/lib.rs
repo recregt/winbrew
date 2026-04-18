@@ -13,8 +13,8 @@ pub use deployment::{
 pub use font::{install_user_font, remove_user_font, user_fonts_dir};
 pub use fs::{PathInfo, create_extracted_file, inspect_path};
 pub use registry::{
-    AppInfo, UninstallEntryGuard, UninstallRoot, collect_installed_apps,
-    create_test_uninstall_entry, create_test_uninstall_entry_with_install_location,
-    uninstall_roots, uninstall_value,
+    AppInfo, UninstallEntry, UninstallEntryGuard, collect_installed_apps,
+    collect_uninstall_entries, create_test_uninstall_entry,
+    create_test_uninstall_entry_with_install_location, uninstall_value,
 };
 pub use system::{HostProfile, host_profile};

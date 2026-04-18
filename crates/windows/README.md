@@ -24,8 +24,8 @@ layout is not part of the contract and can change without breaking consumers.
 | --- | --- | --- |
 | `inspect_path` | Inspect a path and return directory / reparse-point / hard-link metadata | archive extraction and cleanup code |
 | `create_extracted_file` | Create a fresh file for extraction without following existing reparse points | archive extractors |
-| `collect_installed_apps` | Enumerate installed applications from the uninstall registry roots | list / doctor commands |
-| `uninstall_roots` | Iterate over the registry locations that may contain uninstall entries | registry browsing and diagnostics |
+| `collect_installed_apps` | Enumerate installed applications by projecting uninstall entries | list / doctor commands |
+| `collect_uninstall_entries` | Enumerate uninstall registry entries with display-name filtering | native-exe metadata capture and diagnostics |
 | `uninstall_value` | Read a string value from an uninstall key by key name | MSI install verification |
 | `HostProfile` | Snapshot of the current host family and native architecture | platform-aware installer selection |
 | `host_profile` | Return the current host snapshot | installer selection and download routing |
@@ -56,7 +56,7 @@ mod system;
 pub use deployment::{msi_scan_inventory, msix_install, msix_installed_package_full_name, msix_remove};
 pub use font::{install_user_font, remove_user_font, user_fonts_dir};
 pub use fs::{PathInfo, create_extracted_file, inspect_path};
-pub use registry::{AppInfo, Hive, UninstallRoot, collect_installed_apps, uninstall_roots, uninstall_value};
+pub use registry::{AppInfo, UninstallEntry, collect_installed_apps, collect_uninstall_entries, uninstall_value};
 pub use system::{HostProfile, host_profile};
 ```
 
@@ -172,7 +172,7 @@ let _file = create_extracted_file(Path::new(r"C:\Temp\extract\tool.exe")).unwrap
 
 ## Registry helpers
 
-### `UninstallRoot` and `uninstall_roots`
+### `UninstallEntry` and `collect_uninstall_entries`
 
 The uninstall registry data comes from three common locations:
 
@@ -180,17 +180,16 @@ The uninstall registry data comes from three common locations:
 - `HKLM\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall`
 - `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall`
 
-`UninstallRoot` is a snapshot of one discoverable registry branch together with
-its key handle. The snapshot exposes `key()` for enumeration and
-`registry_path()` for diagnostics. `uninstall_roots()` returns only the roots
-that exist on the current machine, so callers can iterate lazily without
-allocating a full collection first.
+`collect_uninstall_entries()` returns a vector of registry snapshots for the
+entries that match an optional display-name filter. Each `UninstallEntry`
+contains plain Rust strings for the commonly used uninstall fields, so callers
+do not need to work with registry handles or root snapshots.
 
 ```rust,no_run
-use winbrew_windows::uninstall_roots;
+use winbrew_windows::collect_uninstall_entries;
 
-for root in uninstall_roots() {
-  println!("{}", root.registry_path());
+for entry in collect_uninstall_entries(Some("winbrew")).unwrap() {
+  println!("{} {}", entry.display_name, entry.version);
 }
 ```
 

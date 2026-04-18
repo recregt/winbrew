@@ -41,7 +41,7 @@ use winbrew_models::catalog::package::CatalogInstaller;
 use winbrew_models::install::engine::{EngineInstallReceipt, EngineKind, EngineMetadata};
 use winbrew_models::install::installed::InstalledPackage;
 use winbrew_models::install::installer::InstallerType;
-use winbrew_windows::uninstall_roots;
+use winbrew_windows::collect_uninstall_entries;
 
 const NATIVE_EXE_SUCCESS_EXIT_CODES: &[i32] = &[0, 1641, 3010];
 
@@ -219,77 +219,63 @@ fn capture_native_exe_metadata(
     let mut best_match: Option<(u8, NativeExeInstallMetadata)> = None;
     let mut saw_ambiguous_match = false;
 
-    for root in uninstall_roots() {
-        for key_result in root.key().enum_keys() {
-            let Ok(key_name) = key_result else { continue };
-            let Ok(app_key) = root.key().open_subkey(&key_name) else {
-                continue;
-            };
+    let Ok(entries) = collect_uninstall_entries(Some(package_name)) else {
+        return None;
+    };
 
-            let Ok(display_name) = app_key.get_value::<String, _>("DisplayName") else {
-                continue;
-            };
+    for entry in entries {
+        if !entry.display_name.trim().eq_ignore_ascii_case(package_name) {
+            continue;
+        }
 
-            if !display_name.trim().eq_ignore_ascii_case(package_name) {
-                continue;
+        let install_location_exact = match entry.install_location.as_deref() {
+            Some(value) if !value.trim().is_empty() => {
+                if !same_install_location(Path::new(value), install_dir) {
+                    continue;
+                }
+
+                true
             }
+            _ => false,
+        };
 
-            let install_location_exact = match app_key.get_value::<String, _>("InstallLocation") {
-                Ok(value) if !value.trim().is_empty() => {
-                    if !same_install_location(Path::new(&value), install_dir) {
-                        continue;
-                    }
+        let candidate = match (
+            entry.quiet_uninstall_string.as_deref(),
+            entry.uninstall_string.as_deref(),
+        ) {
+            (Some(quiet_uninstall_command), Some(uninstall_command)) => Some((
+                native_exe_metadata_priority(install_location_exact, 3),
+                NativeExeInstallMetadata::QuietAndStandard {
+                    quiet_uninstall_command: quiet_uninstall_command.to_string(),
+                    uninstall_command: uninstall_command.to_string(),
+                },
+            )),
+            (Some(quiet_uninstall_command), None) => Some((
+                native_exe_metadata_priority(install_location_exact, 2),
+                NativeExeInstallMetadata::QuietOnly(quiet_uninstall_command.to_string()),
+            )),
+            (None, Some(uninstall_command)) => Some((
+                native_exe_metadata_priority(install_location_exact, 1),
+                NativeExeInstallMetadata::StandardOnly(uninstall_command.to_string()),
+            )),
+            (None, None) => None,
+        };
 
-                    true
+        let Some((priority, metadata)) = candidate else {
+            continue;
+        };
+
+        match best_match.as_mut() {
+            Some((best_priority, best_metadata)) => {
+                if priority > *best_priority {
+                    *best_priority = priority;
+                    *best_metadata = metadata;
+                } else if priority == *best_priority {
+                    saw_ambiguous_match = true;
                 }
-                _ => false,
-            };
-
-            let quiet_uninstall_command =
-                match app_key.get_value::<String, _>("QuietUninstallString") {
-                    Ok(value) if !value.trim().is_empty() => Some(value),
-                    _ => None,
-                };
-            let uninstall_command = match app_key.get_value::<String, _>("UninstallString") {
-                Ok(value) if !value.trim().is_empty() => Some(value),
-                _ => None,
-            };
-
-            let candidate = match (quiet_uninstall_command, uninstall_command) {
-                (Some(quiet_uninstall_command), Some(uninstall_command)) => Some((
-                    native_exe_metadata_priority(install_location_exact, 3),
-                    NativeExeInstallMetadata::QuietAndStandard {
-                        quiet_uninstall_command,
-                        uninstall_command,
-                    },
-                )),
-                (Some(quiet_uninstall_command), None) => Some((
-                    native_exe_metadata_priority(install_location_exact, 2),
-                    NativeExeInstallMetadata::QuietOnly(quiet_uninstall_command),
-                )),
-                (None, Some(uninstall_command)) => Some((
-                    native_exe_metadata_priority(install_location_exact, 1),
-                    NativeExeInstallMetadata::StandardOnly(uninstall_command),
-                )),
-                (None, None) => None,
-            };
-
-            let Some((priority, metadata)) = candidate else {
-                continue;
-            };
-
-            match best_match.as_mut() {
-                Some((best_priority, best_metadata)) => {
-                    if priority > *best_priority {
-                        *best_priority = priority;
-                        *best_metadata = metadata;
-                    } else if priority == *best_priority {
-                        saw_ambiguous_match = true;
-                    }
-                }
-                None => {
-                    best_match = Some((priority, metadata));
-                }
+            }
+            None => {
+                best_match = Some((priority, metadata));
             }
         }
     }
