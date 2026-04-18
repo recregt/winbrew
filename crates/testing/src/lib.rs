@@ -20,9 +20,11 @@ pub mod package;
 pub mod shared_root;
 pub mod zip;
 
+pub use catalog::CatalogInstallerSeed;
 pub use catalog::{
     append_catalog_db, append_catalog_db_with_installer, catalog_package_id, seed_catalog_db,
-    seed_catalog_db_with_installer, seed_catalog_package, seed_catalog_package_with_installer,
+    seed_catalog_db_with_installer, seed_catalog_db_with_installers, seed_catalog_package,
+    seed_catalog_package_with_installer, seed_catalog_package_with_installers,
 };
 pub use db::{init_database, reset_install_state, reset_installed_packages};
 pub use env::{TestEnvVar, env_lock};

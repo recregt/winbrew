@@ -21,8 +21,8 @@
 use anyhow::{Result, bail};
 
 use crate::database;
-use winbrew_models::domains::catalog::CatalogPackage;
-use winbrew_models::domains::package::PackageRef;
+use crate::models::domains::catalog::CatalogPackage;
+use crate::models::domains::package::PackageRef;
 
 const MAX_QUERY_LENGTH: usize = 256;
 
@@ -141,11 +141,11 @@ fn resolve_catalog_package_by_id(
 mod tests {
     use super::{MAX_QUERY_LENGTH, resolve_catalog_package_ref, search_packages};
     use crate::database;
+    use crate::models::domains::catalog::CatalogPackage;
+    use crate::models::domains::package::{PackageName, PackageRef};
     use anyhow::Result;
     use std::fs;
     use tempfile::TempDir;
-    use winbrew_models::domains::catalog::CatalogPackage;
-    use winbrew_models::domains::package::{PackageName, PackageRef};
     use winbrew_testing::{append_catalog_db, init_database, seed_catalog_db, test_root};
 
     struct TestCatalog {

@@ -17,4 +17,4 @@ mod search;
 mod select;
 
 pub(crate) use search::{resolve_catalog_package_ref, search_packages};
-pub(crate) use select::select_installer;
+pub(crate) use select::{InstallerSelectionError, select_installer};

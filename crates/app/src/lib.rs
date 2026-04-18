@@ -13,6 +13,7 @@ pub use winbrew_core as core;
 pub use winbrew_database as database;
 pub use winbrew_engines as engines;
 pub use winbrew_models as models;
+pub use winbrew_windows as windows;
 
 mod catalog;
 pub mod operations;

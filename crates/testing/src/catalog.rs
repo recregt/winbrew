@@ -1,11 +1,21 @@
 use crate::core::hash::hash_algorithm;
 use crate::models::catalog::installer_type::CatalogInstallerType;
-use crate::models::domains::install::InstallerType;
+use crate::models::domains::install::{Architecture, InstallerType};
 use crate::models::package::PackageSource;
 use crate::models::shared::hash::HashAlgorithm as CatalogHashAlgorithm;
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use std::path::Path;
+
+#[derive(Debug, Clone, Copy)]
+pub struct CatalogInstallerSeed<'a> {
+    pub url: &'a str,
+    pub hash: &'a str,
+    pub kind: InstallerType,
+    pub installer_switches: Option<&'a str>,
+    pub arch: Architecture,
+    pub platform: Option<&'a str>,
+}
 
 pub fn catalog_package_id(package_name: &str) -> String {
     format!("winget/{}", package_name.replace(' ', "."))
@@ -48,6 +58,16 @@ pub fn seed_catalog_db_with_installer(
         kind,
         installer_switches,
     )
+}
+
+pub fn seed_catalog_db_with_installers(
+    path: &Path,
+    package_name: &str,
+    description: &str,
+    installers: &[CatalogInstallerSeed<'_>],
+) -> Result<()> {
+    let conn = Connection::open(path)?;
+    seed_catalog_package_with_installers(&conn, package_name, description, installers)
 }
 
 pub fn append_catalog_db(
@@ -198,4 +218,88 @@ pub fn seed_catalog_package_with_installer(
         kind,
         installer_switches,
     )
+}
+
+pub fn seed_catalog_package_with_installers(
+    conn: &Connection,
+    package_name: &str,
+    description: &str,
+    installers: &[CatalogInstallerSeed<'_>],
+) -> Result<()> {
+    conn.execute_batch(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../infra/parser/schema/catalog.sql"
+    )))?;
+
+    conn.execute("DELETE FROM catalog_installers", [])?;
+    conn.execute("DELETE FROM catalog_packages", [])?;
+
+    let package_id = catalog_package_id(package_name);
+    let source_id = package_id
+        .split_once('/')
+        .map(|(_, source_id)| source_id.to_string())
+        .unwrap_or_else(|| package_id.clone());
+
+    conn.execute(
+            r#"
+            INSERT INTO catalog_packages (
+                id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            "#,
+            params![
+                package_id.clone(),
+                package_name,
+                "1.0.0",
+                "winget",
+                Option::<String>::None,
+                source_id,
+                Some(description),
+                Option::<String>::None,
+                Option::<String>::None,
+                Some("Winbrew Ltd."),
+                Some("en-US"),
+            ],
+        )?;
+
+    for installer in installers {
+        insert_catalog_installer(conn, &package_id, installer)?;
+    }
+
+    Ok(())
+}
+
+fn insert_catalog_installer(
+    conn: &Connection,
+    package_id: &str,
+    installer: &CatalogInstallerSeed<'_>,
+) -> Result<()> {
+    let installer_type =
+        CatalogInstallerType::normalize(PackageSource::Winget, installer.kind, installer.url);
+
+    conn.execute(
+            r#"
+            INSERT INTO catalog_installers (
+                package_id, url, hash, hash_algorithm, installer_type, installer_switches, platform, arch, kind
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            "#,
+            params![
+                package_id,
+                installer.url,
+                if installer.hash.trim().is_empty() {
+                    Option::<String>::None
+                } else {
+                    Some(installer.hash.to_string())
+                },
+                hash_algorithm(installer.hash)
+                    .unwrap_or(CatalogHashAlgorithm::Sha256)
+                    .as_str(),
+                installer_type.as_str(),
+                installer.installer_switches.map(|value| value.to_string()),
+                installer.platform.map(|value| value.to_string()),
+                installer.arch.as_str(),
+                installer.kind.as_str(),
+            ],
+        )?;
+
+    Ok(())
 }

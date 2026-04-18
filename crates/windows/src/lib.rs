@@ -5,6 +5,7 @@ mod deployment;
 mod font;
 mod fs;
 mod registry;
+mod system;
 
 pub use deployment::{
     msi_scan_inventory, msix_install, msix_installed_package_full_name, msix_remove,
@@ -16,3 +17,4 @@ pub use registry::{
     create_test_uninstall_entry, create_test_uninstall_entry_with_install_location,
     uninstall_roots, uninstall_value,
 };
+pub use system::{HostKind, host_architecture, host_kind};
