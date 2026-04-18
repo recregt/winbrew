@@ -25,40 +25,22 @@ impl Hive {
         };
         RegKey::predef(hkey)
     }
-
-    fn name(self) -> &'static str {
-        match self {
-            Self::LocalMachine => "HKLM",
-            Self::CurrentUser => "HKCU",
-        }
-    }
 }
 
 /// Snapshot of one uninstall registry location.
 #[derive(Debug)]
-pub struct UninstallRoot {
-    hive: Hive,
-    key_path: &'static str,
+pub(super) struct UninstallRoot {
     key: RegKey,
 }
 
 impl UninstallRoot {
     /// Open registry key handle for the uninstall root.
-    pub fn key(&self) -> &RegKey {
+    pub(super) fn key(&self) -> &RegKey {
         &self.key
     }
 
-    /// Return the registry path for diagnostics and logging.
-    pub fn registry_path(&self) -> String {
-        format!(r"{}\{}", self.hive.name(), self.key_path)
-    }
-
-    fn new(hive: Hive, key_path: &'static str, key: RegKey) -> Self {
-        Self {
-            hive,
-            key_path,
-            key,
-        }
+    fn new(key: RegKey) -> Self {
+        Self { key }
     }
 }
 
@@ -73,11 +55,7 @@ impl UninstallRoot {
 /// ```no_run
 /// use winbrew_windows::uninstall_roots;
 ///
-/// for root in uninstall_roots() {
-///     println!("{}", root.registry_path());
-/// }
-/// ```
-pub fn uninstall_roots() -> impl Iterator<Item = UninstallRoot> {
+pub(super) fn uninstall_roots() -> impl Iterator<Item = UninstallRoot> {
     [
         (Hive::LocalMachine, UNINSTALL),
         (Hive::LocalMachine, WOW6432_UNINSTALL),
@@ -88,6 +66,6 @@ pub fn uninstall_roots() -> impl Iterator<Item = UninstallRoot> {
         hive.open()
             .open_subkey(key_path)
             .ok()
-            .map(|key| UninstallRoot::new(hive, key_path, key))
+            .map(UninstallRoot::new)
     })
 }
