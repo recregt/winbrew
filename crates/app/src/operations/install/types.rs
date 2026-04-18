@@ -14,27 +14,9 @@ use crate::catalog::{self, InstallerSelectionError};
 use crate::core::cancel::CancellationError;
 use crate::core::hash::HashError;
 use crate::models::catalog::CatalogInstaller;
-use crate::models::domains::install::Architecture;
 use crate::models::domains::install::InstallFailureClass;
 use crate::models::domains::shared::HashAlgorithm;
-use crate::windows::{HostKind, host_architecture, host_kind};
-
-/// Runtime host profile used by installer selection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct HostProfile {
-    kind: HostKind,
-    architecture: Architecture,
-}
-
-impl HostProfile {
-    /// Capture the current host family and architecture.
-    pub(crate) fn current() -> Self {
-        Self {
-            kind: host_kind(),
-            architecture: host_architecture(),
-        }
-    }
-}
+use crate::windows::HostProfile;
 
 /// Select the installer that the catalog policy considers best for the package.
 ///
@@ -45,7 +27,7 @@ pub(crate) fn select_installer(
     installers: &[CatalogInstaller],
     host_profile: HostProfile,
 ) -> std::result::Result<CatalogInstaller, InstallerSelectionError> {
-    catalog::select_installer(installers, host_profile.kind, host_profile.architecture)
+    catalog::select_installer(installers, host_profile)
 }
 
 /// User-facing error type produced by the install pipeline.
@@ -74,11 +56,8 @@ pub enum InstallError {
     #[error("catalog package has no installers")]
     NoInstallers,
 
-    #[error("no installer matches this host ({host_kind} {host_architecture})")]
-    NoCompatibleInstaller {
-        host_kind: HostKind,
-        host_architecture: Architecture,
-    },
+    #[error("no installer matches this host ({host})")]
+    NoCompatibleInstaller { host: HostProfile },
 
     #[error("cancelled")]
     Cancelled,
@@ -143,13 +122,9 @@ impl From<InstallerSelectionError> for InstallError {
     fn from(value: InstallerSelectionError) -> Self {
         match value {
             InstallerSelectionError::NoInstallers => Self::NoInstallers,
-            InstallerSelectionError::NoCompatibleInstaller {
-                host_kind,
-                host_architecture,
-            } => Self::NoCompatibleInstaller {
-                host_kind,
-                host_architecture,
-            },
+            InstallerSelectionError::NoCompatibleInstaller { host } => {
+                Self::NoCompatibleInstaller { host }
+            }
         }
     }
 }
@@ -187,7 +162,7 @@ mod tests {
     use crate::models::domains::install::Architecture;
     use crate::models::domains::install::InstallFailureClass;
     use crate::models::domains::shared::HashAlgorithm;
-    use crate::windows::HostKind;
+    use crate::windows::HostProfile;
 
     #[test]
     fn maps_state_conflicts_to_user_facing_errors() {
@@ -220,8 +195,10 @@ mod tests {
         assert!(matches!(err, InstallError::NoInstallers));
 
         let err = InstallError::from(InstallerSelectionError::NoCompatibleInstaller {
-            host_kind: HostKind::Server,
-            host_architecture: Architecture::Arm64,
+            host: HostProfile {
+                is_server: true,
+                architecture: Architecture::Arm64,
+            },
         });
         assert!(matches!(err, InstallError::NoCompatibleInstaller { .. }));
     }

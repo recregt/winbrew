@@ -1,4 +1,3 @@
-use strum_macros::Display;
 use winreg::{
     RegKey,
     enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE},
@@ -9,13 +8,11 @@ pub(super) const WOW6432_UNINSTALL: &str =
     "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
 
 /// Registry hive that can contain uninstall data.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display)]
-pub enum Hive {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Hive {
     /// `HKEY_LOCAL_MACHINE`.
-    #[strum(to_string = "HKLM")]
     LocalMachine,
     /// `HKEY_CURRENT_USER`.
-    #[strum(to_string = "HKCU")]
     CurrentUser,
 }
 
@@ -28,18 +25,41 @@ impl Hive {
         };
         RegKey::predef(hkey)
     }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::LocalMachine => "HKLM",
+            Self::CurrentUser => "HKCU",
+        }
+    }
 }
 
 /// Snapshot of one uninstall registry location.
+#[derive(Debug)]
 pub struct UninstallRoot {
-    /// Hive that owns the root key.
-    pub hive: Hive,
-    /// Relative registry path under the hive.
-    pub key_path: &'static str,
+    hive: Hive,
+    key_path: &'static str,
+    key: RegKey,
+}
+
+impl UninstallRoot {
     /// Open registry key handle for the uninstall root.
-    pub key: RegKey,
-    /// Display label used in diagnostics and logs.
-    pub label: &'static str,
+    pub fn key(&self) -> &RegKey {
+        &self.key
+    }
+
+    /// Return the registry path for diagnostics and logging.
+    pub fn registry_path(&self) -> String {
+        format!(r"{}\{}", self.hive.name(), self.key_path)
+    }
+
+    fn new(hive: Hive, key_path: &'static str, key: RegKey) -> Self {
+        Self {
+            hive,
+            key_path,
+            key,
+        }
+    }
 }
 
 /// Iterate over the uninstall roots that exist on the current machine.
@@ -54,29 +74,20 @@ pub struct UninstallRoot {
 /// use winbrew_windows::uninstall_roots;
 ///
 /// for root in uninstall_roots() {
-///     println!("{} -> {}", root.hive, root.label);
+///     println!("{}", root.registry_path());
 /// }
 /// ```
 pub fn uninstall_roots() -> impl Iterator<Item = UninstallRoot> {
     [
-        (Hive::LocalMachine, UNINSTALL, "HKLM\\Uninstall"),
-        (
-            Hive::LocalMachine,
-            WOW6432_UNINSTALL,
-            "HKLM\\WOW6432Node\\Uninstall",
-        ),
-        (Hive::CurrentUser, UNINSTALL, "HKCU\\Uninstall"),
+        (Hive::LocalMachine, UNINSTALL),
+        (Hive::LocalMachine, WOW6432_UNINSTALL),
+        (Hive::CurrentUser, UNINSTALL),
     ]
     .into_iter()
-    .filter_map(|(hive, key_path, label)| {
+    .filter_map(|(hive, key_path)| {
         hive.open()
             .open_subkey(key_path)
             .ok()
-            .map(|key| UninstallRoot {
-                hive,
-                key_path,
-                key,
-                label,
-            })
+            .map(|key| UninstallRoot::new(hive, key_path, key))
     })
 }

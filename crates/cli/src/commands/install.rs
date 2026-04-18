@@ -61,73 +61,68 @@ pub fn run(ctx: &CommandContext, query: &[String], ignore_checksum_security: boo
                 result.name, result.version, result.install_dir
             ));
         }
-        Err(err) => {
-            match err {
-                InstallError::AlreadyInstalled { name } => {
-                    ui.notice(format!("{name} is already installed."));
-                }
-                InstallError::AlreadyInstalling { name } => {
-                    ui.warn(format!("{name} is currently being installed."));
-                }
-                InstallError::CurrentlyUpdating { name } => {
-                    ui.warn(format!("{name} is currently updating."));
-                }
-                InstallError::ChecksumMismatch { expected, actual } => {
-                    let message =
-                        format!("Installer checksum mismatch: expected {expected}, got {actual}");
-                    ui.error(&message);
-                    ui.notice(
-                        "Hint: re-download the installer or refresh the catalog before retrying.",
-                    );
-                    return Err(reported_with_hint(
-                        message,
-                        "Re-download the installer or refresh the catalog before retrying.",
-                    ));
-                }
-                InstallError::LegacyChecksumAlgorithm { algorithm } => {
-                    let message = format!(
-                        "{} checksums are disabled by default for security. Re-run with --ignore-checksum-security to install this package.",
-                        algorithm.display_name()
-                    );
-                    ui.error(&message);
-                    ui.notice("Hint: re-run with --ignore-checksum-security only if you trust the package source.");
-                    return Err(reported_with_hint(
-                        message,
-                        "Re-run with --ignore-checksum-security only if you trust the package source.",
-                    ));
-                }
-                InstallError::NoInstallers => {
-                    let message = "This package has no installers in the catalog.".to_string();
-                    ui.error(&message);
-                    ui.notice("Hint: refresh the catalog or choose a different package.");
-                    return Err(reported_with_hint(
-                        message,
-                        "Refresh the catalog or choose a different package.",
-                    ));
-                }
-                InstallError::NoCompatibleInstaller {
-                    host_kind,
-                    host_architecture,
-                } => {
-                    let message = format!(
-                        "No installer in the catalog matches this host ({host_kind} {host_architecture})."
-                    );
-                    ui.error(&message);
-                    ui.notice("Hint: refresh the catalog or pick a package variant built for this machine.");
-                    return Err(reported_with_hint(
-                        message,
-                        "Refresh the catalog or pick a package variant built for this machine.",
-                    ));
-                }
-                InstallError::Cancelled => {
-                    ui.notice("Cancelling and cleaning up...");
-                    return Err(cancelled());
-                }
-                InstallError::Unexpected(err) => {
-                    return Err(err);
-                }
+        Err(err) => match err {
+            InstallError::AlreadyInstalled { name } => {
+                ui.notice(format!("{name} is already installed."));
             }
-        }
+            InstallError::AlreadyInstalling { name } => {
+                ui.warn(format!("{name} is currently being installed."));
+            }
+            InstallError::CurrentlyUpdating { name } => {
+                ui.warn(format!("{name} is currently updating."));
+            }
+            InstallError::ChecksumMismatch { expected, actual } => {
+                let message =
+                    format!("Installer checksum mismatch: expected {expected}, got {actual}");
+                ui.error(&message);
+                ui.notice(
+                    "Hint: re-download the installer or refresh the catalog before retrying.",
+                );
+                return Err(reported_with_hint(
+                    message,
+                    "Re-download the installer or refresh the catalog before retrying.",
+                ));
+            }
+            InstallError::LegacyChecksumAlgorithm { algorithm } => {
+                let message = format!(
+                    "{} checksums are disabled by default for security. Re-run with --ignore-checksum-security to install this package.",
+                    algorithm.display_name()
+                );
+                ui.error(&message);
+                ui.notice("Hint: re-run with --ignore-checksum-security only if you trust the package source.");
+                return Err(reported_with_hint(
+                    message,
+                    "Re-run with --ignore-checksum-security only if you trust the package source.",
+                ));
+            }
+            InstallError::NoInstallers => {
+                let message = "This package has no installers in the catalog.".to_string();
+                ui.error(&message);
+                ui.notice("Hint: refresh the catalog or choose a different package.");
+                return Err(reported_with_hint(
+                    message,
+                    "Refresh the catalog or choose a different package.",
+                ));
+            }
+            InstallError::NoCompatibleInstaller { host } => {
+                let message = format!("No installer in the catalog matches this host ({host}).");
+                ui.error(&message);
+                ui.notice(
+                    "Hint: refresh the catalog or pick a package variant built for this machine.",
+                );
+                return Err(reported_with_hint(
+                    message,
+                    "Refresh the catalog or pick a package variant built for this machine.",
+                ));
+            }
+            InstallError::Cancelled => {
+                ui.notice("Cancelling and cleaning up...");
+                return Err(cancelled());
+            }
+            InstallError::Unexpected(err) => {
+                return Err(err);
+            }
+        },
     }
 
     Ok(())

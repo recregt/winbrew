@@ -13,7 +13,7 @@
 
 use crate::models::domains::catalog::CatalogInstaller;
 use crate::models::domains::install::Architecture;
-use crate::windows::HostKind;
+use crate::windows::HostProfile;
 use thiserror::Error;
 use tracing::debug;
 
@@ -24,11 +24,8 @@ pub(crate) enum InstallerSelectionError {
     #[error("catalog package has no installers")]
     NoInstallers,
     /// The package has installers, but none match this host's platform family.
-    #[error("no installer matches this host ({host_kind} {host_architecture})")]
-    NoCompatibleInstaller {
-        host_kind: HostKind,
-        host_architecture: Architecture,
-    },
+    #[error("no installer matches this host ({host})")]
+    NoCompatibleInstaller { host: HostProfile },
 }
 
 /// Select the best installer for the current architecture.
@@ -37,8 +34,7 @@ pub(crate) enum InstallerSelectionError {
 /// installers or when none of the installers are compatible with this host.
 pub(crate) fn select_installer(
     installers: &[CatalogInstaller],
-    host_kind: HostKind,
-    host_architecture: Architecture,
+    host_profile: HostProfile,
 ) -> Result<CatalogInstaller, InstallerSelectionError> {
     if installers.is_empty() {
         return Err(InstallerSelectionError::NoInstallers);
@@ -46,27 +42,23 @@ pub(crate) fn select_installer(
 
     let compatible_installers: Vec<&CatalogInstaller> = installers
         .iter()
-        .filter(|installer| platform_matches_host(installer.platform.as_deref(), host_kind))
+        .filter(|installer| platform_matches_host(installer.platform.as_deref(), host_profile))
         .collect();
 
     if compatible_installers.is_empty() {
-        return Err(InstallerSelectionError::NoCompatibleInstaller {
-            host_kind,
-            host_architecture,
-        });
+        return Err(InstallerSelectionError::NoCompatibleInstaller { host: host_profile });
     }
 
     debug!(
         installer_count = installers.len(),
         compatible_count = compatible_installers.len(),
-        host_kind = %host_kind,
-        host_architecture = %host_architecture,
+        host = %host_profile,
         "selecting best installer"
     );
 
     let selected = compatible_installers
         .iter()
-        .find(|installer| installer.arch == host_architecture)
+        .find(|installer| installer.arch == host_profile.architecture)
         .copied()
         .or_else(|| {
             compatible_installers
@@ -80,7 +72,7 @@ pub(crate) fn select_installer(
     Ok(selected.clone())
 }
 
-fn platform_matches_host(platform: Option<&str>, host_kind: HostKind) -> bool {
+fn platform_matches_host(platform: Option<&str>, host_profile: HostProfile) -> bool {
     let Some(platform) = platform else {
         return true;
     };
@@ -89,7 +81,7 @@ fn platform_matches_host(platform: Option<&str>, host_kind: HostKind) -> bool {
         return false;
     };
 
-    let accepted_platforms = host_kind.platform_tags();
+    let accepted_platforms = host_profile.platform_tags();
 
     platform_values
         .into_iter()
@@ -100,6 +92,7 @@ fn platform_matches_host(platform: Option<&str>, host_kind: HostKind) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::windows::HostProfile;
     use anyhow::Result;
 
     fn sample_installer(
@@ -116,12 +109,18 @@ mod tests {
         installer
     }
 
-    fn normal_host() -> HostKind {
-        HostKind::Normal
+    fn normal_host(architecture: Architecture) -> HostProfile {
+        HostProfile {
+            is_server: false,
+            architecture,
+        }
     }
 
-    fn server_host() -> HostKind {
-        HostKind::Server
+    fn server_host(architecture: Architecture) -> HostProfile {
+        HostProfile {
+            is_server: true,
+            architecture,
+        }
     }
 
     #[test]
@@ -144,7 +143,7 @@ mod tests {
             ),
         ];
 
-        let selected = select_installer(&installers, normal_host(), Architecture::X64)
+        let selected = select_installer(&installers, normal_host(Architecture::X64))
             .expect("installer should exist");
 
         assert_eq!(selected.arch, Architecture::X64);
@@ -176,7 +175,7 @@ mod tests {
             ),
         ];
 
-        let selected = select_installer(&installers, server_host(), Architecture::X64)
+        let selected = select_installer(&installers, server_host(Architecture::X64))
             .expect("installer should exist");
 
         assert_eq!(selected.arch, Architecture::X64);
@@ -203,7 +202,7 @@ mod tests {
             ),
         ];
 
-        let selected = select_installer(&installers, normal_host(), Architecture::Arm64)
+        let selected = select_installer(&installers, normal_host(Architecture::Arm64))
             .expect("installer should exist");
 
         assert_eq!(selected.arch, Architecture::Any);
@@ -223,18 +222,20 @@ mod tests {
             Some("[\"Windows.Server\"]"),
         )];
 
-        let err = select_installer(&installers, normal_host(), Architecture::X64)
+        let err = select_installer(&installers, normal_host(Architecture::X64))
             .expect_err("installer should not match");
 
-        assert!(matches!(
+        assert_eq!(
             err,
-            InstallerSelectionError::NoCompatibleInstaller { .. }
-        ));
+            InstallerSelectionError::NoCompatibleInstaller {
+                host: normal_host(Architecture::X64),
+            }
+        );
     }
 
     #[test]
     fn select_installer_returns_no_installers_when_list_is_empty() {
-        let err = select_installer(&[], normal_host(), Architecture::X64)
+        let err = select_installer(&[], normal_host(Architecture::X64))
             .expect_err("selection should fail");
 
         assert!(matches!(err, InstallerSelectionError::NoInstallers));

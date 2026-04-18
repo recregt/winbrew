@@ -220,9 +220,9 @@ fn capture_native_exe_metadata(
     let mut saw_ambiguous_match = false;
 
     for root in uninstall_roots() {
-        for key_result in root.key.enum_keys() {
+        for key_result in root.key().enum_keys() {
             let Ok(key_name) = key_result else { continue };
-            let Ok(app_key) = root.key.open_subkey(&key_name) else {
+            let Ok(app_key) = root.key().open_subkey(&key_name) else {
                 continue;
             };
 

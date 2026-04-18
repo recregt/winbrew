@@ -15,7 +15,7 @@ use winbrew_testing::{
     reset_install_state, seed_catalog_db_with_installers, sha1_hex, sha512_hex,
     system_font_file_name, system_font_path, test_root,
 };
-use winbrew_windows::{HostKind, host_architecture, host_kind};
+use winbrew_windows::host_profile;
 
 struct InstallTestFixture {
     ctx: AppContext,
@@ -253,17 +253,18 @@ fn install_selects_the_host_matching_architecture_variant() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
 
-    let current_architecture = host_architecture();
+    let current_host_profile = host_profile();
+    let current_architecture = current_host_profile.architecture;
     assert_ne!(
         current_architecture,
         Architecture::Any,
         "native architecture should be detectable"
     );
 
-    let current_host_kind = host_kind();
-    let host_platform = match current_host_kind {
-        HostKind::Server => "Windows.Server",
-        HostKind::Normal => "Windows.Desktop",
+    let host_platform = if current_host_profile.is_server {
+        "Windows.Server"
+    } else {
+        "Windows.Desktop"
     };
     let platform_value = format!(r#"["{host_platform}"]"#);
 

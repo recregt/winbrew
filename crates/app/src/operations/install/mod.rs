@@ -97,7 +97,7 @@ pub fn run<O: InstallObserver>(
         catalog::resolve_catalog_package_ref(&catalog_conn, &package_ref, |query, matches| {
             observer.borrow_mut().choose_package(query, matches)
         })?;
-    let host_profile = types::HostProfile::current();
+    let host_profile = crate::windows::host_profile();
     let installer = types::select_installer(
         &database::get_installers(&catalog_conn, &package.id)?,
         host_profile,
