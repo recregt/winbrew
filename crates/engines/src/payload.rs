@@ -26,9 +26,12 @@ fn archive_kind_from_file_name(file_name: &str) -> Option<ArchiveKind> {
     if file_name.ends_with(".tar.gz")
         || file_name.ends_with(".tgz")
         || file_name.ends_with(".tbz2")
+        || file_name.ends_with(".tar.bz2")
         || file_name.ends_with(".tar")
     {
         Some(ArchiveKind::Tar)
+    } else if file_name.ends_with(".gz") {
+        Some(ArchiveKind::Gzip)
     } else if file_name.ends_with(".7z") {
         Some(ArchiveKind::SevenZip)
     } else if file_name.ends_with(".rar") {
@@ -72,6 +75,18 @@ mod tests {
         assert_eq!(
             classify_payload("https://example.invalid/tool.tbz2"),
             PayloadKind::Archive(ArchiveKind::Tar)
+        );
+        assert_eq!(
+            classify_payload("https://example.invalid/tool.tar.bz2"),
+            PayloadKind::Archive(ArchiveKind::Tar)
+        );
+    }
+
+    #[test]
+    fn classifies_gzip_payloads_as_archive() {
+        assert_eq!(
+            archive_kind_for_url("https://example.invalid/tool.gz"),
+            Some(ArchiveKind::Gzip)
         );
     }
 
