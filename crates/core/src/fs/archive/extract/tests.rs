@@ -1,11 +1,18 @@
+use super::sevenz::{
+    SevenZipLauncher, extract_sevenz_with_runtime_root, sevenz_bin_path_from_runtime_root,
+    sevenz_dll_path_from_runtime_root,
+};
 use super::{
     ExtractionLimits, extract_archive, extract_zip_archive, extract_zip_archive_with_limits,
 };
 use crate::fs::ArchiveKind;
 use flate2::Compression;
 use flate2::write::GzEncoder;
+use std::cell::RefCell;
 use std::fs;
+use std::io;
 use std::io::Write;
+use std::path::PathBuf;
 use tar::Builder;
 use tar::Header;
 use tempfile::tempdir;
@@ -321,21 +328,90 @@ fn extract_zip_archive_rejects_path_depth_limit() {
 }
 
 #[test]
-fn extract_archive_rejects_unimplemented_backends() {
-    let temp_dir = tempdir().expect("temp dir");
-    let destination_dir = temp_dir.path().join("dest");
-    let archive_path = temp_dir.path().join("archive.7z");
+fn sevenz_runtime_layout_uses_expected_relative_paths() {
+    let runtime_root = PathBuf::from("C:/winbrew");
 
-    fs::write(&archive_path, b"placeholder").expect("archive file");
-
-    let error = extract_archive(ArchiveKind::SevenZip, &archive_path, &destination_dir)
-        .expect_err("expected missing backend rejection");
-
-    assert!(
-        error
-            .to_string()
-            .contains("no archive backend is registered")
+    assert_eq!(
+        sevenz_bin_path_from_runtime_root(&runtime_root),
+        PathBuf::from("C:/winbrew/bin/7zip/7z.exe")
     );
+    assert_eq!(
+        sevenz_dll_path_from_runtime_root(&runtime_root),
+        PathBuf::from("C:/winbrew/bin/7zip/7z.dll")
+    );
+}
+
+struct RecordingSevenZipLauncher {
+    calls: RefCell<Vec<(PathBuf, PathBuf, PathBuf)>>,
+}
+
+impl RecordingSevenZipLauncher {
+    fn new() -> Self {
+        Self {
+            calls: RefCell::new(Vec::new()),
+        }
+    }
+}
+
+impl SevenZipLauncher for RecordingSevenZipLauncher {
+    fn extract(
+        &self,
+        binary_path: &std::path::Path,
+        archive_path: &std::path::Path,
+        destination_dir: &std::path::Path,
+    ) -> io::Result<()> {
+        self.calls.borrow_mut().push((
+            binary_path.to_path_buf(),
+            archive_path.to_path_buf(),
+            destination_dir.to_path_buf(),
+        ));
+
+        Ok(())
+    }
+}
+
+#[test]
+fn extract_sevenz_uses_runtime_root_and_launcher() {
+    let temp_dir = tempdir().expect("temp dir");
+    let runtime_root = temp_dir.path().join("runtime");
+    let archive_path = temp_dir.path().join("archive.7z");
+    let destination_dir = temp_dir.path().join("dest");
+    let launcher = RecordingSevenZipLauncher::new();
+    let binary_path = sevenz_bin_path_from_runtime_root(&runtime_root);
+    let dll_path = sevenz_dll_path_from_runtime_root(&runtime_root);
+
+    fs::create_dir_all(binary_path.parent().expect("binary parent")).expect("binary dir");
+    fs::write(&binary_path, b"placeholder").expect("fake binary");
+    fs::write(&dll_path, b"placeholder").expect("fake dll");
+    fs::write(&archive_path, b"archive contents").expect("archive file");
+
+    extract_sevenz_with_runtime_root(&archive_path, &destination_dir, &runtime_root, &launcher)
+        .expect("sevenzip extraction");
+
+    let calls = launcher.calls.borrow();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].0, binary_path);
+    assert_eq!(calls[0].1, archive_path);
+    assert_eq!(calls[0].2, destination_dir);
+}
+
+#[test]
+fn extract_sevenz_rejects_missing_binary_before_launch() {
+    let temp_dir = tempdir().expect("temp dir");
+    let runtime_root = temp_dir.path().join("runtime");
+    let archive_path = temp_dir.path().join("archive.7z");
+    let destination_dir = temp_dir.path().join("dest");
+    let launcher = RecordingSevenZipLauncher::new();
+
+    fs::create_dir_all(&runtime_root).expect("runtime dir");
+    fs::write(&archive_path, b"archive contents").expect("archive file");
+
+    let error =
+        extract_sevenz_with_runtime_root(&archive_path, &destination_dir, &runtime_root, &launcher)
+            .expect_err("expected missing binary rejection");
+
+    assert!(error.to_string().contains("failed to extract 7z archive"));
+    assert!(launcher.calls.borrow().is_empty());
 }
 
 #[test]
