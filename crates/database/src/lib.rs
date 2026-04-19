@@ -42,8 +42,8 @@ pub use config::{
 };
 pub use installed_packages::{
     PackageNotFoundError, commit_install, delete_package, get_package, insert_package,
-    list_installing_packages, list_packages, replay_committed_journal, update_status,
-    update_status_and_engine_metadata,
+    list_installing_packages, list_packages, replay_committed_journal, update_installing_identity,
+    update_status, update_status_and_engine_metadata,
 };
 pub use journal::{
     CommittedJournalPackage, FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader,

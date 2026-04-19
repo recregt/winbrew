@@ -9,7 +9,9 @@ use crate::models::shared::DeploymentKind;
 
 use super::EngineKind;
 use crate::filesystem::{archive::zip, portable};
-use crate::payload::{PayloadKind, classify_payload};
+use crate::payload::{
+    DetectedArtifactKind, PayloadKind, classify_payload, probe_downloaded_artifact_kind,
+};
 use crate::windows::api::msix;
 use crate::windows::font;
 
@@ -52,6 +54,21 @@ fn matches_archive_installer(installer: &CatalogInstaller) -> bool {
 fn matches_portable_installer(installer: &CatalogInstaller) -> bool {
     installer.kind == InstallerType::Portable
         && matches!(classify_payload(&installer.url), PayloadKind::Raw)
+}
+
+pub(crate) fn resolve_downloaded_installer_kind(
+    installer: &CatalogInstaller,
+    download_path: &Path,
+) -> Result<InstallerType> {
+    if installer.kind.is_windows_package() {
+        return Ok(installer.kind);
+    }
+
+    match probe_downloaded_artifact_kind(download_path)? {
+        Some(DetectedArtifactKind::Msi) => Ok(InstallerType::Msi),
+        Some(DetectedArtifactKind::Archive(_)) => Ok(InstallerType::Zip),
+        None => Ok(installer.kind),
+    }
 }
 
 pub(crate) fn resolve_deployment_kind(installer: &CatalogInstaller) -> DeploymentKind {

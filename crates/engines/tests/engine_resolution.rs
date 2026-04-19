@@ -2,10 +2,13 @@
 
 mod common;
 
+use std::fs;
+
 use common::{BASE_URL, assert_expected, installer, installer_with_url};
+use tempfile::tempdir;
 use winbrew_engines::{
     DeploymentKind, EngineKind, engine_kind_for_type, resolve_deployment_kind,
-    resolve_engine_for_installer,
+    resolve_downloaded_installer_kind, resolve_engine_for_installer,
 };
 use winbrew_models::install::installer::InstallerType;
 
@@ -141,6 +144,51 @@ const ROUTING_SCENARIOS: &[RoutingScenario] = &[
     },
 ];
 
+#[derive(Clone, Copy)]
+struct DownloadedRoutingScenario {
+    kind: InstallerType,
+    payload: &'static [u8],
+    expected_kind: InstallerType,
+    expected_engine: EngineKind,
+    expected_deployment: DeploymentKind,
+    description: &'static str,
+}
+
+const DOWNLOADED_ROUTING_SCENARIOS: &[DownloadedRoutingScenario] = &[
+    DownloadedRoutingScenario {
+        kind: InstallerType::Portable,
+        payload: &[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1],
+        expected_kind: InstallerType::Msi,
+        expected_engine: EngineKind::Msi,
+        expected_deployment: DeploymentKind::Installed,
+        description: "portable-labeled MSI payloads should route to the MSI engine",
+    },
+    DownloadedRoutingScenario {
+        kind: InstallerType::Portable,
+        payload: b"PK\x03\x04rest",
+        expected_kind: InstallerType::Zip,
+        expected_engine: EngineKind::Zip,
+        expected_deployment: DeploymentKind::Portable,
+        description: "portable-labeled archive payloads should route to the zip engine",
+    },
+    DownloadedRoutingScenario {
+        kind: InstallerType::Msix,
+        payload: b"PK\x03\x04rest",
+        expected_kind: InstallerType::Msix,
+        expected_engine: EngineKind::Msix,
+        expected_deployment: DeploymentKind::Installed,
+        description: "MSIX manifests should keep the MSIX engine even when the bytes look zip-like",
+    },
+    DownloadedRoutingScenario {
+        kind: InstallerType::Portable,
+        payload: b"plain text payload",
+        expected_kind: InstallerType::Portable,
+        expected_engine: EngineKind::Portable,
+        expected_deployment: DeploymentKind::Portable,
+        description: "unknown payloads should fall back to the manifest kind",
+    },
+];
+
 #[test]
 fn engine_kind_for_type_maps_supported_cases() {
     for case in ENGINE_MAPPING_CASES {
@@ -173,6 +221,35 @@ fn resolve_engine_for_installer_routes_public_families() {
         assert_expected(
             resolve_engine_for_installer(&installer).unwrap(),
             case.expected,
+            case.description,
+        );
+    }
+}
+
+#[test]
+fn resolve_downloaded_installer_kind_uses_probe_results() {
+    for case in DOWNLOADED_ROUTING_SCENARIOS {
+        let temp_dir = tempdir().expect("temp dir");
+        let download_path = temp_dir.path().join("payload.bin");
+        fs::write(&download_path, case.payload).expect("write payload");
+
+        let installer = installer(case.kind, "payload.exe", None);
+        let resolved_kind = resolve_downloaded_installer_kind(&installer, &download_path)
+            .expect("resolve downloaded kind");
+
+        assert_expected(resolved_kind, case.expected_kind, case.description);
+
+        let mut resolved_installer = installer.clone();
+        resolved_installer.kind = resolved_kind;
+
+        assert_expected(
+            resolve_engine_for_installer(&resolved_installer).unwrap(),
+            case.expected_engine,
+            case.description,
+        );
+        assert_expected(
+            resolve_deployment_kind(&resolved_installer),
+            case.expected_deployment,
             case.description,
         );
     }

@@ -164,6 +164,21 @@ pub fn mark_failed(conn: &crate::database::DbConnection, name: &str) -> Result<(
     })
 }
 
+pub fn update_installing_identity(
+    conn: &crate::database::DbConnection,
+    name: &str,
+    kind: InstallerType,
+    deployment_kind: DeploymentKind,
+    engine_kind: EngineKind,
+) -> Result<()> {
+    database::update_installing_identity(conn, name, kind, deployment_kind, engine_kind).map_err(
+        |source| InstallStateError::DatabaseOperationFailed {
+            operation: "updating install classification",
+            source,
+        },
+    )
+}
+
 fn installing_package(
     name: impl Into<String>,
     version: impl Into<String>,
