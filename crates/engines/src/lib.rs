@@ -46,6 +46,13 @@ pub fn resolve_engine_for_installer(installer: &CatalogInstaller) -> Result<Engi
     registry::resolve_engine_kind_for_installer(installer)
 }
 
+pub fn resolve_downloaded_installer_kind(
+    installer: &CatalogInstaller,
+    download_path: &Path,
+) -> Result<InstallerType> {
+    registry::resolve_downloaded_installer_kind(installer, download_path)
+}
+
 pub fn resolve_deployment_kind(installer: &CatalogInstaller) -> DeploymentKind {
     registry::resolve_deployment_kind(installer)
 }

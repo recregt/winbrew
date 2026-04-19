@@ -30,8 +30,8 @@ Use this page to track support status and routing decisions. Use the Windows REA
 | --- | --- | --- | --- | --- |
 | `InstallerType::Msi` | `EngineKind::Msi` | Supported on Windows | Windows-delegated, WinBrew-coordinated | Scans MSI inventory first, runs `msiexec`, records product code, upgrade code, scope, registry keys, shortcuts, and inventory snapshot. |
 | `InstallerType::Msix` | `EngineKind::Msix` | Supported on Windows | Windows-delegated, WinBrew-coordinated | Delegates install/remove to Windows App Installer / package APIs and records package identity metadata. |
-| `InstallerType::Zip` | `EngineKind::Zip` | Supported | WinBrew-owned filesystem engine | ZIP is the archive front door today. The shared archive dispatcher now handles ZIP, Tar, GZip, and 7z backends; 7z checks `SearchPathW` for a global `7z.exe` first and otherwise asks the install flow to bootstrap a local `bin/7zip` copy under the active WinBrew root after confirmation, and remove is still plain directory cleanup. |
-| `InstallerType::Portable` | `EngineKind::Portable` | Supported | WinBrew-owned filesystem engine | Copies raw payloads into a staging tree, then replaces the target install directory. Raw-only fallback; archive-shaped payloads route through the archive dispatcher instead of Portable. Remove is plain directory cleanup. |
+| `InstallerType::Zip` | `EngineKind::Zip` | Supported | WinBrew-owned filesystem engine | ZIP is the archive front door today. The shared archive dispatcher now handles ZIP, Tar, GZip, and 7z backends; 7z checks `SearchPathW` for a global `7z.exe` first and otherwise asks the install flow to bootstrap a local `bin/7zip` copy under the active WinBrew root after confirmation, and remove is still plain directory cleanup. The install flow now probes the downloaded payload before final engine selection, so a mislabeled MSI or archive can still be routed correctly. |
+| `InstallerType::Portable` | `EngineKind::Portable` | Supported | WinBrew-owned filesystem engine | Copies raw payloads into a staging tree, then replaces the target install directory. Raw-only fallback when the downloaded payload cannot be identified structurally; archive-shaped or MSI-like payloads can override a misleading manifest before the engine is committed. Remove is plain directory cleanup. |
 | `InstallerType::Font` | `EngineKind::Font` | Supported on Windows | Windows-delegated, WinBrew-coordinated | Installs raw font payloads into the per-user Windows fonts directory and removes the copied file on uninstall. |
 | `InstallerType::Exe` | `EngineKind::NativeExe` | Supported on Windows | Windows-delegated, WinBrew-coordinated | v1 covers the native-exe family (`Exe`, `Inno`, `Nullsoft`, `Burn`). Switches are parsed literally and duplicate entries are rejected. `Pwa` remains scaffolded. |
 
@@ -66,6 +66,8 @@ Current routing rules:
 - 7z runtime ownership lives in the install flow: WinBrew checks for a system `7z.exe` first, then prompts before bootstrapping a local runtime into `<root>\bin\7zip`.
 - Portable installers whose URL looks like an archive are routed away from Portable and into the archive path.
 - The archive descriptor must stay before portable in the registry table.
+- The install flow also probes the downloaded temp file before final routing. Strong signatures such as MSI and archive containers can override a misleading manifest kind, but MSIX/AppX still keeps manifest precedence because the payload bytes alone are not enough to distinguish it from other zip-shaped containers.
+- `crates/engines/src/registry.rs` owns the download-time kind resolution helper so the app layer can reuse the same precedence rules without duplicating file probing logic.
 
 The registry is the place to keep that ordering logic visible. The selection should remain data-driven rather than a chain of hidden conditionals.
 

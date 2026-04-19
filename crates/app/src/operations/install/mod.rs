@@ -25,6 +25,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::catalog;
+use crate::core::network::installer_filename;
 use crate::core::paths::{ensure_install_dirs_at, install_root_from_package_dir};
 use crate::core::temp_workspace;
 use crate::database;
@@ -32,8 +33,10 @@ use crate::engines;
 
 pub use crate::core::cancel;
 pub use crate::models::catalog::CatalogPackage;
+use crate::models::domains::install::EngineInstallReceipt;
 pub use crate::models::domains::install::{InstallFailureClass, InstallOutcome, InstallResult};
 pub use crate::models::domains::package::PackageRef;
+use crate::models::domains::shared::HashAlgorithm;
 pub use types::InstallError;
 pub type Result<T> = types::Result<T>;
 
@@ -117,7 +120,8 @@ pub fn run<O: InstallObserver>(
         &database::get_installers(&catalog_conn, &package.id)?,
         selection_context,
     )?;
-    let engine = engines::resolve_engine_for_installer(&installer)?;
+    let manifest_engine = engines::resolve_engine_for_installer(&installer)?;
+    let manifest_deployment_kind = engines::resolve_deployment_kind(&installer);
 
     let _runtime_root_guard = sevenz::runtime_root_env_guard(&ctx.paths.root);
     {
@@ -134,7 +138,6 @@ pub fn run<O: InstallObserver>(
     let install_dir = ctx.paths.package_install_dir(&package.name);
     let temp_root = temp_workspace::build_temp_root(&package.name, &package_version);
     let install_root = install_root_from_package_dir(&install_dir);
-    let deployment_kind = engines::resolve_deployment_kind(&installer);
 
     ensure_install_dirs_at(&install_root)?;
     fs::create_dir_all(&temp_root)?;
@@ -148,25 +151,56 @@ pub fn run<O: InstallObserver>(
         package.name.clone(),
         package_version.clone(),
         installer.kind,
-        deployment_kind,
-        engine,
+        manifest_deployment_kind,
+        manifest_engine,
         &install_dir,
     )?;
 
+    let download_path = temp_root.join(installer_filename(&installer.url));
     let client = download::build_client()?;
 
     let (engine_receipt, legacy_checksum_algorithms) =
-        match flow::perform_install(flow::InstallRequest {
-            client: &client,
-            engine,
-            installer: &installer,
-            package_name: &package.name,
-            temp_root: &temp_root,
-            install_dir: &install_dir,
-            ignore_checksum_security,
-            on_start: |total_bytes| observer.borrow_mut().on_start(total_bytes),
-            on_progress: |downloaded_bytes| observer.borrow_mut().on_progress(downloaded_bytes),
-        }) {
+        match (|| -> anyhow::Result<(EngineInstallReceipt, Vec<HashAlgorithm>)> {
+            let legacy_checksum_algorithms = download::download_installer(
+                &client,
+                &installer,
+                &download_path,
+                ignore_checksum_security,
+                |total_bytes| observer.borrow_mut().on_start(total_bytes),
+                |downloaded_bytes| observer.borrow_mut().on_progress(downloaded_bytes),
+            )?;
+
+            let resolved_kind =
+                engines::resolve_downloaded_installer_kind(&installer, &download_path)?;
+            let mut resolved_installer = installer.clone();
+            resolved_installer.kind = resolved_kind;
+
+            let engine = engines::resolve_engine_for_installer(&resolved_installer)?;
+            let deployment_kind = engines::resolve_deployment_kind(&resolved_installer);
+
+            if resolved_kind != installer.kind
+                || engine != manifest_engine
+                || deployment_kind != manifest_deployment_kind
+            {
+                state::update_installing_identity(
+                    &conn,
+                    &package.name,
+                    resolved_kind,
+                    deployment_kind,
+                    engine,
+                )?;
+            }
+
+            let engine_receipt = flow::execute_engine_install(
+                engine,
+                &resolved_installer,
+                &download_path,
+                &install_dir,
+                &package.name,
+            )?;
+
+            Ok((engine_receipt, legacy_checksum_algorithms))
+        })() {
             Ok(result) => result,
             Err(err) => {
                 let install_error: InstallError = err.into();

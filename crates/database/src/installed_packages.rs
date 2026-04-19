@@ -64,6 +64,31 @@ pub fn update_status(conn: &Connection, name: &str, status: PackageStatus) -> Re
     Ok(())
 }
 
+pub fn update_installing_identity(
+    conn: &Connection,
+    name: &str,
+    kind: InstallerType,
+    deployment_kind: DeploymentKind,
+    engine_kind: EngineKind,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE installed_packages
+            SET kind = ?1,
+                deployment_kind = ?2,
+                engine_kind = ?3
+          WHERE name = ?4",
+        params![
+            kind.to_string(),
+            deployment_kind.to_string(),
+            engine_kind.to_string(),
+            name,
+        ],
+    )
+    .context("failed to update install classification")?;
+
+    Ok(())
+}
+
 pub fn update_status_and_engine_metadata(
     conn: &Connection,
     name: &str,
@@ -253,7 +278,8 @@ fn row_to_package(row: &rusqlite::Row) -> std::result::Result<InstalledPackage, 
 #[cfg(test)]
 mod tests {
     use super::{
-        get_package, insert_package, replay_committed_journal, update_status_and_engine_metadata,
+        get_package, insert_package, replay_committed_journal, update_installing_identity,
+        update_status_and_engine_metadata,
     };
     use crate::migration;
     use rusqlite::Connection;
@@ -356,5 +382,31 @@ mod tests {
         assert_eq!(package.install_dir, "C:/Tools/Replayed");
         assert_eq!(package.status, PackageStatus::Ok);
         assert_eq!(package.installed_at, "2026-04-12T01:00:00Z");
+    }
+
+    #[test]
+    fn update_installing_identity_overwrites_routing_fields() {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        migration::migrate(&conn).expect("run migration");
+
+        let package_name = "demo";
+        insert_package(&conn, &sample_package(package_name)).expect("insert original package");
+
+        update_installing_identity(
+            &conn,
+            package_name,
+            InstallerType::Portable,
+            DeploymentKind::Portable,
+            EngineKind::Portable,
+        )
+        .expect("update install identity");
+
+        let package = get_package(&conn, package_name)
+            .expect("read updated package")
+            .expect("package should exist");
+
+        assert_eq!(package.kind, InstallerType::Portable);
+        assert_eq!(package.deployment_kind, DeploymentKind::Portable);
+        assert_eq!(package.engine_kind, EngineKind::Portable);
     }
 }

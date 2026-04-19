@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use crate::AppContext;
 use crate::catalog;
-use crate::core::{fs::cleanup_path, temp_workspace};
+use crate::core::{fs::cleanup_path, network::installer_filename, temp_workspace};
 use crate::database;
 use crate::engines::{self, EngineKind};
 use crate::models::catalog::{CatalogInstaller, CatalogPackage};
@@ -255,18 +255,30 @@ pub fn restore_file_restore_target(
     let result = (|| -> Result<usize> {
         let stage_dir = temp_root.join("stage");
         let client = install::download::build_client()?;
+        let download_path = temp_root.join(installer_filename(&target.installer.url));
 
-        let _ = install::flow::perform_install(install::flow::InstallRequest {
-            client: &client,
-            engine: target.engine,
-            installer: &target.installer,
-            package_name: &target.package.name,
-            temp_root: &temp_root,
-            install_dir: &stage_dir,
-            ignore_checksum_security: false,
-            on_start: |_| {},
-            on_progress: |_| {},
-        })?;
+        install::download::download_installer(
+            &client,
+            &target.installer,
+            &download_path,
+            false,
+            |_| {},
+            |_| {},
+        )?;
+
+        let resolved_kind =
+            engines::resolve_downloaded_installer_kind(&target.installer, &download_path)?;
+        let mut resolved_installer = target.installer.clone();
+        resolved_installer.kind = resolved_kind;
+        let engine = engines::resolve_engine_for_installer(&resolved_installer)?;
+
+        let _ = install::flow::execute_engine_install(
+            engine,
+            &resolved_installer,
+            &download_path,
+            &stage_dir,
+            &target.package.name,
+        )?;
 
         restore_target_files(
             &stage_dir,
