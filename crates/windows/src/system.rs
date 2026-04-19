@@ -1,7 +1,7 @@
 use std::fmt;
 
+use crate::models::domains::install::Architecture;
 use crate::registry::read_product_type;
-use winbrew_models::domains::install::Architecture;
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Security::{
     GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
@@ -118,7 +118,7 @@ fn architecture_from_native_system_info(system_info: SYSTEM_INFO) -> Architectur
 #[cfg(test)]
 mod tests {
     use super::{HostProfile, architecture_from_native_system_info, classify_product_type};
-    use winbrew_models::domains::install::Architecture;
+    use crate::models::domains::install::Architecture;
     use windows_sys::Win32::System::SystemInformation::{
         PROCESSOR_ARCHITECTURE_AMD64, PROCESSOR_ARCHITECTURE_ARM64, PROCESSOR_ARCHITECTURE_INTEL,
         SYSTEM_INFO,

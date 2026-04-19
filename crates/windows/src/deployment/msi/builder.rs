@@ -13,8 +13,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use winbrew_models::install::engine::InstallScope;
-use winbrew_models::msi_inventory::records::{
+use crate::models::install::engine::InstallScope;
+use crate::models::msi_inventory::records::{
     MsiComponentRecord, MsiFileRecord, MsiRegistryRecord, MsiShortcutRecord,
 };
 
@@ -203,7 +203,7 @@ pub(super) fn build_component_records(
 #[cfg(test)]
 mod tests {
     use super::registry_root_name;
-    use winbrew_models::install::engine::InstallScope;
+    use crate::models::install::engine::InstallScope;
 
     #[test]
     fn registry_root_name_uses_scope_for_negative_one() {

@@ -4,8 +4,8 @@
 use anyhow::Result;
 use std::path::Path;
 
-use winbrew_models::install::engine::InstallScope;
-use winbrew_models::msi_inventory::records::{MsiInventoryReceipt, MsiInventorySnapshot};
+use crate::models::install::engine::InstallScope;
+use crate::models::msi_inventory::records::{MsiInventoryReceipt, MsiInventorySnapshot};
 
 mod builder;
 mod database;
