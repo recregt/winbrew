@@ -1,5 +1,8 @@
-pub mod install;
-pub mod remove;
+mod install;
+mod remove;
+
+pub use install::install;
+pub use remove::remove;
 
 use anyhow::{Context, Result};
 use windows::Management::Deployment::PackageManager;

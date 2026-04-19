@@ -7,9 +7,9 @@ mod fs;
 mod registry;
 mod system;
 
-pub use deployment::{
-    msi_scan_inventory, msix_install, msix_installed_package_full_name, msix_remove,
-};
+pub use deployment::msi_scan_inventory;
+#[path = "deployment/msix/mod.rs"]
+pub mod msix;
 pub use font::{install_user_font, remove_user_font, user_fonts_dir};
 pub use fs::{PathInfo, create_extracted_file, inspect_path};
 pub use registry::{

@@ -2,7 +2,7 @@
 //!
 //! This adapter expects the installed package receipt to contain
 //! `EngineMetadata::Msix`. It extracts the stored package full name and passes
-//! it to `winbrew_windows::msix_remove`.
+//! it to `winbrew_windows::msix::remove`.
 //!
 //! The module does not query the registry or derive package identity on its
 //! own. That information must already be present in the receipt.
@@ -12,7 +12,7 @@ use anyhow::{Context, Result, bail};
 use winbrew_models::install::engine::EngineMetadata;
 use winbrew_models::install::installed::InstalledPackage as WinbrewPackage;
 
-use winbrew_windows::msix_remove;
+use winbrew_windows::msix;
 
 /// Remove an MSIX package using the package full name stored in the receipt.
 ///
@@ -26,7 +26,7 @@ pub fn remove(package: &WinbrewPackage) -> Result<()> {
         _ => bail!("missing msix receipt metadata for '{}'", package.name),
     };
 
-    msix_remove(package_full_name)
+    msix::remove(package_full_name)
         .with_context(|| format!("msix uninstall failed for {package_full_name}"))?;
 
     Ok(())

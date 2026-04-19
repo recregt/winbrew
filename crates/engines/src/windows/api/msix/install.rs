@@ -1,7 +1,7 @@
 //! MSIX installation implementation.
 //!
 //! This is a thin adapter around the Windows App Installer APIs exposed by
-//! `winbrew_windows::msix_install`. It does not unpack files or manage a
+//! `winbrew_windows::msix::install`. It does not unpack files or manage a
 //! portable install tree; it only records the MSIX receipt metadata WinBrew
 //! needs later for removal.
 
@@ -13,7 +13,7 @@ use winbrew_models::install::engine::{
     EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope,
 };
 
-use winbrew_windows::msix_install;
+use winbrew_windows::msix;
 
 /// Install an MSIX package and return the receipt data WinBrew needs later.
 ///
@@ -26,7 +26,7 @@ pub fn install(
     package_name: &str,
 ) -> Result<EngineInstallReceipt> {
     let package_full_name =
-        msix_install(download_path, package_name).context("msix install failed")?;
+        msix::install(download_path, package_name).context("msix install failed")?;
 
     fs::create_dir_all(install_dir)
         .with_context(|| format!("failed to create {}", install_dir.display()))?;
