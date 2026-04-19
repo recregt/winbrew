@@ -36,12 +36,12 @@ use std::path::Path;
 use std::process::Command;
 use tracing::warn;
 
-use winbrew_core::fs::cleanup_path;
-use winbrew_models::catalog::package::CatalogInstaller;
-use winbrew_models::install::engine::{EngineInstallReceipt, EngineKind, EngineMetadata};
-use winbrew_models::install::installed::InstalledPackage;
-use winbrew_models::install::installer::InstallerType;
-use winbrew_windows::collect_uninstall_entries;
+use crate::core::fs::cleanup_path;
+use crate::models::catalog::package::CatalogInstaller;
+use crate::models::install::engine::{EngineInstallReceipt, EngineKind, EngineMetadata};
+use crate::models::install::installed::InstalledPackage;
+use crate::models::install::installer::InstallerType;
+use crate::windows_dep::collect_uninstall_entries;
 
 const NATIVE_EXE_SUCCESS_EXIT_CODES: &[i32] = &[0, 1641, 3010];
 
@@ -481,10 +481,10 @@ mod tests {
 
     use std::path::{Path, PathBuf};
 
-    use winbrew_models::catalog::package::CatalogInstaller;
-    use winbrew_models::install::installer::InstallerType;
-    use winbrew_models::shared::CatalogId;
-    use winbrew_windows::{
+    use crate::models::catalog::package::CatalogInstaller;
+    use crate::models::install::installer::InstallerType;
+    use crate::models::shared::CatalogId;
+    use crate::windows_dep::{
         create_test_uninstall_entry, create_test_uninstall_entry_with_install_location,
     };
 

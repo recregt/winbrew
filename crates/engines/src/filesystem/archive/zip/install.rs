@@ -2,10 +2,10 @@ use anyhow::Result;
 use std::fs;
 use std::path::Path;
 
-use winbrew_core::fs::{cleanup_path, extract_archive, replace_directory};
+use crate::core::fs::{cleanup_path, extract_archive, replace_directory};
 
-use winbrew_models::install::engine::EngineInstallReceipt;
-use winbrew_models::install::engine::EngineKind;
+use crate::models::install::engine::EngineInstallReceipt;
+use crate::models::install::engine::EngineKind;
 
 use crate::payload::archive_kind_for_url;
 
@@ -15,8 +15,7 @@ pub fn install(
     installer_url: &str,
 ) -> Result<EngineInstallReceipt> {
     let stage_dir = install_dir.parent().unwrap_or(install_dir).join("staging");
-    let archive_kind =
-        archive_kind_for_url(installer_url).unwrap_or(winbrew_core::ArchiveKind::Zip);
+    let archive_kind = archive_kind_for_url(installer_url).unwrap_or(crate::core::ArchiveKind::Zip);
 
     cleanup_path(&stage_dir)?;
     fs::create_dir_all(&stage_dir)?;

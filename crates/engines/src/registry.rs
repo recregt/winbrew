@@ -1,11 +1,11 @@
 use anyhow::{Result, anyhow};
 use std::path::Path;
 
-use winbrew_models::catalog::package::CatalogInstaller;
-use winbrew_models::install::engine::EngineInstallReceipt;
-use winbrew_models::install::installed::InstalledPackage;
-use winbrew_models::install::installer::InstallerType;
-use winbrew_models::shared::DeploymentKind;
+use crate::models::catalog::package::CatalogInstaller;
+use crate::models::install::engine::EngineInstallReceipt;
+use crate::models::install::installed::InstalledPackage;
+use crate::models::install::installer::InstallerType;
+use crate::models::shared::DeploymentKind;
 
 use super::EngineKind;
 use crate::filesystem::{archive::zip, portable};
@@ -262,9 +262,9 @@ fn resolve_engine_descriptor(kind: EngineKind) -> Result<&'static EngineDescript
 mod tests {
     use super::{resolve_deployment_kind, resolve_engine_kind_for_installer};
     use crate::EngineKind;
-    use winbrew_models::catalog::package::CatalogInstaller;
-    use winbrew_models::install::installer::InstallerType;
-    use winbrew_models::shared::DeploymentKind;
+    use crate::models::catalog::package::CatalogInstaller;
+    use crate::models::install::installer::InstallerType;
+    use crate::models::shared::DeploymentKind;
 
     fn installer(kind: InstallerType, url: &str) -> CatalogInstaller {
         CatalogInstaller::test_builder("Contoso.App".into(), url).with_kind(kind)

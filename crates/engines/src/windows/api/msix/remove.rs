@@ -2,17 +2,17 @@
 //!
 //! This adapter expects the installed package receipt to contain
 //! `EngineMetadata::Msix`. It extracts the stored package full name and passes
-//! it to `winbrew_windows::msix_remove`.
+//! it to `crate::windows_dep::msix_remove`.
 //!
 //! The module does not query the registry or derive package identity on its
 //! own. That information must already be present in the receipt.
 
 use anyhow::{Context, Result, bail};
 
-use winbrew_models::install::engine::EngineMetadata;
-use winbrew_models::install::installed::InstalledPackage as WinbrewPackage;
+use crate::models::install::engine::EngineMetadata;
+use crate::models::install::installed::InstalledPackage as WinbrewPackage;
 
-use winbrew_windows::msix_remove;
+use crate::windows_dep::msix_remove;
 
 /// Remove an MSIX package using the package full name stored in the receipt.
 ///

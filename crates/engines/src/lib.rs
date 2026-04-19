@@ -11,6 +11,11 @@ mod registry;
 pub mod filesystem;
 pub mod windows;
 
+pub(crate) use winbrew_core as core;
+pub(crate) use winbrew_models as models;
+#[cfg(windows)]
+pub(crate) use winbrew_windows as windows_dep;
+
 pub use filesystem::archive::zip;
 pub use filesystem::portable;
 pub use windows::api::msix;
@@ -18,12 +23,12 @@ pub use windows::api::msix;
 use anyhow::Result;
 use std::path::Path;
 
-pub use winbrew_models::install::engine::{EngineInstallReceipt, EngineKind};
-pub use winbrew_models::shared::DeploymentKind;
+pub use crate::models::install::engine::{EngineInstallReceipt, EngineKind};
+pub use crate::models::shared::DeploymentKind;
 
-use winbrew_models::catalog::package::CatalogInstaller;
-use winbrew_models::install::installed::InstalledPackage;
-use winbrew_models::install::installer::InstallerType;
+use crate::models::catalog::package::CatalogInstaller;
+use crate::models::install::installed::InstalledPackage;
+use crate::models::install::installer::InstallerType;
 
 pub trait PackageEngine {
     fn install(
@@ -68,8 +73,8 @@ impl PackageEngine for EngineKind {
 #[cfg(test)]
 mod tests {
     use super::{DeploymentKind, EngineKind, engine_kind_for_type, resolve_deployment_kind};
-    use winbrew_models::catalog::package::CatalogInstaller;
-    use winbrew_models::install::installer::InstallerType;
+    use crate::models::catalog::package::CatalogInstaller;
+    use crate::models::install::installer::InstallerType;
 
     fn installer(kind: InstallerType, nested_kind: Option<InstallerType>) -> CatalogInstaller {
         let installer =
