@@ -3,6 +3,7 @@
 mod common;
 
 use std::fs;
+use std::io::Write;
 
 use common::{BASE_URL, assert_expected, installer, installer_with_url};
 use tempfile::tempdir;
@@ -11,6 +12,8 @@ use winbrew_engines::{
     resolve_downloaded_installer_kind, resolve_engine_for_installer,
 };
 use winbrew_models::install::installer::InstallerType;
+use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 #[derive(Clone, Copy)]
 struct EngineMappingCase {
@@ -253,6 +256,46 @@ fn resolve_downloaded_installer_kind_uses_probe_results() {
             case.description,
         );
     }
+}
+
+#[test]
+fn resolve_downloaded_installer_kind_detects_msix_like_zip_payloads() {
+    let temp_dir = tempdir().expect("temp dir");
+    let download_path = temp_dir.path().join("payload.zip");
+    let file = fs::File::create(&download_path).expect("create zip file");
+    let mut writer = ZipWriter::new(file);
+
+    writer
+        .start_file("AppxManifest.xml", SimpleFileOptions::default())
+        .expect("start manifest entry");
+    writer
+        .write_all(b"<Package />")
+        .expect("write manifest contents");
+    writer.finish().expect("finish zip file");
+
+    let installer = installer(InstallerType::Portable, "payload.zip", None);
+    let resolved_kind = resolve_downloaded_installer_kind(&installer, &download_path)
+        .expect("resolve downloaded kind");
+
+    assert_expected(
+        resolved_kind,
+        InstallerType::Msix,
+        "msix-shaped zip payloads should route to the msix family",
+    );
+
+    let mut resolved_installer = installer.clone();
+    resolved_installer.kind = resolved_kind;
+
+    assert_expected(
+        resolve_engine_for_installer(&resolved_installer).unwrap(),
+        EngineKind::Msix,
+        "msix-shaped zip payloads should route to the msix engine",
+    );
+    assert_expected(
+        resolve_deployment_kind(&resolved_installer),
+        DeploymentKind::Installed,
+        "msix-shaped zip payloads should deploy as installed packages",
+    );
 }
 
 mod edge_cases {
