@@ -66,6 +66,7 @@ pub(crate) fn resolve_downloaded_installer_kind(
 
     match probe_downloaded_artifact_kind(download_path)? {
         Some(DetectedArtifactKind::Msi) => Ok(InstallerType::Msi),
+        Some(DetectedArtifactKind::Msix) => Ok(InstallerType::Msix),
         Some(DetectedArtifactKind::Archive(_)) => Ok(InstallerType::Zip),
         None => Ok(installer.kind),
     }

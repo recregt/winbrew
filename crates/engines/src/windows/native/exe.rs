@@ -505,7 +505,14 @@ mod tests {
 
     #[cfg(windows)]
     fn native_exe_test_dir(suffix: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("winbrew-nativeexe-{}-{suffix}", std::process::id()))
+        tempfile::Builder::new()
+            .prefix(&format!(
+                "winbrew-nativeexe-{}-{suffix}-",
+                std::process::id()
+            ))
+            .tempdir()
+            .expect("create native exe test dir")
+            .keep()
     }
 
     #[test]
