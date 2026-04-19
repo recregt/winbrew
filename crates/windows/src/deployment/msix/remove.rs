@@ -1,10 +1,7 @@
 use anyhow::{Context, Result};
 
-#[cfg(windows)]
 use windows::ApplicationModel::Package;
-#[cfg(windows)]
 use windows::Management::Deployment::PackageManager;
-#[cfg(windows)]
 use windows::core::HSTRING;
 
 /// Remove an installed MSIX package by its full package name.
@@ -13,27 +10,17 @@ use windows::core::HSTRING;
 /// receipt. This keeps removal deterministic and avoids ambiguous package name
 /// lookups at uninstall time.
 pub fn remove(package_full_name: &str) -> Result<()> {
-    #[cfg(not(windows))]
-    {
-        let _ = package_full_name;
-        anyhow::bail!("MSIX removal is only supported on Windows")
-    }
+    let package_manager = PackageManager::new().context("failed to create package manager")?;
 
-    #[cfg(windows)]
-    {
-        let package_manager = PackageManager::new().context("failed to create package manager")?;
+    package_manager
+        .RemovePackageAsync(&HSTRING::from(package_full_name))
+        .with_context(|| format!("failed to start uninstall for {package_full_name}"))?
+        .join()
+        .with_context(|| format!("msix uninstall failed for {package_full_name}"))?;
 
-        package_manager
-            .RemovePackageAsync(&HSTRING::from(package_full_name))
-            .with_context(|| format!("failed to start uninstall for {package_full_name}"))?
-            .join()
-            .with_context(|| format!("msix uninstall failed for {package_full_name}"))?;
-
-        Ok(())
-    }
+    Ok(())
 }
 
-#[cfg(windows)]
 pub(crate) fn matching_package_full_names(
     package_manager: &PackageManager,
     package_name: &str,
@@ -62,7 +49,6 @@ pub(crate) fn matching_package_full_names(
     Ok(matching_full_names)
 }
 
-#[cfg(windows)]
 fn package_matches(package: &Package, expected_name: &str) -> Result<bool> {
     let package_id = package.Id().context("failed to read package identity")?;
 
@@ -83,7 +69,6 @@ fn package_matches(package: &Package, expected_name: &str) -> Result<bool> {
     ))
 }
 
-#[cfg(windows)]
 fn package_full_name(package: &Package) -> Result<HSTRING> {
     package
         .Id()
@@ -92,7 +77,6 @@ fn package_full_name(package: &Package) -> Result<HSTRING> {
         .context("failed to read package full name")
 }
 
-#[cfg(windows)]
 fn identity_matches(name: &str, family_name: &str, full_name: &str, expected_name: &str) -> bool {
     [name, family_name, full_name]
         .into_iter()
@@ -101,11 +85,9 @@ fn identity_matches(name: &str, family_name: &str, full_name: &str, expected_nam
 
 #[cfg(test)]
 mod tests {
-    #[cfg(windows)]
     use super::identity_matches;
 
     #[test]
-    #[cfg(windows)]
     fn identity_matches_name_family_or_full_name() {
         assert!(identity_matches(
             "Contoso.App",
@@ -128,7 +110,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(windows)]
     fn identity_matches_rejects_other_names() {
         assert!(!identity_matches(
             "Contoso.App",
