@@ -143,6 +143,25 @@ The following topics belong here:
 
 Policy docs should remain policy docs. They can point back here, but they should not restate the engine matrix in detail.
 
+## Verification Strategy
+
+Engine behavior should be verified in two layers.
+
+- Unit tests stay close to the implementation in `crates/engines/src/...` and cover local parsing helpers, routing helpers, and invariants that only need module-level visibility.
+- Integration tests live under `crates/engines/tests/` and exercise the public crate surface from the outside.
+- Shared fixtures should live in `tests/common/mod.rs` so test cases stay short and focused.
+- Table-driven scenarios are the default shape for engine routing and deployment-kind coverage; use small structs with explicit `description` fields when the assertion needs context.
+- Keep targeted smoke tests for public adapter visibility, such as the MSIX surface, separate from the routing matrices.
+- Add edge-case cases when they protect a real contract, such as Unicode paths, base URLs, or the distinction between archive-shaped and raw portable installers.
+
+The current integration test command for this crate is:
+
+```powershell
+cargo test -p winbrew-engines --tests
+```
+
+If the matrix grows enough to justify extra generators or property-based coverage, add them later. The default should stay simple unless the test data becomes genuinely repetitive.
+
 ## Next Implementation Target
 
 The nearest follow-up work is hardening the font backend and finishing any remaining native-exe edge cases.
