@@ -62,6 +62,9 @@ pub enum InstallError {
     #[error("no installer matches this host's install scope ({host})")]
     NoScopeCompatibleInstaller { host: HostProfile },
 
+    #[error("runtime bootstrap for {runtime} was declined")]
+    RuntimeBootstrapDeclined { runtime: String },
+
     #[error("cancelled")]
     Cancelled,
 
@@ -84,7 +87,8 @@ impl InstallError {
             }
             Self::NoInstallers
             | Self::NoCompatibleInstaller { .. }
-            | Self::NoScopeCompatibleInstaller { .. } => InstallFailureClass::Preflight,
+            | Self::NoScopeCompatibleInstaller { .. }
+            | Self::RuntimeBootstrapDeclined { .. } => InstallFailureClass::Preflight,
             Self::Cancelled => InstallFailureClass::Cancelled,
             Self::Unexpected(_) => InstallFailureClass::Runtime,
         }
@@ -240,6 +244,13 @@ mod tests {
         assert_eq!(
             InstallError::Cancelled.failure_class(),
             InstallFailureClass::Cancelled
+        );
+        assert_eq!(
+            InstallError::RuntimeBootstrapDeclined {
+                runtime: "7-Zip runtime".to_string(),
+            }
+            .failure_class(),
+            InstallFailureClass::Preflight
         );
     }
 }

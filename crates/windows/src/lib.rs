@@ -19,4 +19,4 @@ pub use registry::{
     collect_uninstall_entries, create_test_uninstall_entry,
     create_test_uninstall_entry_with_install_location, uninstall_value,
 };
-pub use system::{HostProfile, host_profile, is_elevated};
+pub use system::{HostProfile, host_profile, is_elevated, search_path_file};

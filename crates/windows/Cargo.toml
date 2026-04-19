@@ -18,3 +18,6 @@ winbrew-models = { path = "../models" }
 windows = { version = "0.62.2", features = ["ApplicationModel", "Foundation", "Management_Deployment", "Win32_System_ApplicationInstallationAndServicing"] }
 winreg = "0.56"
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_SystemInformation", "Win32_System_Threading"] }
+
+[dev-dependencies]
+tempfile = "3"

@@ -133,6 +133,15 @@ pub fn is_zip_path(url: &str) -> bool {
     })
 }
 
+/// Returns `true` when the URL path ends in `.7z`, ignoring query and fragment parts.
+pub fn is_7z_path(url: &str) -> bool {
+    last_path_segment(url).is_some_and(|segment| {
+        segment
+            .rsplit_once('.')
+            .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("7z"))
+    })
+}
+
 fn last_path_segment(url: &str) -> Option<String> {
     let parsed = url::Url::parse(url).ok()?;
 
@@ -186,7 +195,7 @@ impl Drop for TempFileGuard<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{installer_filename, is_zip_path};
+    use super::{installer_filename, is_7z_path, is_zip_path};
 
     #[test]
     fn installer_filename_uses_last_segment() {
@@ -227,6 +236,18 @@ mod tests {
     fn is_zip_path_is_case_insensitive() {
         assert!(is_zip_path("https://example.invalid/tool.ZIP"));
         assert!(is_zip_path("https://example.invalid/tool.Zip"));
+    }
+
+    #[test]
+    fn is_7z_path_ignores_query_string() {
+        assert!(is_7z_path("https://example.invalid/tool.7z?token=abc"));
+        assert!(!is_7z_path("https://example.invalid/tool.exe?token=abc"));
+    }
+
+    #[test]
+    fn is_7z_path_is_case_insensitive() {
+        assert!(is_7z_path("https://example.invalid/tool.7Z"));
+        assert!(is_7z_path("https://example.invalid/tool.7z"));
     }
 
     #[test]
