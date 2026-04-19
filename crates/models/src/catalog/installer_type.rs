@@ -155,12 +155,14 @@ fn is_archive_url(url: &str) -> bool {
         .to_ascii_lowercase();
 
     normalized.ends_with(".zip")
-        || normalized.ends_with(".7z")
-        || normalized.ends_with(".rar")
         || normalized.ends_with(".tar")
         || normalized.ends_with(".tar.gz")
         || normalized.ends_with(".tgz")
         || normalized.ends_with(".tbz2")
+        || normalized.ends_with(".tar.bz2")
+        || normalized.ends_with(".gz")
+        || normalized.ends_with(".7z")
+        || normalized.ends_with(".rar")
 }
 
 #[cfg(test)]
@@ -210,6 +212,22 @@ mod tests {
                 PackageSource::Winget,
                 InstallerType::Portable,
                 "https://example.test/app.zip"
+            ),
+            CatalogInstallerType::Zip
+        );
+        assert_eq!(
+            CatalogInstallerType::normalize(
+                PackageSource::Winget,
+                InstallerType::Portable,
+                "https://example.test/app.tar.bz2"
+            ),
+            CatalogInstallerType::Zip
+        );
+        assert_eq!(
+            CatalogInstallerType::normalize(
+                PackageSource::Winget,
+                InstallerType::Portable,
+                "https://example.test/app.gz"
             ),
             CatalogInstallerType::Zip
         );

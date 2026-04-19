@@ -304,6 +304,17 @@ mod tests {
     }
 
     #[test]
+    fn resolve_installer_routes_portable_gzip_payloads_to_zip() {
+        let engine = resolve_engine_kind_for_installer(&installer(
+            InstallerType::Portable,
+            "https://example.invalid/tool.gz",
+        ))
+        .expect("engine should resolve");
+
+        assert_eq!(engine, EngineKind::Zip);
+    }
+
+    #[test]
     fn resolve_installer_prefers_msix_for_msix_kind() {
         let engine = resolve_engine_kind_for_installer(&installer(
             InstallerType::Msix,

@@ -6,6 +6,8 @@ use super::{
     ExtractionLimits, extract_archive, extract_zip_archive, extract_zip_archive_with_limits,
 };
 use crate::fs::ArchiveKind;
+use bzip2::Compression as BzCompression;
+use bzip2::write::BzEncoder;
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use std::cell::RefCell;
@@ -80,6 +82,30 @@ fn create_tar_gz_archive(path: &std::path::Path, file_name: &str, contents: &[u8
         .expect("append tar.gz entry");
     let encoder = builder.into_inner().expect("finish tar builder");
     encoder.finish().expect("finish tar.gz file");
+}
+
+fn create_gz_archive(path: &std::path::Path, contents: &[u8]) {
+    let file = fs::File::create(path).expect("create gz file");
+    let mut encoder = GzEncoder::new(file, Compression::default());
+
+    encoder.write_all(contents).expect("write gz contents");
+    encoder.finish().expect("finish gz file");
+}
+
+fn create_tar_bz2_archive(path: &std::path::Path, file_name: &str, contents: &[u8]) {
+    let file = fs::File::create(path).expect("create tar.bz2 file");
+    let encoder = BzEncoder::new(file, BzCompression::default());
+    let mut builder = Builder::new(encoder);
+    let mut header = Header::new_gnu();
+    header.set_size(contents.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+
+    builder
+        .append_data(&mut header, file_name, contents)
+        .expect("append tar.bz2 entry");
+    let encoder = builder.into_inner().expect("finish tar builder");
+    encoder.finish().expect("finish tar.bz2 file");
 }
 
 #[test]
@@ -328,6 +354,23 @@ fn extract_zip_archive_rejects_path_depth_limit() {
 }
 
 #[test]
+fn extract_archive_extracts_gzip_archive() {
+    let temp_dir = tempdir().expect("temp dir");
+    let destination_dir = temp_dir.path().join("dest");
+    let archive_path = temp_dir.path().join("tool.exe.gz");
+
+    fs::create_dir_all(&destination_dir).expect("destination dir");
+    create_gz_archive(&archive_path, b"gzip payload");
+
+    extract_archive(ArchiveKind::Gzip, &archive_path, &destination_dir).expect("gzip extraction");
+
+    assert_eq!(
+        fs::read(destination_dir.join("tool.exe")).expect("read"),
+        b"gzip payload"
+    );
+}
+
+#[test]
 fn sevenz_runtime_layout_uses_expected_relative_paths() {
     let runtime_root = PathBuf::from("C:/winbrew");
 
@@ -445,5 +488,22 @@ fn extract_archive_extracts_tar_gz_archive() {
     assert_eq!(
         fs::read(destination_dir.join("bin/tool.exe")).expect("read"),
         b"tar gz payload"
+    );
+}
+
+#[test]
+fn extract_archive_extracts_tar_bz2_archive() {
+    let temp_dir = tempdir().expect("temp dir");
+    let destination_dir = temp_dir.path().join("dest");
+    let archive_path = temp_dir.path().join("archive.tar.bz2");
+
+    fs::create_dir_all(&destination_dir).expect("destination dir");
+    create_tar_bz2_archive(&archive_path, "bin/tool.exe", b"tar bz2 payload");
+
+    extract_archive(ArchiveKind::Tar, &archive_path, &destination_dir).expect("tar.bz2 extraction");
+
+    assert_eq!(
+        fs::read(destination_dir.join("bin/tool.exe")).expect("read"),
+        b"tar bz2 payload"
     );
 }

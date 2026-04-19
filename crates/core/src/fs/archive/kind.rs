@@ -5,7 +5,9 @@ pub enum ArchiveKind {
     Zip,
     /// 7-Zip archive format.
     SevenZip,
-    /// Tar-based archive family, including `.tar`, `.tar.gz`, `.tgz`, and `.tbz2`.
+    /// GZip single-file compression format.
+    Gzip,
+    /// Tar-based archive family, including `.tar`, `.tar.gz`, `.tgz`, `.tbz2`, and `.tar.bz2`.
     Tar,
     /// RAR archive format.
     Rar,
@@ -17,6 +19,7 @@ impl ArchiveKind {
         match self {
             Self::Zip => "zip",
             Self::SevenZip => "7z",
+            Self::Gzip => "gzip",
             Self::Tar => "tar",
             Self::Rar => "rar",
         }
