@@ -7,6 +7,8 @@ mod fs;
 mod registry;
 mod system;
 
+pub(crate) use winbrew_models as models;
+
 pub use deployment::{
     msi_scan_inventory, msix_install, msix_installed_package_full_name, msix_remove,
 };
