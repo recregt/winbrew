@@ -17,6 +17,7 @@ mod signatures {
     pub const GZIP: [u8; 3] = [0x1F, 0x8B, 0x08];
     pub const TAR_OFFSET: usize = 257;
     pub const TAR_MAGIC: [u8; 5] = [0x75, 0x73, 0x74, 0x61, 0x72];
+    pub const CAB: [u8; 4] = [0x4D, 0x53, 0x43, 0x46];
     pub const RAR4: [u8; 7] = [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00];
     pub const RAR5: [u8; 8] = [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00];
     pub const MSIX_MARKERS: [&str; 2] = ["appxmanifest.xml", "appxmetadata/appxbundlemanifest.xml"];
@@ -32,6 +33,7 @@ const PROBE_HEADER_BYTES: usize = 512;
 pub(crate) enum PayloadKind {
     Raw,
     Archive(ArchiveKind),
+    Cab,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,10 +41,21 @@ pub(crate) enum DetectedArtifactKind {
     Msi,
     Msix,
     Archive(ArchiveKind),
+    Cab,
 }
 
 pub(crate) fn classify_payload(url: &str) -> PayloadKind {
-    archive_kind_for_url(url).map_or(PayloadKind::Raw, PayloadKind::Archive)
+    if is_zip_path(url) {
+        return PayloadKind::Archive(ArchiveKind::Zip);
+    }
+
+    let file_name = installer_filename(url).to_ascii_lowercase();
+
+    if file_name.ends_with(".cab") {
+        return PayloadKind::Cab;
+    }
+
+    archive_kind_from_file_name(&file_name).map_or(PayloadKind::Raw, PayloadKind::Archive)
 }
 
 pub(crate) fn probe_downloaded_artifact_kind(path: &Path) -> Result<Option<DetectedArtifactKind>> {
@@ -94,6 +107,10 @@ fn classify_probe_bytes(bytes: &[u8]) -> Option<DetectedArtifactKind> {
 
     if is_msi_signature(bytes) {
         return Some(DetectedArtifactKind::Msi);
+    }
+
+    if is_cab_signature(bytes) {
+        return Some(DetectedArtifactKind::Cab);
     }
 
     if is_gzip_signature(bytes) {
@@ -160,6 +177,10 @@ fn read_probe_bytes<R: Read>(reader: &mut R) -> Result<Vec<u8>> {
 
 fn is_msi_signature(bytes: &[u8]) -> bool {
     bytes.starts_with(&signatures::MSI)
+}
+
+fn is_cab_signature(bytes: &[u8]) -> bool {
+    bytes.starts_with(&signatures::CAB)
 }
 
 fn is_zip_signature(bytes: &[u8]) -> bool {
@@ -238,6 +259,14 @@ mod tests {
     }
 
     #[test]
+    fn classifies_cab_payloads_as_cab() {
+        assert_eq!(
+            classify_payload("https://example.invalid/tool.cab"),
+            PayloadKind::Cab
+        );
+    }
+
+    #[test]
     fn classifies_tar_family_payloads_as_archive() {
         assert_eq!(
             classify_payload("https://example.invalid/tool.tar.gz"),
@@ -282,6 +311,14 @@ mod tests {
         assert_eq!(
             classify_probe_bytes(&[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]),
             Some(DetectedArtifactKind::Msi)
+        );
+    }
+
+    #[test]
+    fn probes_cab_signatures() {
+        assert_eq!(
+            classify_probe_bytes(b"MSCFcab payload"),
+            Some(DetectedArtifactKind::Cab)
         );
     }
 
