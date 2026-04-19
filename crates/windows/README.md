@@ -33,7 +33,9 @@ layout is not part of the contract and can change without breaking consumers.
 | `user_fonts_dir` | Return the per-user Windows font directory | font install / remove helpers |
 | `install_user_font` | Copy a supported font into the user font directory, register it, and load it into the current session | font engine |
 | `remove_user_font` | Unregister a previously installed user font and remove its copied file | font engine |
-| `msix` | Namespace containing `install`, `installed_package_full_name`, and `remove` | MSIX flows |
+| `msix_install` | Install an MSIX package from a downloaded file and return the installed package full name | engine install flow |
+| `msix_installed_package_full_name` | Resolve the installed full name for a package name or family name | MSIX receipt creation |
+| `msix_remove` | Remove an installed MSIX package by full package name | engine remove flow |
 | `msi_scan_inventory` | Scan an MSI database and reconstruct the inventory snapshot stored in SQLite | MSI install and repair flows |
 
 ## `src/lib.rs` root facade
@@ -52,9 +54,9 @@ mod fs;
 mod registry;
 mod system;
 
-pub use deployment::msi_scan_inventory;
-#[path = "deployment/msix/mod.rs"]
-pub mod msix;
+pub use deployment::{
+  msi_scan_inventory, msix_install, msix_installed_package_full_name, msix_remove,
+};
 pub use font::{install_user_font, remove_user_font, user_fonts_dir};
 pub use fs::{PathInfo, create_extracted_file, inspect_path};
 pub use registry::{AppInfo, UninstallEntry, collect_installed_apps, collect_uninstall_entries, uninstall_value};
@@ -243,9 +245,9 @@ let install_location = uninstall_value(
 
 ## MSIX deployment helpers
 
-### `msix::install`
+### `msix_install`
 
-`msix::install` installs an MSIX package from a downloaded file path and returns
+`msix_install` installs an MSIX package from a downloaded file path and returns
 the installed package full name as a `String`.
 
 The install flow canonicalizes the path, converts it into a file URI, and then
@@ -255,13 +257,13 @@ the caller can store it in a receipt.
 
 ```rust,no_run
 use std::path::Path;
-use winbrew_windows::msix::install;
+use winbrew_windows::msix_install;
 
-let full_name = install(Path::new(r"C:\Temp\packages\Contoso.App.msix"), "Contoso.App").unwrap();
+let full_name = msix_install(Path::new(r"C:\Temp\packages\Contoso.App.msix"), "Contoso.App").unwrap();
 println!("installed package: {}", full_name);
 ```
 
-### `msix::installed_package_full_name`
+### `msix_installed_package_full_name`
 
 Use this helper when you know a package name or family name but need the exact
 installed full name.
@@ -275,16 +277,16 @@ The lookup returns one of three outcomes:
 
 This is primarily a receipt helper for install flows.
 
-### `msix::remove`
+### `msix_remove`
 
-`msix::remove` removes an MSIX package by its exact full name. In other words,
+`msix_remove` removes an MSIX package by its exact full name. In other words,
 it expects the value that was stored in the install receipt, not just a friendly
 package display name.
 
 ```rust,no_run
-use winbrew_windows::msix::remove;
+use winbrew_windows::msix_remove;
 
-remove("Contoso.App_1.0.0.0_x64__8wekyb3d8bbwe!App").unwrap();
+msix_remove("Contoso.App_1.0.0.0_x64__8wekyb3d8bbwe!App").unwrap();
 ```
 
 ## Typical usage patterns
@@ -294,7 +296,7 @@ remove("Contoso.App_1.0.0.0_x64__8wekyb3d8bbwe!App").unwrap();
 The engine layer uses this crate in two steps:
 
 1. download the package file
-2. call `msix::install`
+2. call `msix_install`
 3. store the returned full name in the engine receipt
 
 That makes removal possible later without having to rediscover the package.
@@ -305,7 +307,7 @@ Removal is the inverse of install:
 
 1. load the installed package metadata
 2. extract the stored MSIX full name
-3. call `msix::remove`
+3. call `msix_remove`
 
 This avoids ambiguous package-name lookups during removal.
 
