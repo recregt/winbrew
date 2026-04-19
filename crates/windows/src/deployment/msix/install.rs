@@ -4,9 +4,7 @@ use std::path::Path;
 
 use super::installed_package_full_name;
 
-#[cfg(windows)]
 use windows::Management::Deployment::{AddPackageOptions, PackageManager};
-#[cfg(windows)]
 use windows::core::HSTRING;
 
 /// Install an MSIX package from a downloaded file and return the installed full name.
@@ -16,29 +14,19 @@ use windows::core::HSTRING;
 /// installed package full name, which is what WinBrew stores in an engine
 /// receipt for later removal.
 pub fn install(download_path: &Path, package_name: &str) -> Result<String> {
-    #[cfg(not(windows))]
-    {
-        let _ = (download_path, package_name);
-        anyhow::bail!("MSIX installation is only supported on Windows")
-    }
+    let package_manager = PackageManager::new().context("failed to create package manager")?;
+    let package_uri = file_uri_for_path(download_path)?;
+    let options = AddPackageOptions::new().context("failed to create add package options")?;
 
-    #[cfg(windows)]
-    {
-        let package_manager = PackageManager::new().context("failed to create package manager")?;
-        let package_uri = file_uri_for_path(download_path)?;
-        let options = AddPackageOptions::new().context("failed to create add package options")?;
+    package_manager
+        .AddPackageByUriAsync(&package_uri, &options)
+        .context("failed to start msix installation")?
+        .join()
+        .context("msix install failed")?;
 
-        package_manager
-            .AddPackageByUriAsync(&package_uri, &options)
-            .context("failed to start msix installation")?
-            .join()
-            .context("msix install failed")?;
-
-        installed_package_full_name(package_name)
-    }
+    installed_package_full_name(package_name)
 }
 
-#[cfg(windows)]
 fn file_uri_for_path(path: &Path) -> Result<windows::Foundation::Uri> {
     let absolute_path =
         fs::canonicalize(path).with_context(|| format!("failed to resolve {}", path.display()))?;
@@ -49,7 +37,6 @@ fn file_uri_for_path(path: &Path) -> Result<windows::Foundation::Uri> {
         .context("failed to create file URI for msix installer")
 }
 
-#[cfg(windows)]
 fn file_uri_string(path: &Path) -> String {
     let path = path.to_string_lossy();
     let (scheme, path) = if let Some(path) = path.strip_prefix(r"\\?\UNC\") {
@@ -69,7 +56,7 @@ fn file_uri_string(path: &Path) -> String {
     file_uri
 }
 
-#[cfg(all(windows, test))]
+#[cfg(test)]
 fn encode_file_uri_path(path: &str) -> String {
     let mut encoded = String::with_capacity(path.len() + path.len() / 4);
     encode_file_uri_path_into(path, &mut encoded);
@@ -77,7 +64,6 @@ fn encode_file_uri_path(path: &str) -> String {
     encoded
 }
 
-#[cfg(windows)]
 fn encode_file_uri_path_into(path: &str, encoded: &mut String) {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
 
@@ -97,22 +83,17 @@ fn encode_file_uri_path_into(path: &str, encoded: &mut String) {
     }
 }
 
-#[cfg(windows)]
 fn is_uri_path_char(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || matches!(ch, '/' | '-' | '.' | '_' | '~' | ':')
 }
 
 #[cfg(test)]
 mod tests {
-    #[cfg(windows)]
     use super::encode_file_uri_path;
-    #[cfg(windows)]
     use super::file_uri_string;
-    #[cfg(windows)]
     use std::path::Path;
 
     #[test]
-    #[cfg(windows)]
     fn encode_file_uri_path_escapes_special_characters() {
         let encoded = encode_file_uri_path(r"C:\pkg\o'ne tool\app#.msix");
 
@@ -120,7 +101,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(windows)]
     fn encode_file_uri_path_keeps_safe_segments() {
         let encoded = encode_file_uri_path(r"C:\Packages\Contoso.App\tool-1.0.msix");
 
@@ -128,7 +108,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(windows)]
     fn file_uri_string_strips_verbatim_path_prefix() {
         let uri = file_uri_string(Path::new(r"\\?\C:\pkg\o'ne tool\app#.msix"));
 
@@ -136,7 +115,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(windows)]
     fn file_uri_string_handles_unc_paths() {
         let uri = file_uri_string(Path::new(r"\\server\share\pkg\tool msix.appx"));
 
