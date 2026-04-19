@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use std::fs::File;
-use std::io::{Read, Seek};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 use crate::core::{
@@ -8,6 +8,24 @@ use crate::core::{
     network::{installer_filename, is_zip_path},
 };
 
+mod signatures {
+    pub const MSI: [u8; 8] = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+    pub const ZIP_LOCAL: [u8; 4] = [0x50, 0x4B, 0x03, 0x04];
+    pub const ZIP_EMPTY: [u8; 4] = [0x50, 0x4B, 0x05, 0x06];
+    pub const ZIP_SPANNED: [u8; 4] = [0x50, 0x4B, 0x07, 0x08];
+    pub const SEVEN_ZIP: [u8; 6] = [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C];
+    pub const GZIP: [u8; 3] = [0x1F, 0x8B, 0x08];
+    pub const TAR_OFFSET: usize = 257;
+    pub const TAR_MAGIC: [u8; 5] = [0x75, 0x73, 0x74, 0x61, 0x72];
+    pub const RAR4: [u8; 7] = [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00];
+    pub const RAR5: [u8; 8] = [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00];
+    pub const MSIX_MARKERS: [&str; 2] = ["appxmanifest.xml", "appxmetadata/appxbundlemanifest.xml"];
+}
+
+/// Maximum number of bytes to read when probing a payload header.
+///
+/// 512 bytes is enough to cover the common signatures we use here, including
+/// TAR's magic offset, without reading the entire file into memory.
 const PROBE_HEADER_BYTES: usize = 512;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,13 +46,15 @@ pub(crate) fn classify_payload(url: &str) -> PayloadKind {
 }
 
 pub(crate) fn probe_downloaded_artifact_kind(path: &Path) -> Result<Option<DetectedArtifactKind>> {
-    let file = File::open(path)
+    let mut file = File::open(path)
         .with_context(|| format!("failed to open downloaded payload {}", path.display()))?;
-    let mut limited_reader = file.take(PROBE_HEADER_BYTES as u64);
+    let mut limited_reader = file.by_ref().take(PROBE_HEADER_BYTES as u64);
     let buffer = read_probe_bytes(&mut limited_reader)?;
+    file.seek(SeekFrom::Start(0))
+        .with_context(|| format!("failed to rewind downloaded payload {}", path.display()))?;
 
     match classify_probe_bytes(&buffer) {
-        Some(DetectedArtifactKind::Archive(ArchiveKind::Zip)) => probe_zip_like_artifact_kind(path),
+        Some(DetectedArtifactKind::Archive(ArchiveKind::Zip)) => try_probe_as_msix(file),
         detected => Ok(detected),
     }
 }
@@ -68,16 +88,12 @@ fn archive_kind_from_file_name(file_name: &str) -> Option<ArchiveKind> {
 }
 
 fn classify_probe_bytes(bytes: &[u8]) -> Option<DetectedArtifactKind> {
-    if is_msi_signature(bytes) {
-        return Some(DetectedArtifactKind::Msi);
-    }
-
     if is_zip_signature(bytes) {
         return Some(DetectedArtifactKind::Archive(ArchiveKind::Zip));
     }
 
-    if is_seven_zip_signature(bytes) {
-        return Some(DetectedArtifactKind::Archive(ArchiveKind::SevenZip));
+    if is_msi_signature(bytes) {
+        return Some(DetectedArtifactKind::Msi);
     }
 
     if is_gzip_signature(bytes) {
@@ -88,6 +104,10 @@ fn classify_probe_bytes(bytes: &[u8]) -> Option<DetectedArtifactKind> {
         return Some(DetectedArtifactKind::Archive(ArchiveKind::Tar));
     }
 
+    if is_seven_zip_signature(bytes) {
+        return Some(DetectedArtifactKind::Archive(ArchiveKind::SevenZip));
+    }
+
     if is_rar_signature(bytes) {
         return Some(DetectedArtifactKind::Archive(ArchiveKind::Rar));
     }
@@ -95,10 +115,7 @@ fn classify_probe_bytes(bytes: &[u8]) -> Option<DetectedArtifactKind> {
     None
 }
 
-fn probe_zip_like_artifact_kind(path: &Path) -> Result<Option<DetectedArtifactKind>> {
-    let file = File::open(path)
-        .with_context(|| format!("failed to inspect ZIP payload {}", path.display()))?;
-
+fn try_probe_as_msix(file: File) -> Result<Option<DetectedArtifactKind>> {
     let mut archive = match zip::ZipArchive::new(file) {
         Ok(archive) => archive,
         Err(_) => return Ok(Some(DetectedArtifactKind::Archive(ArchiveKind::Zip))),
@@ -121,8 +138,9 @@ fn zip_archive_looks_like_msix<R: Read + Seek>(archive: &mut zip::ZipArchive<R>)
         })?;
 
         let normalized_name = entry.name().replace('\\', "/").to_ascii_lowercase();
-        if normalized_name == "appxmanifest.xml"
-            || normalized_name == "appxmetadata/appxbundlemanifest.xml"
+        if signatures::MSIX_MARKERS
+            .iter()
+            .any(|marker| normalized_name == *marker)
         {
             return Ok(true);
         }
@@ -141,30 +159,31 @@ fn read_probe_bytes<R: Read>(reader: &mut R) -> Result<Vec<u8>> {
 }
 
 fn is_msi_signature(bytes: &[u8]) -> bool {
-    bytes.starts_with(&[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1])
+    bytes.starts_with(&signatures::MSI)
 }
 
 fn is_zip_signature(bytes: &[u8]) -> bool {
-    bytes.starts_with(b"PK\x03\x04")
-        || bytes.starts_with(b"PK\x05\x06")
-        || bytes.starts_with(b"PK\x07\x08")
+    bytes.starts_with(&signatures::ZIP_LOCAL)
+        || bytes.starts_with(&signatures::ZIP_EMPTY)
+        || bytes.starts_with(&signatures::ZIP_SPANNED)
 }
 
 fn is_seven_zip_signature(bytes: &[u8]) -> bool {
-    bytes.starts_with(&[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C])
+    bytes.starts_with(&signatures::SEVEN_ZIP)
 }
 
 fn is_gzip_signature(bytes: &[u8]) -> bool {
-    bytes.starts_with(&[0x1F, 0x8B, 0x08])
+    bytes.starts_with(&signatures::GZIP)
 }
 
 fn is_tar_signature(bytes: &[u8]) -> bool {
-    bytes.get(257..262).is_some_and(|magic| magic == b"ustar")
+    bytes
+        .get(signatures::TAR_OFFSET..signatures::TAR_OFFSET + signatures::TAR_MAGIC.len())
+        .is_some_and(|magic| magic == signatures::TAR_MAGIC)
 }
 
 fn is_rar_signature(bytes: &[u8]) -> bool {
-    bytes.starts_with(&[0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00])
-        || bytes.starts_with(&[0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00])
+    bytes.starts_with(&signatures::RAR4) || bytes.starts_with(&signatures::RAR5)
 }
 
 #[cfg(test)]
@@ -272,6 +291,17 @@ mod tests {
             classify_probe_bytes(b"PK\x03\x04rest"),
             Some(DetectedArtifactKind::Archive(ArchiveKind::Zip))
         );
+    }
+
+    #[test]
+    fn classifies_empty_probe_bytes_as_none() {
+        assert_eq!(classify_probe_bytes(&[]), None);
+    }
+
+    #[test]
+    fn classifies_partial_probe_bytes_as_none() {
+        assert_eq!(classify_probe_bytes(&[0xD0]), None);
+        assert_eq!(classify_probe_bytes(b"PK\x03"), None);
     }
 
     #[test]
