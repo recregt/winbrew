@@ -68,6 +68,7 @@ pub(crate) fn resolve_downloaded_installer_kind(
         Some(DetectedArtifactKind::Msi) => Ok(InstallerType::Msi),
         Some(DetectedArtifactKind::Msix) => Ok(InstallerType::Msix),
         Some(DetectedArtifactKind::Archive(_)) => Ok(InstallerType::Zip),
+        Some(DetectedArtifactKind::Cab) => Err(anyhow!("CAB archives are not supported")),
         None => Ok(installer.kind),
     }
 }
@@ -244,6 +245,10 @@ const ENGINE_DESCRIPTORS: &[EngineDescriptor] = &[
 pub(crate) fn resolve_engine_kind_for_installer(
     installer: &CatalogInstaller,
 ) -> Result<EngineKind> {
+    if matches!(classify_payload(&installer.url), PayloadKind::Cab) {
+        return Err(anyhow!("CAB archives are not supported"));
+    }
+
     ENGINE_DESCRIPTORS
         .iter()
         .find(|descriptor| (descriptor.matches_installer)(installer))

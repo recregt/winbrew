@@ -298,6 +298,38 @@ fn resolve_downloaded_installer_kind_detects_msix_like_zip_payloads() {
     );
 }
 
+#[test]
+fn resolve_engine_for_installer_rejects_cab_urls() {
+    let installer = installer_with_url(
+        InstallerType::Portable,
+        "https://example.invalid/tool.cab",
+        None,
+    );
+
+    let error = resolve_engine_for_installer(&installer).expect_err("CAB urls should be rejected");
+
+    assert!(
+        error.to_string().contains("CAB archives are not supported"),
+        "expected a CAB-specific routing error, got: {error}"
+    );
+}
+
+#[test]
+fn resolve_downloaded_installer_kind_rejects_cab_payloads() {
+    let temp_dir = tempdir().expect("temp dir");
+    let download_path = temp_dir.path().join("payload.bin");
+    fs::write(&download_path, b"MSCFcab payload").expect("write cab payload");
+
+    let installer = installer(InstallerType::Portable, "payload.exe", None);
+    let error = resolve_downloaded_installer_kind(&installer, &download_path)
+        .expect_err("CAB payloads should be rejected");
+
+    assert!(
+        error.to_string().contains("CAB archives are not supported"),
+        "expected a CAB-specific routing error, got: {error}"
+    );
+}
+
 mod edge_cases {
     use super::*;
 
