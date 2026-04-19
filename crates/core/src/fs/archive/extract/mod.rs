@@ -6,6 +6,7 @@ mod cleanup;
 mod context;
 mod engine;
 mod limits;
+mod sevenz;
 mod tar;
 mod types;
 
@@ -41,6 +42,9 @@ pub fn extract_archive(
             ExtractionLimits::default(),
         )
         .map_err(Box::new),
+        ArchiveKind::SevenZip => {
+            sevenz::extract_sevenz(archive_path, destination_dir).map_err(Box::new)
+        }
         ArchiveKind::Tar => tar::extract_tar_archive_with_platform::<DefaultPlatform>(
             archive_path,
             destination_dir,
