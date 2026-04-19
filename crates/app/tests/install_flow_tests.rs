@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use winbrew_app::install;
+use winbrew_app::install::InstallError;
 use winbrew_app::install::InstallObserver;
 use winbrew_app::{AppContext, database};
 use winbrew_models::domains::catalog::CatalogPackage;
@@ -221,6 +222,35 @@ fn install_runs_end_to_end_in_an_isolated_root() -> Result<()> {
     assert_eq!(stored.status, PackageStatus::Ok);
     assert_eq!(stored.kind, InstallerType::Zip);
     fixture.assert_downloaded();
+
+    Ok(())
+}
+
+#[test]
+fn install_requires_confirmation_before_bootstrapping_7z_runtime() -> Result<()> {
+    let test_root = test_root();
+    let root = test_root.path();
+
+    let fixture = InstallTestFixture::from_catalog_with_installer(
+        root,
+        "Winbrew Test 7z",
+        "https://example.invalid/download.7z",
+        &sha512_hex(b"unused"),
+        InstallerType::Zip,
+        None,
+    )?;
+
+    let err = fixture
+        .run_install(false)
+        .expect_err("7z bootstrap should require confirmation");
+    let install_error = err
+        .downcast_ref::<InstallError>()
+        .expect("install error should be preserved");
+
+    assert!(matches!(
+        install_error,
+        InstallError::RuntimeBootstrapDeclined { runtime } if runtime == "7-Zip runtime"
+    ));
 
     Ok(())
 }

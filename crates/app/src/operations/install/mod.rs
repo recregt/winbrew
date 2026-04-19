@@ -22,7 +22,7 @@
 
 use std::cell::RefCell;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::catalog;
 use crate::core::paths::{ensure_install_dirs_at, install_root_from_package_dir};
@@ -39,15 +39,17 @@ pub type Result<T> = types::Result<T>;
 
 pub mod download;
 pub mod flow;
+mod sevenz;
 pub mod state;
 pub mod types;
 
 /// Interactive hooks used by the installation pipeline.
 ///
-/// The install flow uses this trait for the two pieces of user interaction it
-/// needs to support: choosing between multiple catalog matches and reporting
-/// download progress. Implementations should stay responsive because these
-/// callbacks are invoked while the install is actively running.
+/// The install flow uses this trait for the pieces of user interaction it
+/// needs to support: choosing between multiple catalog matches, reporting
+/// download progress, and approving an optional 7-Zip runtime bootstrap.
+/// Implementations should stay responsive because these callbacks are invoked
+/// while the install is actively running.
 pub trait InstallObserver {
     /// Choose one package from the catalog matches returned for a reference.
     ///
@@ -63,6 +65,16 @@ pub trait InstallObserver {
 
     /// Report cumulative installer download progress in bytes.
     fn on_progress(&mut self, downloaded_bytes: u64);
+
+    /// Confirm whether WinBrew may bootstrap a local 7-Zip runtime.
+    fn confirm_runtime_bootstrap(
+        &mut self,
+        runtime_name: &str,
+        target_dir: &Path,
+    ) -> anyhow::Result<bool> {
+        let _ = (runtime_name, target_dir);
+        Ok(false)
+    }
 }
 
 /// Execute the full install workflow for a resolved package reference.
@@ -106,6 +118,17 @@ pub fn run<O: InstallObserver>(
         selection_context,
     )?;
     let engine = engines::resolve_engine_for_installer(&installer)?;
+
+    let _runtime_root_guard = sevenz::runtime_root_env_guard(&ctx.paths.root);
+    {
+        let mut observer = observer.borrow_mut();
+        sevenz::ensure_runtime(
+            &ctx.paths.root,
+            &installer.url,
+            |runtime_name, target_dir| observer.confirm_runtime_bootstrap(runtime_name, target_dir),
+        )?;
+    }
+
     let package_version = package.version.to_string();
 
     let install_dir = ctx.paths.package_install_dir(&package.name);

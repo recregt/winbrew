@@ -4,6 +4,7 @@
 use anyhow::Result;
 use indicatif::ProgressBar;
 use std::io;
+use std::path::Path;
 
 use crate::CommandContext;
 use crate::app::install;
@@ -126,6 +127,17 @@ pub fn run(ctx: &CommandContext, query: &[String], ignore_checksum_security: boo
                     "Run from an elevated terminal or choose a user-scope installer.",
                 ));
             }
+            InstallError::RuntimeBootstrapDeclined { runtime } => {
+                let message = format!("{runtime} bootstrap was declined.");
+                ui.warn(&message);
+                ui.notice(
+                    "Hint: install 7-Zip system-wide or re-run and allow WinBrew to bootstrap the local runtime.",
+                );
+                return Err(reported_with_hint(
+                    message,
+                    "Install 7-Zip system-wide or re-run and allow WinBrew to bootstrap the local runtime.",
+                ));
+            }
             InstallError::Cancelled => {
                 ui.notice("Cancelling and cleaning up...");
                 return Err(cancelled());
@@ -196,5 +208,18 @@ impl InstallObserver for InstallUi<'_> {
 
     fn on_progress(&mut self, downloaded_bytes: u64) {
         self.progress.inc(downloaded_bytes);
+    }
+
+    fn confirm_runtime_bootstrap(
+        &mut self,
+        runtime_name: &str,
+        target_dir: &Path,
+    ) -> anyhow::Result<bool> {
+        let prompt = format!(
+            "WinBrew needs to download {runtime_name} into {}. Continue?",
+            target_dir.display()
+        );
+
+        self.ui.confirm(&prompt, false)
     }
 }

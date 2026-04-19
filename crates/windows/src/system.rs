@@ -1,4 +1,7 @@
+use std::ffi::{OsStr, OsString};
 use std::fmt;
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
+use std::path::PathBuf;
 
 use crate::models::domains::install::Architecture;
 use crate::registry::read_product_type;
@@ -6,6 +9,7 @@ use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Security::{
     GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
 };
+use windows_sys::Win32::Storage::FileSystem::SearchPathW;
 use windows_sys::Win32::System::SystemInformation::{
     GetNativeSystemInfo, PROCESSOR_ARCHITECTURE_AMD64, PROCESSOR_ARCHITECTURE_ARM64,
     PROCESSOR_ARCHITECTURE_INTEL, SYSTEM_INFO,
@@ -88,6 +92,50 @@ pub fn is_elevated() -> bool {
     queried && elevation.TokenIsElevated != 0
 }
 
+/// Search the current Windows search path for a file name.
+///
+/// This uses `SearchPathW`, so it checks the standard current-directory, system
+/// directory, and PATH search order on Windows.
+pub fn search_path_file(file_name: &str) -> Option<PathBuf> {
+    search_path_file_with_path(file_name, None)
+}
+
+fn search_path_file_with_path(file_name: &str, search_path: Option<&OsStr>) -> Option<PathBuf> {
+    let file_name_wide: Vec<u16> = OsStr::new(file_name).encode_wide().chain(Some(0)).collect();
+    let search_path_wide =
+        search_path.map(|path| path.encode_wide().chain(Some(0)).collect::<Vec<u16>>());
+
+    let mut buffer_len = 260u32;
+
+    loop {
+        let mut buffer = vec![0u16; buffer_len as usize];
+        let written = unsafe {
+            SearchPathW(
+                search_path_wide
+                    .as_ref()
+                    .map_or(core::ptr::null(), |path| path.as_ptr()),
+                file_name_wide.as_ptr(),
+                core::ptr::null(),
+                buffer_len,
+                buffer.as_mut_ptr(),
+                core::ptr::null_mut(),
+            )
+        };
+
+        if written == 0 {
+            return None;
+        }
+
+        if written as usize >= buffer.len() {
+            buffer_len = written + 1;
+            continue;
+        }
+
+        buffer.truncate(written as usize);
+        return Some(PathBuf::from(OsString::from_wide(&buffer)));
+    }
+}
+
 fn classify_product_type(product_type: &str) -> bool {
     let trimmed = product_type.trim();
 
@@ -117,8 +165,13 @@ fn architecture_from_native_system_info(system_info: SYSTEM_INFO) -> Architectur
 
 #[cfg(test)]
 mod tests {
-    use super::{HostProfile, architecture_from_native_system_info, classify_product_type};
+    use super::{
+        HostProfile, architecture_from_native_system_info, classify_product_type,
+        search_path_file_with_path,
+    };
     use crate::models::domains::install::Architecture;
+    use std::fs;
+    use tempfile::tempdir;
     use windows_sys::Win32::System::SystemInformation::{
         PROCESSOR_ARCHITECTURE_AMD64, PROCESSOR_ARCHITECTURE_ARM64, PROCESSOR_ARCHITECTURE_INTEL,
         SYSTEM_INFO,
@@ -182,5 +235,18 @@ mod tests {
             architecture_from_native_system_info(system_info_for(0xffff)),
             Architecture::Any
         );
+    }
+
+    #[test]
+    fn search_path_file_uses_explicit_search_path_list() {
+        let temp_dir = tempdir().expect("temp dir");
+        let file_path = temp_dir.path().join("7z.exe");
+
+        fs::write(&file_path, b"placeholder").expect("fake binary");
+
+        let found = search_path_file_with_path("7z.exe", Some(temp_dir.path().as_os_str()))
+            .expect("file should be found via explicit search path");
+
+        assert_eq!(found, file_path);
     }
 }
