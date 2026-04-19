@@ -1,4 +1,4 @@
-use winbrew_core::{
+use crate::core::{
     ArchiveKind,
     network::{installer_filename, is_zip_path},
 };
@@ -41,7 +41,7 @@ fn archive_kind_from_file_name(file_name: &str) -> Option<ArchiveKind> {
 #[cfg(test)]
 mod tests {
     use super::{PayloadKind, archive_kind_for_url, classify_payload};
-    use winbrew_core::ArchiveKind;
+    use crate::core::ArchiveKind;
 
     #[test]
     fn classifies_zip_payloads_before_portable_fallback() {

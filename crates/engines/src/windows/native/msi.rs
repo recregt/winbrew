@@ -4,12 +4,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::{debug, warn};
 
-use winbrew_models::install::engine::{
+use crate::models::install::engine::{
     EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope,
 };
-use winbrew_models::install::installed::InstalledPackage;
-use winbrew_models::msi_inventory::records::MsiInventorySnapshot;
-use winbrew_windows::{msi_scan_inventory, uninstall_value};
+use crate::models::install::installed::InstalledPackage;
+use crate::models::msi_inventory::records::MsiInventorySnapshot;
+use crate::windows_dep::{msi_scan_inventory, uninstall_value};
 
 const MSI_INSTALL_EXIT_CODES: &[i32] = &[0, 1641, 3010];
 const INSTALL_LOCATION_VALUE: &str = "InstallLocation";

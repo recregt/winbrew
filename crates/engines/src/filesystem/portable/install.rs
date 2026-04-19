@@ -2,10 +2,10 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use winbrew_core::fs::{cleanup_path, replace_directory};
+use crate::core::fs::{cleanup_path, replace_directory};
 
-use winbrew_models::install::engine::EngineInstallReceipt;
-use winbrew_models::install::engine::EngineKind;
+use crate::models::install::engine::EngineInstallReceipt;
+use crate::models::install::engine::EngineKind;
 
 pub fn install(
     download_path: &Path,

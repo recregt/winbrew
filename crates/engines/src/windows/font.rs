@@ -3,13 +3,13 @@ use std::path::Path;
 
 use tracing::warn;
 
-use winbrew_core::fs::cleanup_path;
-use winbrew_models::catalog::package::CatalogInstaller;
-use winbrew_models::install::engine::{EngineInstallReceipt, EngineKind};
-use winbrew_models::install::installed::InstalledPackage;
+use crate::core::fs::cleanup_path;
+use crate::models::catalog::package::CatalogInstaller;
+use crate::models::install::engine::{EngineInstallReceipt, EngineKind};
+use crate::models::install::installed::InstalledPackage;
 
 #[cfg(windows)]
-use winbrew_windows::{install_user_font, remove_user_font};
+use crate::windows_dep::{install_user_font, remove_user_font};
 
 /// Install a per-user font by copying the downloaded font file into the
 /// Windows user fonts directory.
