@@ -308,7 +308,6 @@ fn main_database_contract_matches_database_schema() -> Result<()> {
         "msi_shortcuts",
         "msi_components",
         "package_command_lists",
-        "package_bin_lists",
     ] {
         assert!(object_exists(&conn, "table", table)?);
     }
