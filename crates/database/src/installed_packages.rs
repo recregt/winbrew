@@ -180,6 +180,16 @@ pub fn replay_committed_journal(
     let _ = delete_package(&tx, &journal.package.name)?;
     insert_package(&tx, &journal.package)?;
 
+    if let Some(commands) = journal.commands.as_ref() {
+        let commands_json =
+            serde_json::to_string(commands).context("failed to serialize commands")?;
+        crate::command_registry::sync_package_commands(
+            &tx,
+            &journal.package.name,
+            Some(commands_json.as_str()),
+        )?;
+    }
+
     tx.commit()
         .context("failed to commit journal replay transaction")?;
 
@@ -382,6 +392,7 @@ mod tests {
             journal_path: PathBuf::from("C:/tmp/journal.jsonl"),
             entries: Vec::new(),
             package: replay_package,
+            commands: None,
         };
 
         replay_committed_journal(&mut conn, &replay).expect("replay committed journal");

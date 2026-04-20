@@ -16,6 +16,7 @@ pub struct CommittedJournalPackage {
     pub journal_path: PathBuf,
     pub entries: Vec<JournalEntry>,
     pub package: InstalledPackage,
+    pub commands: Option<Vec<String>>,
 }
 
 #[derive(Debug, Error)]
@@ -100,32 +101,42 @@ fn parse_committed_package_journal(
     path: &Path,
     entries: Vec<JournalEntry>,
 ) -> Result<CommittedJournalPackage, JournalReplayError> {
-    let (package_id, version, engine, deployment_kind, install_dir, dependencies, engine_metadata) =
-        entries
-            .iter()
-            .find_map(|entry| match entry {
-                JournalEntry::Metadata {
-                    package_id,
-                    version,
-                    engine,
-                    deployment_kind,
-                    install_dir,
-                    dependencies,
-                    engine_metadata,
-                } => Some((
-                    package_id.as_str(),
-                    version.as_str(),
-                    engine.as_str(),
-                    *deployment_kind,
-                    install_dir.as_str(),
-                    dependencies.clone(),
-                    engine_metadata.clone(),
-                )),
-                _ => None,
-            })
-            .ok_or_else(|| JournalReplayError::MissingMetadata {
-                path: path.to_path_buf(),
-            })?;
+    let (
+        package_id,
+        version,
+        engine,
+        deployment_kind,
+        install_dir,
+        dependencies,
+        commands,
+        engine_metadata,
+    ) = entries
+        .iter()
+        .find_map(|entry| match entry {
+            JournalEntry::Metadata {
+                package_id,
+                version,
+                engine,
+                deployment_kind,
+                install_dir,
+                dependencies,
+                commands,
+                engine_metadata,
+            } => Some((
+                package_id.as_str(),
+                version.as_str(),
+                engine.as_str(),
+                *deployment_kind,
+                install_dir.as_str(),
+                dependencies.clone(),
+                commands.clone(),
+                engine_metadata.clone(),
+            )),
+            _ => None,
+        })
+        .ok_or_else(|| JournalReplayError::MissingMetadata {
+            path: path.to_path_buf(),
+        })?;
 
     if package_id.is_empty() {
         return Err(JournalReplayError::MissingField {
@@ -197,6 +208,7 @@ fn parse_committed_package_journal(
         journal_path: path.to_path_buf(),
         entries,
         package,
+        commands,
     })
 }
 
