@@ -366,6 +366,7 @@ fn scan_package_journals_detects_incomplete_journal() {
             install_dir: r"C:\winbrew\apps\Contoso.Recover".to_string(),
             dependencies: Vec::new(),
             commands: None,
+            bin: None,
             engine_metadata: None,
         })
         .expect("write metadata");
@@ -450,6 +451,7 @@ fn scan_package_journals_detects_orphan_committed_journal() {
             install_dir: r"C:\winbrew\apps\Contoso.Orphan".to_string(),
             dependencies: Vec::new(),
             commands: None,
+            bin: None,
             engine_metadata: None,
         })
         .expect("write metadata");
@@ -494,6 +496,7 @@ fn scan_package_journals_tracks_trailing_journal_replay_target() {
             install_dir: r"C:\winbrew\apps\Contoso.Trailing".to_string(),
             dependencies: Vec::new(),
             commands: None,
+            bin: None,
             engine_metadata: None,
         })
         .expect("write metadata");

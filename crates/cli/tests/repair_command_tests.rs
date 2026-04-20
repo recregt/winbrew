@@ -159,8 +159,6 @@ fn repair_replays_committed_journal_into_database() {
     let installer_url = "https://example.invalid/contoso.zip";
     create_catalog_db_with_hash(&fixture, catalog_package_name, installer_url, &sha512_hash)
         .expect("seed catalog package");
-    database::sync_package_bin_metadata(fixture.conn(), package_name, Some(r#"["bin/tool.exe"]"#))
-        .expect("seed local bin metadata");
 
     let mut writer =
         database::JournalWriter::open_for_package(fixture.root_path(), package_name, "1.0.0")
@@ -174,6 +172,7 @@ fn repair_replays_committed_journal_into_database() {
             install_dir: journal_install_dir.to_string_lossy().to_string(),
             dependencies: vec!["winget/Contoso.Dependency".to_string()],
             commands: Some(vec!["contoso".to_string()]),
+            bin: Some(vec!["bin/tool.exe".to_string()]),
             engine_metadata: None,
         })
         .expect("write metadata");

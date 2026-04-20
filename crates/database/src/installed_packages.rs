@@ -179,8 +179,12 @@ pub fn replay_committed_journal(
         .transaction()
         .context("failed to start journal replay transaction")?;
 
-    let bin_metadata =
-        crate::package_bin_metadata::get_package_bin_metadata(&tx, &journal.package.name)?;
+    let bin_metadata = match journal.bin.as_ref() {
+        Some(bin) => {
+            Some(serde_json::to_string(bin).context("failed to serialize journal bin metadata")?)
+        }
+        None => crate::package_bin_metadata::get_package_bin_metadata(&tx, &journal.package.name)?,
+    };
     let _ = delete_package(&tx, &journal.package.name)?;
     insert_package(&tx, &journal.package)?;
 
@@ -404,6 +408,7 @@ mod tests {
             entries: Vec::new(),
             package: replay_package,
             commands: None,
+            bin: Some(vec!["bin/tool.exe".to_string()]),
         };
 
         replay_committed_journal(&mut conn, &replay).expect("replay committed journal");
@@ -415,6 +420,13 @@ mod tests {
         assert_eq!(package.install_dir, "C:/Tools/Replayed");
         assert_eq!(package.status, PackageStatus::Ok);
         assert_eq!(package.installed_at, "2026-04-12T01:00:00Z");
+
+        let bin_metadata =
+            crate::package_bin_metadata::get_package_bin_metadata(&conn, package_name)
+                .expect("read package bin metadata")
+                .expect("package bin metadata should exist");
+
+        assert_eq!(bin_metadata, r#"["bin\\tool.exe"]"#);
     }
 
     #[test]

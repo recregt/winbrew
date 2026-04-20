@@ -360,6 +360,7 @@ fn journal_contract_round_trips_metadata_and_commit() -> Result<()> {
         install_dir: r"C:\winbrew\apps\Contoso.App".to_string(),
         dependencies: vec!["winget/Contoso.Shared".to_string()],
         commands: Some(vec!["contoso".to_string()]),
+        bin: Some(vec!["bin/tool.exe".to_string()]),
         engine_metadata: None,
     })?;
     writer.append(&database::JournalEntry::Commit {
@@ -385,6 +386,7 @@ fn journal_contract_round_trips_metadata_and_commit() -> Result<()> {
             install_dir,
             dependencies,
             commands,
+            bin,
             engine_metadata,
         } => {
             assert_eq!(package_id, "winget/Contoso.App");
@@ -394,6 +396,7 @@ fn journal_contract_round_trips_metadata_and_commit() -> Result<()> {
             assert_eq!(install_dir, r"C:\winbrew\apps\Contoso.App");
             assert_eq!(dependencies, &vec!["winget/Contoso.Shared".to_string()]);
             assert_eq!(commands, &Some(vec!["contoso".to_string()]));
+            assert_eq!(bin, &Some(vec!["bin/tool.exe".to_string()]));
             assert!(engine_metadata.is_none());
         }
         other => panic!("expected metadata entry, got {other:?}"),

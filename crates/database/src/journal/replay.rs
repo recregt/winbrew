@@ -17,6 +17,7 @@ pub struct CommittedJournalPackage {
     pub entries: Vec<JournalEntry>,
     pub package: InstalledPackage,
     pub commands: Option<Vec<String>>,
+    pub bin: Option<Vec<String>>,
 }
 
 #[derive(Debug, Error)]
@@ -109,6 +110,7 @@ fn parse_committed_package_journal(
         install_dir,
         dependencies,
         commands,
+        bin,
         engine_metadata,
     ) = entries
         .iter()
@@ -121,6 +123,7 @@ fn parse_committed_package_journal(
                 install_dir,
                 dependencies,
                 commands,
+                bin,
                 engine_metadata,
             } => Some((
                 package_id.as_str(),
@@ -130,6 +133,7 @@ fn parse_committed_package_journal(
                 install_dir.as_str(),
                 dependencies.clone(),
                 commands.clone(),
+                bin.clone(),
                 engine_metadata.clone(),
             )),
             _ => None,
@@ -209,6 +213,7 @@ fn parse_committed_package_journal(
         entries,
         package,
         commands,
+        bin,
     })
 }
 
