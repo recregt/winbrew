@@ -2,6 +2,8 @@ use anyhow::Result;
 use std::fs;
 use std::path::Path;
 
+use rusqlite::{Connection, params};
+
 use winbrew_app::install;
 use winbrew_app::install::InstallObserver;
 use winbrew_app::remove;
@@ -11,8 +13,8 @@ use winbrew_models::domains::install::{EngineMetadata, InstallerType};
 use winbrew_models::domains::installed::{InstalledPackage as Package, PackageStatus};
 use winbrew_models::domains::package::{PackageName, PackageRef};
 use winbrew_testing::{
-    MockServer, init_database, reset_install_state, seed_catalog_db_with_installer, sha512_hex,
-    system_font_file_name, system_font_path, test_root,
+    MockServer, catalog_package_id, init_database, reset_install_state,
+    seed_catalog_db_with_installer, sha512_hex, system_font_file_name, system_font_path, test_root,
 };
 
 struct NoopInstallObserver;
@@ -70,6 +72,23 @@ fn sample_package(
     }
 }
 
+fn seed_catalog_commands(
+    catalog_db_path: &Path,
+    package_name: &str,
+    commands_json: &str,
+) -> Result<()> {
+    let conn = Connection::open(catalog_db_path)?;
+    conn.execute(
+        "UPDATE catalog_packages SET commands = ?1 WHERE id = ?2",
+        params![
+            Some(commands_json.to_string()),
+            catalog_package_id(package_name)
+        ],
+    )?;
+
+    Ok(())
+}
+
 fn native_exe_package(name: &str, install_dir: &Path, uninstall_command: String) -> Package {
     Package {
         name: name.to_string(),
@@ -111,6 +130,62 @@ fn remove_deletes_portable_installation_and_database_row() -> Result<()> {
     assert!(!install_dir.exists());
     assert!(database::get_package(&conn, &package.name)?.is_none());
     assert!(database::list_packages(&conn)?.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn remove_removes_command_shims_after_install() -> Result<()> {
+    let test_root = test_root();
+    let root = test_root.path();
+    let config = init_database(root)?;
+    reset_install_state(root)?;
+    let resolved_paths = config.resolved_paths();
+
+    let zip_bytes = winbrew_testing::create_dummy_zip_bytes()?;
+    let sha512_hash = sha512_hex(&zip_bytes);
+
+    let mut server = MockServer::new();
+    let installer_url = format!("{}/shim.zip", server.url());
+    let download_mock = server.mock_get("/shim.zip", zip_bytes);
+
+    let catalog_db_dir = root.join("data").join("db");
+    fs::create_dir_all(&catalog_db_dir)?;
+    seed_catalog_db_with_installer(
+        &catalog_db_dir.join("catalog.db"),
+        "Winbrew Test Shim",
+        "Synthetic package for isolated remove testing",
+        &installer_url,
+        &sha512_hash,
+        InstallerType::Zip,
+        None,
+    )?;
+    seed_catalog_commands(
+        &resolved_paths.catalog_db,
+        "Winbrew Test Shim",
+        r#"["contoso"]"#,
+    )?;
+
+    let ctx = AppContext::from_config(&config)?;
+    let mut observer = NoopInstallObserver;
+    let outcome = install::run(
+        &ctx,
+        PackageRef::ByName(PackageName::parse("Winbrew Test Shim")?),
+        false,
+        &mut observer,
+    )?;
+
+    let shim_path = std::path::PathBuf::from(&ctx.paths.shims).join("contoso.cmd");
+    assert!(shim_path.exists());
+    assert!(outcome.result.install_dir.contains("Winbrew Test Shim"));
+
+    remove::remove("Winbrew Test Shim", false)?;
+
+    download_mock.assert();
+    assert!(!shim_path.exists());
+
+    let conn = database::get_conn()?;
+    assert!(database::get_package(&conn, "Winbrew Test Shim")?.is_none());
 
     Ok(())
 }

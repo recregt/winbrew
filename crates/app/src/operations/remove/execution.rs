@@ -17,11 +17,13 @@
 use anyhow::Context;
 use tracing::{debug, warn};
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::core::fs::cleanup_path;
+use crate::core::paths::install_root_from_package_dir;
 use crate::database;
 use crate::engines::{EngineKind, PackageEngine};
+use crate::operations::shims;
 
 use super::{RemovalError, RemovalPlan, Result};
 use crate::models::domains::installed::InstalledPackage;
@@ -32,8 +34,10 @@ use crate::models::domains::installed::InstalledPackage;
 /// connection and then delegates the actual work to the shared removal engine.
 pub fn execute_removal(plan: &RemovalPlan, force: bool) -> Result<()> {
     let conn = database::get_conn()?;
+    let shims_root =
+        install_root_from_package_dir(Path::new(&plan.package.install_dir)).join("shims");
 
-    execute_removal_with_conn(plan, force, &conn)
+    execute_removal_with_conn(plan, force, &shims_root, &conn)
 }
 
 /// Execute a removal plan with a caller-provided database connection.
@@ -44,6 +48,7 @@ pub fn execute_removal(plan: &RemovalPlan, force: bool) -> Result<()> {
 fn execute_removal_with_conn(
     plan: &RemovalPlan,
     force: bool,
+    shims_root: &std::path::Path,
     conn: &database::DbConnection,
 ) -> Result<()> {
     debug!(
@@ -64,6 +69,17 @@ fn execute_removal_with_conn(
 
     let install_dir = PathBuf::from(&plan.package.install_dir);
     let engine_kind = plan.package.engine_kind;
+    let commands = match database::list_commands_for_package(conn, &plan.package.name) {
+        Ok(commands) => commands,
+        Err(err) => {
+            warn!(
+                package = plan.package.name.as_str(),
+                error = %err,
+                "failed to read package commands for shim cleanup"
+            );
+            Vec::new()
+        }
+    };
 
     match engine_kind {
         EngineKind::Msix | EngineKind::Msi | EngineKind::NativeExe | EngineKind::Font => {
@@ -79,6 +95,15 @@ fn execute_removal_with_conn(
             }
 
             database::delete_package(conn, &plan.package.name)?;
+            if !commands.is_empty()
+                && let Err(err) = shims::remove_shim_files(shims_root, &commands)
+            {
+                warn!(
+                    package = plan.package.name.as_str(),
+                    error = %err,
+                    "failed to remove package shims"
+                );
+            }
         }
         EngineKind::Zip | EngineKind::Portable => {
             if install_dir.exists() {
@@ -99,6 +124,16 @@ fn execute_removal_with_conn(
                     return Err(RemovalError::Unexpected(err));
                 }
 
+                if !commands.is_empty()
+                    && let Err(err) = shims::remove_shim_files(shims_root, &commands)
+                {
+                    warn!(
+                        package = plan.package.name.as_str(),
+                        error = %err,
+                        "failed to remove package shims"
+                    );
+                }
+
                 if let Err(err) = engine_kind.remove(&trash_package) {
                     warn!(
                         "failed to completely remove trash for {}: {err}",
@@ -107,6 +142,15 @@ fn execute_removal_with_conn(
                 }
             } else {
                 database::delete_package(conn, &plan.package.name)?;
+                if !commands.is_empty()
+                    && let Err(err) = shims::remove_shim_files(shims_root, &commands)
+                {
+                    warn!(
+                        package = plan.package.name.as_str(),
+                        error = %err,
+                        "failed to remove package shims"
+                    );
+                }
             }
         }
     }

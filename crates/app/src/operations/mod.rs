@@ -7,6 +7,7 @@ pub mod remove;
 pub mod repair;
 pub mod report;
 pub mod search;
+pub(crate) mod shims;
 pub mod update;
 pub mod version;
 

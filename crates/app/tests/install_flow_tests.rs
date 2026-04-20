@@ -2,6 +2,8 @@ use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use rusqlite::{Connection, params};
+
 use winbrew_app::install;
 use winbrew_app::install::InstallError;
 use winbrew_app::install::InstallObserver;
@@ -12,9 +14,9 @@ use winbrew_models::domains::installed::PackageStatus;
 use winbrew_models::domains::package::{PackageId, PackageName, PackageRef};
 use winbrew_models::shared::HashAlgorithm as CatalogHashAlgorithm;
 use winbrew_testing::{
-    CatalogInstallerSeed, Mock, MockServer, create_dummy_zip_bytes, init_database, md5_hex,
-    reset_install_state, seed_catalog_db_with_installers, sha1_hex, sha512_hex,
-    system_font_file_name, system_font_path, test_root,
+    CatalogInstallerSeed, Mock, MockServer, catalog_package_id, create_dummy_zip_bytes,
+    init_database, md5_hex, reset_install_state, seed_catalog_db_with_installers, sha1_hex,
+    sha512_hex, system_font_file_name, system_font_path, test_root,
 };
 use winbrew_windows::{host_profile, is_elevated};
 
@@ -198,6 +200,23 @@ impl InstallTestFixture {
     }
 }
 
+fn seed_catalog_commands(
+    catalog_db_path: &Path,
+    package_name: &str,
+    commands_json: &str,
+) -> Result<()> {
+    let conn = Connection::open(catalog_db_path)?;
+    conn.execute(
+        "UPDATE catalog_packages SET commands = ?1 WHERE id = ?2",
+        params![
+            Some(commands_json.to_string()),
+            catalog_package_id(package_name)
+        ],
+    )?;
+
+    Ok(())
+}
+
 #[test]
 fn install_runs_end_to_end_in_an_isolated_root() -> Result<()> {
     let test_root = test_root();
@@ -221,6 +240,44 @@ fn install_runs_end_to_end_in_an_isolated_root() -> Result<()> {
         .expect("package should be marked as installed");
     assert_eq!(stored.status, PackageStatus::Ok);
     assert_eq!(stored.kind, InstallerType::Zip);
+    fixture.assert_downloaded();
+
+    Ok(())
+}
+
+#[test]
+fn install_publishes_command_shims_for_catalog_commands() -> Result<()> {
+    let test_root = test_root();
+    let root = test_root.path();
+
+    let zip_bytes = create_dummy_zip_bytes()?;
+    let sha512_hash = sha512_hex(&zip_bytes);
+    let fixture = InstallTestFixture::from_zip(root, zip_bytes, &sha512_hash)?;
+    seed_catalog_commands(
+        &fixture.ctx.paths.catalog_db,
+        &fixture.package_name,
+        r#"["contoso"]"#,
+    )?;
+
+    let outcome = fixture.run_install(false)?;
+
+    let shim_path = fixture.ctx.paths.shims.join("contoso.cmd");
+    assert_eq!(outcome.result.name, "Winbrew Test Zip");
+    assert!(shim_path.exists());
+
+    let shim_contents = fs::read_to_string(&shim_path)?;
+    assert!(shim_contents.contains("contoso"));
+    assert!(
+        shim_contents.contains(
+            fixture
+                .ctx
+                .paths
+                .packages
+                .join(&fixture.package_name)
+                .to_string_lossy()
+                .as_ref()
+        )
+    );
     fixture.assert_downloaded();
 
     Ok(())

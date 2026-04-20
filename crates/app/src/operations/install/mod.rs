@@ -30,6 +30,8 @@ use crate::core::paths::{ensure_install_dirs_at, install_root_from_package_dir};
 use crate::core::temp_workspace;
 use crate::database;
 use crate::engines;
+use crate::operations::shims;
+use tracing::warn;
 
 pub use crate::core::cancel;
 pub use crate::models::catalog::CatalogPackage;
@@ -241,6 +243,14 @@ pub fn run<O: InstallObserver>(
             });
         }
         return Err(err.into());
+    }
+
+    if let Err(err) = shims::publish_package_shims(&ctx.paths.shims, &package.name) {
+        warn!(
+            package = %package.name,
+            error = %err,
+            "failed to publish package shims"
+        );
     }
 
     let install_result = InstallResult {
