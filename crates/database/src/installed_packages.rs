@@ -179,12 +179,11 @@ pub fn replay_committed_journal(
         .transaction()
         .context("failed to start journal replay transaction")?;
 
-    let bin_metadata = match journal.bin.as_ref() {
-        Some(bin) => {
-            Some(serde_json::to_string(bin).context("failed to serialize journal bin metadata")?)
-        }
-        None => crate::package_bin_metadata::get_package_bin_metadata(&tx, &journal.package.name)?,
-    };
+    let bin_metadata = journal
+        .bin
+        .as_ref()
+        .map(|bin| serde_json::to_string(bin).context("failed to serialize journal bin metadata"))
+        .transpose()?;
     let _ = delete_package(&tx, &journal.package.name)?;
     insert_package(&tx, &journal.package)?;
 

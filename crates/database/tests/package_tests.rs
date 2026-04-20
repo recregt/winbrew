@@ -217,3 +217,55 @@ fn replay_committed_journal_preserves_package_bin_metadata() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn replay_committed_journal_drops_local_bin_metadata_without_journal_field() -> Result<()> {
+    let test_root = tempdir()?;
+    init_database(test_root.path())?;
+
+    let mut conn = database::get_conn()?;
+    conn.execute("DELETE FROM installed_packages", [])?;
+
+    let package_name = "Contoso.OldReplay";
+    let install_dir = format!(r"C:\\winbrew\\packages\\{package_name}");
+    let package = Package {
+        name: package_name.to_string(),
+        version: "0.9.0".to_string(),
+        kind: InstallerType::Portable,
+        deployment_kind: InstallerType::Portable.deployment_kind(),
+        engine_kind: EngineKind::Portable,
+        engine_metadata: None,
+        install_dir: install_dir.clone(),
+        dependencies: Vec::new(),
+        status: PackageStatus::Installing,
+        installed_at: "2026-03-24T00:00:00Z".to_string(),
+    };
+
+    database::insert_package(&conn, &package)?;
+    database::sync_package_bin_metadata(&conn, package_name, Some(r#"["bin/tool.exe"]"#))?;
+
+    let replay_package = Package {
+        version: "1.0.0".to_string(),
+        status: PackageStatus::Ok,
+        ..package.clone()
+    };
+
+    let replay = database::CommittedJournalPackage {
+        journal_path: PathBuf::from("C:/tmp/journal.jsonl"),
+        entries: Vec::new(),
+        package: replay_package,
+        commands: None,
+        bin: None,
+    };
+
+    database::replay_committed_journal(&mut conn, &replay)?;
+
+    let stored_package =
+        database::get_package(&conn, package_name)?.expect("package should exist after replay");
+    assert_eq!(stored_package.version, "1.0.0");
+    assert_eq!(stored_package.status, PackageStatus::Ok);
+
+    assert!(database::get_package_bin_metadata(&conn, package_name)?.is_none());
+
+    Ok(())
+}
