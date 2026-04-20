@@ -134,17 +134,7 @@ pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
                     None
                 }
             },
-            None => match database::get_package_bin_metadata(&conn, &committed.package.name) {
-                Ok(bin_metadata) => bin_metadata,
-                Err(err) => {
-                    warn!(
-                        package = committed.package.name.as_str(),
-                        error = %err,
-                        "failed to read local package bin metadata during repair replay"
-                    );
-                    None
-                }
-            },
+            None => None,
         };
 
         if let Err(err) = shims::publish_package_shims(
