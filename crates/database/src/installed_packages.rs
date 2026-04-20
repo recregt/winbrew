@@ -135,6 +135,15 @@ pub fn commit_install(
     name: &str,
     engine_receipt: &EngineInstallReceipt,
 ) -> Result<()> {
+    commit_install_with_commands(conn, name, engine_receipt, None)
+}
+
+pub fn commit_install_with_commands(
+    conn: &mut crate::DbConnection,
+    name: &str,
+    engine_receipt: &EngineInstallReceipt,
+    package_commands: Option<&str>,
+) -> Result<()> {
     let installed_at = now();
     let tx = conn
         .transaction()
@@ -148,6 +157,8 @@ pub fn commit_install(
         engine_receipt.install_dir.as_str(),
         &installed_at,
     )?;
+
+    crate::command_registry::sync_package_commands(&tx, name, package_commands)?;
 
     if let Some(snapshot) = engine_receipt.msi_inventory_snapshot.as_ref() {
         crate::apply_snapshot(&tx, snapshot)?;

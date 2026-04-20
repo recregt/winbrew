@@ -145,7 +145,12 @@ pub fn run<O: InstallObserver>(
     let _temp_root_guard = TempRootGuard::new(temp_root.clone());
 
     let mut conn = database::get_conn()?;
-    state::prepare_install_target(&conn, &package.name, &install_dir)?;
+    state::prepare_install_target_with_commands(
+        &conn,
+        &package.name,
+        &install_dir,
+        package.commands.as_deref(),
+    )?;
     state::mark_installing(
         &conn,
         package.name.clone(),
@@ -223,8 +228,18 @@ pub fn run<O: InstallObserver>(
         return Err(cancel::CancellationError.into());
     }
 
-    if let Err(err) = database::commit_install(&mut conn, &package.name, &engine_receipt) {
+    if let Err(err) = database::commit_install_with_commands(
+        &mut conn,
+        &package.name,
+        &engine_receipt,
+        package.commands.as_deref(),
+    ) {
         let _ = state::mark_failed(&conn, &package.name);
+        if let Some(conflict) = err.downcast_ref::<database::CommandRegistryConflictError>() {
+            return Err(InstallError::CommandClaimedWhileInProgress {
+                command: conflict.command_name.clone(),
+            });
+        }
         return Err(err.into());
     }
 

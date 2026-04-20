@@ -62,6 +62,14 @@ pub enum InstallError {
     #[error("no installer matches this host's install scope ({host})")]
     NoScopeCompatibleInstaller { host: HostProfile },
 
+    #[error("command '{command}' is already exposed by package '{package}'")]
+    CommandAlreadyExposed { command: String, package: String },
+
+    #[error(
+        "command '{command}' was claimed by another install while this install was in progress"
+    )]
+    CommandClaimedWhileInProgress { command: String },
+
     #[error("runtime bootstrap for {runtime} was declined")]
     RuntimeBootstrapDeclined { runtime: String },
 
@@ -88,7 +96,9 @@ impl InstallError {
             Self::NoInstallers
             | Self::NoCompatibleInstaller { .. }
             | Self::NoScopeCompatibleInstaller { .. }
+            | Self::CommandAlreadyExposed { .. }
             | Self::RuntimeBootstrapDeclined { .. } => InstallFailureClass::Preflight,
+            Self::CommandClaimedWhileInProgress { .. } => InstallFailureClass::StateTransition,
             Self::Cancelled => InstallFailureClass::Cancelled,
             Self::Unexpected(_) => InstallFailureClass::Runtime,
         }
@@ -101,6 +111,9 @@ impl From<InstallStateError> for InstallError {
             InstallStateError::AlreadyInstalled { name } => Self::AlreadyInstalled { name },
             InstallStateError::AlreadyInstalling { name } => Self::AlreadyInstalling { name },
             InstallStateError::CurrentlyUpdating { name } => Self::CurrentlyUpdating { name },
+            InstallStateError::CommandAlreadyExposed { command, package } => {
+                Self::CommandAlreadyExposed { command, package }
+            }
             other => Self::Unexpected(Error::new(other)),
         }
     }
@@ -222,6 +235,26 @@ mod tests {
             err,
             InstallError::NoScopeCompatibleInstaller { .. }
         ));
+    }
+
+    #[test]
+    fn maps_command_conflicts_to_user_facing_errors() {
+        assert_eq!(
+            InstallError::CommandAlreadyExposed {
+                command: "grep".to_string(),
+                package: "Contoso.Grep".to_string(),
+            }
+            .failure_class(),
+            InstallFailureClass::Preflight
+        );
+
+        assert_eq!(
+            InstallError::CommandClaimedWhileInProgress {
+                command: "grep".to_string(),
+            }
+            .failure_class(),
+            InstallFailureClass::StateTransition
+        );
     }
 
     #[test]

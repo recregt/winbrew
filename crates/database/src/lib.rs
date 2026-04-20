@@ -14,6 +14,7 @@
 pub use winbrew_core as core;
 
 pub mod catalog;
+pub mod command_registry;
 pub mod config;
 pub mod connection;
 pub mod error;
@@ -36,14 +37,18 @@ pub type DbConnection = PooledConnection<SqliteConnectionManager>;
 pub use error::{CatalogNotFoundError, CatalogSchemaVersionMismatchError};
 
 pub use catalog::{get_installers, get_package_by_id, search};
+pub use command_registry::{
+    CommandRegistryConflictError, find_command_owner, list_commands_for_package,
+    parse_command_names, sync_package_commands,
+};
 pub use config::{
     Config, ConfigEnv, ConfigError, ConfigSection, ConfigSource, ConfigValidationError, CoreConfig,
     PathsConfig, config_sections, config_set, config_unset, get_effective_value,
 };
 pub use installed_packages::{
-    PackageNotFoundError, commit_install, delete_package, get_package, insert_package,
-    list_installing_packages, list_packages, replay_committed_journal, update_installing_identity,
-    update_status, update_status_and_engine_metadata,
+    PackageNotFoundError, commit_install, commit_install_with_commands, delete_package,
+    get_package, insert_package, list_installing_packages, list_packages, replay_committed_journal,
+    update_installing_identity, update_status, update_status_and_engine_metadata,
 };
 pub use journal::{
     CommittedJournalPackage, FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader,
