@@ -72,17 +72,19 @@ fn sample_package(
     }
 }
 
-fn seed_catalog_commands(
+fn seed_catalog_shim_metadata(
     catalog_db_path: &Path,
     package_name: &str,
     commands_json: &str,
+    bin_json: &str,
 ) -> Result<()> {
     let conn = Connection::open(catalog_db_path)?;
     conn.execute(
-        "UPDATE catalog_packages SET commands = ?1 WHERE id = ?2",
+        "UPDATE catalog_packages SET commands = ?1, bin = ?3 WHERE id = ?2",
         params![
             Some(commands_json.to_string()),
-            catalog_package_id(package_name)
+            catalog_package_id(package_name),
+            Some(bin_json.to_string())
         ],
     )?;
 
@@ -160,10 +162,11 @@ fn remove_removes_command_shims_after_install() -> Result<()> {
         InstallerType::Zip,
         None,
     )?;
-    seed_catalog_commands(
+    seed_catalog_shim_metadata(
         &resolved_paths.catalog_db,
         "Winbrew Test Shim",
         r#"["contoso"]"#,
+        r#"["bin/tool.exe"]"#,
     )?;
 
     let ctx = AppContext::from_config(&config)?;

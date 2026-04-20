@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 use winbrew_database as database;
 use winbrew_models::domains::install::{EngineKind, EngineMetadata, InstallScope, InstallerType};
@@ -137,6 +137,83 @@ fn update_status_and_engine_metadata_round_trip_native_exe() -> Result<()> {
             Some("C:\\Apps\\Contoso.NativeExe\\uninstall.exe".to_string()),
         ))
     );
+
+    Ok(())
+}
+
+#[test]
+fn package_bin_metadata_round_trip() -> Result<()> {
+    let test_root = tempdir()?;
+    init_database(test_root.path())?;
+
+    let conn = database::get_conn()?;
+    conn.execute("DELETE FROM installed_packages", [])?;
+    let package = sample_package("Contoso.Bin", PackageStatus::Installing);
+
+    database::insert_package(&conn, &package)?;
+    database::sync_package_bin_metadata(
+        &conn,
+        &package.name,
+        Some(r#"["bin/tool.exe","BIN/tool.exe","bin/helper.cmd"]"#),
+    )?;
+
+    let stored = database::get_package_bin_metadata(&conn, &package.name)?
+        .expect("package bin metadata should exist");
+
+    assert_eq!(stored, r#"["bin\\tool.exe","bin\\helper.cmd"]"#);
+
+    Ok(())
+}
+
+#[test]
+fn replay_committed_journal_preserves_package_bin_metadata() -> Result<()> {
+    let test_root = tempdir()?;
+    init_database(test_root.path())?;
+
+    let mut conn = database::get_conn()?;
+    conn.execute("DELETE FROM installed_packages", [])?;
+
+    let package_name = "Contoso.Replay";
+    let install_dir = format!(r"C:\\winbrew\\packages\\{package_name}");
+    let package = Package {
+        name: package_name.to_string(),
+        version: "0.9.0".to_string(),
+        kind: InstallerType::Portable,
+        deployment_kind: InstallerType::Portable.deployment_kind(),
+        engine_kind: EngineKind::Portable,
+        engine_metadata: None,
+        install_dir: install_dir.clone(),
+        dependencies: Vec::new(),
+        status: PackageStatus::Installing,
+        installed_at: "2026-03-24T00:00:00Z".to_string(),
+    };
+
+    database::insert_package(&conn, &package)?;
+    database::sync_package_bin_metadata(&conn, package_name, Some(r#"["bin/tool.exe"]"#))?;
+
+    let replay_package = Package {
+        version: "1.0.0".to_string(),
+        status: PackageStatus::Ok,
+        ..package.clone()
+    };
+
+    let replay = database::CommittedJournalPackage {
+        journal_path: PathBuf::from("C:/tmp/journal.jsonl"),
+        entries: Vec::new(),
+        package: replay_package,
+        commands: None,
+    };
+
+    database::replay_committed_journal(&mut conn, &replay)?;
+
+    let stored_package =
+        database::get_package(&conn, package_name)?.expect("package should exist after replay");
+    assert_eq!(stored_package.version, "1.0.0");
+    assert_eq!(stored_package.status, PackageStatus::Ok);
+
+    let stored_bin = database::get_package_bin_metadata(&conn, package_name)?
+        .expect("package bin metadata should survive replay");
+    assert_eq!(stored_bin, r#"["bin\\tool.exe"]"#);
 
     Ok(())
 }

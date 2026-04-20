@@ -22,6 +22,7 @@ pub mod installed_packages;
 pub mod journal;
 pub mod migration;
 pub mod msi_inventory;
+pub mod package_bin_metadata;
 
 use self::connection::SqliteConnectionManager;
 use anyhow::{Context, Result};
@@ -58,6 +59,7 @@ pub use msi_inventory::{
     apply_snapshot, find_packages_by_normalized_path,
     find_packages_by_normalized_registry_key_path, get_snapshot, replace_snapshot, upsert_receipt,
 };
+pub use package_bin_metadata::{get_package_bin_metadata, sync_package_bin_metadata};
 
 thread_local! {
     static CURRENT_PATHS: RefCell<Option<ResolvedPaths>> = const { RefCell::new(None) };

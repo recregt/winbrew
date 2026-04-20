@@ -150,8 +150,17 @@ fn create_catalog_db_with_installer(
 fn repair_replays_committed_journal_into_database() {
     let fixture = RepairFixture::new();
     let package_name = "winget/Contoso.App";
+    let catalog_package_name = "Contoso.App";
     let journal_install_dir = fixture.root_path().join("packages").join("Contoso.App");
     fixture.insert_stale_package(package_name);
+
+    let zip_bytes = create_dummy_zip_bytes().expect("create zip bytes");
+    let sha512_hash = sha512_hex(&zip_bytes);
+    let installer_url = "https://example.invalid/contoso.zip";
+    create_catalog_db_with_hash(&fixture, catalog_package_name, installer_url, &sha512_hash)
+        .expect("seed catalog package");
+    database::sync_package_bin_metadata(fixture.conn(), package_name, Some(r#"["bin/tool.exe"]"#))
+        .expect("seed local bin metadata");
 
     let mut writer =
         database::JournalWriter::open_for_package(fixture.root_path(), package_name, "1.0.0")
@@ -199,7 +208,8 @@ fn repair_replays_committed_journal_into_database() {
     let shim_path = fixture.root_path().join("shims").join("contoso.cmd");
     assert!(shim_path.exists());
     let shim_contents = fs::read_to_string(&shim_path).expect("read shim");
-    assert!(shim_contents.contains(&journal_install_dir.to_string_lossy().to_string()));
+    assert!(shim_contents.contains("WINBREW_SHIM_TARGET=bin\\tool.exe"));
+    assert!(!shim_contents.contains("WINBREW_SHIM_NAME"));
 }
 
 #[test]

@@ -200,17 +200,19 @@ impl InstallTestFixture {
     }
 }
 
-fn seed_catalog_commands(
+fn seed_catalog_shim_metadata(
     catalog_db_path: &Path,
     package_name: &str,
     commands_json: &str,
+    bin_json: &str,
 ) -> Result<()> {
     let conn = Connection::open(catalog_db_path)?;
     conn.execute(
-        "UPDATE catalog_packages SET commands = ?1 WHERE id = ?2",
+        "UPDATE catalog_packages SET commands = ?1, bin = ?3 WHERE id = ?2",
         params![
             Some(commands_json.to_string()),
-            catalog_package_id(package_name)
+            catalog_package_id(package_name),
+            Some(bin_json.to_string())
         ],
     )?;
 
@@ -240,6 +242,11 @@ fn install_runs_end_to_end_in_an_isolated_root() -> Result<()> {
         .expect("package should be marked as installed");
     assert_eq!(stored.status, PackageStatus::Ok);
     assert_eq!(stored.kind, InstallerType::Zip);
+
+    let bin_metadata = database::get_package_bin_metadata(&conn, &fixture.package_name)?
+        .expect("package bin metadata should be persisted");
+    assert_eq!(bin_metadata, "[]");
+
     fixture.assert_downloaded();
 
     Ok(())
@@ -253,10 +260,11 @@ fn install_publishes_command_shims_for_catalog_commands() -> Result<()> {
     let zip_bytes = create_dummy_zip_bytes()?;
     let sha512_hash = sha512_hex(&zip_bytes);
     let fixture = InstallTestFixture::from_zip(root, zip_bytes, &sha512_hash)?;
-    seed_catalog_commands(
+    seed_catalog_shim_metadata(
         &fixture.ctx.paths.catalog_db,
         &fixture.package_name,
         r#"["contoso"]"#,
+        r#"["bin/tool.exe"]"#,
     )?;
 
     let outcome = fixture.run_install(false)?;
@@ -266,18 +274,14 @@ fn install_publishes_command_shims_for_catalog_commands() -> Result<()> {
     assert!(shim_path.exists());
 
     let shim_contents = fs::read_to_string(&shim_path)?;
-    assert!(shim_contents.contains("contoso"));
-    assert!(
-        shim_contents.contains(
-            fixture
-                .ctx
-                .paths
-                .packages
-                .join(&fixture.package_name)
-                .to_string_lossy()
-                .as_ref()
-        )
-    );
+    assert!(shim_contents.contains("WINBREW_SHIM_TARGET=bin\\tool.exe"));
+    assert!(!shim_contents.contains("WINBREW_SHIM_NAME"));
+
+    let conn = database::get_conn()?;
+    let bin_metadata = database::get_package_bin_metadata(&conn, &fixture.package_name)?
+        .expect("package bin metadata should be persisted");
+    assert_eq!(bin_metadata, r#"["bin\\tool.exe"]"#);
+
     fixture.assert_downloaded();
 
     Ok(())
