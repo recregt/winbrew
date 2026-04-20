@@ -60,10 +60,15 @@ fn command_registry_round_trip_and_reverse_lookup() -> Result<()> {
         database::list_commands_for_package(&conn, &package.name)?,
         vec!["git".to_string(), "grep".to_string()]
     );
+    assert_eq!(
+        database::get_package_command_names(&conn, &package.name)?,
+        Some(vec!["git".to_string(), "grep".to_string()])
+    );
 
     assert!(database::delete_package(&conn, &package.name)?);
     assert!(database::find_command_owner(&conn, "grep")?.is_none());
     assert!(database::list_commands_for_package(&conn, &package.name)?.is_empty());
+    assert!(database::get_package_command_names(&conn, &package.name)?.is_none());
 
     Ok(())
 }
@@ -111,6 +116,7 @@ fn command_registry_commit_conflict_surfaces_as_claimed_during_install() -> Resu
         .expect("contender package should still exist after rollback");
     assert_eq!(stored.status, PackageStatus::Installing);
     assert!(database::list_commands_for_package(&conn, &contender.name)?.is_empty());
+    assert!(database::get_package_command_names(&conn, &contender.name)?.is_none());
 
     Ok(())
 }
