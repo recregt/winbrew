@@ -127,6 +127,27 @@ pub fn run(ctx: &CommandContext, query: &[String], ignore_checksum_security: boo
                     "Run from an elevated terminal or choose a user-scope installer.",
                 ));
             }
+            InstallError::CommandAlreadyExposed { command, package } => {
+                let message =
+                    format!("Command '{command}' is already exposed by package '{package}'.");
+                ui.error(&message);
+                ui.notice("Hint: remove the other package or choose a different package.");
+                return Err(reported_with_hint(
+                    message,
+                    "Remove the other package or choose a different package.",
+                ));
+            }
+            InstallError::CommandClaimedWhileInProgress { command } => {
+                let message = format!(
+                    "Command '{command}' was claimed by another install while this install was in progress."
+                );
+                ui.error(&message);
+                ui.notice("Hint: re-run the install once the other install completes.");
+                return Err(reported_with_hint(
+                    message,
+                    "Re-run the install once the other install completes.",
+                ));
+            }
             InstallError::RuntimeBootstrapDeclined { runtime } => {
                 let message = format!("{runtime} bootstrap was declined.");
                 ui.warn(&message);

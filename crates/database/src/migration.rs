@@ -17,6 +17,14 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
             installed_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS command_registry (
+            command_name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            package_name TEXT NOT NULL REFERENCES installed_packages(name) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_command_registry_package_name
+            ON command_registry(package_name);
+
         CREATE TABLE IF NOT EXISTS msi_receipts (
             package_name TEXT PRIMARY KEY REFERENCES installed_packages(name) ON DELETE CASCADE,
             product_code TEXT NOT NULL UNIQUE,
@@ -99,6 +107,7 @@ mod tests {
 
         for table in [
             "installed_packages",
+            "command_registry",
             "msi_receipts",
             "msi_files",
             "msi_registry_entries",
@@ -114,6 +123,18 @@ mod tests {
                 .expect("table lookup");
 
             assert_eq!(exists, 1, "expected table {table} to exist");
+        }
+
+        for index in ["idx_command_registry_package_name"] {
+            let exists = conn
+                .query_row(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?1",
+                    [index],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("index lookup");
+
+            assert_eq!(exists, 1, "expected index {index} to exist");
         }
     }
 }

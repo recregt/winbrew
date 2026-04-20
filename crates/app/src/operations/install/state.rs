@@ -39,6 +39,9 @@ pub enum InstallStateError {
     #[error("package '{name}' is currently updating")]
     CurrentlyUpdating { name: String },
 
+    #[error("command '{command}' is already exposed by package '{package}'")]
+    CommandAlreadyExposed { command: String, package: String },
+
     #[error("failed to delete failed install record for '{name}'")]
     DeleteFailed {
         name: String,
@@ -75,6 +78,19 @@ pub fn prepare_install_target(
     conn: &crate::database::DbConnection,
     name: &str,
     install_dir: &Path,
+) -> Result<()> {
+    prepare_install_target_with_commands(conn, name, install_dir, None)
+}
+
+/// Validate the target install path and clear stale failed state if present.
+///
+/// This variant also checks the command registry so command conflicts fail
+/// before the installer payload is downloaded.
+pub fn prepare_install_target_with_commands(
+    conn: &crate::database::DbConnection,
+    name: &str,
+    install_dir: &Path,
+    package_commands: Option<&str>,
 ) -> Result<()> {
     if let Some(existing) =
         database::get_package(conn, name).map_err(|source| InstallStateError::LookupFailed {
@@ -116,6 +132,26 @@ pub fn prepare_install_target(
             path: install_dir.to_string_lossy().into_owned(),
             source: source.into(),
         })?;
+    }
+
+    for command in database::parse_command_names(package_commands).map_err(|source| {
+        InstallStateError::DatabaseOperationFailed {
+            operation: "parsing exposed commands",
+            source,
+        }
+    })? {
+        if let Some(owner) = database::find_command_owner(conn, &command).map_err(|source| {
+            InstallStateError::DatabaseOperationFailed {
+                operation: "reading command registry",
+                source,
+            }
+        })? && owner != name
+        {
+            return Err(InstallStateError::CommandAlreadyExposed {
+                command,
+                package: owner,
+            });
+        }
     }
 
     Ok(())
@@ -204,6 +240,7 @@ fn installing_package(
 
 #[cfg(test)]
 mod tests {
+    use super::prepare_install_target_with_commands;
     use crate::core::paths::resolved_paths;
     use crate::database;
     use std::path::Path;
@@ -330,5 +367,28 @@ mod tests {
             database::find_packages_by_normalized_registry_key_path(&conn, "software\\demo")
                 .expect("lookup registry owners");
         assert_eq!(registry_owners, vec![package_name.to_string()]);
+    }
+
+    #[test]
+    fn prepare_install_target_rejects_conflicting_command_exposure() {
+        let root = tempdir().expect("temp root");
+        init_storage(root.path());
+
+        let conn = database::get_conn().expect("database connection should open");
+        let owner = sample_package("Contoso.CommandOwner", "C:/Tools/Owner");
+        database::insert_package(&conn, &owner).expect("insert owner package");
+        database::sync_package_commands(&conn, &owner.name, Some(r#"["grep"]"#))
+            .expect("seed command registry");
+
+        let install_dir = root.path().join("packages").join("Contoso.CommandConflict");
+        let err = prepare_install_target_with_commands(
+            &conn,
+            "Contoso.CommandConflict",
+            &install_dir,
+            Some(r#"["grep"]"#),
+        )
+        .expect_err("conflicting command should be rejected");
+
+        assert!(err.to_string().contains("already exposed by package"));
     }
 }
