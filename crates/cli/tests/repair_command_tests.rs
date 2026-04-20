@@ -164,7 +164,7 @@ fn repair_replays_committed_journal_into_database() {
             deployment_kind: DeploymentKind::Portable,
             install_dir: journal_install_dir.to_string_lossy().to_string(),
             dependencies: vec!["winget/Contoso.Dependency".to_string()],
-            commands: None,
+            commands: Some(vec!["contoso".to_string()]),
             engine_metadata: None,
         })
         .expect("write metadata");
@@ -195,6 +195,11 @@ fn repair_replays_committed_journal_into_database() {
     );
     assert_eq!(package.status, PackageStatus::Ok);
     assert_eq!(package.installed_at, "2026-04-12T00:00:00Z");
+
+    let shim_path = fixture.root_path().join("shims").join("contoso.cmd");
+    assert!(shim_path.exists());
+    let shim_contents = fs::read_to_string(&shim_path).expect("read shim");
+    assert!(shim_contents.contains(&journal_install_dir.to_string_lossy().to_string()));
 }
 
 #[test]

@@ -2,14 +2,18 @@
 //! and resolving high-risk recovery candidates.
 
 use anyhow::{Context, Result};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 use crate::AppContext;
 use crate::catalog;
-use crate::core::{fs::cleanup_path, network::installer_filename, temp_workspace};
+use crate::core::{
+    fs::cleanup_path, network::installer_filename, paths::install_root_from_package_dir,
+    temp_workspace,
+};
 use crate::database;
 use crate::engines::{self, EngineKind};
 use crate::models::catalog::{CatalogInstaller, CatalogPackage};
@@ -18,6 +22,7 @@ use crate::models::domains::package::{PackageId, PackageRef};
 use crate::models::domains::reporting::{HealthReport, RecoveryActionGroup};
 use crate::operations::install::{self, InstallObserver};
 use crate::operations::remove;
+use crate::operations::shims;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileRestorePackage {
@@ -100,12 +105,57 @@ pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
                     journal_path.display()
                 )
             })?;
+        let previous_commands = database::list_commands_for_package(&conn, &committed.package.name)
+            .unwrap_or_else(|err| {
+                warn!(
+                    package = committed.package.name.as_str(),
+                    error = %err,
+                    "failed to read existing package commands before replay"
+                );
+                Vec::new()
+            });
         database::replay_committed_journal(&mut conn, &committed).with_context(|| {
             format!(
                 "failed to replay committed journal at {}",
                 journal_path.display()
             )
         })?;
+        let shims_root =
+            install_root_from_package_dir(Path::new(&committed.package.install_dir)).join("shims");
+        if let Err(err) = shims::publish_package_shims(&shims_root, &committed.package.name) {
+            warn!(
+                package = committed.package.name.as_str(),
+                error = %err,
+                "failed to publish package shims during repair replay"
+            );
+        } else {
+            let current_commands =
+                database::list_commands_for_package(&conn, &committed.package.name).unwrap_or_else(
+                    |err| {
+                        warn!(
+                            package = committed.package.name.as_str(),
+                            error = %err,
+                            "failed to read package commands after replay"
+                        );
+                        Vec::new()
+                    },
+                );
+            let current_commands = current_commands.into_iter().collect::<BTreeSet<_>>();
+            let stale_commands = previous_commands
+                .into_iter()
+                .filter(|command| !current_commands.contains(command))
+                .collect::<Vec<_>>();
+
+            if !stale_commands.is_empty()
+                && let Err(err) = shims::remove_shim_files(&shims_root, &stale_commands)
+            {
+                warn!(
+                    package = committed.package.name.as_str(),
+                    error = %err,
+                    "failed to remove stale package shims during repair replay"
+                );
+            }
+        }
         replayed += 1;
     }
 
