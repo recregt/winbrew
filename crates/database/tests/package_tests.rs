@@ -189,7 +189,6 @@ fn replay_committed_journal_preserves_package_bin_metadata() -> Result<()> {
     };
 
     database::insert_package(&conn, &package)?;
-    database::sync_package_bin_metadata(&conn, package_name, Some(r#"["bin/tool.exe"]"#))?;
 
     let replay_package = Package {
         version: "1.0.0".to_string(),
@@ -202,6 +201,7 @@ fn replay_committed_journal_preserves_package_bin_metadata() -> Result<()> {
         entries: Vec::new(),
         package: replay_package,
         commands: None,
+        bin: Some(vec!["bin/tool.exe".to_string()]),
     };
 
     database::replay_committed_journal(&mut conn, &replay)?;

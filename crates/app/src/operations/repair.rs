@@ -122,17 +122,29 @@ pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
         })?;
         let shims_root =
             install_root_from_package_dir(Path::new(&committed.package.install_dir)).join("shims");
-        let bin_metadata = match database::get_package_bin_metadata(&conn, &committed.package.name)
-        {
-            Ok(bin_metadata) => bin_metadata,
-            Err(err) => {
-                warn!(
-                    package = committed.package.name.as_str(),
-                    error = %err,
-                    "failed to read local package bin metadata during repair replay"
-                );
-                None
-            }
+        let bin_metadata = match committed.bin.as_ref() {
+            Some(bin) => match serde_json::to_string(bin) {
+                Ok(bin_metadata) => Some(bin_metadata),
+                Err(err) => {
+                    warn!(
+                        package = committed.package.name.as_str(),
+                        error = %err,
+                        "failed to serialize journal bin metadata during repair replay"
+                    );
+                    None
+                }
+            },
+            None => match database::get_package_bin_metadata(&conn, &committed.package.name) {
+                Ok(bin_metadata) => bin_metadata,
+                Err(err) => {
+                    warn!(
+                        package = committed.package.name.as_str(),
+                        error = %err,
+                        "failed to read local package bin metadata during repair replay"
+                    );
+                    None
+                }
+            },
         };
 
         if let Err(err) = shims::publish_package_shims(

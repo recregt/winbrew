@@ -146,6 +146,7 @@ fn replay_committed_journal_restores_command_registry() -> Result<()> {
             ..package.clone()
         },
         commands: Some(vec!["grep".to_string(), "git".to_string()]),
+        bin: None,
     };
 
     database::replay_committed_journal(&mut conn, &replay)?;
