@@ -34,6 +34,28 @@ pub fn find_command_owner(conn: &Connection, command_name: &str) -> Result<Optio
         .context("failed to read command registry")
 }
 
+pub fn get_package_command_names(
+    conn: &Connection,
+    package_name: &str,
+) -> Result<Option<Vec<String>>> {
+    let mut stmt = conn.prepare(
+        "SELECT commands_json
+         FROM package_command_lists
+         WHERE package_name = ?1",
+    )?;
+
+    let commands_json = stmt
+        .query_row(params![package_name], |row| row.get::<_, String>(0))
+        .optional()
+        .context("failed to read package command list")?;
+
+    let Some(commands_json) = commands_json else {
+        return Ok(None);
+    };
+
+    Ok(Some(parse_command_names(Some(commands_json.as_str()))?))
+}
+
 pub fn list_commands_for_package(conn: &Connection, package_name: &str) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
         "SELECT command_name
@@ -53,6 +75,17 @@ pub fn sync_package_commands(
     raw_commands: Option<&str>,
 ) -> Result<()> {
     let commands = parse_command_names(raw_commands)?;
+    let commands_json =
+        serde_json::to_string(&commands).context("failed to serialize package command list")?;
+
+    conn.execute(
+        "INSERT INTO package_command_lists (package_name, commands_json)
+         VALUES (?1, ?2)
+         ON CONFLICT(package_name) DO UPDATE SET
+             commands_json = excluded.commands_json",
+        params![package_name, commands_json],
+    )
+    .context("failed to upsert package command list")?;
 
     conn.execute(
         "DELETE FROM command_registry WHERE package_name = ?1",

@@ -38,8 +38,8 @@ pub use error::{CatalogNotFoundError, CatalogSchemaVersionMismatchError};
 
 pub use catalog::{get_installers, get_package_by_id, search};
 pub use command_registry::{
-    CommandRegistryConflictError, find_command_owner, list_commands_for_package,
-    parse_command_names, sync_package_commands,
+    CommandRegistryConflictError, find_command_owner, get_package_command_names,
+    list_commands_for_package, parse_command_names, sync_package_commands,
 };
 pub use config::{
     Config, ConfigEnv, ConfigError, ConfigSection, ConfigSource, ConfigValidationError, CoreConfig,
