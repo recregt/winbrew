@@ -235,7 +235,6 @@ pub fn run<O: InstallObserver>(
         &package.name,
         &engine_receipt,
         package.commands.as_deref(),
-        package.bin.as_deref(),
     ) {
         let _ = state::mark_failed(&conn, &package.name);
         if let Some(conflict) = err.downcast_ref::<database::CommandRegistryConflictError>() {

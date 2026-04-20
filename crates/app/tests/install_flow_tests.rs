@@ -243,10 +243,6 @@ fn install_runs_end_to_end_in_an_isolated_root() -> Result<()> {
     assert_eq!(stored.status, PackageStatus::Ok);
     assert_eq!(stored.kind, InstallerType::Zip);
 
-    let bin_metadata = database::get_package_bin_metadata(&conn, &fixture.package_name)?
-        .expect("package bin metadata should be persisted");
-    assert_eq!(bin_metadata, "[]");
-
     fixture.assert_downloaded();
 
     Ok(())
@@ -276,11 +272,6 @@ fn install_publishes_command_shims_for_catalog_commands() -> Result<()> {
     let shim_contents = fs::read_to_string(&shim_path)?;
     assert!(shim_contents.contains("WINBREW_SHIM_TARGET=bin\\tool.exe"));
     assert!(!shim_contents.contains("WINBREW_SHIM_NAME"));
-
-    let conn = database::get_conn()?;
-    let bin_metadata = database::get_package_bin_metadata(&conn, &fixture.package_name)?
-        .expect("package bin metadata should be persisted");
-    assert_eq!(bin_metadata, r#"["bin\\tool.exe"]"#);
 
     fixture.assert_downloaded();
 

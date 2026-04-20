@@ -46,7 +46,6 @@ fn command_registry_round_trip_and_reverse_lookup() -> Result<()> {
         &package.name,
         &receipt,
         Some(r#"["grep", "git"]"#),
-        None,
     )?;
 
     assert_eq!(
@@ -93,7 +92,6 @@ fn command_registry_commit_conflict_surfaces_as_claimed_during_install() -> Resu
         &owner.name,
         &owner_receipt,
         Some(r#"["grep"]"#),
-        None,
     )?;
 
     let contender = sample_package("Contoso.Contender", PackageStatus::Installing);
@@ -106,7 +104,6 @@ fn command_registry_commit_conflict_surfaces_as_claimed_during_install() -> Resu
         &contender.name,
         &contender_receipt,
         Some(r#"["grep"]"#),
-        None,
     )
     .expect_err("conflicting command should fail");
 

@@ -22,11 +22,6 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
             commands_json TEXT NOT NULL DEFAULT '[]'
         );
 
-        CREATE TABLE IF NOT EXISTS package_bin_lists (
-            package_name TEXT PRIMARY KEY REFERENCES installed_packages(name) ON DELETE CASCADE,
-            bin_json TEXT NOT NULL DEFAULT '[]'
-        );
-
         CREATE TABLE IF NOT EXISTS command_registry (
             command_name TEXT NOT NULL COLLATE NOCASE UNIQUE,
             package_name TEXT NOT NULL REFERENCES installed_packages(name) ON DELETE CASCADE
@@ -118,7 +113,6 @@ mod tests {
         for table in [
             "installed_packages",
             "package_command_lists",
-            "package_bin_lists",
             "command_registry",
             "msi_receipts",
             "msi_files",
