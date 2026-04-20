@@ -17,6 +17,8 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
             installed_at TEXT NOT NULL
         );
 
+        DROP TABLE IF EXISTS package_bin_lists;
+
         CREATE TABLE IF NOT EXISTS package_command_lists (
             package_name TEXT PRIMARY KEY REFERENCES installed_packages(name) ON DELETE CASCADE,
             commands_json TEXT NOT NULL DEFAULT '[]'
@@ -102,7 +104,7 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::migrate;
-    use rusqlite::Connection;
+    use rusqlite::{Connection, OptionalExtension};
 
     #[test]
     fn migrate_creates_msi_inventory_tables() {
@@ -142,5 +144,48 @@ mod tests {
 
             assert_eq!(exists, 1, "expected index {index} to exist");
         }
+    }
+
+    #[test]
+    fn migrate_drops_obsolete_package_bin_lists_table() {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        conn.execute_batch(
+            "
+            CREATE TABLE installed_packages (
+                name TEXT PRIMARY KEY,
+                version TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                deployment_kind TEXT NOT NULL DEFAULT 'installed',
+                engine_kind TEXT NOT NULL,
+                engine_metadata TEXT,
+                install_dir TEXT NOT NULL,
+                dependencies TEXT NOT NULL DEFAULT '[]',
+                status TEXT NOT NULL DEFAULT 'installing',
+                installed_at TEXT NOT NULL
+            );
+
+            CREATE TABLE package_bin_lists (
+                package_name TEXT PRIMARY KEY REFERENCES installed_packages(name) ON DELETE CASCADE,
+                bin_json TEXT NOT NULL DEFAULT '[]'
+            );
+            ",
+        )
+        .expect("seed obsolete table");
+
+        migrate(&conn).expect("run migration");
+
+        let exists = conn
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'package_bin_lists'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+            .expect("table lookup");
+
+        assert!(
+            exists.is_none(),
+            "expected obsolete bin table to be dropped"
+        );
     }
 }
