@@ -135,7 +135,7 @@ pub fn commit_install(
     name: &str,
     engine_receipt: &EngineInstallReceipt,
 ) -> Result<()> {
-    commit_install_with_commands(conn, name, engine_receipt, None)
+    commit_install_with_commands(conn, name, engine_receipt, None, None)
 }
 
 pub fn commit_install_with_commands(
@@ -143,6 +143,7 @@ pub fn commit_install_with_commands(
     name: &str,
     engine_receipt: &EngineInstallReceipt,
     package_commands: Option<&str>,
+    package_bin_metadata: Option<&str>,
 ) -> Result<()> {
     let installed_at = now();
     let tx = conn
@@ -159,6 +160,7 @@ pub fn commit_install_with_commands(
     )?;
 
     crate::command_registry::sync_package_commands(&tx, name, package_commands)?;
+    crate::package_bin_metadata::sync_package_bin_metadata(&tx, name, package_bin_metadata)?;
 
     if let Some(snapshot) = engine_receipt.msi_inventory_snapshot.as_ref() {
         crate::apply_snapshot(&tx, snapshot)?;
@@ -177,6 +179,8 @@ pub fn replay_committed_journal(
         .transaction()
         .context("failed to start journal replay transaction")?;
 
+    let bin_metadata =
+        crate::package_bin_metadata::get_package_bin_metadata(&tx, &journal.package.name)?;
     let _ = delete_package(&tx, &journal.package.name)?;
     insert_package(&tx, &journal.package)?;
 
@@ -187,6 +191,14 @@ pub fn replay_committed_journal(
             &tx,
             &journal.package.name,
             Some(commands_json.as_str()),
+        )?;
+    }
+
+    if let Some(bin_metadata) = bin_metadata.as_deref() {
+        crate::package_bin_metadata::sync_package_bin_metadata(
+            &tx,
+            &journal.package.name,
+            Some(bin_metadata),
         )?;
     }
 
@@ -239,7 +251,6 @@ pub fn delete_package(conn: &Connection, name: &str) -> Result<bool> {
             params![name],
         )
         .context("failed to delete package")?;
-
     Ok(affected > 0)
 }
 

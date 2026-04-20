@@ -235,6 +235,7 @@ pub fn run<O: InstallObserver>(
         &package.name,
         &engine_receipt,
         package.commands.as_deref(),
+        package.bin.as_deref(),
     ) {
         let _ = state::mark_failed(&conn, &package.name);
         if let Some(conflict) = err.downcast_ref::<database::CommandRegistryConflictError>() {
@@ -245,7 +246,9 @@ pub fn run<O: InstallObserver>(
         return Err(err.into());
     }
 
-    if let Err(err) = shims::publish_package_shims(&ctx.paths.shims, &package.name) {
+    if let Err(err) =
+        shims::publish_package_shims(&ctx.paths.shims, &package.name, package.bin.as_deref())
+    {
         warn!(
             package = %package.name,
             error = %err,

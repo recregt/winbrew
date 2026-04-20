@@ -122,7 +122,52 @@ pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
         })?;
         let shims_root =
             install_root_from_package_dir(Path::new(&committed.package.install_dir)).join("shims");
-        if let Err(err) = shims::publish_package_shims(&shims_root, &committed.package.name) {
+        let bin_metadata = match database::get_package_bin_metadata(&conn, &committed.package.name)
+        {
+            Ok(bin_metadata) => bin_metadata,
+            Err(err) => {
+                warn!(
+                    package = committed.package.name.as_str(),
+                    error = %err,
+                    "failed to read local package bin metadata during repair replay"
+                );
+                None
+            }
+        };
+
+        let bin_metadata = match bin_metadata {
+            Some(bin_metadata) => Some(bin_metadata),
+            None => match database::get_catalog_conn() {
+                Ok(catalog_conn) => {
+                    match database::get_package_by_id(&catalog_conn, &committed.package.name) {
+                        Ok(Some(package)) => package.bin,
+                        Ok(None) => None,
+                        Err(err) => {
+                            warn!(
+                                package = committed.package.name.as_str(),
+                                error = %err,
+                                "failed to read catalog package bin metadata during repair replay"
+                            );
+                            None
+                        }
+                    }
+                }
+                Err(err) => {
+                    warn!(
+                        package = committed.package.name.as_str(),
+                        error = %err,
+                        "failed to open catalog database during repair replay"
+                    );
+                    None
+                }
+            },
+        };
+
+        if let Err(err) = shims::publish_package_shims(
+            &shims_root,
+            &committed.package.name,
+            bin_metadata.as_deref(),
+        ) {
             warn!(
                 package = committed.package.name.as_str(),
                 error = %err,
