@@ -123,6 +123,8 @@ pub enum JournalEntry {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         dependencies: Vec<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        commands: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         engine_metadata: Option<EngineMetadata>,
     },
     FsCreate {
@@ -193,6 +195,7 @@ mod tests {
             deployment_kind: winbrew_models::shared::DeploymentKind::Installed,
             install_dir: r"C:\winbrew\apps\Contoso.App".to_string(),
             dependencies: vec!["winget/Contoso.Shared".to_string()],
+            commands: None,
             engine_metadata: None,
         }
     }
@@ -473,6 +476,7 @@ mod tests {
                 deployment_kind: winbrew_models::shared::DeploymentKind::Installed,
                 install_dir: r"C:\winbrew\apps\Contoso.Committed".to_string(),
                 dependencies: Vec::new(),
+                commands: None,
                 engine_metadata: None,
             })
             .expect("write committed metadata");
@@ -490,6 +494,7 @@ mod tests {
                 deployment_kind: winbrew_models::shared::DeploymentKind::Installed,
                 install_dir: r"C:\winbrew\apps\Contoso.Incomplete".to_string(),
                 dependencies: Vec::new(),
+                commands: None,
                 engine_metadata: None,
             })
             .expect("write incomplete metadata");

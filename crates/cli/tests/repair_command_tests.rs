@@ -164,6 +164,7 @@ fn repair_replays_committed_journal_into_database() {
             deployment_kind: DeploymentKind::Portable,
             install_dir: journal_install_dir.to_string_lossy().to_string(),
             dependencies: vec!["winget/Contoso.Dependency".to_string()],
+            commands: None,
             engine_metadata: None,
         })
         .expect("write metadata");

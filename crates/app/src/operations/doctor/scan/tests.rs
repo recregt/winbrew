@@ -365,6 +365,7 @@ fn scan_package_journals_detects_incomplete_journal() {
             deployment_kind: winbrew_models::shared::DeploymentKind::Installed,
             install_dir: r"C:\winbrew\apps\Contoso.Recover".to_string(),
             dependencies: Vec::new(),
+            commands: None,
             engine_metadata: None,
         })
         .expect("write metadata");
@@ -448,6 +449,7 @@ fn scan_package_journals_detects_orphan_committed_journal() {
             deployment_kind: winbrew_models::shared::DeploymentKind::Installed,
             install_dir: r"C:\winbrew\apps\Contoso.Orphan".to_string(),
             dependencies: Vec::new(),
+            commands: None,
             engine_metadata: None,
         })
         .expect("write metadata");
@@ -491,6 +493,7 @@ fn scan_package_journals_tracks_trailing_journal_replay_target() {
             deployment_kind: winbrew_models::shared::DeploymentKind::Installed,
             install_dir: r"C:\winbrew\apps\Contoso.Trailing".to_string(),
             dependencies: Vec::new(),
+            commands: None,
             engine_metadata: None,
         })
         .expect("write metadata");

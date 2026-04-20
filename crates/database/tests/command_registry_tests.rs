@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 use winbrew_database as database;
 use winbrew_models::domains::install::{EngineInstallReceipt, EngineKind, InstallerType};
@@ -117,6 +117,52 @@ fn command_registry_commit_conflict_surfaces_as_claimed_during_install() -> Resu
     assert_eq!(stored.status, PackageStatus::Installing);
     assert!(database::list_commands_for_package(&conn, &contender.name)?.is_empty());
     assert!(database::get_package_command_names(&conn, &contender.name)?.is_none());
+
+    Ok(())
+}
+
+#[test]
+fn replay_committed_journal_restores_command_registry() -> Result<()> {
+    let test_root = tempdir()?;
+    init_database(test_root.path())?;
+
+    let conn = database::get_conn()?;
+    conn.execute("DELETE FROM installed_packages", [])?;
+
+    let package = sample_package("Contoso.Replay", PackageStatus::Installing);
+    database::insert_package(&conn, &package)?;
+
+    let mut conn = conn;
+    let replay = database::CommittedJournalPackage {
+        journal_path: PathBuf::from("C:/tmp/journal.jsonl"),
+        entries: Vec::new(),
+        package: Package {
+            status: PackageStatus::Ok,
+            install_dir: "C:/Tools/Replayed".to_string(),
+            installed_at: "2026-04-19T01:00:00Z".to_string(),
+            ..package.clone()
+        },
+        commands: Some(vec!["grep".to_string(), "git".to_string()]),
+    };
+
+    database::replay_committed_journal(&mut conn, &replay)?;
+
+    assert_eq!(
+        database::find_command_owner(&conn, "grep")?,
+        Some(package.name.clone())
+    );
+    assert_eq!(
+        database::find_command_owner(&conn, "git")?,
+        Some(package.name.clone())
+    );
+    assert_eq!(
+        database::get_package_command_names(&conn, &package.name)?,
+        Some(vec!["git".to_string(), "grep".to_string()])
+    );
+
+    let stored = database::get_package(&conn, &package.name)?.expect("package should exist");
+    assert_eq!(stored.status, PackageStatus::Ok);
+    assert_eq!(stored.install_dir, "C:/Tools/Replayed");
 
     Ok(())
 }
