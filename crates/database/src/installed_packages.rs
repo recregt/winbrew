@@ -1,8 +1,9 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, Error as SqlError, OptionalExtension, params, types::Type};
 use thiserror::Error;
 
 use crate::core::now;
+use winbrew_models::command_resolution::ResolverResult;
 use winbrew_models::install::engine::{EngineInstallReceipt, EngineKind, EngineMetadata};
 use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
 use winbrew_models::install::installer::InstallerType;
@@ -180,15 +181,25 @@ pub fn replay_committed_journal(
     let _ = delete_package(&tx, &journal.package.name)?;
     insert_package(&tx, &journal.package)?;
 
-    if let Some(commands) = journal.commands.as_ref() {
-        let commands_json =
-            serde_json::to_string(commands).context("failed to serialize commands")?;
-        crate::command_registry::sync_package_commands(
-            &tx,
-            &journal.package.name,
-            Some(commands_json.as_str()),
-        )?;
-    }
+    let Some(command_resolution) = journal.command_resolution.as_ref() else {
+        bail!(
+            "committed journal at {} is missing command resolution metadata",
+            journal.journal_path.display()
+        );
+    };
+
+    let commands_json = match command_resolution {
+        ResolverResult::Resolved { commands, .. } => {
+            Some(serde_json::to_string(commands).context("failed to serialize commands")?)
+        }
+        ResolverResult::Unresolved { .. } => None,
+    };
+
+    crate::command_registry::sync_package_commands(
+        &tx,
+        &journal.package.name,
+        commands_json.as_deref(),
+    )?;
 
     tx.commit()
         .context("failed to commit journal replay transaction")?;
@@ -304,6 +315,9 @@ mod tests {
     use crate::migration;
     use rusqlite::Connection;
     use std::path::PathBuf;
+    use winbrew_models::command_resolution::{
+        CommandSource, Confidence, ResolverResult, VersionScope,
+    };
     use winbrew_models::install::engine::{EngineKind, EngineMetadata, InstallScope};
     use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
     use winbrew_models::install::installer::InstallerType;
@@ -391,9 +405,15 @@ mod tests {
             journal_path: PathBuf::from("C:/tmp/journal.jsonl"),
             entries: Vec::new(),
             package: replay_package,
-            commands: None,
+            commands: Some(vec!["contoso".to_string()]),
             bin: Some(vec!["bin/tool.exe".to_string()]),
-            command_resolution: None,
+            command_resolution: Some(ResolverResult::Resolved {
+                commands: vec!["contoso".to_string()],
+                confidence: Confidence::High,
+                sources: vec![CommandSource::PackageLevel],
+                version_scope: VersionScope::Specific("1.0.0".to_string()),
+                catalog_fingerprint: "sha256:deadbeef".to_string(),
+            }),
         };
 
         replay_committed_journal(&mut conn, &replay).expect("replay committed journal");
@@ -405,6 +425,37 @@ mod tests {
         assert_eq!(package.install_dir, "C:/Tools/Replayed");
         assert_eq!(package.status, PackageStatus::Ok);
         assert_eq!(package.installed_at, "2026-04-12T01:00:00Z");
+    }
+
+    #[test]
+    fn replay_committed_journal_rejects_missing_command_resolution_metadata() {
+        let mut conn = Connection::open_in_memory().expect("open in-memory database");
+        migration::migrate(&conn).expect("run migration");
+
+        let package = sample_package("Contoso.Replay");
+        insert_package(&conn, &package).expect("insert original package");
+
+        let replay = crate::CommittedJournalPackage {
+            journal_path: PathBuf::from("C:/tmp/journal.jsonl"),
+            entries: Vec::new(),
+            package: InstalledPackage {
+                status: PackageStatus::Ok,
+                install_dir: "C:/Tools/Replayed".to_string(),
+                installed_at: "2026-04-12T01:00:00Z".to_string(),
+                ..package.clone()
+            },
+            commands: Some(vec!["grep".to_string(), "git".to_string()]),
+            bin: None,
+            command_resolution: None,
+        };
+
+        let err = replay_committed_journal(&mut conn, &replay)
+            .expect_err("legacy journal should be rejected");
+
+        assert!(
+            err.to_string()
+                .contains("missing command resolution metadata")
+        );
     }
 
     #[test]
