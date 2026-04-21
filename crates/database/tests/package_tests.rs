@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 use winbrew_database as database;
+use winbrew_models::command_resolution::{CommandSource, Confidence, ResolverResult, VersionScope};
 use winbrew_models::domains::install::{EngineKind, EngineMetadata, InstallScope, InstallerType};
 use winbrew_models::domains::installed::{InstalledPackage as Package, PackageStatus};
 
@@ -176,9 +177,15 @@ fn replay_committed_journal_replaces_existing_package() -> Result<()> {
         journal_path: PathBuf::from("C:/tmp/journal.jsonl"),
         entries: Vec::new(),
         package: replay_package,
-        commands: None,
+        commands: Some(vec!["contoso".to_string()]),
         bin: Some(vec!["bin/tool.exe".to_string()]),
-        command_resolution: None,
+        command_resolution: Some(ResolverResult::Resolved {
+            commands: vec!["contoso".to_string()],
+            confidence: Confidence::High,
+            sources: vec![CommandSource::PackageLevel],
+            version_scope: VersionScope::Specific("1.0.0".to_string()),
+            catalog_fingerprint: "sha256:deadbeef".to_string(),
+        }),
     };
 
     database::replay_committed_journal(&mut conn, &replay)?;

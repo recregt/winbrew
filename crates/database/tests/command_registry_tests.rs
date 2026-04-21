@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 use winbrew_database as database;
+use winbrew_models::command_resolution::{CommandSource, Confidence, ResolverResult, VersionScope};
 use winbrew_models::domains::install::{EngineInstallReceipt, EngineKind, InstallerType};
 use winbrew_models::domains::installed::{InstalledPackage as Package, PackageStatus};
 
@@ -144,7 +145,13 @@ fn replay_committed_journal_restores_command_registry() -> Result<()> {
         },
         commands: Some(vec!["grep".to_string(), "git".to_string()]),
         bin: None,
-        command_resolution: None,
+        command_resolution: Some(ResolverResult::Resolved {
+            commands: vec!["grep".to_string(), "git".to_string()],
+            confidence: Confidence::High,
+            sources: vec![CommandSource::PackageLevel],
+            version_scope: VersionScope::Specific("1.0.0".to_string()),
+            catalog_fingerprint: "sha256:deadbeef".to_string(),
+        }),
     };
 
     database::replay_committed_journal(&mut conn, &replay)?;
