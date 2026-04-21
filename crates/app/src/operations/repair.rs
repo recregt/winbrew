@@ -170,7 +170,7 @@ pub fn prepare_journal_replay_targets(
         .collect()
 }
 
-fn replay_prepared_journal_targets(targets: &[JournalReplayTarget]) -> Result<usize> {
+pub fn replay_prepared_journal_targets(targets: &[JournalReplayTarget]) -> Result<usize> {
     let mut conn = database::get_conn()?;
     let mut replayed = 0usize;
 
