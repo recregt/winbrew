@@ -122,25 +122,16 @@ pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
         })?;
         let shims_root =
             install_root_from_package_dir(Path::new(&committed.package.install_dir)).join("shims");
-        let bin_metadata = match committed.bin.as_ref() {
-            Some(bin) => match serde_json::to_string(bin) {
-                Ok(bin_metadata) => Some(bin_metadata),
-                Err(err) => {
-                    warn!(
-                        package = committed.package.name.as_str(),
-                        error = %err,
-                        "failed to serialize journal bin metadata during repair replay"
-                    );
-                    None
-                }
-            },
-            None => None,
-        };
+        let empty_commands: &[String] = &[];
+        let desired_commands = committed.commands.as_deref().unwrap_or(empty_commands);
+        let empty_paths: &[String] = &[];
+        let target_paths = committed.bin.as_deref().unwrap_or(empty_paths);
 
-        if let Err(err) = shims::publish_package_shims(
+        if let Err(err) = shims::publish_shims_for_install_dir(
             &shims_root,
-            &committed.package.name,
-            bin_metadata.as_deref(),
+            Path::new(&committed.package.install_dir),
+            desired_commands,
+            target_paths,
         ) {
             warn!(
                 package = committed.package.name.as_str(),
@@ -148,21 +139,10 @@ pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
                 "failed to publish package shims during repair replay"
             );
         } else {
-            let current_commands =
-                database::list_commands_for_package(&conn, &committed.package.name).unwrap_or_else(
-                    |err| {
-                        warn!(
-                            package = committed.package.name.as_str(),
-                            error = %err,
-                            "failed to read package commands after replay"
-                        );
-                        Vec::new()
-                    },
-                );
-            let current_commands = current_commands.into_iter().collect::<BTreeSet<_>>();
+            let desired_commands = desired_commands.iter().cloned().collect::<BTreeSet<_>>();
             let stale_commands = previous_commands
                 .into_iter()
-                .filter(|command| !current_commands.contains(command))
+                .filter(|command| !desired_commands.contains(command))
                 .collect::<Vec<_>>();
 
             if !stale_commands.is_empty()
