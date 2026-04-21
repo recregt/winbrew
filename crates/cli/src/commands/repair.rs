@@ -69,12 +69,13 @@ fn run_journal_replay_group<W: Write>(
         return Ok(0);
     }
 
+    let journal_targets = repair::prepare_journal_replay_targets(&plan.journal_paths)?;
     let replayed = ui.spinner(
         format!(
             "Replaying {} committed journal(s)...",
             plan.journal_paths.len()
         ),
-        || repair::replay_committed_journals(&plan.journal_paths),
+        || repair::replay_prepared_journal_targets(&journal_targets),
     )?;
 
     ui.success(format!("Replayed {replayed} committed journal(s)."));
