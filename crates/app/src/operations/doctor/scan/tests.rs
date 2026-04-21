@@ -367,6 +367,7 @@ fn scan_package_journals_detects_incomplete_journal() {
             dependencies: Vec::new(),
             commands: None,
             bin: None,
+            command_resolution: None,
             engine_metadata: None,
         })
         .expect("write metadata");
@@ -452,6 +453,7 @@ fn scan_package_journals_detects_orphan_committed_journal() {
             dependencies: Vec::new(),
             commands: None,
             bin: None,
+            command_resolution: None,
             engine_metadata: None,
         })
         .expect("write metadata");
@@ -497,6 +499,7 @@ fn scan_package_journals_tracks_trailing_journal_replay_target() {
             dependencies: Vec::new(),
             commands: None,
             bin: None,
+            command_resolution: None,
             engine_metadata: None,
         })
         .expect("write metadata");

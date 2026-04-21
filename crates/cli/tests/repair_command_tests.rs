@@ -173,6 +173,7 @@ fn repair_replays_committed_journal_into_database() {
             dependencies: vec!["winget/Contoso.Dependency".to_string()],
             commands: Some(vec!["contoso".to_string()]),
             bin: Some(vec!["bin/tool.exe".to_string()]),
+            command_resolution: None,
             engine_metadata: None,
         })
         .expect("write metadata");
