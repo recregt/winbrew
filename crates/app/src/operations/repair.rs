@@ -127,55 +127,67 @@ pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
 pub fn prepare_journal_replay_targets(
     journal_paths: &[PathBuf],
 ) -> Result<Vec<JournalReplayTarget>> {
-    let catalog_conn = match database::get_catalog_conn() {
-        Ok(conn) => Some(conn),
-        Err(err) => {
-            warn!(
-                error = %err,
-                "failed to open catalog database for repair command resolution comparison"
-            );
-            None
-        }
-    };
+    let mut catalog_conn: Option<database::DbConnection> = None;
+    let mut catalog_conn_attempted = false;
+    let mut targets = Vec::with_capacity(journal_paths.len());
 
-    journal_paths
-        .iter()
-        .map(|journal_path| {
-            let committed = database::JournalReader::read_committed_package(journal_path)
-                .with_context(|| {
-                    format!(
-                        "failed to parse committed journal at {}",
-                        journal_path.display()
-                    )
-                })?;
+    for journal_path in journal_paths {
+        let committed = database::JournalReader::read_committed_package(journal_path)
+            .with_context(|| {
+                format!(
+                    "failed to parse committed journal at {}",
+                    journal_path.display()
+                )
+            })?;
 
-            let command_resolution_status = classify_journal_command_resolution_status(
-                committed.command_resolution.as_ref(),
-                catalog_conn
-                    .as_ref()
-                    .and_then(|conn| current_command_resolution(conn, &committed.package.name)),
-            );
+        let current_resolution = if committed.command_resolution.is_some() {
+            if catalog_conn.is_none() && !catalog_conn_attempted {
+                catalog_conn_attempted = true;
 
-            if let JournalCommandResolutionStatus::Stale {
-                committed_fingerprint,
-                current_fingerprint,
-            } = &command_resolution_status
-            {
-                warn!(
-                    package = committed.package.name.as_str(),
-                    committed_fingerprint = committed_fingerprint.as_str(),
-                    current_fingerprint = current_fingerprint.as_str(),
-                    "committed journal command resolution fingerprint differs from current catalog metadata"
-                );
+                match database::get_catalog_conn() {
+                    Ok(conn) => catalog_conn = Some(conn),
+                    Err(err) => {
+                        warn!(
+                            error = %err,
+                            "failed to open catalog database for repair command resolution comparison"
+                        );
+                    }
+                }
             }
 
-            Ok(JournalReplayTarget {
-                journal_path: journal_path.clone(),
-                committed,
-                command_resolution_status,
-            })
-        })
-        .collect()
+            catalog_conn
+                .as_ref()
+                .and_then(|conn| current_command_resolution(conn, &committed.package.name))
+        } else {
+            None
+        };
+
+        let command_resolution_status = classify_journal_command_resolution_status(
+            committed.command_resolution.as_ref(),
+            current_resolution,
+        );
+
+        if let JournalCommandResolutionStatus::Stale {
+            committed_fingerprint,
+            current_fingerprint,
+        } = &command_resolution_status
+        {
+            warn!(
+                package = committed.package.name.as_str(),
+                committed_fingerprint = committed_fingerprint.as_str(),
+                current_fingerprint = current_fingerprint.as_str(),
+                "committed journal command resolution fingerprint differs from current catalog metadata"
+            );
+        }
+
+        targets.push(JournalReplayTarget {
+            journal_path: journal_path.clone(),
+            committed,
+            command_resolution_status,
+        });
+    }
+
+    Ok(targets)
 }
 
 pub fn replay_prepared_journal_targets(targets: &[JournalReplayTarget]) -> Result<usize> {
@@ -690,17 +702,51 @@ fn restore_target_files(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_repair_plan, classify_journal_command_resolution_status, command_resolution_is_stale,
-        engine_requires_reinstall_only, restore_target_files,
+        JournalCommandResolutionStatus, JournalReplayTarget, build_repair_plan,
+        classify_journal_command_resolution_status, command_resolution_is_stale,
+        engine_requires_reinstall_only, restore_target_files, summarize_journal_replay_targets,
     };
     use crate::models::domains::command_resolution::{
         CommandSource, Confidence, ResolverResult, VersionScope,
     };
+    use crate::models::domains::install::{EngineKind, InstallerType};
+    use crate::models::domains::installed::{InstalledPackage, PackageStatus};
     use crate::models::domains::reporting::{
         DiagnosisSeverity, HealthReport, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind,
     };
-    use std::path::Path;
+    use crate::models::domains::shared::DeploymentKind;
+    use std::path::{Path, PathBuf};
     use tempfile::tempdir;
+
+    fn test_committed_package() -> crate::database::CommittedJournalPackage {
+        crate::database::CommittedJournalPackage {
+            journal_path: PathBuf::from("C:/winbrew/pkgdb/Contoso.App/journal.jsonl"),
+            entries: Vec::new(),
+            package: InstalledPackage {
+                name: "Contoso.App".to_string(),
+                version: "1.0.0".to_string(),
+                kind: InstallerType::Portable,
+                deployment_kind: DeploymentKind::Portable,
+                engine_kind: EngineKind::Portable,
+                engine_metadata: None,
+                install_dir: "C:/winbrew/packages/Contoso.App".to_string(),
+                dependencies: Vec::new(),
+                status: PackageStatus::Ok,
+                installed_at: "2026-04-12T00:00:00Z".to_string(),
+            },
+            commands: Some(vec!["contoso".to_string()]),
+            bin: Some(vec!["bin/tool.exe".to_string()]),
+            command_resolution: None,
+        }
+    }
+
+    fn test_journal_target(status: JournalCommandResolutionStatus) -> JournalReplayTarget {
+        JournalReplayTarget {
+            journal_path: PathBuf::from("C:/winbrew/pkgdb/Contoso.App/journal.jsonl"),
+            committed: test_committed_package(),
+            command_resolution_status: status,
+        }
+    }
 
     #[test]
     fn build_repair_plan_groups_targets_and_counts_findings() {
@@ -786,6 +832,23 @@ mod tests {
         };
 
         assert!(command_resolution_is_stale(&committed, &current));
+    }
+
+    #[test]
+    fn summarize_journal_replay_targets_counts_statuses() {
+        let summary = summarize_journal_replay_targets(&[
+            test_journal_target(JournalCommandResolutionStatus::Fresh),
+            test_journal_target(JournalCommandResolutionStatus::Stale {
+                committed_fingerprint: "sha256:deadbeef".to_string(),
+                current_fingerprint: "sha256:cafebabe".to_string(),
+            }),
+            test_journal_target(JournalCommandResolutionStatus::Unknown),
+        ]);
+
+        assert_eq!(summary.total, 3);
+        assert_eq!(summary.fresh, 1);
+        assert_eq!(summary.stale, 1);
+        assert_eq!(summary.unknown, 1);
     }
 
     #[test]
