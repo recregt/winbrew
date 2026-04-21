@@ -1,10 +1,10 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::catalog::package::CanonicalInstallerKey;
+use crate::catalog::package::{CanonicalInstallerKey, CatalogInstaller, CatalogPackage};
 
 /// Provenance for a resolved command list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -87,6 +87,55 @@ struct CanonicalFingerprintInstallerIdentity {
 /// Error returned when a catalog fingerprint cannot be serialized.
 pub type CatalogFingerprintError = serde_json::Error;
 
+/// Resolve command exposure from catalog metadata with conservative precedence.
+pub fn resolve_command_exposure(
+    package: &CatalogPackage,
+    installer: &CatalogInstaller,
+) -> Result<ResolverResult, CatalogFingerprintError> {
+    let package_commands = parse_command_list(package.commands.as_deref())?;
+    let installer_commands = parse_command_list(installer.commands.as_deref())?;
+
+    if !package_commands.is_empty() {
+        let catalog_fingerprint = catalog_fingerprint(
+            &package_commands,
+            package.bin.as_deref(),
+            package.moniker.as_deref(),
+            &installer_commands,
+            &installer.canonical_key(),
+        )?;
+
+        return Ok(ResolverResult::Resolved {
+            commands: package_commands,
+            confidence: Confidence::High,
+            sources: vec![CommandSource::PackageLevel],
+            version_scope: VersionScope::Specific(package.version.to_string()),
+            catalog_fingerprint,
+        });
+    }
+
+    if !installer_commands.is_empty() {
+        let catalog_fingerprint = catalog_fingerprint(
+            &package_commands,
+            package.bin.as_deref(),
+            package.moniker.as_deref(),
+            &installer_commands,
+            &installer.canonical_key(),
+        )?;
+
+        return Ok(ResolverResult::Resolved {
+            commands: installer_commands,
+            confidence: Confidence::Low,
+            sources: vec![CommandSource::InstallerLevel],
+            version_scope: VersionScope::Specific(package.version.to_string()),
+            catalog_fingerprint,
+        });
+    }
+
+    Ok(ResolverResult::Unresolved {
+        reason: UnresolvedReason::NoMetadata,
+    })
+}
+
 impl ResolverResult {
     /// Return the caller-facing confidence classification.
     pub fn confidence(&self) -> Confidence {
@@ -137,6 +186,36 @@ fn normalize_command_list(values: &[String]) -> Vec<String> {
     normalized.into_iter().collect()
 }
 
+fn parse_command_list(raw: Option<&str>) -> Result<Vec<String>, serde_json::Error> {
+    let Some(raw) = raw else {
+        return Ok(Vec::new());
+    };
+
+    let commands: Vec<String> = serde_json::from_str(raw)?;
+    Ok(normalize_command_names(commands))
+}
+
+fn normalize_command_names<I, S>(commands: I) -> Vec<String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut normalized = BTreeMap::new();
+
+    for command in commands {
+        let trimmed = command.as_ref().trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        normalized
+            .entry(trimmed.to_ascii_lowercase())
+            .or_insert_with(|| trimmed.to_string());
+    }
+
+    normalized.into_values().collect()
+}
+
 fn normalize_text(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
@@ -179,9 +258,106 @@ impl From<&CanonicalInstallerKey> for CanonicalFingerprintInstallerIdentity {
 mod tests {
     use super::{
         CommandSource, Confidence, ResolverResult, UnresolvedReason, VersionScope,
-        catalog_fingerprint,
+        catalog_fingerprint, resolve_command_exposure,
     };
-    use crate::catalog::package::CanonicalInstallerKey;
+    use crate::catalog::package::{CanonicalInstallerKey, CatalogInstaller, CatalogPackage};
+    use crate::shared::Version;
+
+    #[test]
+    fn resolves_package_commands_with_high_confidence() {
+        let package = CatalogPackage::test_builder(
+            "winget/Contoso.App".into(),
+            "Contoso App",
+            Version::parse("1.2.3").expect("version should parse"),
+        )
+        .with_moniker("contoso");
+        let mut installer = CatalogInstaller::test_builder(
+            "winget/Contoso.App".into(),
+            "https://example.invalid/app.exe",
+        )
+        .with_kind(crate::install::InstallerType::Exe);
+        let mut package = package;
+        package.commands = Some(r#"["Contoso", "contoso"]"#.to_string());
+        installer.commands = Some(r#"["Installer"]"#.to_string());
+
+        let resolved = resolve_command_exposure(&package, &installer).expect("resolve commands");
+
+        match resolved {
+            ResolverResult::Resolved {
+                commands,
+                confidence,
+                sources,
+                version_scope,
+                catalog_fingerprint,
+            } => {
+                assert_eq!(commands, vec!["Contoso".to_string()]);
+                assert_eq!(confidence, Confidence::High);
+                assert_eq!(sources, vec![CommandSource::PackageLevel]);
+                assert_eq!(version_scope, VersionScope::Specific("1.2.3".to_string()));
+                assert!(catalog_fingerprint.starts_with("sha256:"));
+            }
+            other => panic!("expected resolved commands, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolves_installer_commands_when_package_metadata_is_empty() {
+        let package = CatalogPackage::test_builder(
+            "winget/Contoso.App".into(),
+            "Contoso App",
+            Version::parse("1.2.3").expect("version should parse"),
+        );
+        let mut installer = CatalogInstaller::test_builder(
+            "winget/Contoso.App".into(),
+            "https://example.invalid/app.exe",
+        )
+        .with_kind(crate::install::InstallerType::Exe);
+        installer.commands = Some(r#"["contoso", "Contoso"]"#.to_string());
+
+        let resolved = resolve_command_exposure(&package, &installer).expect("resolve commands");
+
+        match resolved {
+            ResolverResult::Resolved {
+                commands,
+                confidence,
+                sources,
+                version_scope,
+                catalog_fingerprint,
+            } => {
+                assert_eq!(commands, vec!["contoso".to_string()]);
+                assert_eq!(confidence, Confidence::Low);
+                assert_eq!(sources, vec![CommandSource::InstallerLevel]);
+                assert_eq!(version_scope, VersionScope::Specific("1.2.3".to_string()));
+                assert!(catalog_fingerprint.starts_with("sha256:"));
+            }
+            other => panic!("expected resolved commands, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unresolved_when_no_command_metadata_exists() {
+        let package = CatalogPackage::test_builder(
+            "winget/Contoso.App".into(),
+            "Contoso App",
+            Version::parse("1.2.3").expect("version should parse"),
+        )
+        .with_moniker("contoso");
+        let installer = CatalogInstaller::test_builder(
+            "winget/Contoso.App".into(),
+            "https://example.invalid/app.exe",
+        )
+        .with_kind(crate::install::InstallerType::Exe);
+
+        let resolved = resolve_command_exposure(&package, &installer).expect("resolve commands");
+
+        assert_eq!(
+            resolved,
+            ResolverResult::Unresolved {
+                reason: UnresolvedReason::NoMetadata,
+            }
+        );
+        assert_eq!(resolved.confidence(), Confidence::Unresolved);
+    }
 
     #[test]
     fn resolver_result_round_trips() {

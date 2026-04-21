@@ -219,6 +219,23 @@ fn seed_catalog_shim_metadata(
     Ok(())
 }
 
+fn seed_catalog_installer_commands(
+    catalog_db_path: &Path,
+    package_name: &str,
+    commands_json: &str,
+) -> Result<()> {
+    let conn = Connection::open(catalog_db_path)?;
+    conn.execute(
+        "UPDATE catalog_installers SET commands = ?1 WHERE package_id = ?2",
+        params![
+            Some(commands_json.to_string()),
+            catalog_package_id(package_name)
+        ],
+    )?;
+
+    Ok(())
+}
+
 #[test]
 fn install_runs_end_to_end_in_an_isolated_root() -> Result<()> {
     let test_root = test_root();
@@ -272,6 +289,31 @@ fn install_publishes_command_shims_for_catalog_commands() -> Result<()> {
     let shim_contents = fs::read_to_string(&shim_path)?;
     assert!(shim_contents.contains("WINBREW_SHIM_TARGET=bin\\tool.exe"));
     assert!(!shim_contents.contains("WINBREW_SHIM_NAME"));
+
+    fixture.assert_downloaded();
+
+    Ok(())
+}
+
+#[test]
+fn install_publishes_command_shims_for_installer_commands() -> Result<()> {
+    let test_root = test_root();
+    let root = test_root.path();
+
+    let zip_bytes = create_dummy_zip_bytes()?;
+    let sha512_hash = sha512_hex(&zip_bytes);
+    let fixture = InstallTestFixture::from_zip(root, zip_bytes, &sha512_hash)?;
+    seed_catalog_installer_commands(
+        &fixture.ctx.paths.catalog_db,
+        &fixture.package_name,
+        r#"["contoso"]"#,
+    )?;
+
+    let outcome = fixture.run_install(false)?;
+
+    let shim_path = fixture.ctx.paths.shims.join("contoso.cmd");
+    assert_eq!(outcome.result.name, "Winbrew Test Zip");
+    assert!(shim_path.exists());
 
     fixture.assert_downloaded();
 
