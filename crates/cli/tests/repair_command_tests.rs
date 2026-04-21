@@ -186,7 +186,13 @@ fn repair_replays_committed_journal_into_database() {
             dependencies: vec!["winget/Contoso.Dependency".to_string()],
             commands: Some(vec!["contoso".to_string()]),
             bin: Some(vec!["bin/tool.exe".to_string()]),
-            command_resolution: None,
+            command_resolution: Some(ResolverResult::Resolved {
+                commands: vec!["contoso".to_string()],
+                confidence: Confidence::High,
+                sources: vec![CommandSource::PackageLevel],
+                version_scope: VersionScope::Specific("1.0.0".to_string()),
+                catalog_fingerprint: "sha256:deadbeef".to_string(),
+            }),
             engine_metadata: None,
         })
         .expect("write metadata");
