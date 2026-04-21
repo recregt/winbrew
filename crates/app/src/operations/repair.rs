@@ -17,7 +17,7 @@ use crate::core::{
 use crate::database;
 use crate::engines::{self, EngineKind};
 use crate::models::catalog::{CatalogInstaller, CatalogPackage};
-use crate::models::domains::command_resolution::ResolverResult;
+use crate::models::domains::command_resolution::{ResolverResult, resolve_command_exposure};
 use crate::models::domains::installed::InstalledPackage;
 use crate::models::domains::package::{PackageId, PackageRef};
 use crate::models::domains::reporting::{HealthReport, RecoveryActionGroup};
@@ -96,6 +96,16 @@ pub fn build_repair_plan(report: &HealthReport, packages_root: &Path) -> RepairP
 
 pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
     let mut conn = database::get_conn()?;
+    let catalog_conn = match database::get_catalog_conn() {
+        Ok(conn) => Some(conn),
+        Err(err) => {
+            warn!(
+                error = %err,
+                "failed to open catalog database for repair command resolution comparison"
+            );
+            None
+        }
+    };
     let mut replayed = 0usize;
 
     for journal_path in journal_paths {
@@ -106,6 +116,9 @@ pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
                     journal_path.display()
                 )
             })?;
+        if let Some(catalog_conn) = catalog_conn.as_ref() {
+            warn_if_command_resolution_is_stale(catalog_conn, &committed);
+        }
         let previous_commands = database::list_commands_for_package(&conn, &committed.package.name)
             .unwrap_or_else(|err| {
                 warn!(
@@ -166,6 +179,121 @@ fn journal_commands(committed: &database::CommittedJournalPackage) -> &[String] 
         commands.as_slice()
     } else {
         committed.commands.as_deref().unwrap_or(&[])
+    }
+}
+
+fn warn_if_command_resolution_is_stale(
+    catalog_conn: &database::DbConnection,
+    committed: &database::CommittedJournalPackage,
+) {
+    let Some(committed_resolution) = committed.command_resolution.as_ref() else {
+        return;
+    };
+
+    let Some(current_resolution) =
+        current_command_resolution(catalog_conn, &committed.package.name)
+    else {
+        return;
+    };
+
+    if !command_resolution_is_stale(committed_resolution, &current_resolution) {
+        return;
+    }
+
+    let ResolverResult::Resolved {
+        catalog_fingerprint: committed_fingerprint,
+        ..
+    } = committed_resolution
+    else {
+        return;
+    };
+    let ResolverResult::Resolved {
+        catalog_fingerprint: current_fingerprint,
+        ..
+    } = &current_resolution
+    else {
+        return;
+    };
+
+    warn!(
+        package = committed.package.name.as_str(),
+        committed_fingerprint = committed_fingerprint.as_str(),
+        current_fingerprint = current_fingerprint.as_str(),
+        "committed journal command resolution fingerprint differs from current catalog metadata"
+    );
+}
+
+fn current_command_resolution(
+    catalog_conn: &database::DbConnection,
+    package_id: &str,
+) -> Option<ResolverResult> {
+    let package = match database::get_package_by_id(catalog_conn, package_id) {
+        Ok(Some(package)) => package,
+        Ok(None) => return None,
+        Err(err) => {
+            warn!(
+                package = package_id,
+                error = %err,
+                "failed to read catalog package for repair command resolution comparison"
+            );
+            return None;
+        }
+    };
+
+    let installers = match database::get_installers(catalog_conn, package.id.as_str()) {
+        Ok(installers) => installers,
+        Err(err) => {
+            warn!(
+                package = package_id,
+                error = %err,
+                "failed to read catalog installers for repair command resolution comparison"
+            );
+            return None;
+        }
+    };
+
+    let selection_context = crate::catalog::SelectionContext::new(
+        crate::windows::host_profile(),
+        crate::windows::is_elevated(),
+    );
+    let installer = match install::types::select_installer(&installers, selection_context) {
+        Ok(installer) => installer,
+        Err(err) => {
+            warn!(
+                package = package_id,
+                error = %err,
+                "failed to select catalog installer for repair command resolution comparison"
+            );
+            return None;
+        }
+    };
+
+    match resolve_command_exposure(&package, &installer) {
+        Ok(resolution) => Some(resolution),
+        Err(err) => {
+            warn!(
+                package = package_id,
+                error = %err,
+                "failed to resolve current command exposure for repair comparison"
+            );
+            None
+        }
+    }
+}
+
+fn command_resolution_is_stale(committed: &ResolverResult, current: &ResolverResult) -> bool {
+    match (committed, current) {
+        (
+            ResolverResult::Resolved {
+                catalog_fingerprint: committed_fingerprint,
+                ..
+            },
+            ResolverResult::Resolved {
+                catalog_fingerprint: current_fingerprint,
+                ..
+            },
+        ) => committed_fingerprint != current_fingerprint,
+        _ => false,
     }
 }
 
@@ -482,7 +610,13 @@ fn restore_target_files(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_repair_plan, engine_requires_reinstall_only, restore_target_files};
+    use super::{
+        build_repair_plan, command_resolution_is_stale, engine_requires_reinstall_only,
+        restore_target_files,
+    };
+    use crate::models::domains::command_resolution::{
+        CommandSource, Confidence, ResolverResult, VersionScope,
+    };
     use crate::models::domains::reporting::{
         DiagnosisSeverity, HealthReport, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind,
     };
@@ -553,6 +687,26 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn command_resolution_is_stale_when_fingerprints_differ() {
+        let committed = ResolverResult::Resolved {
+            commands: vec!["contoso".to_string()],
+            confidence: Confidence::High,
+            sources: vec![CommandSource::PackageLevel],
+            version_scope: VersionScope::Specific("1.0.0".to_string()),
+            catalog_fingerprint: "sha256:deadbeef".to_string(),
+        };
+        let current = ResolverResult::Resolved {
+            commands: vec!["contoso".to_string()],
+            confidence: Confidence::High,
+            sources: vec![CommandSource::PackageLevel],
+            version_scope: VersionScope::Specific("1.0.0".to_string()),
+            catalog_fingerprint: "sha256:cafebabe".to_string(),
+        };
+
+        assert!(command_resolution_is_stale(&committed, &current));
     }
 
     #[test]
