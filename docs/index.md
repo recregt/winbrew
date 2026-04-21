@@ -14,6 +14,7 @@ Use it when you want to answer one of these questions:
 - [BUILD](BUILD.md) for local build, test, and run steps.
 - [Contributing](../CONTRIBUTING.md) for setup, task commands, and validation.
 - [Create Dependency Boundaries](create-dependence.md) for object ownership and wiring rules.
+- [Frequently Asked Questions](faq.md) for questions.
 
 ## Runtime Contracts
 
