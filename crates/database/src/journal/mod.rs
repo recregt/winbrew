@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+use winbrew_models::command_resolution::ResolverResult;
 use winbrew_models::install::engine::EngineMetadata;
 use winbrew_models::shared::DeploymentKind;
 use winbrew_models::shared::hash::HashAlgorithm;
@@ -108,6 +109,7 @@ impl fmt::Display for FileHash {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum JournalEntry {
     Metadata {
@@ -126,6 +128,8 @@ pub enum JournalEntry {
         commands: Option<Vec<String>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         bin: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        command_resolution: Option<ResolverResult>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         engine_metadata: Option<EngineMetadata>,
     },
@@ -199,6 +203,7 @@ mod tests {
             dependencies: vec!["winget/Contoso.Shared".to_string()],
             commands: None,
             bin: None,
+            command_resolution: None,
             engine_metadata: None,
         }
     }
@@ -481,6 +486,7 @@ mod tests {
                 dependencies: Vec::new(),
                 commands: None,
                 bin: None,
+                command_resolution: None,
                 engine_metadata: None,
             })
             .expect("write committed metadata");
@@ -500,6 +506,7 @@ mod tests {
                 dependencies: Vec::new(),
                 commands: None,
                 bin: None,
+                command_resolution: None,
                 engine_metadata: None,
             })
             .expect("write incomplete metadata");

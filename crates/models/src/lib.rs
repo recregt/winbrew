@@ -10,6 +10,7 @@
 //! - `shared`: errors, validation, identifiers, config, hash, deployment, and version
 //! - `package`: package identity, queries, dependencies, and package aggregates
 //! - `catalog`: typed catalog records and raw upstream catalog payloads
+//! - `command_resolution`: command exposure results, confidence, provenance, and fingerprinting
 //! - `install`: installer metadata, engine receipts, installed state, and removal planning
 //! - `reporting`: diagnostics, health reports, and recovery findings
 //! - `msi_inventory`: MSI snapshot records used for repair and inventory persistence
@@ -20,6 +21,7 @@
 //! a direct module path.
 
 pub mod catalog;
+pub mod command_resolution;
 pub mod install;
 pub mod msi_inventory;
 pub mod package;
@@ -51,6 +53,13 @@ pub mod domains {
         pub use crate::catalog::metadata::CatalogMetadata;
         pub use crate::catalog::package::{CatalogInstaller, CatalogPackage};
         pub use crate::catalog::raw::{RawCatalogInstaller, RawCatalogPackage};
+    }
+
+    pub mod command_resolution {
+        pub use crate::command_resolution::{
+            CatalogFingerprintError, CommandSource, Confidence, ResolverResult, UnresolvedReason,
+            VersionScope, catalog_fingerprint,
+        };
     }
 
     pub mod installed {

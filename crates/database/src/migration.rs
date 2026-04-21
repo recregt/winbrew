@@ -133,17 +133,16 @@ mod tests {
             assert_eq!(exists, 1, "expected table {table} to exist");
         }
 
-        for index in ["idx_command_registry_package_name"] {
-            let exists = conn
-                .query_row(
-                    "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?1",
-                    [index],
-                    |row| row.get::<_, i64>(0),
-                )
-                .expect("index lookup");
+        let index = "idx_command_registry_package_name";
+        let exists = conn
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?1",
+                [index],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("index lookup");
 
-            assert_eq!(exists, 1, "expected index {index} to exist");
-        }
+        assert_eq!(exists, 1, "expected index {index} to exist");
     }
 
     #[test]

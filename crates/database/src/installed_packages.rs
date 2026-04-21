@@ -393,6 +393,7 @@ mod tests {
             package: replay_package,
             commands: None,
             bin: Some(vec!["bin/tool.exe".to_string()]),
+            command_resolution: None,
         };
 
         replay_committed_journal(&mut conn, &replay).expect("replay committed journal");

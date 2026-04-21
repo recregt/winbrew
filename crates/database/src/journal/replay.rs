@@ -6,6 +6,7 @@ use thiserror::Error;
 
 use super::{JournalEntry, JournalReadError, JournalReader};
 use winbrew_core::ResolvedPaths;
+use winbrew_models::command_resolution::ResolverResult;
 use winbrew_models::install::engine::EngineKind;
 use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
 use winbrew_models::install::installer::InstallerType;
@@ -18,6 +19,7 @@ pub struct CommittedJournalPackage {
     pub package: InstalledPackage,
     pub commands: Option<Vec<String>>,
     pub bin: Option<Vec<String>>,
+    pub command_resolution: Option<ResolverResult>,
 }
 
 #[derive(Debug, Error)]
@@ -111,6 +113,7 @@ fn parse_committed_package_journal(
         dependencies,
         commands,
         bin,
+        command_resolution,
         engine_metadata,
     ) = entries
         .iter()
@@ -124,6 +127,7 @@ fn parse_committed_package_journal(
                 dependencies,
                 commands,
                 bin,
+                command_resolution,
                 engine_metadata,
             } => Some((
                 package_id.as_str(),
@@ -134,6 +138,7 @@ fn parse_committed_package_journal(
                 dependencies.clone(),
                 commands.clone(),
                 bin.clone(),
+                command_resolution.clone(),
                 engine_metadata.clone(),
             )),
             _ => None,
@@ -214,6 +219,7 @@ fn parse_committed_package_journal(
         package,
         commands,
         bin,
+        command_resolution,
     })
 }
 

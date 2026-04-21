@@ -178,6 +178,7 @@ fn replay_committed_journal_replaces_existing_package() -> Result<()> {
         package: replay_package,
         commands: None,
         bin: Some(vec!["bin/tool.exe".to_string()]),
+        command_resolution: None,
     };
 
     database::replay_committed_journal(&mut conn, &replay)?;

@@ -235,6 +235,7 @@ fn diagnose_committed_journal(
                 dependencies: _,
                 commands: _,
                 bin: _,
+                command_resolution: _,
                 engine_metadata: _,
             } => Some((
                 package_id.as_str(),
