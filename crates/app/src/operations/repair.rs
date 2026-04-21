@@ -87,6 +87,14 @@ pub struct JournalReplayTarget {
     pub command_resolution_status: JournalCommandResolutionStatus,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct JournalReplaySummary {
+    pub total: usize,
+    pub fresh: usize,
+    pub stale: usize,
+    pub unknown: usize,
+}
+
 /// Build the grouped recovery plan from a health report.
 pub fn build_repair_plan(report: &HealthReport, packages_root: &Path) -> RepairPlan {
     let journal_paths = recovery_paths(report, RecoveryActionGroup::JournalReplay);
@@ -229,6 +237,23 @@ pub fn replay_prepared_journal_targets(targets: &[JournalReplayTarget]) -> Resul
     }
 
     Ok(replayed)
+}
+
+pub fn summarize_journal_replay_targets(targets: &[JournalReplayTarget]) -> JournalReplaySummary {
+    let mut summary = JournalReplaySummary {
+        total: targets.len(),
+        ..JournalReplaySummary::default()
+    };
+
+    for target in targets {
+        match target.command_resolution_status {
+            JournalCommandResolutionStatus::Fresh => summary.fresh += 1,
+            JournalCommandResolutionStatus::Stale { .. } => summary.stale += 1,
+            JournalCommandResolutionStatus::Unknown => summary.unknown += 1,
+        }
+    }
+
+    summary
 }
 
 fn journal_commands(committed: &database::CommittedJournalPackage) -> &[String] {

@@ -56,6 +56,21 @@ fn run_journal_replay_group<W: Write>(
         plan.journal_paths.len()
     ));
 
+    let journal_targets = repair::prepare_journal_replay_targets(&plan.journal_paths)?;
+    let journal_summary = repair::summarize_journal_replay_targets(&journal_targets);
+    if journal_summary.total > 0 {
+        let message = format!(
+            "Journal command resolution: {} fresh, {} stale, {} unknown.",
+            journal_summary.fresh, journal_summary.stale, journal_summary.unknown
+        );
+
+        if journal_summary.stale > 0 {
+            ui.warn(message);
+        } else {
+            ui.info(message);
+        }
+    }
+
     if !confirm_group(
         ui,
         yes,
@@ -69,7 +84,6 @@ fn run_journal_replay_group<W: Write>(
         return Ok(0);
     }
 
-    let journal_targets = repair::prepare_journal_replay_targets(&plan.journal_paths)?;
     let replayed = ui.spinner(
         format!(
             "Replaying {} committed journal(s)...",

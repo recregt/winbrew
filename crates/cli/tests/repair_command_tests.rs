@@ -282,6 +282,69 @@ fn repair_replays_committed_journal_using_resolver_commands() {
 }
 
 #[test]
+fn repair_reports_journal_command_resolution_summary() -> Result<()> {
+    let fixture = RepairFixture::new();
+    let package_name = "winget/Contoso.Summary";
+    let catalog_package_name = "Contoso.Summary";
+    let journal_install_dir = fixture.root_path().join("packages").join("Contoso.Summary");
+    fixture.insert_stale_package(package_name);
+
+    let zip_bytes = create_dummy_zip_bytes()?;
+    let sha512_hash = sha512_hex(&zip_bytes);
+    let installer_url = "https://example.invalid/summary.zip";
+    create_catalog_db_with_hash(&fixture, catalog_package_name, installer_url, &sha512_hash)?;
+    fixture
+        .catalog_conn()
+        .execute(
+            "UPDATE catalog_packages SET commands = ?1 WHERE id = ?2",
+            params![
+                r#"["current"]"#,
+                common::catalog_package_id(catalog_package_name)
+            ],
+        )
+        .expect("seed current catalog commands");
+
+    let mut writer =
+        database::JournalWriter::open_for_package(fixture.root_path(), package_name, "1.0.0")
+            .expect("open journal");
+    writer
+        .append(&database::JournalEntry::Metadata {
+            package_id: package_name.to_string(),
+            version: "1.0.0".to_string(),
+            engine: "portable".to_string(),
+            deployment_kind: DeploymentKind::Portable,
+            install_dir: journal_install_dir.to_string_lossy().to_string(),
+            dependencies: vec!["winget/Contoso.Dependency".to_string()],
+            commands: None,
+            bin: Some(vec!["bin/tool.exe".to_string()]),
+            command_resolution: Some(ResolverResult::Resolved {
+                commands: vec!["contoso".to_string()],
+                confidence: Confidence::High,
+                sources: vec![CommandSource::PackageLevel],
+                version_scope: VersionScope::Specific("1.0.0".to_string()),
+                catalog_fingerprint: "sha256:deadbeef".to_string(),
+            }),
+            engine_metadata: None,
+        })
+        .expect("write metadata");
+    writer
+        .append(&database::JournalEntry::Commit {
+            installed_at: "2026-04-12T00:00:00Z".to_string(),
+        })
+        .expect("write commit");
+    writer.flush().expect("flush journal");
+
+    let output = common::run_winbrew(fixture.root_path(), &["repair", "-y"]);
+    common::assert_success(&output, "winbrew repair")?;
+    common::assert_output_contains(
+        &output,
+        "Journal command resolution: 0 fresh, 1 stale, 0 unknown.",
+    )?;
+
+    Ok(())
+}
+
+#[test]
 fn repair_removes_orphan_install_directory() {
     let fixture = RepairFixture::new();
     let orphan_dir = fixture.package_dir("Contoso.Orphan");
