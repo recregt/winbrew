@@ -70,6 +70,23 @@ pub enum FileRestoreResolution {
     Reinstall(Box<FileRestoreReinstallTarget>),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JournalCommandResolutionStatus {
+    Unknown,
+    Fresh,
+    Stale {
+        committed_fingerprint: String,
+        current_fingerprint: String,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct JournalReplayTarget {
+    pub journal_path: PathBuf,
+    pub committed: database::CommittedJournalPackage,
+    pub command_resolution_status: JournalCommandResolutionStatus,
+}
+
 /// Build the grouped recovery plan from a health report.
 pub fn build_repair_plan(report: &HealthReport, packages_root: &Path) -> RepairPlan {
     let journal_paths = recovery_paths(report, RecoveryActionGroup::JournalReplay);
@@ -95,7 +112,13 @@ pub fn build_repair_plan(report: &HealthReport, packages_root: &Path) -> RepairP
 }
 
 pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
-    let mut conn = database::get_conn()?;
+    let targets = prepare_journal_replay_targets(journal_paths)?;
+    replay_prepared_journal_targets(&targets)
+}
+
+pub fn prepare_journal_replay_targets(
+    journal_paths: &[PathBuf],
+) -> Result<Vec<JournalReplayTarget>> {
     let catalog_conn = match database::get_catalog_conn() {
         Ok(conn) => Some(conn),
         Err(err) => {
@@ -106,19 +129,53 @@ pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
             None
         }
     };
+
+    journal_paths
+        .iter()
+        .map(|journal_path| {
+            let committed = database::JournalReader::read_committed_package(journal_path)
+                .with_context(|| {
+                    format!(
+                        "failed to parse committed journal at {}",
+                        journal_path.display()
+                    )
+                })?;
+
+            let command_resolution_status = classify_journal_command_resolution_status(
+                committed.command_resolution.as_ref(),
+                catalog_conn
+                    .as_ref()
+                    .and_then(|conn| current_command_resolution(conn, &committed.package.name)),
+            );
+
+            if let JournalCommandResolutionStatus::Stale {
+                committed_fingerprint,
+                current_fingerprint,
+            } = &command_resolution_status
+            {
+                warn!(
+                    package = committed.package.name.as_str(),
+                    committed_fingerprint = committed_fingerprint.as_str(),
+                    current_fingerprint = current_fingerprint.as_str(),
+                    "committed journal command resolution fingerprint differs from current catalog metadata"
+                );
+            }
+
+            Ok(JournalReplayTarget {
+                journal_path: journal_path.clone(),
+                committed,
+                command_resolution_status,
+            })
+        })
+        .collect()
+}
+
+fn replay_prepared_journal_targets(targets: &[JournalReplayTarget]) -> Result<usize> {
+    let mut conn = database::get_conn()?;
     let mut replayed = 0usize;
 
-    for journal_path in journal_paths {
-        let committed = database::JournalReader::read_committed_package(journal_path)
-            .with_context(|| {
-                format!(
-                    "failed to parse committed journal at {}",
-                    journal_path.display()
-                )
-            })?;
-        if let Some(catalog_conn) = catalog_conn.as_ref() {
-            warn_if_command_resolution_is_stale(catalog_conn, &committed);
-        }
+    for target in targets {
+        let committed = &target.committed;
         let previous_commands = database::list_commands_for_package(&conn, &committed.package.name)
             .unwrap_or_else(|err| {
                 warn!(
@@ -128,15 +185,15 @@ pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
                 );
                 Vec::new()
             });
-        database::replay_committed_journal(&mut conn, &committed).with_context(|| {
+        database::replay_committed_journal(&mut conn, committed).with_context(|| {
             format!(
                 "failed to replay committed journal at {}",
-                journal_path.display()
+                target.journal_path.display()
             )
         })?;
         let shims_root =
             install_root_from_package_dir(Path::new(&committed.package.install_dir)).join("shims");
-        let desired_commands = journal_commands(&committed);
+        let desired_commands = journal_commands(committed);
         let empty_paths: &[String] = &[];
         let target_paths = committed.bin.as_deref().unwrap_or(empty_paths);
 
@@ -180,47 +237,6 @@ fn journal_commands(committed: &database::CommittedJournalPackage) -> &[String] 
     } else {
         committed.commands.as_deref().unwrap_or(&[])
     }
-}
-
-fn warn_if_command_resolution_is_stale(
-    catalog_conn: &database::DbConnection,
-    committed: &database::CommittedJournalPackage,
-) {
-    let Some(committed_resolution) = committed.command_resolution.as_ref() else {
-        return;
-    };
-
-    let Some(current_resolution) =
-        current_command_resolution(catalog_conn, &committed.package.name)
-    else {
-        return;
-    };
-
-    if !command_resolution_is_stale(committed_resolution, &current_resolution) {
-        return;
-    }
-
-    let ResolverResult::Resolved {
-        catalog_fingerprint: committed_fingerprint,
-        ..
-    } = committed_resolution
-    else {
-        return;
-    };
-    let ResolverResult::Resolved {
-        catalog_fingerprint: current_fingerprint,
-        ..
-    } = &current_resolution
-    else {
-        return;
-    };
-
-    warn!(
-        package = committed.package.name.as_str(),
-        committed_fingerprint = committed_fingerprint.as_str(),
-        current_fingerprint = current_fingerprint.as_str(),
-        "committed journal command resolution fingerprint differs from current catalog metadata"
-    );
 }
 
 fn current_command_resolution(
@@ -277,6 +293,44 @@ fn current_command_resolution(
                 "failed to resolve current command exposure for repair comparison"
             );
             None
+        }
+    }
+}
+
+fn classify_journal_command_resolution_status(
+    committed: Option<&ResolverResult>,
+    current: Option<ResolverResult>,
+) -> JournalCommandResolutionStatus {
+    let Some(committed_resolution) = committed else {
+        return JournalCommandResolutionStatus::Unknown;
+    };
+
+    let ResolverResult::Resolved {
+        catalog_fingerprint: committed_fingerprint,
+        ..
+    } = committed_resolution
+    else {
+        return JournalCommandResolutionStatus::Unknown;
+    };
+
+    let Some(current_resolution) = current.as_ref() else {
+        return JournalCommandResolutionStatus::Unknown;
+    };
+
+    let ResolverResult::Resolved {
+        catalog_fingerprint: current_fingerprint,
+        ..
+    } = current_resolution
+    else {
+        return JournalCommandResolutionStatus::Unknown;
+    };
+
+    if !command_resolution_is_stale(committed_resolution, current_resolution) {
+        JournalCommandResolutionStatus::Fresh
+    } else {
+        JournalCommandResolutionStatus::Stale {
+            committed_fingerprint: committed_fingerprint.clone(),
+            current_fingerprint: current_fingerprint.clone(),
         }
     }
 }
@@ -611,8 +665,8 @@ fn restore_target_files(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_repair_plan, command_resolution_is_stale, engine_requires_reinstall_only,
-        restore_target_files,
+        build_repair_plan, classify_journal_command_resolution_status, command_resolution_is_stale,
+        engine_requires_reinstall_only, restore_target_files,
     };
     use crate::models::domains::command_resolution::{
         CommandSource, Confidence, ResolverResult, VersionScope,
@@ -707,6 +761,33 @@ mod tests {
         };
 
         assert!(command_resolution_is_stale(&committed, &current));
+    }
+
+    #[test]
+    fn classify_journal_command_resolution_status_tracks_fresh_and_unknown_states() {
+        let committed = ResolverResult::Resolved {
+            commands: vec!["contoso".to_string()],
+            confidence: Confidence::High,
+            sources: vec![CommandSource::PackageLevel],
+            version_scope: VersionScope::Specific("1.0.0".to_string()),
+            catalog_fingerprint: "sha256:deadbeef".to_string(),
+        };
+        let current = ResolverResult::Resolved {
+            commands: vec!["contoso".to_string()],
+            confidence: Confidence::High,
+            sources: vec![CommandSource::PackageLevel],
+            version_scope: VersionScope::Specific("1.0.0".to_string()),
+            catalog_fingerprint: "sha256:deadbeef".to_string(),
+        };
+
+        assert!(matches!(
+            classify_journal_command_resolution_status(Some(&committed), Some(current)),
+            super::JournalCommandResolutionStatus::Fresh
+        ));
+        assert!(matches!(
+            classify_journal_command_resolution_status(None, None),
+            super::JournalCommandResolutionStatus::Unknown
+        ));
     }
 
     #[test]
