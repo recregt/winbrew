@@ -17,6 +17,7 @@ use crate::core::{
 use crate::database;
 use crate::engines::{self, EngineKind};
 use crate::models::catalog::{CatalogInstaller, CatalogPackage};
+use crate::models::domains::command_resolution::ResolverResult;
 use crate::models::domains::installed::InstalledPackage;
 use crate::models::domains::package::{PackageId, PackageRef};
 use crate::models::domains::reporting::{HealthReport, RecoveryActionGroup};
@@ -122,8 +123,7 @@ pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
         })?;
         let shims_root =
             install_root_from_package_dir(Path::new(&committed.package.install_dir)).join("shims");
-        let empty_commands: &[String] = &[];
-        let desired_commands = committed.commands.as_deref().unwrap_or(empty_commands);
+        let desired_commands = journal_commands(&committed);
         let empty_paths: &[String] = &[];
         let target_paths = committed.bin.as_deref().unwrap_or(empty_paths);
 
@@ -159,6 +159,14 @@ pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
     }
 
     Ok(replayed)
+}
+
+fn journal_commands(committed: &database::CommittedJournalPackage) -> &[String] {
+    if let Some(ResolverResult::Resolved { commands, .. }) = committed.command_resolution.as_ref() {
+        commands.as_slice()
+    } else {
+        committed.commands.as_deref().unwrap_or(&[])
+    }
 }
 
 pub fn cleanup_orphan_install_dirs(orphan_paths: &[PathBuf]) -> Result<usize> {
