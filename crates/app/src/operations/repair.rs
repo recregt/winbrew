@@ -266,10 +266,9 @@ pub fn summarize_journal_replay_targets(targets: &[JournalReplayTarget]) -> Jour
 }
 
 fn journal_commands(committed: &database::CommittedJournalPackage) -> &[String] {
-    if let Some(ResolverResult::Resolved { commands, .. }) = committed.command_resolution.as_ref() {
-        commands.as_slice()
-    } else {
-        committed.commands.as_deref().unwrap_or(&[])
+    match committed.command_resolution.as_ref() {
+        Some(ResolverResult::Resolved { commands, .. }) => commands.as_slice(),
+        Some(ResolverResult::Unresolved { .. }) | None => &[],
     }
 }
 
@@ -733,7 +732,13 @@ mod tests {
             },
             commands: Some(vec!["contoso".to_string()]),
             bin: Some(vec!["bin/tool.exe".to_string()]),
-            command_resolution: None,
+            command_resolution: Some(ResolverResult::Resolved {
+                commands: vec!["contoso".to_string()],
+                confidence: Confidence::High,
+                sources: vec![CommandSource::PackageLevel],
+                version_scope: VersionScope::Specific("1.0.0".to_string()),
+                catalog_fingerprint: "sha256:deadbeef".to_string(),
+            }),
         }
     }
 
