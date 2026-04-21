@@ -1,7 +1,7 @@
 //! Recovery repair helpers for replaying committed journals, cleaning orphans,
 //! and resolving high-risk recovery candidates.
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::ErrorKind;
@@ -127,8 +127,16 @@ pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
 pub fn prepare_journal_replay_targets(
     journal_paths: &[PathBuf],
 ) -> Result<Vec<JournalReplayTarget>> {
-    let mut catalog_conn: Option<database::DbConnection> = None;
-    let mut catalog_conn_attempted = false;
+    let catalog_conn = match database::get_catalog_conn() {
+        Ok(conn) => Some(conn),
+        Err(err) => {
+            warn!(
+                error = %err,
+                "failed to open catalog database for repair command resolution comparison"
+            );
+            None
+        }
+    };
     let mut targets = Vec::with_capacity(journal_paths.len());
 
     for journal_path in journal_paths {
@@ -140,27 +148,16 @@ pub fn prepare_journal_replay_targets(
                 )
             })?;
 
-        let current_resolution = if committed.command_resolution.is_some() {
-            if catalog_conn.is_none() && !catalog_conn_attempted {
-                catalog_conn_attempted = true;
+        if committed.command_resolution.is_none() {
+            bail!(
+                "committed journal at {} is missing command resolution metadata",
+                journal_path.display()
+            );
+        }
 
-                match database::get_catalog_conn() {
-                    Ok(conn) => catalog_conn = Some(conn),
-                    Err(err) => {
-                        warn!(
-                            error = %err,
-                            "failed to open catalog database for repair command resolution comparison"
-                        );
-                    }
-                }
-            }
-
-            catalog_conn
-                .as_ref()
-                .and_then(|conn| current_command_resolution(conn, &committed.package.name))
-        } else {
-            None
-        };
+        let current_resolution = catalog_conn
+            .as_ref()
+            .and_then(|conn| current_command_resolution(conn, &committed.package.name));
 
         let command_resolution_status = classify_journal_command_resolution_status(
             committed.command_resolution.as_ref(),
@@ -832,6 +829,54 @@ mod tests {
         };
 
         assert!(command_resolution_is_stale(&committed, &current));
+    }
+
+    #[test]
+    fn prepare_journal_replay_targets_rejects_missing_command_resolution_metadata()
+    -> anyhow::Result<()> {
+        let root = tempdir().expect("temp dir");
+        let mut writer = crate::database::JournalWriter::open_for_package(
+            root.path(),
+            "Contoso.Legacy",
+            "1.0.0",
+        )
+        .expect("open journal");
+        writer
+            .append(&crate::database::JournalEntry::Metadata {
+                package_id: "Contoso.Legacy".to_string(),
+                version: "1.0.0".to_string(),
+                engine: "portable".to_string(),
+                deployment_kind: DeploymentKind::Portable,
+                install_dir: root
+                    .path()
+                    .join("packages")
+                    .join("Contoso.Legacy")
+                    .to_string_lossy()
+                    .to_string(),
+                dependencies: Vec::new(),
+                commands: Some(vec!["contoso".to_string()]),
+                bin: None,
+                command_resolution: None,
+                engine_metadata: None,
+            })
+            .expect("write metadata");
+        writer
+            .append(&crate::database::JournalEntry::Commit {
+                installed_at: "2026-04-12T00:00:00Z".to_string(),
+            })
+            .expect("write commit");
+        writer.flush().expect("flush journal");
+
+        let journal_path = writer.path().to_path_buf();
+        let err = super::prepare_journal_replay_targets(&[journal_path])
+            .expect_err("legacy journal should be rejected");
+
+        assert!(
+            err.to_string()
+                .contains("missing command resolution metadata")
+        );
+
+        Ok(())
     }
 
     #[test]
