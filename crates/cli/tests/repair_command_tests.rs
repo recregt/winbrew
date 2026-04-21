@@ -5,7 +5,7 @@ mod common;
 
 use anyhow::Result;
 use mockito::Server;
-use rusqlite::Connection;
+use rusqlite::{Connection, params};
 use std::cell::OnceCell;
 use std::fs;
 use std::io::{Cursor, Write};
@@ -162,6 +162,16 @@ fn repair_replays_committed_journal_into_database() {
     let installer_url = "https://example.invalid/contoso.zip";
     create_catalog_db_with_hash(&fixture, catalog_package_name, installer_url, &sha512_hash)
         .expect("seed catalog package");
+    fixture
+        .catalog_conn()
+        .execute(
+            "UPDATE catalog_packages SET commands = ?1 WHERE id = ?2",
+            params![
+                r#"["current"]"#,
+                common::catalog_package_id(catalog_package_name)
+            ],
+        )
+        .expect("seed current catalog commands");
 
     let mut writer =
         database::JournalWriter::open_for_package(fixture.root_path(), package_name, "1.0.0")
