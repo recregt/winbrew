@@ -125,12 +125,13 @@ pub fn run<O: InstallObserver>(
     )?;
     let command_resolution = resolve_command_exposure(&package, &installer)
         .map_err(|source| InstallError::Unexpected(anyhow::Error::new(source)))?;
-    let resolved_commands_json = match &command_resolution {
-        ResolverResult::Resolved { commands, .. } => {
-            Some(serde_json::to_string(commands).expect("resolved commands should serialize"))
-        }
+    let resolved_commands = match &command_resolution {
+        ResolverResult::Resolved { commands, .. } => Some(commands.clone()),
         ResolverResult::Unresolved { .. } => None,
     };
+    let resolved_commands_json = resolved_commands.as_ref().map(|commands| {
+        serde_json::to_string(commands).expect("resolved commands should serialize")
+    });
     let manifest_engine = engines::resolve_engine_for_installer(&installer)?;
     let manifest_deployment_kind = engines::resolve_deployment_kind(&installer);
 
@@ -254,6 +255,21 @@ pub fn run<O: InstallObserver>(
         return Err(err.into());
     }
 
+    if let Err(err) = write_install_journal(
+        &ctx.paths,
+        &conn,
+        &package.name,
+        &command_resolution,
+        resolved_commands.as_deref(),
+        package.bin.as_deref(),
+    ) {
+        warn!(
+            package = %package.name,
+            error = %err,
+            "failed to write install journal"
+        );
+    }
+
     if let Err(err) =
         shims::publish_package_shims(&ctx.paths.shims, &package.name, package.bin.as_deref())
     {
@@ -290,4 +306,57 @@ impl Drop for TempRootGuard {
     fn drop(&mut self) {
         flow::cleanup_temp_root(&self.path);
     }
+}
+
+fn write_install_journal(
+    paths: &crate::core::paths::ResolvedPaths,
+    conn: &crate::database::DbConnection,
+    package_name: &str,
+    command_resolution: &ResolverResult,
+    commands: Option<&[String]>,
+    bin: Option<&str>,
+) -> anyhow::Result<()> {
+    let committed_package = database::get_package(conn, package_name)?.ok_or_else(|| {
+        anyhow::anyhow!("package '{package_name}' was not found after a successful install commit")
+    })?;
+
+    let mut writer = database::JournalWriter::open_for_package_in(
+        paths,
+        committed_package.name.as_str(),
+        committed_package.version.as_str(),
+    )?;
+
+    let bin = match bin {
+        Some(raw_bin) => match serde_json::from_str::<Vec<String>>(raw_bin) {
+            Ok(bin) => Some(bin),
+            Err(err) => {
+                warn!(
+                    package = %package_name,
+                    error = %err,
+                    "failed to serialize install bin metadata into journal"
+                );
+                None
+            }
+        },
+        None => None,
+    };
+
+    writer.append(&database::JournalEntry::Metadata {
+        package_id: committed_package.name.clone(),
+        version: committed_package.version.clone(),
+        engine: committed_package.engine_kind.as_str().to_string(),
+        deployment_kind: committed_package.deployment_kind,
+        install_dir: committed_package.install_dir.clone(),
+        dependencies: committed_package.dependencies.clone(),
+        commands: commands.map(|commands| commands.to_vec()),
+        bin,
+        command_resolution: Some(command_resolution.clone()),
+        engine_metadata: committed_package.engine_metadata.clone(),
+    })?;
+    writer.append(&database::JournalEntry::Commit {
+        installed_at: committed_package.installed_at.clone(),
+    })?;
+    writer.flush()?;
+
+    Ok(())
 }

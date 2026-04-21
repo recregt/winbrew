@@ -8,7 +8,9 @@ use winbrew_app::install;
 use winbrew_app::install::InstallError;
 use winbrew_app::install::InstallObserver;
 use winbrew_app::{AppContext, database};
+use winbrew_core::package_journal_key;
 use winbrew_models::domains::catalog::CatalogPackage;
+use winbrew_models::domains::command_resolution::{CommandSource, Confidence, ResolverResult};
 use winbrew_models::domains::install::{Architecture, EngineKind, InstallerType};
 use winbrew_models::domains::installed::PackageStatus;
 use winbrew_models::domains::package::{PackageId, PackageName, PackageRef};
@@ -236,6 +238,19 @@ fn seed_catalog_installer_commands(
     Ok(())
 }
 
+fn read_committed_install_journal(
+    fixture: &InstallTestFixture,
+) -> Result<database::CommittedJournalPackage> {
+    let journal_path = fixture
+        .ctx
+        .paths
+        .package_journal_file(&package_journal_key(&fixture.package_name, "1.0.0"));
+
+    Ok(database::JournalReader::read_committed_package(
+        &journal_path,
+    )?)
+}
+
 #[test]
 fn install_runs_end_to_end_in_an_isolated_root() -> Result<()> {
     let test_root = test_root();
@@ -292,6 +307,18 @@ fn install_publishes_command_shims_for_catalog_commands() -> Result<()> {
 
     fixture.assert_downloaded();
 
+    let committed = read_committed_install_journal(&fixture)?;
+    assert_eq!(committed.commands, Some(vec!["contoso".to_string()]));
+    assert_eq!(committed.bin, Some(vec!["bin/tool.exe".to_string()]));
+    assert!(matches!(
+        committed.command_resolution,
+        Some(ResolverResult::Resolved {
+            confidence: Confidence::High,
+            sources,
+            ..
+        }) if sources == vec![CommandSource::PackageLevel]
+    ));
+
     Ok(())
 }
 
@@ -316,6 +343,17 @@ fn install_publishes_command_shims_for_installer_commands() -> Result<()> {
     assert!(shim_path.exists());
 
     fixture.assert_downloaded();
+
+    let committed = read_committed_install_journal(&fixture)?;
+    assert_eq!(committed.commands, Some(vec!["contoso".to_string()]));
+    assert!(matches!(
+        committed.command_resolution,
+        Some(ResolverResult::Resolved {
+            confidence: Confidence::Low,
+            sources,
+            ..
+        }) if sources == vec![CommandSource::InstallerLevel]
+    ));
 
     Ok(())
 }
