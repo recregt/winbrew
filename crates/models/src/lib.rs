@@ -58,7 +58,7 @@ pub mod domains {
     pub mod command_resolution {
         pub use crate::command_resolution::{
             CatalogFingerprintError, CommandSource, Confidence, ResolverResult, UnresolvedReason,
-            VersionScope, catalog_fingerprint,
+            VersionScope, catalog_fingerprint, resolve_command_exposure,
         };
     }
 

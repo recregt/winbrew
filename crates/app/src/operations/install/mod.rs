@@ -35,6 +35,7 @@ use tracing::warn;
 
 pub use crate::core::cancel;
 pub use crate::models::catalog::CatalogPackage;
+use crate::models::domains::command_resolution::{ResolverResult, resolve_command_exposure};
 use crate::models::domains::install::EngineInstallReceipt;
 pub use crate::models::domains::install::{InstallFailureClass, InstallOutcome, InstallResult};
 pub use crate::models::domains::package::PackageRef;
@@ -122,6 +123,14 @@ pub fn run<O: InstallObserver>(
         &database::get_installers(&catalog_conn, &package.id)?,
         selection_context,
     )?;
+    let command_resolution = resolve_command_exposure(&package, &installer)
+        .map_err(|source| InstallError::Unexpected(anyhow::Error::new(source)))?;
+    let resolved_commands_json = match &command_resolution {
+        ResolverResult::Resolved { commands, .. } => {
+            Some(serde_json::to_string(commands).expect("resolved commands should serialize"))
+        }
+        ResolverResult::Unresolved { .. } => None,
+    };
     let manifest_engine = engines::resolve_engine_for_installer(&installer)?;
     let manifest_deployment_kind = engines::resolve_deployment_kind(&installer);
 
@@ -151,7 +160,7 @@ pub fn run<O: InstallObserver>(
         &conn,
         &package.name,
         &install_dir,
-        package.commands.as_deref(),
+        resolved_commands_json.as_deref(),
     )?;
     state::mark_installing(
         &conn,
@@ -234,7 +243,7 @@ pub fn run<O: InstallObserver>(
         &mut conn,
         &package.name,
         &engine_receipt,
-        package.commands.as_deref(),
+        resolved_commands_json.as_deref(),
     ) {
         let _ = state::mark_failed(&conn, &package.name);
         if let Some(conflict) = err.downcast_ref::<database::CommandRegistryConflictError>() {
