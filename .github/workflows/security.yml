@@ -65,7 +65,7 @@ jobs:
         uses: actions-rust-lang/audit@v1
         with:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          createIssues: true
+          createIssues: false
 
   gitleaks:
     name: Secrets
