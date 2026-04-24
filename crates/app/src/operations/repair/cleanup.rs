@@ -25,3 +25,28 @@ pub fn cleanup_orphan_install_dirs(orphan_paths: &[PathBuf]) -> Result<usize> {
 
     Ok(removed)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::cleanup_orphan_install_dirs;
+    use anyhow::Result;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn cleanup_orphan_install_dirs_removes_existing_paths_and_ignores_missing_ones() -> Result<()> {
+        let root = tempdir().expect("temp dir");
+        let existing_orphan = root.path().join("Contoso.Orphan");
+        let missing_orphan = root.path().join("Contoso.Missing");
+
+        fs::create_dir_all(&existing_orphan).expect("create orphan directory");
+        fs::write(existing_orphan.join("tool.exe"), b"binary").expect("write orphan file");
+
+        let removed = cleanup_orphan_install_dirs(&[existing_orphan.clone(), missing_orphan])?;
+
+        assert_eq!(removed, 1);
+        assert!(!existing_orphan.exists());
+
+        Ok(())
+    }
+}

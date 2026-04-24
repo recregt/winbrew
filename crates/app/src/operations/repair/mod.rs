@@ -14,17 +14,8 @@ pub use replay::{
     prepare_journal_replay_targets, replay_committed_journals, replay_prepared_journal_targets,
     summarize_journal_replay_targets,
 };
-#[cfg(test)]
-pub(crate) use replay::{classify_journal_command_resolution_status, command_resolution_is_stale};
-#[cfg(test)]
-pub(crate) use resolution::engine_requires_reinstall_only;
 pub use resolution::{
     FileRestoreReinstallTarget, FileRestoreResolution, ResolvedFileRestoreTarget,
     reinstall_package, resolve_file_restore_target, resolve_repair_catalog_package,
 };
 pub use restore::restore_file_restore_target;
-#[cfg(test)]
-pub(crate) use restore::restore_target_files;
-
-#[cfg(test)]
-mod tests;

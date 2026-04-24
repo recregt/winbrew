@@ -136,3 +136,16 @@ pub fn reinstall_package<O: InstallObserver>(
     install::run(ctx, package_ref, false, observer)
         .with_context(|| format!("failed to reinstall package '{}'", catalog_package.name))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::engine_requires_reinstall_only;
+    use crate::engines::EngineKind;
+
+    #[test]
+    fn engine_requires_reinstall_only_returns_true_for_fonts() {
+        assert!(engine_requires_reinstall_only(EngineKind::Font));
+        assert!(!engine_requires_reinstall_only(EngineKind::NativeExe));
+        assert!(!engine_requires_reinstall_only(EngineKind::Portable));
+    }
+}

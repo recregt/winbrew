@@ -97,3 +97,35 @@ pub(crate) fn restore_target_files(
 
     Ok(restored)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::restore_target_files;
+    use anyhow::Result;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn restore_target_files_copies_staged_content() -> Result<()> {
+        let root = tempdir().expect("temp dir");
+        let stage_dir = root.path().join("stage");
+        let install_dir = root.path().join("packages").join("Contoso.App");
+        let target_path = install_dir.join("bin").join("tool.exe");
+        let staged_path = stage_dir.join("bin").join("tool.exe");
+
+        fs::create_dir_all(staged_path.parent().expect("stage parent")).expect("stage dir");
+        fs::create_dir_all(target_path.parent().expect("target parent")).expect("target dir");
+        fs::write(&staged_path, b"restored-binary").expect("write staged file");
+
+        let restored =
+            restore_target_files(&stage_dir, &install_dir, std::slice::from_ref(&target_path))?;
+
+        assert_eq!(restored, 1);
+        assert_eq!(
+            fs::read(&target_path).expect("read target"),
+            b"restored-binary"
+        );
+
+        Ok(())
+    }
+}
