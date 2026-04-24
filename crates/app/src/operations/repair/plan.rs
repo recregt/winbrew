@@ -143,3 +143,56 @@ fn package_name_from_target_path(packages_root: &Path, target_path: &Path) -> Op
 
     Some(package_name.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::domains::reporting::{
+        DiagnosisSeverity, HealthReport, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind,
+    };
+    use std::path::Path;
+
+    #[test]
+    fn build_repair_plan_groups_targets_and_counts_findings() {
+        let report = HealthReport {
+            database_path: "db.sqlite".to_string(),
+            database_exists: true,
+            catalog_database_path: "catalog.sqlite".to_string(),
+            catalog_database_exists: true,
+            install_root_source: "config".to_string(),
+            install_root: "C:/Tools".to_string(),
+            install_root_exists: true,
+            packages_dir: "C:/Tools/packages".to_string(),
+            diagnostics: Vec::new(),
+            recovery_findings: vec![
+                RecoveryFinding {
+                    error_code: "missing_install_directory".to_string(),
+                    issue_kind: RecoveryIssueKind::DiskDrift,
+                    action_group: Some(RecoveryActionGroup::Reinstall),
+                    description: "pkg reinstall".to_string(),
+                    severity: DiagnosisSeverity::Error,
+                    target_path: Some("C:/Tools/packages/Contoso.App".to_string()),
+                },
+                RecoveryFinding {
+                    error_code: "missing_msi_file".to_string(),
+                    issue_kind: RecoveryIssueKind::DiskDrift,
+                    action_group: Some(RecoveryActionGroup::FileRestore),
+                    description: "pkg file".to_string(),
+                    severity: DiagnosisSeverity::Error,
+                    target_path: Some("C:/Tools/packages/Contoso.App/bin/tool.exe".to_string()),
+                },
+            ],
+            scan_duration: std::time::Duration::from_millis(1),
+            error_count: 2,
+        };
+
+        let plan = build_repair_plan(&report, Path::new("C:/Tools/packages"));
+
+        assert!(plan.journal_paths.is_empty());
+        assert!(plan.orphan_paths.is_empty());
+        assert!(plan.reinstall_packages.is_empty());
+        assert_eq!(plan.file_restore_packages.len(), 1);
+        assert_eq!(plan.file_restore_count, 1);
+        assert_eq!(plan.reinstall_count, 1);
+    }
+}
