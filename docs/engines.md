@@ -97,6 +97,16 @@ WinBrew owns the orchestration and the recorded metadata, but Windows owns the f
 
 In both cases, WinBrew should treat the OS as the execution authority and itself as the observer, normalizer, and persistence layer.
 
+### Command Exposure and Shims
+
+WinBrew writes command shims under the managed `shims/` root. That is an app-layer responsibility, not an engine-specific install path.
+
+- install publishes `.cmd` shims after the package commit succeeds
+- repair republishes shims from committed journal metadata
+- remove cleans up stale shims for the package being removed
+
+The engine layer supplies the command and `bin` metadata that drive those shims, but it does not manage the shim files directly.
+
 ### Out of scope
 
 `Pwa` is not supported.
@@ -118,6 +128,8 @@ The storage layer writes and replays per-package journals under `data/pkgdb/<pac
 - `JournalWriter::open_for_package_in` and `JournalReader::committed_paths_in` derive paths from `ResolvedPaths`.
 - `JournalReader::read_committed` reads a committed journal stream.
 - `JournalReader::read_committed_package` turns a committed journal into a replayable package record.
+- Committed journals also carry `commands`, `bin`, and `command_resolution`
+  metadata, which the app layer uses to regenerate shims.
 - Doctor scans those package journals to classify recovery issues.
 - Repair replays committed package journals before it handles the remaining recovery groups.
 

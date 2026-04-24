@@ -36,8 +36,12 @@ the directories it needs for the current command or startup phase.
 
 ```text
 %LOCALAPPDATA%\winbrew
+├── bin/
+│   └── 7zip/                        # Optional local 7-Zip runtime bootstrap
 ├── packages/
 │   └── <package-name>/              # Package install root owned by WinBrew
+├── shims/
+│   └── <package-key>/               # Package command shims
 └── data/
     ├── db/
     │   ├── winbrew.db               # Primary application database
@@ -46,7 +50,8 @@ the directories it needs for the current command or startup phase.
     │   └── <package-key>/
     │       └── journal.jsonl        # Per-package recovery journal
     ├── logs/
-    │   └── winbrew.log              # Process-wide tracing output
+    │   ├── winbrew.log              # Process-wide tracing output
+    │   └── packages/                # Package-scoped log roots when needed
     ├── cache/                       # Downloaded installers and staging files
     └── winbrew.toml                 # Persisted runtime configuration
 ```
@@ -54,13 +59,19 @@ the directories it needs for the current command or startup phase.
 Current ownership rules:
 
 - `packages/` holds package install roots created by WinBrew-managed installs.
+- `shims/` holds the managed command shims that install, remove, and repair
+  publish or clean up.
 - `data/db/` holds SQLite state and catalog state.
 - `data/pkgdb/` holds recovery journals and other package-scoped recovery
   evidence.
 - `data/logs/` holds process logs.
+- `data/logs/packages/` holds package-scoped log directories when a workflow
+  needs them.
 - `data/cache/` holds downloaded payloads and other managed temporary artifacts
   that are meant to survive within the root during a session.
 - `data/winbrew.toml` is the persisted configuration file.
+- `bin/7zip/` holds the optional locally bootstrapped 7-Zip runtime, not a
+  general-purpose binary directory.
 
 ## 3. Directory Creation Rules
 
@@ -70,12 +81,17 @@ tree on first launch.
 Creation triggers are:
 
 - `data/logs/` when the process logging subsystem initializes.
+- `data/logs/packages/` when package-scoped logging or evidence needs it.
 - `data/db/` when the database pool resolves or opens the backing SQLite files.
 - `data/pkgdb/` when journal writers or recovery code need package journals.
 - `packages/<package-name>/` when an install workflow prepares the install
   target.
+- `shims/` when install, remove, or repair needs to publish or clean command
+  shims.
 - `data/cache/` when the download or staging pipeline needs cached files.
 - `data/winbrew.toml` when config commands persist settings.
+- `bin/7zip/` when the optional 7-Zip runtime bootstrap is approved and
+  published.
 
 This laziness is deliberate. It keeps first-run overhead low and avoids creating
 state that a user may never need.
@@ -110,12 +126,14 @@ present them as part of the owned root tree.
 - `WINBREW_PATHS_ROOT` and `[paths].root` can redirect the active root.
 - `packages/`, `data/db/`, `data/pkgdb/`, `data/logs/`, and `data/cache/` are
   owned by WinBrew.
+- `shims/` is owned by WinBrew and stores command shims derived from committed
+  package metadata.
 - `data/pkgdb/<package-key>/journal.jsonl` is the per-package recovery trail.
 - Engine-specific evidence placement and launcher-shim conventions live in
   [Engine Roadmap and Ownership](engines.md).
 - Temporary workspaces under `%TEMP%\winbrew` stay unmanaged.
-- `bin/` is intentionally not part of the current plan because WinBrew does not
-  currently have a second managed binary to place there.
+- `bin/7zip/` is reserved for the optional local 7-Zip runtime and is not a
+  general-purpose binary drop location.
 
 This policy is intentionally conservative. It keeps durable state, recovery
 history, and transient installer work in separate lanes so future MSI/MSIX
