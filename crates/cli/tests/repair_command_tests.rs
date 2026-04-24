@@ -88,6 +88,11 @@ impl RepairFixture {
 
         database::insert_package(conn, &package).expect("package should insert");
     }
+
+    fn sync_package_commands(&self, package_name: &str, commands_json: &str) {
+        database::sync_package_commands(self.conn(), package_name, Some(commands_json))
+            .expect("package commands should sync");
+    }
 }
 
 fn create_dummy_zip_bytes() -> Result<Vec<u8>> {
@@ -283,6 +288,70 @@ fn repair_replays_committed_journal_using_resolver_commands() {
     let shim_path = fixture.root_path().join("shims").join("contoso.cmd");
     assert!(shim_path.exists());
     let shim_contents = fs::read_to_string(&shim_path).expect("read shim");
+    assert!(shim_contents.contains("WINBREW_SHIM_TARGET=bin\\tool.exe"));
+    assert!(!shim_contents.contains("WINBREW_SHIM_NAME"));
+}
+
+#[test]
+fn repair_replays_committed_journal_and_removes_stale_shims() {
+    let fixture = RepairFixture::new();
+    let package_name = "winget/Contoso.StaleShims";
+    let catalog_package_name = "Contoso.StaleShims";
+    let journal_install_dir = fixture
+        .root_path()
+        .join("packages")
+        .join("Contoso.StaleShims");
+    fixture.insert_stale_package(package_name);
+    fixture.sync_package_commands(package_name, r#"["contoso","legacy"]"#);
+
+    let legacy_shim = fixture.root_path().join("shims").join("legacy.cmd");
+    fs::create_dir_all(legacy_shim.parent().expect("shim parent should exist"))
+        .expect("create shim directory");
+    fs::write(&legacy_shim, "legacy shim").expect("write stale shim");
+
+    let zip_bytes = create_dummy_zip_bytes().expect("create zip bytes");
+    let sha512_hash = sha512_hex(&zip_bytes);
+    let installer_url = "https://example.invalid/stale-shims.zip";
+    create_catalog_db_with_hash(&fixture, catalog_package_name, installer_url, &sha512_hash)
+        .expect("seed catalog package");
+
+    let mut writer =
+        database::JournalWriter::open_for_package(fixture.root_path(), package_name, "1.0.0")
+            .expect("open journal");
+    writer
+        .append(&database::JournalEntry::Metadata {
+            package_id: package_name.to_string(),
+            version: "1.0.0".to_string(),
+            engine: "portable".to_string(),
+            deployment_kind: DeploymentKind::Portable,
+            install_dir: journal_install_dir.to_string_lossy().to_string(),
+            dependencies: vec!["winget/Contoso.Dependency".to_string()],
+            commands: None,
+            bin: Some(vec!["bin/tool.exe".to_string()]),
+            command_resolution: Some(ResolverResult::Resolved {
+                commands: vec!["contoso".to_string()],
+                confidence: Confidence::High,
+                sources: vec![CommandSource::PackageLevel],
+                version_scope: VersionScope::Specific("1.0.0".to_string()),
+                catalog_fingerprint: "sha256:deadbeef".to_string(),
+            }),
+            engine_metadata: None,
+        })
+        .expect("write metadata");
+    writer
+        .append(&database::JournalEntry::Commit {
+            installed_at: "2026-04-12T00:00:00Z".to_string(),
+        })
+        .expect("write commit");
+    writer.flush().expect("flush journal");
+
+    repair::run(&fixture.ctx, true).expect("repair should succeed");
+
+    let current_shim = fixture.root_path().join("shims").join("contoso.cmd");
+    assert!(current_shim.exists());
+    assert!(!legacy_shim.exists());
+
+    let shim_contents = fs::read_to_string(&current_shim).expect("read current shim");
     assert!(shim_contents.contains("WINBREW_SHIM_TARGET=bin\\tool.exe"));
     assert!(!shim_contents.contains("WINBREW_SHIM_NAME"));
 }

@@ -208,8 +208,8 @@ fn validate_font_source(source_path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        FONT_RESOURCE_FLAGS, font_registry_value_name, register_user_font, remove_user_font,
-        unregister_user_font_by_name,
+        FONT_RESOURCE_FLAGS, font_registry_value_name, install_user_font, register_user_font,
+        remove_user_font, unregister_user_font_by_name, validate_font_source,
     };
     use crate::registry::user_fonts::USER_FONTS_REGISTRY_PATH;
     use std::fs;
@@ -240,6 +240,52 @@ mod tests {
             font_registry_value_name(&PathBuf::from(r"C:\Fonts\Demo.otf"))
                 .expect("otf should parse"),
             "Demo (OpenType)"
+        );
+        assert_eq!(
+            font_registry_value_name(&PathBuf::from(r"C:\Fonts\Demo.ttc"))
+                .expect("ttc should parse"),
+            "Demo (TrueType)"
+        );
+        assert_eq!(
+            font_registry_value_name(&PathBuf::from(r"C:\Fonts\Demo.otc"))
+                .expect("otc should parse"),
+            "Demo (OpenType)"
+        );
+    }
+
+    #[test]
+    fn install_user_font_rejects_unsupported_extensions() {
+        let font_path = temp_font_path("unsupported.txt");
+        fs::write(&font_path, b"not a font").expect("write temp file");
+
+        let err = install_user_font(&font_path).expect_err("unsupported font should fail");
+
+        assert!(err.to_string().contains("unsupported font extension"));
+
+        let _ = fs::remove_file(&font_path);
+    }
+
+    #[test]
+    fn install_user_font_rejects_missing_source_file() {
+        let font_path = temp_font_path("missing.ttf");
+
+        let err = install_user_font(&font_path).expect_err("missing font should fail");
+
+        assert!(err.to_string().contains("font source path does not exist"));
+    }
+
+    #[test]
+    fn validate_font_source_rejects_empty_paths_without_a_file_stem() {
+        let err = validate_font_source(&PathBuf::from("")).expect_err("empty path should fail");
+
+        assert!(err.to_string().contains("font source path cannot be empty"));
+
+        let err = font_registry_value_name(&PathBuf::from(""))
+            .expect_err("empty path should not have a file stem");
+
+        assert!(
+            err.to_string()
+                .contains("font path does not have a file stem")
         );
     }
 
@@ -291,6 +337,32 @@ mod tests {
         remove_user_font(&font_path).expect("font removal should succeed");
 
         assert!(!font_path.exists());
+        let fonts_key = RegKey::predef(HKEY_CURRENT_USER)
+            .open_subkey(USER_FONTS_REGISTRY_PATH)
+            .expect("fonts key should exist");
+        assert!(fonts_key.get_value::<String, _>(&value_name).is_err());
+    }
+
+    #[test]
+    fn remove_user_font_is_idempotent_when_registry_entry_is_missing() {
+        let font_path = temp_font_path("missing-registry.ttf");
+        fs::write(&font_path, b"dummy font payload").expect("write temp font file");
+
+        remove_user_font(&font_path).expect("font removal should succeed without registry entry");
+
+        assert!(!font_path.exists());
+    }
+
+    #[test]
+    fn remove_user_font_is_idempotent_when_font_file_is_missing() {
+        let font_path = temp_font_path("missing-file.ttf");
+        fs::write(&font_path, b"dummy font payload").expect("write temp font file");
+
+        let value_name = register_user_font(&font_path).expect("registry entry should be written");
+        fs::remove_file(&font_path).expect("remove temp font file");
+
+        remove_user_font(&font_path).expect("font removal should succeed without the file");
+
         let fonts_key = RegKey::predef(HKEY_CURRENT_USER)
             .open_subkey(USER_FONTS_REGISTRY_PATH)
             .expect("fonts key should exist");
