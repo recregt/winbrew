@@ -71,3 +71,62 @@ pub(super) fn scan_orphaned_install_dirs(
 
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::domains::install::InstallerType;
+    use crate::models::domains::installed::{InstalledPackage, PackageStatus};
+    use crate::models::domains::reporting::{RecoveryActionGroup, RecoveryIssueKind};
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn sample_package(name: &str, install_dir: &std::path::Path) -> InstalledPackage {
+        InstalledPackage {
+            name: name.to_string(),
+            version: "1.0.0".to_string(),
+            kind: InstallerType::Portable,
+            deployment_kind: InstallerType::Portable.deployment_kind(),
+            engine_kind: InstallerType::Portable.into(),
+            engine_metadata: None,
+            install_dir: install_dir.to_string_lossy().into_owned(),
+            dependencies: Vec::new(),
+            status: PackageStatus::Ok,
+            installed_at: "2026-04-05T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn scan_orphaned_install_dirs_detects_directories_without_packages() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let packages_root = temp_dir.path().join("packages");
+        fs::create_dir_all(&packages_root).expect("packages root should be created");
+
+        let orphan_dir = packages_root.join("Contoso.Orphan");
+        fs::create_dir_all(&orphan_dir).expect("orphan directory should be created");
+
+        let known_package = sample_package("Contoso.Known", &packages_root.join("Contoso.Known"));
+
+        let scan = scan_orphaned_install_dirs(&packages_root, &[known_package]);
+
+        assert_eq!(scan.diagnostics.len(), 1);
+        assert_eq!(scan.diagnostics[0].error_code, "orphan_install_directory");
+        assert_eq!(
+            scan.diagnostics[0].severity,
+            crate::models::domains::reporting::DiagnosisSeverity::Warning
+        );
+        assert_eq!(scan.recovery_findings.len(), 1);
+        assert_eq!(
+            scan.recovery_findings[0].issue_kind,
+            RecoveryIssueKind::IncompleteInstall
+        );
+        assert_eq!(
+            scan.recovery_findings[0].action_group,
+            Some(RecoveryActionGroup::OrphanCleanup)
+        );
+        assert_eq!(
+            scan.recovery_findings[0].target_path.as_deref(),
+            Some(orphan_dir.to_string_lossy().as_ref())
+        );
+    }
+}
