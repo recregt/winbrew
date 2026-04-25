@@ -64,10 +64,8 @@ pub(super) fn scan_orphaned_install_dirs(
         result.push_orphan(package_name, &path);
     }
 
-    result.diagnostics = sort_diagnoses(result.diagnostics);
-    result
-        .recovery_findings
-        .sort_unstable_by(sort_recovery_findings);
+    sort_diagnoses(&mut result.diagnostics);
+    sort_recovery_findings(&mut result.recovery_findings);
 
     result
 }

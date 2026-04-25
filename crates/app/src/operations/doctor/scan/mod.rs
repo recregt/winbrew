@@ -5,9 +5,7 @@
 //! doctor workflow.
 
 use crate::models::domains::installed::InstalledPackage;
-use crate::models::domains::reporting::{
-    DiagnosisResult, DiagnosisSeverity, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind,
-};
+use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity, RecoveryFinding};
 
 mod journal;
 mod msi;
@@ -43,26 +41,17 @@ impl ScanResult {
     }
 
     fn push_orphan(&mut self, package_name: &str, path: &std::path::Path) {
-        let description = format!(
-            "{}: orphan install directory ({})",
-            package_name,
-            path.to_string_lossy()
-        );
-
-        self.diagnostics.push(DiagnosisResult {
+        let diagnosis = DiagnosisResult {
             error_code: "orphan_install_directory".to_string(),
-            description: description.clone(),
+            description: format!(
+                "{}: orphan install directory ({})",
+                package_name,
+                path.to_string_lossy()
+            ),
             severity: DiagnosisSeverity::Warning,
-        });
+        };
 
-        self.recovery_findings.push(RecoveryFinding {
-            error_code: "orphan_install_directory".to_string(),
-            issue_kind: RecoveryIssueKind::IncompleteInstall,
-            action_group: Some(RecoveryActionGroup::OrphanCleanup),
-            description,
-            severity: DiagnosisSeverity::Warning,
-            target_path: Some(path.to_string_lossy().into_owned()),
-        });
+        self.push(diagnosis, Some(path));
     }
 }
 
@@ -84,22 +73,20 @@ pub(super) fn scan_orphaned_install_dirs(
 }
 
 /// Sort diagnostics deterministically by code and description.
-pub(super) fn sort_diagnoses(mut diagnoses: Vec<DiagnosisResult>) -> Vec<DiagnosisResult> {
+pub(super) fn sort_diagnoses(diagnoses: &mut [DiagnosisResult]) {
     diagnoses.sort_unstable_by(|left, right| {
         left.error_code
             .cmp(&right.error_code)
             .then_with(|| left.description.cmp(&right.description))
     });
-    diagnoses
 }
 
-pub(super) fn sort_recovery_findings(
-    left: &RecoveryFinding,
-    right: &RecoveryFinding,
-) -> std::cmp::Ordering {
-    left.severity
-        .cmp(&right.severity)
-        .then_with(|| left.error_code.cmp(&right.error_code))
-        .then_with(|| left.target_path.cmp(&right.target_path))
-        .then_with(|| left.description.cmp(&right.description))
+pub(super) fn sort_recovery_findings(findings: &mut [RecoveryFinding]) {
+    findings.sort_unstable_by(|left, right| {
+        left.severity
+            .cmp(&right.severity)
+            .then_with(|| left.error_code.cmp(&right.error_code))
+            .then_with(|| left.target_path.cmp(&right.target_path))
+            .then_with(|| left.description.cmp(&right.description))
+    });
 }
