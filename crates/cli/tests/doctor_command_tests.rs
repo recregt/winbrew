@@ -96,6 +96,137 @@ fn doctor_run_warn_as_error_returns_reported_error() {
     assert_eq!(cmd_err.exit_code(), 1);
 }
 
+#[test]
+fn doctor_json_reports_corrupted_records_and_journals() {
+    let fixture = DoctorFixture::new();
+
+    let missing_install_dir = fixture.package_install_dir("Contoso.MissingInstall");
+    fixture.insert_installed_package("Contoso.MissingInstall", &missing_install_dir);
+
+    let orphan_dir = fixture.package_install_dir("Contoso.Orphan");
+    std::fs::create_dir_all(&orphan_dir).expect("orphan dir should exist");
+
+    let stale_install_dir = fixture.package_install_dir("Contoso.StaleJournal");
+    std::fs::create_dir_all(&stale_install_dir).expect("stale install dir should exist");
+    let stale_package = common::InstalledPackageBuilder::new("Contoso.StaleJournal")
+        .version("2.0.0")
+        .kind(InstallerType::Portable)
+        .build(&stale_install_dir);
+    database::insert_package(fixture.conn(), &stale_package).expect("stale package should insert");
+
+    let stale_journal_path = write_committed_journal(
+        fixture.root.path(),
+        "Contoso.StaleJournal",
+        "1.0.0",
+        &stale_install_dir,
+    );
+
+    let legacy_journal_path =
+        write_commit_only_journal(fixture.root.path(), "Contoso.LegacyJournal", "1.0.0");
+
+    let output = common::run_winbrew(fixture.root.path(), &["doctor", "--json"]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "doctor should fail when broken records are present"
+    );
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("doctor JSON should parse from stdout");
+
+    assert_eq!(report["error_count"], 2);
+    assert!(report["scan_duration_micros"].as_u64().is_some());
+
+    let scan_timings = report["scan_timings"]
+        .as_object()
+        .expect("scan_timings should be an object");
+    for key in [
+        "database_connection_micros",
+        "installed_packages_micros",
+        "package_scan_micros",
+        "msi_scan_micros",
+        "orphan_scan_micros",
+        "journal_scan_micros",
+    ] {
+        assert!(
+            scan_timings
+                .get(key)
+                .and_then(|value| value.as_u64())
+                .is_some(),
+            "expected {key} to be a numeric microsecond field"
+        );
+    }
+
+    let diagnostics = report["diagnostics"]
+        .as_array()
+        .expect("diagnostics should be an array");
+    assert_eq!(diagnostics.len(), 4);
+    assert_eq!(
+        diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic["severity"] == "error")
+            .count(),
+        2
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic["error_code"] == "missing_install_directory")
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic["error_code"] == "orphan_install_directory")
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic["error_code"] == "stale_package_journal")
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic["error_code"] == "missing_journal_metadata")
+    );
+
+    let findings = report["recovery_findings"]
+        .as_array()
+        .expect("recovery_findings should be an array");
+    assert_eq!(findings.len(), 4);
+
+    let missing_install_finding = recovery_finding_by_code(findings, "missing_install_directory");
+    assert_eq!(missing_install_finding["issue_kind"], "disk_drift");
+    assert_eq!(missing_install_finding["action_group"], "reinstall");
+    assert_eq!(
+        missing_install_finding["target_path"],
+        missing_install_dir.to_string_lossy().as_ref()
+    );
+
+    let orphan_finding = recovery_finding_by_code(findings, "orphan_install_directory");
+    assert_eq!(orphan_finding["issue_kind"], "incomplete_install");
+    assert_eq!(orphan_finding["action_group"], "orphan_cleanup");
+    assert_eq!(
+        orphan_finding["target_path"],
+        orphan_dir.to_string_lossy().as_ref()
+    );
+
+    let stale_finding = recovery_finding_by_code(findings, "stale_package_journal");
+    assert_eq!(stale_finding["issue_kind"], "conflict");
+    assert_eq!(stale_finding["action_group"], "journal_replay");
+    assert_eq!(
+        stale_finding["target_path"],
+        stale_journal_path.to_string_lossy().as_ref()
+    );
+
+    let legacy_finding = recovery_finding_by_code(findings, "missing_journal_metadata");
+    assert_eq!(legacy_finding["issue_kind"], "recovery_trail_missing");
+    assert!(legacy_finding.get("action_group").is_none());
+    assert_eq!(
+        legacy_finding["target_path"],
+        legacy_journal_path.to_string_lossy().as_ref()
+    );
+}
+
 struct SharedBuffer {
     bytes: Arc<Mutex<Vec<u8>>>,
 }
@@ -155,6 +286,61 @@ fn sample_report(diagnostics: Vec<DiagnosisResult>) -> HealthReport {
         scan_duration: Duration::from_micros(1_234),
         error_count,
     }
+}
+
+fn write_committed_journal(
+    root: &Path,
+    package_name: &str,
+    version: &str,
+    install_dir: &Path,
+) -> PathBuf {
+    let mut writer = database::JournalWriter::open_for_package(root, package_name, version)
+        .expect("open committed journal");
+    writer
+        .append(&database::JournalEntry::Metadata {
+            package_id: package_name.to_string(),
+            version: version.to_string(),
+            engine: "portable".to_string(),
+            deployment_kind: InstallerType::Portable.deployment_kind(),
+            install_dir: install_dir.to_string_lossy().into_owned(),
+            dependencies: Vec::new(),
+            commands: None,
+            bin: None,
+            command_resolution: None,
+            engine_metadata: None,
+        })
+        .expect("write metadata");
+    writer
+        .append(&database::JournalEntry::Commit {
+            installed_at: "2026-04-12T00:00:00Z".to_string(),
+        })
+        .expect("write commit");
+    writer.flush().expect("flush journal");
+
+    writer.path().to_path_buf()
+}
+
+fn write_commit_only_journal(root: &Path, package_name: &str, version: &str) -> PathBuf {
+    let mut writer = database::JournalWriter::open_for_package(root, package_name, version)
+        .expect("open legacy journal");
+    writer
+        .append(&database::JournalEntry::Commit {
+            installed_at: "2026-04-12T00:00:00Z".to_string(),
+        })
+        .expect("write commit");
+    writer.flush().expect("flush journal");
+
+    writer.path().to_path_buf()
+}
+
+fn recovery_finding_by_code<'a>(
+    findings: &'a [serde_json::Value],
+    error_code: &str,
+) -> &'a serde_json::Value {
+    findings
+        .iter()
+        .find(|finding| finding["error_code"] == error_code)
+        .unwrap_or_else(|| panic!("missing recovery finding for {error_code}"))
 }
 
 #[test]
