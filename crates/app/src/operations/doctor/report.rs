@@ -26,11 +26,13 @@ fn display_path(path: impl AsRef<Path>) -> String {
     path.as_ref().to_string_lossy().into_owned()
 }
 
-/// Order diagnostics so the final report is deterministic and readable.
+/// Order diagnostics for the final report.
 ///
-/// Errors are shown before warnings, and items within the same severity are
-/// sorted by error code and then by description.
-fn sort_diagnostics(left: &DiagnosisResult, right: &DiagnosisResult) -> std::cmp::Ordering {
+/// This is intentionally different from `scan::sort_diagnoses`: scan modules
+/// keep their own source-local ordering, while the final report groups all
+/// collected diagnostics by severity first so the UI reads from errors to
+/// warnings.
+fn sort_report_diagnostics(left: &DiagnosisResult, right: &DiagnosisResult) -> std::cmp::Ordering {
     left.severity
         .cmp(&right.severity)
         .then_with(|| left.error_code.cmp(&right.error_code))
@@ -58,7 +60,8 @@ fn collect_packages(
     }
 }
 
-fn collect_recovery_findings(diagnostics: &[DiagnosisResult]) -> Vec<RecoveryFinding> {
+/// Collect recovery findings from the initial package-loading diagnostics.
+fn collect_initial_recovery_findings(diagnostics: &[DiagnosisResult]) -> Vec<RecoveryFinding> {
     diagnostics
         .iter()
         .filter_map(RecoveryFinding::from_diagnosis)
@@ -87,7 +90,7 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
     let conn = database::get_conn()?;
 
     let (packages, mut diagnostics) = collect_packages(scan::installed_packages(&conn));
-    let mut recovery_findings = collect_recovery_findings(&diagnostics);
+    let mut recovery_findings = collect_initial_recovery_findings(&diagnostics);
     let orphan_scan = scan::scan_orphaned_install_dirs(&paths.packages, &packages);
     let scan::PackageInstallScan {
         diagnostics: package_diagnostics,
@@ -104,11 +107,10 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
 
     diagnostics.extend(package_diagnostics);
     diagnostics.extend(msi_diagnostics);
-    diagnostics.sort_unstable_by(sort_diagnostics);
-
     diagnostics.extend(orphan_scan.diagnostics);
     diagnostics.extend(journal_diagnostics);
-    diagnostics.sort_unstable_by(sort_diagnostics);
+    // Merge every scan source first, then sort the final report once.
+    diagnostics.sort_unstable_by(sort_report_diagnostics);
     recovery_findings.extend(package_recovery_findings);
     recovery_findings.extend(msi_recovery_findings);
     recovery_findings.extend(orphan_scan.recovery_findings);
@@ -142,7 +144,7 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
 
 #[cfg(test)]
 mod tests {
-    use super::{collect_packages, collect_recovery_findings, sort_diagnostics};
+    use super::{collect_initial_recovery_findings, collect_packages, sort_report_diagnostics};
     use crate::models::domains::reporting::{
         DiagnosisResult, DiagnosisSeverity, RecoveryActionGroup, RecoveryIssueKind,
     };
@@ -160,7 +162,7 @@ mod tests {
     }
 
     #[test]
-    fn sort_diagnostics_keeps_errors_before_warnings() {
+    fn sort_report_diagnostics_keeps_errors_before_warnings() {
         let mut diagnostics = [
             DiagnosisResult {
                 error_code: "warning_b".to_string(),
@@ -179,7 +181,7 @@ mod tests {
             },
         ];
 
-        diagnostics.sort_unstable_by(sort_diagnostics);
+        diagnostics.sort_unstable_by(sort_report_diagnostics);
 
         assert_eq!(diagnostics[0].severity, DiagnosisSeverity::Error);
         assert_eq!(diagnostics[1].severity, DiagnosisSeverity::Error);
@@ -195,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn collect_recovery_findings_maps_policy_issues() {
+    fn collect_initial_recovery_findings_maps_policy_issues() {
         let diagnostics = vec![DiagnosisResult {
             error_code: "stale_package_journal".to_string(),
             description: "Contoso.App: recovery journal does not match installed package"
@@ -203,7 +205,7 @@ mod tests {
             severity: DiagnosisSeverity::Error,
         }];
 
-        let findings = collect_recovery_findings(&diagnostics);
+        let findings = collect_initial_recovery_findings(&diagnostics);
 
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].issue_kind, RecoveryIssueKind::Conflict);
