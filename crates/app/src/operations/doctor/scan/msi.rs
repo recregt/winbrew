@@ -5,37 +5,11 @@ use crate::core::hash::hash_file;
 use crate::core::{HashError, verify_hash};
 use crate::models::domains::installed::InstalledPackage;
 use crate::models::domains::inventory::MsiFileRecord;
-use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity, RecoveryFinding};
+use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity};
 
-use super::{sort_diagnoses, sort_recovery_findings};
+use super::{ScanResult, sort_diagnoses, sort_recovery_findings};
 
-pub(crate) struct MsiInventoryScan {
-    pub(crate) diagnostics: Vec<DiagnosisResult>,
-    pub(crate) recovery_findings: Vec<RecoveryFinding>,
-}
-
-impl MsiInventoryScan {
-    fn new() -> Self {
-        Self {
-            diagnostics: Vec::new(),
-            recovery_findings: Vec::new(),
-        }
-    }
-
-    fn push(&mut self, diagnosis: DiagnosisResult, target_path: Option<&Path>) {
-        if let Some(finding) = RecoveryFinding::from_diagnosis(&diagnosis) {
-            let finding = match target_path {
-                Some(target_path) => {
-                    finding.with_target_path(target_path.to_string_lossy().into_owned())
-                }
-                None => finding,
-            };
-            self.recovery_findings.push(finding);
-        }
-
-        self.diagnostics.push(diagnosis);
-    }
-}
+pub(crate) type MsiInventoryScan = ScanResult;
 
 /// Verify a single MSI file against the stored inventory snapshot.
 pub(super) fn diagnose_msi_file(
@@ -135,7 +109,7 @@ pub(crate) fn scan_msi_inventory(
     conn: &crate::database::DbConnection,
     packages: &[InstalledPackage],
 ) -> MsiInventoryScan {
-    let mut scan = MsiInventoryScan::new();
+    let mut scan: MsiInventoryScan = Default::default();
 
     for pkg in packages.iter().filter(|pkg| {
         matches!(
@@ -200,6 +174,22 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::{TempDir, tempdir};
 
+    fn sample_file_record(name: &str, path: &Path, hash_hex: &str) -> MsiFileRecord {
+        let normalized_path = path
+            .to_string_lossy()
+            .replace('\\', "/")
+            .to_ascii_lowercase();
+
+        MsiFileRecord {
+            package_name: name.to_string(),
+            path: path.to_string_lossy().into_owned(),
+            normalized_path,
+            hash_algorithm: Some(HashAlgorithm::Sha256),
+            hash_hex: Some(hash_hex.to_string()),
+            is_config_file: false,
+        }
+    }
+
     fn sample_snapshot(
         name: &str,
         install_dir: &std::path::Path,
@@ -209,6 +199,7 @@ mod tests {
             .to_string_lossy()
             .replace('\\', "/")
             .to_ascii_lowercase();
+        let file_path = format!("{install_dir}/bin/demo.exe");
 
         MsiInventorySnapshot {
             receipt: MsiInventoryReceipt {
@@ -217,14 +208,7 @@ mod tests {
                 upgrade_code: Some("{22222222-2222-2222-2222-222222222222}".to_string()),
                 scope: winbrew_models::domains::install::InstallScope::Installed,
             },
-            files: vec![MsiFileRecord {
-                package_name: name.to_string(),
-                path: format!("{install_dir}/bin/demo.exe"),
-                normalized_path: format!("{install_dir}/bin/demo.exe"),
-                hash_algorithm: Some(HashAlgorithm::Sha256),
-                hash_hex: Some(hash_hex.to_string()),
-                is_config_file: false,
-            }],
+            files: vec![sample_file_record(name, Path::new(&file_path), hash_hex)],
             registry_entries: vec![MsiRegistryRecord {
                 package_name: name.to_string(),
                 hive: "HKLM".to_string(),
@@ -347,75 +331,57 @@ mod tests {
     }
 
     #[test]
-    fn diagnose_msi_file_error_maps_missing_and_permission_denied() {
+    fn diagnose_msi_file_error_maps_not_found_to_missing_msi_file() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let package = sample_package("Contoso.Msi", temp_dir.path());
-        let file = MsiFileRecord {
-            package_name: "Contoso.Msi".to_string(),
-            path: temp_dir
-                .path()
-                .join("missing.exe")
-                .to_string_lossy()
-                .into_owned(),
-            normalized_path: temp_dir
-                .path()
-                .join("missing.exe")
-                .to_string_lossy()
-                .into_owned(),
-            hash_algorithm: Some(HashAlgorithm::Sha256),
-            hash_hex: Some("00".repeat(32)),
-            is_config_file: false,
-        };
-
-        let not_found = diagnose_msi_file_error(
-            &package,
-            &file,
-            std::io::Error::from(std::io::ErrorKind::NotFound),
-        );
-        let denied = diagnose_msi_file_error(
-            &package,
-            &file,
-            std::io::Error::from(std::io::ErrorKind::PermissionDenied),
-        );
-
-        assert_eq!(not_found.error_code, "missing_msi_file");
-        assert_eq!(denied.error_code, "msi_file_permission_denied");
-        assert_eq!(
-            not_found.severity,
-            crate::models::domains::reporting::DiagnosisSeverity::Error
-        );
-        assert_eq!(denied.severity, DiagnosisSeverity::Error);
-        assert!(not_found.description.contains("Contoso.Msi"));
-        assert!(denied.description.contains("Contoso.Msi"));
-    }
-
-    #[test]
-    fn scan_msi_inventory_attaches_file_restore_targets() {
-        let temp_dir = tempdir().expect("temp dir should be created");
-        let package = sample_package("Contoso.Msi", temp_dir.path());
-        let file = MsiFileRecord {
-            package_name: "Contoso.Msi".to_string(),
-            path: temp_dir
-                .path()
-                .join("missing.exe")
-                .to_string_lossy()
-                .into_owned(),
-            normalized_path: temp_dir
-                .path()
-                .join("missing.exe")
-                .to_string_lossy()
-                .into_owned(),
-            hash_algorithm: Some(HashAlgorithm::Sha256),
-            hash_hex: Some("00".repeat(32)),
-            is_config_file: false,
-        };
+        let file_path = temp_dir.path().join("missing.exe");
+        let hash_hex = "00".repeat(32);
+        let file = sample_file_record("Contoso.Msi", &file_path, &hash_hex);
 
         let diagnosis = diagnose_msi_file_error(
             &package,
             &file,
             std::io::Error::from(std::io::ErrorKind::NotFound),
         );
-        let mut scan = MsiInventoryScan::new();
+
+        assert_eq!(diagnosis.error_code, "missing_msi_file");
+        assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
+        assert!(diagnosis.description.contains("Contoso.Msi"));
+    }
+
+    #[test]
+    fn diagnose_msi_file_error_maps_permission_denied() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let package = sample_package("Contoso.Msi", temp_dir.path());
+        let file_path = temp_dir.path().join("missing.exe");
+        let hash_hex = "00".repeat(32);
+        let file = sample_file_record("Contoso.Msi", &file_path, &hash_hex);
+
+        let diagnosis = diagnose_msi_file_error(
+            &package,
+            &file,
+            std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+        );
+
+        assert_eq!(diagnosis.error_code, "msi_file_permission_denied");
+        assert_eq!(diagnosis.severity, DiagnosisSeverity::Error);
+        assert!(diagnosis.description.contains("Contoso.Msi"));
+    }
+
+    #[test]
+    fn scan_msi_inventory_attaches_file_restore_targets() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let package = sample_package("Contoso.Msi", temp_dir.path());
+        let file_path = temp_dir.path().join("missing.exe");
+        let hash_hex = "00".repeat(32);
+        let file = sample_file_record("Contoso.Msi", &file_path, &hash_hex);
+
+        let diagnosis = diagnose_msi_file_error(
+            &package,
+            &file,
+            std::io::Error::from(std::io::ErrorKind::NotFound),
+        );
+        let mut scan: MsiInventoryScan = Default::default();
         scan.push(diagnosis, Some(Path::new(&file.path)));
 
         assert_eq!(scan.recovery_findings.len(), 1);
