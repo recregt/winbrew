@@ -113,25 +113,29 @@ impl RecoveryFinding {
 }
 
 /// Timing breakdown for the doctor scan pipeline.
+///
+/// These fields are serialized in microseconds so JSON output preserves
+/// sub-millisecond measurements, while the CLI still renders them with
+/// human-friendly units.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct HealthScanTimings {
     /// Time spent opening the database connection.
-    #[serde(serialize_with = "serialize_duration_millis")]
+    #[serde(serialize_with = "serialize_duration_micros")]
     pub database_connection: Duration,
     /// Time spent loading installed packages.
-    #[serde(serialize_with = "serialize_duration_millis")]
+    #[serde(serialize_with = "serialize_duration_micros")]
     pub installed_packages: Duration,
     /// Time spent validating package install directories.
-    #[serde(serialize_with = "serialize_duration_millis")]
+    #[serde(serialize_with = "serialize_duration_micros")]
     pub package_scan: Duration,
     /// Time spent validating MSI inventory snapshots and files.
-    #[serde(serialize_with = "serialize_duration_millis")]
+    #[serde(serialize_with = "serialize_duration_micros")]
     pub msi_scan: Duration,
     /// Time spent checking for orphaned package directories.
-    #[serde(serialize_with = "serialize_duration_millis")]
+    #[serde(serialize_with = "serialize_duration_micros")]
     pub orphan_scan: Duration,
     /// Time spent scanning committed package journals.
-    #[serde(serialize_with = "serialize_duration_millis")]
+    #[serde(serialize_with = "serialize_duration_micros")]
     pub journal_scan: Duration,
 }
 
@@ -197,4 +201,12 @@ where
 {
     let millis = duration.as_millis().min(u64::MAX as u128) as u64;
     serializer.serialize_u64(millis)
+}
+
+fn serialize_duration_micros<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let micros = duration.as_micros().min(u64::MAX as u128) as u64;
+    serializer.serialize_u64(micros)
 }
