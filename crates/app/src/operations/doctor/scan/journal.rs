@@ -457,20 +457,20 @@ mod tests {
         writer.path().to_path_buf()
     }
 
-    fn write_metadata_only_journal(env: &TestEnvironment, package_name: &str) -> PathBuf {
-        write_journal(env, package_name, |writer| {
+    fn write_metadata_only_journal(env: &TestEnvironment, package_name: &str) {
+        let _ = write_journal(env, package_name, |writer| {
             writer
                 .append(&journal_metadata_entry(package_name))
                 .expect("write metadata");
-        })
+        });
     }
 
-    fn write_commit_only_journal(env: &TestEnvironment, package_name: &str) -> PathBuf {
-        write_journal(env, package_name, |writer| {
+    fn write_commit_only_journal(env: &TestEnvironment, package_name: &str) {
+        let _ = write_journal(env, package_name, |writer| {
             writer
                 .append(&journal_commit_entry())
                 .expect("write commit");
-        })
+        });
     }
 
     fn write_committed_journal(env: &TestEnvironment, package_name: &str) -> PathBuf {
