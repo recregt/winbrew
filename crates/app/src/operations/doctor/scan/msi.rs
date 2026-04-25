@@ -176,9 +176,8 @@ pub(crate) fn scan_msi_inventory(
         }
     }
 
-    scan.diagnostics = sort_diagnoses(scan.diagnostics);
-    scan.recovery_findings
-        .sort_unstable_by(sort_recovery_findings);
+    sort_diagnoses(&mut scan.diagnostics);
+    sort_recovery_findings(&mut scan.recovery_findings);
 
     scan
 }
