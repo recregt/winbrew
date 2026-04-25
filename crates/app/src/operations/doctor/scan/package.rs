@@ -251,4 +251,34 @@ mod tests {
             Some(missing_dir_string.as_str())
         );
     }
+
+    #[test]
+    fn scan_packages_sorts_diagnoses_by_error_code() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let zeta_missing_dir = temp_dir.path().join("Zeta.Missing");
+        let alpha_valid_dir = temp_dir.path().join("Alpha.Valid");
+        let beta_missing_dir = temp_dir.path().join("Beta.Missing");
+        std::fs::create_dir_all(&alpha_valid_dir).expect("valid directory should be created");
+
+        let packages = vec![
+            sample_package("Zeta.Missing", &zeta_missing_dir),
+            sample_package("Alpha.Valid", &alpha_valid_dir),
+            sample_package("Beta.Missing", &beta_missing_dir),
+        ];
+
+        let scan = scan_packages(&packages);
+
+        assert_eq!(scan.diagnostics.len(), 2);
+        assert_eq!(scan.diagnostics[0].error_code, "missing_install_directory");
+        assert_eq!(scan.diagnostics[1].error_code, "missing_install_directory");
+        assert_eq!(scan.recovery_findings.len(), 2);
+        assert_eq!(
+            scan.recovery_findings[0].action_group,
+            Some(RecoveryActionGroup::Reinstall)
+        );
+        assert_eq!(
+            scan.recovery_findings[1].action_group,
+            Some(RecoveryActionGroup::Reinstall)
+        );
+    }
 }

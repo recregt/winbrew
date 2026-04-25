@@ -5,6 +5,7 @@ use crate::core::paths::ResolvedPaths;
 use crate::database;
 use crate::models::domains::installed::InstalledPackage;
 use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity};
+use crate::models::domains::shared::DeploymentKind;
 use tracing::debug;
 
 use super::{PackageJournalScan, sort_diagnoses, sort_recovery_findings};
@@ -18,6 +19,15 @@ mod error_codes {
     pub const MISSING_METADATA: &str = "missing_journal_metadata";
     pub const ORPHAN_JOURNAL: &str = "orphan_package_journal";
     pub const STALE_JOURNAL: &str = "stale_package_journal";
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct JournalMetadata<'a> {
+    pub(super) package_id: &'a str,
+    pub(super) version: &'a str,
+    pub(super) engine: &'a str,
+    pub(super) deployment_kind: DeploymentKind,
+    pub(super) install_dir: &'a str,
 }
 
 /// Create a standardized diagnosis result with consistent formatting.
@@ -125,12 +135,71 @@ fn journal_read_error_diagnosis(
     }
 }
 
+pub(super) fn extract_journal_metadata(
+    entries: &[database::JournalEntry],
+) -> Option<JournalMetadata<'_>> {
+    entries.iter().find_map(|entry| match entry {
+        database::JournalEntry::Metadata {
+            package_id,
+            version,
+            engine,
+            deployment_kind,
+            install_dir,
+            dependencies: _,
+            commands: _,
+            bin: _,
+            command_resolution: _,
+            engine_metadata: _,
+        } => Some(JournalMetadata {
+            package_id: package_id.as_str(),
+            version: version.as_str(),
+            engine: engine.as_str(),
+            deployment_kind: *deployment_kind,
+            install_dir: install_dir.as_str(),
+        }),
+        _ => None,
+    })
+}
+
+pub(super) fn journal_metadata_matches_package(
+    package: &InstalledPackage,
+    metadata: &JournalMetadata<'_>,
+) -> bool {
+    package.version == metadata.version
+        && package
+            .engine_kind
+            .as_str()
+            .eq_ignore_ascii_case(metadata.engine)
+        && package.install_dir == metadata.install_dir
+        && package.deployment_kind == metadata.deployment_kind
+}
+
+fn process_journal_entry(
+    entry_path: &Path,
+    package_lookup: &HashMap<&str, &InstalledPackage>,
+    result: &mut PackageJournalScan,
+) {
+    let journal_path = entry_path.join("journal.jsonl");
+
+    match database::JournalReader::read_committed(&journal_path) {
+        Ok(entries) => {
+            for diagnosis in diagnose_committed_journal(&journal_path, &entries, package_lookup) {
+                result.push(diagnosis, Some(&journal_path));
+            }
+        }
+        Err(error) => {
+            let (diagnosis, target_path) = journal_read_error_diagnosis(&journal_path, error);
+            result.push(diagnosis, target_path);
+        }
+    }
+}
+
 /// Scan package journal files under `data/pkgdb` and report recovery issues.
 pub(super) fn scan_package_journals(
     paths: &ResolvedPaths,
     packages: &[InstalledPackage],
 ) -> PackageJournalScan {
-    let pkgdb_root = paths.pkgdb.clone();
+    let pkgdb_root = &paths.pkgdb;
 
     if !pkgdb_root.exists() {
         debug!(path = %pkgdb_root.display(), "pkgdb root does not exist, skipping journal scan");
@@ -142,7 +211,7 @@ pub(super) fn scan_package_journals(
         .map(|package| (package.name.as_str(), package))
         .collect();
 
-    let entries = match std::fs::read_dir(&pkgdb_root) {
+    let entries = match std::fs::read_dir(pkgdb_root) {
         Ok(entries) => entries,
         Err(err) => {
             if err.kind() == std::io::ErrorKind::NotFound {
@@ -191,24 +260,7 @@ pub(super) fn scan_package_journals(
             continue;
         }
 
-        let journal_path = entry_path.join("journal.jsonl");
-        if !journal_path.exists() {
-            continue;
-        }
-
-        match database::JournalReader::read_committed(&journal_path) {
-            Ok(entries) => {
-                for diagnosis in
-                    diagnose_committed_journal(&journal_path, &entries, &package_lookup)
-                {
-                    result.push(diagnosis, Some(&journal_path));
-                }
-            }
-            Err(error) => {
-                let (diagnosis, target_path) = journal_read_error_diagnosis(&journal_path, error);
-                result.push(diagnosis, target_path);
-            }
-        }
+        process_journal_entry(&entry_path, &package_lookup, &mut result);
     }
 
     result.diagnostics = sort_diagnoses(result.diagnostics);
@@ -224,29 +276,7 @@ fn diagnose_committed_journal(
     entries: &[database::JournalEntry],
     packages: &HashMap<&str, &InstalledPackage>,
 ) -> Vec<DiagnosisResult> {
-    let Some((package_id, version, engine, deployment_kind, install_dir)) =
-        entries.iter().find_map(|entry| match entry {
-            database::JournalEntry::Metadata {
-                package_id,
-                version,
-                engine,
-                deployment_kind,
-                install_dir,
-                dependencies: _,
-                commands: _,
-                bin: _,
-                command_resolution: _,
-                engine_metadata: _,
-            } => Some((
-                package_id.as_str(),
-                version.as_str(),
-                engine.as_str(),
-                *deployment_kind,
-                install_dir.as_str(),
-            )),
-            _ => None,
-        })
-    else {
+    let Some(metadata) = extract_journal_metadata(entries) else {
         return vec![journal_error(
             journal_path,
             error_codes::MISSING_METADATA,
@@ -255,21 +285,27 @@ fn diagnose_committed_journal(
         )];
     };
 
-    let Some(package) = packages.get(package_id) else {
-        return vec![journal_error(
+    diagnose_committed_journal_metadata(journal_path, &metadata, packages)
+        .into_iter()
+        .collect()
+}
+
+fn diagnose_committed_journal_metadata(
+    journal_path: &Path,
+    metadata: &JournalMetadata<'_>,
+    packages: &HashMap<&str, &InstalledPackage>,
+) -> Option<DiagnosisResult> {
+    let Some(package) = packages.get(metadata.package_id) else {
+        return Some(journal_error(
             journal_path,
             error_codes::ORPHAN_JOURNAL,
             "committed recovery journal has no installed package",
             DiagnosisSeverity::Warning,
-        )];
+        ));
     };
 
-    if package.version != version
-        || !package.engine_kind.as_str().eq_ignore_ascii_case(engine)
-        || package.install_dir != install_dir
-        || package.deployment_kind != deployment_kind
-    {
-        return vec![journal_error(
+    if !journal_metadata_matches_package(package, metadata) {
+        return Some(journal_error(
             journal_path,
             error_codes::STALE_JOURNAL,
             format!(
@@ -277,8 +313,395 @@ fn diagnose_committed_journal(
                 package.name, package.version
             ),
             DiagnosisSeverity::Warning,
-        )];
+        ));
     }
 
-    Vec::new()
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        JournalMetadata, diagnose_committed_journal_metadata, extract_journal_metadata,
+        journal_metadata_matches_package, scan_package_journals,
+    };
+    use crate::core::paths::{ResolvedPaths, resolved_paths};
+    use crate::database;
+    use crate::models::domains::install::{EngineKind, InstallerType};
+    use crate::models::domains::installed::{InstalledPackage, PackageStatus};
+    use crate::models::domains::reporting::{
+        DiagnosisResult, DiagnosisSeverity, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind,
+    };
+    use crate::models::domains::shared::DeploymentKind;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use tempfile::{TempDir, tempdir};
+
+    struct TestEnvironment {
+        _root: TempDir,
+        paths: ResolvedPaths,
+    }
+
+    impl TestEnvironment {
+        fn new() -> Self {
+            let root = tempdir().expect("temp dir should be created");
+            let paths = Self::build_paths(root.path());
+
+            Self { _root: root, paths }
+        }
+
+        fn build_paths(root: &Path) -> ResolvedPaths {
+            let packages = root.join("packages").to_string_lossy().into_owned();
+            let data = root.join("data").to_string_lossy().into_owned();
+            let logs = root.join("logs").to_string_lossy().into_owned();
+            let cache = root.join("cache").to_string_lossy().into_owned();
+
+            resolved_paths(root, &packages, &data, &logs, &cache)
+        }
+
+        fn root(&self) -> &Path {
+            self._root.path()
+        }
+
+        fn pkgdb_root(&self) -> &Path {
+            &self.paths.pkgdb
+        }
+
+        fn create_dir(&self, path: &Path) {
+            fs::create_dir_all(path).expect("directory should be created");
+        }
+
+        fn write_file(&self, path: &Path, content: &[u8]) {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).expect("parent directory should be created");
+            }
+
+            fs::write(path, content).expect("file should be written");
+        }
+
+        fn journal_path(&self, package_name: &str) -> PathBuf {
+            self.pkgdb_root().join(package_name).join("journal.jsonl")
+        }
+    }
+
+    fn assert_single_diagnosis<'a>(
+        diagnostics: &'a [DiagnosisResult],
+        expected_error_code: &str,
+        expected_severity: DiagnosisSeverity,
+    ) -> &'a DiagnosisResult {
+        assert_eq!(diagnostics.len(), 1, "expected exactly one diagnosis");
+
+        let diagnosis = &diagnostics[0];
+        assert_eq!(diagnosis.error_code, expected_error_code);
+        assert_eq!(diagnosis.severity, expected_severity);
+
+        diagnosis
+    }
+
+    fn assert_single_recovery_finding(
+        findings: &[RecoveryFinding],
+        expected_issue_kind: RecoveryIssueKind,
+        expected_action_group: Option<RecoveryActionGroup>,
+    ) -> &RecoveryFinding {
+        assert_eq!(findings.len(), 1, "expected exactly one recovery finding");
+
+        let finding = &findings[0];
+        assert_eq!(finding.issue_kind, expected_issue_kind);
+        assert_eq!(finding.action_group, expected_action_group);
+
+        finding
+    }
+
+    fn assert_recovery_target_path(finding: &RecoveryFinding, expected_path: &Path) {
+        let expected_path = expected_path.to_string_lossy().to_string();
+        assert_eq!(finding.target_path.as_deref(), Some(expected_path.as_str()));
+    }
+
+    fn sample_package() -> InstalledPackage {
+        InstalledPackage {
+            name: "Contoso.App".to_string(),
+            version: "1.0.0".to_string(),
+            kind: InstallerType::Msi,
+            deployment_kind: DeploymentKind::Installed,
+            engine_kind: EngineKind::Msi,
+            engine_metadata: None,
+            install_dir: r"C:\winbrew\apps\Contoso.App".to_string(),
+            dependencies: Vec::new(),
+            status: PackageStatus::Ok,
+            installed_at: "2026-04-12T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn extract_journal_metadata_returns_structured_metadata() {
+        let entries = vec![
+            crate::database::JournalEntry::FsCreate {
+                path: r"C:\winbrew\apps\Contoso.App\bin\tool.exe".to_string(),
+                hash: None,
+            },
+            crate::database::JournalEntry::Metadata {
+                package_id: "Contoso.App".to_string(),
+                version: "1.0.0".to_string(),
+                engine: "msi".to_string(),
+                deployment_kind: DeploymentKind::Installed,
+                install_dir: r"C:\winbrew\apps\Contoso.App".to_string(),
+                dependencies: Vec::new(),
+                commands: None,
+                bin: None,
+                command_resolution: None,
+                engine_metadata: None,
+            },
+            crate::database::JournalEntry::Commit {
+                installed_at: "2026-04-12T00:00:00Z".to_string(),
+            },
+        ];
+
+        let metadata = extract_journal_metadata(&entries).expect("metadata should be found");
+
+        assert_eq!(metadata.package_id, "Contoso.App");
+        assert_eq!(metadata.version, "1.0.0");
+        assert_eq!(metadata.engine, "msi");
+        assert_eq!(metadata.deployment_kind, DeploymentKind::Installed);
+        assert_eq!(metadata.install_dir, r"C:\winbrew\apps\Contoso.App");
+    }
+
+    #[test]
+    fn journal_metadata_matches_package_accepts_matching_package_fields() {
+        let package = sample_package();
+        let metadata = JournalMetadata {
+            package_id: "Contoso.App",
+            version: "1.0.0",
+            engine: "msi",
+            deployment_kind: DeploymentKind::Installed,
+            install_dir: r"C:\winbrew\apps\Contoso.App",
+        };
+
+        assert!(journal_metadata_matches_package(&package, &metadata));
+    }
+
+    #[test]
+    fn diagnose_committed_journal_metadata_returns_stale_diagnosis_for_changed_package() {
+        let package = sample_package();
+        let metadata = JournalMetadata {
+            package_id: "Contoso.App",
+            version: "0.9.0",
+            engine: "msi",
+            deployment_kind: DeploymentKind::Installed,
+            install_dir: r"C:\winbrew\apps\Contoso.App",
+        };
+        let packages = std::collections::HashMap::from([(package.name.as_str(), &package)]);
+
+        let diagnosis = diagnose_committed_journal_metadata(
+            &PathBuf::from(r"C:\winbrew\pkgdb\Contoso.App\journal.jsonl"),
+            &metadata,
+            &packages,
+        )
+        .expect("stale package should produce a diagnosis");
+
+        assert_eq!(diagnosis.error_code, "stale_package_journal");
+    }
+
+    #[test]
+    fn scan_package_journals_detects_incomplete_journal() {
+        let env = TestEnvironment::new();
+
+        let mut writer =
+            database::JournalWriter::open_for_package(env.root(), "Contoso.Recover", "1.0.0")
+                .expect("open journal");
+        writer
+            .append(&database::JournalEntry::Metadata {
+                package_id: "Contoso.Recover".to_string(),
+                version: "1.0.0".to_string(),
+                engine: "msi".to_string(),
+                deployment_kind: DeploymentKind::Installed,
+                install_dir: r"C:\winbrew\apps\Contoso.Recover".to_string(),
+                dependencies: Vec::new(),
+                commands: None,
+                bin: None,
+                command_resolution: None,
+                engine_metadata: None,
+            })
+            .expect("write metadata");
+        writer.flush().expect("flush journal");
+
+        let scan = scan_package_journals(&env.paths, &[]);
+
+        assert_single_diagnosis(
+            &scan.diagnostics,
+            "incomplete_package_journal",
+            DiagnosisSeverity::Error,
+        );
+
+        let finding = assert_single_recovery_finding(
+            &scan.recovery_findings,
+            RecoveryIssueKind::RecoveryTrailMissing,
+            None,
+        );
+        assert!(finding.target_path.is_none());
+    }
+
+    #[test]
+    fn scan_package_journals_detects_malformed_journal() {
+        let env = TestEnvironment::new();
+
+        let journal_path = env.journal_path("Contoso.Malformed");
+        env.write_file(&journal_path, b"{not-json}\n");
+
+        let scan = scan_package_journals(&env.paths, &[]);
+
+        assert_single_diagnosis(
+            &scan.diagnostics,
+            "malformed_package_journal",
+            DiagnosisSeverity::Error,
+        );
+
+        let finding = assert_single_recovery_finding(
+            &scan.recovery_findings,
+            RecoveryIssueKind::RecoveryTrailMissing,
+            None,
+        );
+        assert!(finding.target_path.is_none());
+    }
+
+    #[test]
+    fn scan_package_journals_reports_unreadable_missing_journal_file() {
+        let env = TestEnvironment::new();
+
+        let journal_dir = env.pkgdb_root().join("Contoso.MissingJournal");
+        env.create_dir(&journal_dir);
+
+        let scan = scan_package_journals(&env.paths, &[]);
+
+        assert_single_diagnosis(
+            &scan.diagnostics,
+            "unreadable_package_journal",
+            DiagnosisSeverity::Error,
+        );
+    }
+
+    #[test]
+    fn scan_package_journals_reports_missing_journal_metadata() {
+        let env = TestEnvironment::new();
+
+        let mut writer =
+            database::JournalWriter::open_for_package(env.root(), "Contoso.MissingMeta", "1.0.0")
+                .expect("open journal");
+        writer
+            .append(&database::JournalEntry::Commit {
+                installed_at: "2026-04-12T00:00:00Z".to_string(),
+            })
+            .expect("write commit");
+        writer.flush().expect("flush journal");
+
+        let scan = scan_package_journals(&env.paths, &[]);
+
+        assert_single_diagnosis(
+            &scan.diagnostics,
+            "missing_journal_metadata",
+            DiagnosisSeverity::Error,
+        );
+        assert!(scan.recovery_findings.is_empty());
+    }
+
+    #[test]
+    fn scan_package_journals_detects_orphan_committed_journal() {
+        let env = TestEnvironment::new();
+
+        let mut writer =
+            database::JournalWriter::open_for_package(env.root(), "Contoso.Orphan", "1.0.0")
+                .expect("open journal");
+        writer
+            .append(&database::JournalEntry::Metadata {
+                package_id: "Contoso.Orphan".to_string(),
+                version: "1.0.0".to_string(),
+                engine: "msi".to_string(),
+                deployment_kind: DeploymentKind::Installed,
+                install_dir: r"C:\winbrew\apps\Contoso.Orphan".to_string(),
+                dependencies: Vec::new(),
+                commands: None,
+                bin: None,
+                command_resolution: None,
+                engine_metadata: None,
+            })
+            .expect("write metadata");
+        writer
+            .append(&database::JournalEntry::Commit {
+                installed_at: "2026-04-12T00:00:00Z".to_string(),
+            })
+            .expect("write commit");
+        writer.flush().expect("flush journal");
+        let journal_path = writer.path().to_path_buf();
+
+        let scan = scan_package_journals(&env.paths, &[]);
+
+        let diagnosis = assert_single_diagnosis(
+            &scan.diagnostics,
+            "orphan_package_journal",
+            DiagnosisSeverity::Warning,
+        );
+        assert!(diagnosis.description.contains("no installed package"));
+
+        let finding = assert_single_recovery_finding(
+            &scan.recovery_findings,
+            RecoveryIssueKind::IncompleteInstall,
+            Some(RecoveryActionGroup::JournalReplay),
+        );
+        assert_recovery_target_path(finding, &journal_path);
+    }
+
+    #[test]
+    fn scan_package_journals_tracks_trailing_journal_replay_target() {
+        let env = TestEnvironment::new();
+
+        let mut writer =
+            database::JournalWriter::open_for_package(env.root(), "Contoso.Trailing", "1.0.0")
+                .expect("open journal");
+        writer
+            .append(&database::JournalEntry::Metadata {
+                package_id: "Contoso.Trailing".to_string(),
+                version: "1.0.0".to_string(),
+                engine: "msi".to_string(),
+                deployment_kind: DeploymentKind::Installed,
+                install_dir: r"C:\winbrew\apps\Contoso.Trailing".to_string(),
+                dependencies: Vec::new(),
+                commands: None,
+                bin: None,
+                command_resolution: None,
+                engine_metadata: None,
+            })
+            .expect("write metadata");
+        writer
+            .append(&database::JournalEntry::Commit {
+                installed_at: "2026-04-12T00:00:00Z".to_string(),
+            })
+            .expect("write commit");
+        writer
+            .append(&database::JournalEntry::FsCreate {
+                path: r"C:\winbrew\apps\Contoso.Trailing\payload.exe".to_string(),
+                hash: None,
+            })
+            .expect("write trailing entry");
+        writer.flush().expect("flush journal");
+        let journal_path = writer.path().to_path_buf();
+
+        let scan = scan_package_journals(&env.paths, &[]);
+
+        let diagnosis = assert_single_diagnosis(
+            &scan.diagnostics,
+            "trailing_package_journal",
+            DiagnosisSeverity::Error,
+        );
+        assert!(
+            diagnosis
+                .description
+                .contains("trailing entries after commit")
+        );
+
+        let finding = assert_single_recovery_finding(
+            &scan.recovery_findings,
+            RecoveryIssueKind::Conflict,
+            Some(RecoveryActionGroup::JournalReplay),
+        );
+        assert_recovery_target_path(finding, &journal_path);
+    }
 }

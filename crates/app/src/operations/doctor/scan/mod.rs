@@ -103,6 +103,3 @@ pub(super) fn sort_recovery_findings(
         .then_with(|| left.target_path.cmp(&right.target_path))
         .then_with(|| left.description.cmp(&right.description))
 }
-
-#[cfg(test)]
-mod tests;

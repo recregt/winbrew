@@ -186,12 +186,151 @@ pub(crate) fn scan_msi_inventory(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::paths::{ResolvedPaths, resolved_paths};
+    use crate::database;
     use crate::models::domains::install::EngineKind;
     use crate::models::domains::install::InstallerType;
     use crate::models::domains::installed::PackageStatus;
+    use crate::models::domains::inventory::{
+        MsiComponentRecord, MsiInventoryReceipt, MsiInventorySnapshot, MsiRegistryRecord,
+        MsiShortcutRecord,
+    };
     use crate::models::domains::reporting::{RecoveryActionGroup, RecoveryIssueKind};
     use crate::models::domains::shared::HashAlgorithm;
-    use tempfile::tempdir;
+    use std::fs;
+    use std::path::PathBuf;
+    use tempfile::{TempDir, tempdir};
+
+    fn sample_snapshot(
+        name: &str,
+        install_dir: &std::path::Path,
+        hash_hex: &str,
+    ) -> MsiInventorySnapshot {
+        let install_dir = install_dir
+            .to_string_lossy()
+            .replace('\\', "/")
+            .to_ascii_lowercase();
+
+        MsiInventorySnapshot {
+            receipt: MsiInventoryReceipt {
+                package_name: name.to_string(),
+                product_code: "{11111111-1111-1111-1111-111111111111}".to_string(),
+                upgrade_code: Some("{22222222-2222-2222-2222-222222222222}".to_string()),
+                scope: winbrew_models::domains::install::InstallScope::Installed,
+            },
+            files: vec![MsiFileRecord {
+                package_name: name.to_string(),
+                path: format!("{install_dir}/bin/demo.exe"),
+                normalized_path: format!("{install_dir}/bin/demo.exe"),
+                hash_algorithm: Some(HashAlgorithm::Sha256),
+                hash_hex: Some(hash_hex.to_string()),
+                is_config_file: false,
+            }],
+            registry_entries: vec![MsiRegistryRecord {
+                package_name: name.to_string(),
+                hive: "HKLM".to_string(),
+                key_path: "Software\\Demo".to_string(),
+                normalized_key_path: "software\\demo".to_string(),
+                value_name: "InstallPath".to_string(),
+                value_data: Some(install_dir.clone()),
+                previous_value: None,
+            }],
+            shortcuts: vec![MsiShortcutRecord {
+                package_name: name.to_string(),
+                path: format!("{install_dir}/Desktop/Demo.lnk"),
+                normalized_path: format!("{install_dir}/desktop/demo.lnk"),
+                target_path: Some(format!("{install_dir}/bin/demo.exe")),
+                normalized_target_path: Some(format!("{install_dir}/bin/demo.exe")),
+            }],
+            components: vec![MsiComponentRecord {
+                package_name: name.to_string(),
+                component_id: "COMPONENT-DEMO".to_string(),
+                path: Some(format!("{install_dir}/bin/demo.exe")),
+                normalized_path: Some(format!("{install_dir}/bin/demo.exe")),
+            }],
+        }
+    }
+
+    struct TestEnvironment {
+        _root: TempDir,
+        paths: ResolvedPaths,
+    }
+
+    impl TestEnvironment {
+        fn new() -> Self {
+            let root = tempdir().expect("temp dir should be created");
+            let paths = Self::build_paths(root.path());
+
+            Self { _root: root, paths }
+        }
+
+        fn with_storage() -> Self {
+            let env = Self::new();
+            database::init(&env.paths).expect("database should initialize");
+            env
+        }
+
+        fn build_paths(root: &Path) -> ResolvedPaths {
+            let packages = root.join("packages").to_string_lossy().into_owned();
+            let data = root.join("data").to_string_lossy().into_owned();
+            let logs = root.join("logs").to_string_lossy().into_owned();
+            let cache = root.join("cache").to_string_lossy().into_owned();
+
+            resolved_paths(root, &packages, &data, &logs, &cache)
+        }
+
+        fn packages_root(&self) -> &Path {
+            &self.paths.packages
+        }
+
+        fn create_dir(&self, path: &Path) {
+            fs::create_dir_all(path).expect("directory should be created");
+        }
+
+        fn write_file(&self, path: &Path, content: &[u8]) {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).expect("parent directory should be created");
+            }
+
+            fs::write(path, content).expect("file should be written");
+        }
+
+        fn db_conn(&self) -> database::DbConnection {
+            database::get_conn().expect("database connection")
+        }
+
+        fn insert_package(&self, package: &InstalledPackage) -> database::DbConnection {
+            let conn = self.db_conn();
+            database::insert_package(&conn, package).expect("insert package");
+            conn
+        }
+
+        fn make_msi_package(&self, name: &str) -> (InstalledPackage, PathBuf) {
+            let install_dir = self.packages_root().join(name);
+            (sample_package(name, &install_dir), install_dir)
+        }
+
+        fn make_msi_snapshot(
+            &self,
+            name: &str,
+            install_dir: &Path,
+            hash_hex: &str,
+        ) -> MsiInventorySnapshot {
+            sample_snapshot(name, install_dir, hash_hex)
+        }
+    }
+
+    fn assert_normalized_recovery_target_path(
+        finding: &crate::models::domains::reporting::RecoveryFinding,
+        expected_path: &Path,
+    ) {
+        let expected_path = expected_path
+            .to_string_lossy()
+            .replace('\\', "/")
+            .to_ascii_lowercase();
+
+        assert_eq!(finding.target_path.as_deref(), Some(expected_path.as_str()));
+    }
 
     fn sample_package(name: &str, install_dir: &std::path::Path) -> InstalledPackage {
         InstalledPackage {
@@ -292,6 +431,81 @@ mod tests {
         assert_eq!(
             scan.recovery_findings[0].target_path.as_deref(),
             Some(file.path.as_str())
+        );
+    }
+
+    #[test]
+    fn scan_msi_inventory_detects_hash_mismatch() {
+        let env = TestEnvironment::with_storage();
+
+        let (package, install_dir) = env.make_msi_package("Contoso.Msi");
+        let file_path = install_dir.join("bin").join("demo.exe");
+        env.create_dir(file_path.parent().expect("file parent"));
+        env.write_file(&file_path, b"abc");
+
+        let snapshot = env.make_msi_snapshot(
+            "Contoso.Msi",
+            &install_dir,
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        );
+
+        let mut conn = env.insert_package(&package);
+        database::replace_snapshot(&mut conn, &snapshot).expect("replace snapshot");
+
+        let scan = scan_msi_inventory(&conn, &[package]);
+
+        assert_eq!(scan.diagnostics.len(), 1);
+        assert_eq!(scan.diagnostics[0].error_code, "msi_file_hash_mismatch");
+        assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Error);
+        assert!(scan.diagnostics[0].description.contains("Contoso.Msi"));
+
+        assert_eq!(scan.recovery_findings.len(), 1);
+        assert_eq!(
+            scan.recovery_findings[0].issue_kind,
+            RecoveryIssueKind::DiskDrift
+        );
+        assert_eq!(
+            scan.recovery_findings[0].action_group,
+            Some(RecoveryActionGroup::FileRestore)
+        );
+        assert_normalized_recovery_target_path(&scan.recovery_findings[0], &file_path);
+    }
+
+    #[test]
+    fn scan_msi_inventory_detects_missing_files() {
+        let env = TestEnvironment::with_storage();
+
+        let (package, install_dir) = env.make_msi_package("Contoso.Msi");
+        env.create_dir(&install_dir);
+
+        let snapshot = env.make_msi_snapshot(
+            "Contoso.Msi",
+            &install_dir,
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        );
+
+        let mut conn = env.insert_package(&package);
+        database::replace_snapshot(&mut conn, &snapshot).expect("replace snapshot");
+
+        let scan = scan_msi_inventory(&conn, &[package]);
+
+        assert_eq!(scan.diagnostics.len(), 1);
+        assert_eq!(scan.diagnostics[0].error_code, "missing_msi_file");
+        assert_eq!(scan.diagnostics[0].severity, DiagnosisSeverity::Error);
+        assert!(scan.diagnostics[0].description.contains("Contoso.Msi"));
+
+        assert_eq!(scan.recovery_findings.len(), 1);
+        assert_eq!(
+            scan.recovery_findings[0].issue_kind,
+            RecoveryIssueKind::DiskDrift
+        );
+        assert_eq!(
+            scan.recovery_findings[0].action_group,
+            Some(RecoveryActionGroup::FileRestore)
+        );
+        assert_normalized_recovery_target_path(
+            &scan.recovery_findings[0],
+            &install_dir.join("bin").join("demo.exe"),
         );
     }
 }
