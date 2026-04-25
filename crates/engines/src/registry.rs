@@ -288,9 +288,10 @@ mod tests {
     use crate::models::catalog::package::CatalogInstaller;
     use crate::models::install::installer::InstallerType;
     use crate::models::shared::DeploymentKind;
+    use winbrew_testing::{CatalogInstallerBuilderExt as _, catalog_installer};
 
     fn installer(kind: InstallerType, url: &str) -> CatalogInstaller {
-        CatalogInstaller::test_builder("Contoso.App".into(), url).with_kind(kind)
+        catalog_installer("Contoso.App".into(), url).with_kind(kind)
     }
 
     #[test]

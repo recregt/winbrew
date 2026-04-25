@@ -266,21 +266,20 @@ mod tests {
     use winbrew_models::catalog::package::CatalogInstaller;
     use winbrew_models::install::{Architecture, InstallerType};
     use winbrew_models::shared::HashAlgorithm;
+    use winbrew_testing::{CatalogInstallerBuilderExt as _, catalog_installer};
 
     fn installer(
         nested_kind: Option<InstallerType>,
         platform: Option<&str>,
         commands: Option<&str>,
     ) -> CatalogInstaller {
-        let mut installer = CatalogInstaller::test_builder(
-            "winget/Contoso.App".into(),
-            "https://example.test/app.zip",
-        )
-        .with_hash("sha256:deadbeef")
-        .with_hash_algorithm(HashAlgorithm::Sha256)
-        .with_installer_type(CatalogInstallerType::Zip)
-        .with_arch(Architecture::X64)
-        .with_kind(InstallerType::Zip);
+        let mut installer =
+            catalog_installer("winget/Contoso.App".into(), "https://example.test/app.zip")
+                .with_hash("sha256:deadbeef")
+                .with_hash_algorithm(HashAlgorithm::Sha256)
+                .with_installer_type(CatalogInstallerType::Zip)
+                .with_arch(Architecture::X64)
+                .with_kind(InstallerType::Zip);
 
         installer.nested_kind = nested_kind;
         installer.platform = platform.map(|value| value.to_string());

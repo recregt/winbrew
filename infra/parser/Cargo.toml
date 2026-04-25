@@ -16,4 +16,4 @@ rusqlite = { version = "0.39", default-features = false, features = ["bundled", 
 sha2 = "0.11"
 
 [dev-dependencies]
-winbrew-models = { path = "../../crates/models", features = ["test-support"] }
+winbrew-testing = { path = "../../crates/testing" }

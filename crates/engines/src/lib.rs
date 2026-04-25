@@ -82,11 +82,11 @@ mod tests {
     use super::{DeploymentKind, EngineKind, engine_kind_for_type, resolve_deployment_kind};
     use crate::models::catalog::package::CatalogInstaller;
     use crate::models::install::installer::InstallerType;
+    use winbrew_testing::{CatalogInstallerBuilderExt as _, catalog_installer};
 
     fn installer(kind: InstallerType, nested_kind: Option<InstallerType>) -> CatalogInstaller {
-        let installer =
-            CatalogInstaller::test_builder("Contoso.App".into(), "https://example.invalid/app.zip")
-                .with_kind(kind);
+        let installer = catalog_installer("Contoso.App".into(), "https://example.invalid/app.zip")
+            .with_kind(kind);
 
         match nested_kind {
             Some(nested_kind) => installer.with_nested(nested_kind),
