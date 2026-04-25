@@ -52,7 +52,7 @@ where
     FProgress: FnMut(u64),
 {
     let temp_path = download_path.with_extension("part");
-    let result = (|| -> Result<Vec<HashAlgorithm>> {
+    let download_result = (|| -> Result<Vec<HashAlgorithm>> {
         check()?;
 
         let (verification, legacy_checksum_algorithms) = verify_strategy(
@@ -85,11 +85,11 @@ where
         Ok(legacy_checksum_algorithms)
     })();
 
-    if result.is_err() {
+    if download_result.is_err() {
         let _ = cleanup_path(&temp_path);
     }
 
-    result
+    download_result
 }
 
 enum Verification {
@@ -127,6 +127,8 @@ fn verify_strategy(
     }
 
     match hash_algorithm {
+        // MD5 is cryptographically broken beyond use; skip verification entirely
+        // rather than computing a hash we cannot trust.
         HashAlgorithm::Md5 if ignore_checksum_security => {
             Ok((Verification::None, vec![HashAlgorithm::Md5]))
         }
@@ -146,5 +148,57 @@ fn verify_strategy(
             Verification::Active(Box::new(Hasher::new(algorithm))),
             Vec::new(),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Verification, verify_strategy};
+    use crate::core::HashError;
+    use crate::models::domains::shared::HashAlgorithm;
+
+    #[test]
+    fn verify_strategy_rejects_md5_without_ignore_flag() {
+        let err = match verify_strategy("abc123", HashAlgorithm::Md5, false) {
+            Ok(_) => panic!("md5 should be rejected by default"),
+            Err(err) => err,
+        };
+
+        assert!(matches!(
+            err.downcast_ref::<HashError>(),
+            Some(HashError::LegacyChecksumAlgorithm {
+                algorithm: HashAlgorithm::Md5
+            })
+        ));
+    }
+
+    #[test]
+    fn verify_strategy_tolerates_md5_with_ignore_flag() {
+        let (verification, legacy_checksum_algorithms) =
+            verify_strategy("abc123", HashAlgorithm::Md5, true)
+                .expect("md5 should be tolerated when ignoring checksum security");
+
+        assert!(matches!(verification, Verification::None));
+        assert_eq!(legacy_checksum_algorithms, vec![HashAlgorithm::Md5]);
+    }
+
+    #[test]
+    fn verify_strategy_skips_verification_for_empty_hash() {
+        let (verification, legacy_checksum_algorithms) =
+            verify_strategy("   ", HashAlgorithm::Sha256, false)
+                .expect("empty hashes should bypass verification");
+
+        assert!(matches!(verification, Verification::None));
+        assert!(legacy_checksum_algorithms.is_empty());
+    }
+
+    #[test]
+    fn verify_strategy_still_verifies_sha1_when_ignored() {
+        let (verification, legacy_checksum_algorithms) =
+            verify_strategy("abc123", HashAlgorithm::Sha1, true)
+                .expect("sha1 should remain verifiable when security checks are ignored");
+
+        assert!(matches!(verification, Verification::Active(_)));
+        assert_eq!(legacy_checksum_algorithms, vec![HashAlgorithm::Sha1]);
     }
 }
