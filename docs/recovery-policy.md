@@ -39,6 +39,21 @@ Notes:
 - "Conflict" is a policy decision, not an automatic overwrite. The repair path must show the difference and ask for explicit approval.
 - Disk drift is a separate category from state drift. Missing files and hash mismatches are content problems, not database problems.
 
+### Diagnostic to Recovery Mapping
+
+The current doctor implementation maps diagnostics into recovery findings as follows:
+
+| Diagnostic code(s) | Recovery issue | Action group | Notes |
+| --- | --- | --- | --- |
+| `missing_install_directory`, `install_directory_not_a_directory`, `install_directory_permission_denied`, `install_directory_unreadable` | Disk drift | Reinstall | The package record is present, but the install root needs to be recreated. |
+| `missing_msi_file`, `msi_file_not_a_file`, `msi_file_unreadable`, `msi_file_permission_denied`, `msi_file_hash_mismatch`, `msi_file_hash_unavailable` | Disk drift | File restore | The recorded file content no longer matches the snapshot. |
+| `missing_msi_inventory_snapshot`, `msi_inventory_unreadable`, `pkgdb_unreadable`, `incomplete_package_journal`, `unreadable_package_journal`, `malformed_package_journal`, `missing_journal_metadata` | Recovery trail missing | None | The recovery trail is incomplete, but doctor does not assign a direct repair action yet. |
+| `orphan_install_directory` | Incomplete install | Orphan cleanup | A package directory exists without a matching database record. |
+| `orphan_package_journal` | Incomplete install | Journal replay | A committed journal exists without a live package row. |
+| `stale_package_journal`, `trailing_package_journal` | Conflict | Journal replay | The committed journal disagrees with the installed package and is treated as the recovery source. |
+
+Diagnostics without a recovery mapping still appear in the health report, but they are report-only until a repair path is defined.
+
 ## 3. Repair Groups
 
 Repair should be grouped by risk, not by individual line item.

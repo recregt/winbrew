@@ -7,7 +7,7 @@
 
 use anyhow::Result;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::AppContext;
 use crate::database;
@@ -17,6 +17,7 @@ use crate::models::domains::installed::InstalledPackage;
 use crate::models::domains::reporting::{
     DiagnosisResult, DiagnosisSeverity, HealthReport, RecoveryFinding,
 };
+use crate::models::reporting::HealthScanTimings;
 
 /// Convert a path into the display string used in the final report.
 ///
@@ -68,6 +69,12 @@ fn collect_initial_recovery_findings(diagnostics: &[DiagnosisResult]) -> Vec<Rec
         .collect()
 }
 
+fn measure<T>(operation: impl FnOnce() -> T) -> (T, Duration) {
+    let started_at = Instant::now();
+    let value = operation();
+    (value, started_at.elapsed())
+}
+
 fn sort_recovery_findings(left: &RecoveryFinding, right: &RecoveryFinding) -> std::cmp::Ordering {
     left.action_group
         .cmp(&right.action_group)
@@ -87,23 +94,31 @@ fn sort_recovery_findings(left: &RecoveryFinding, right: &RecoveryFinding) -> st
 pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
     let paths = &ctx.paths;
     let started_at = Instant::now();
-    let conn = database::get_conn()?;
+    let (conn_result, database_connection_duration) = measure(database::get_conn);
+    let conn = conn_result?;
 
-    let (packages, mut diagnostics) = collect_packages(scan::installed_packages(&conn));
+    let (packages_result, installed_packages_duration) =
+        measure(|| scan::installed_packages(&conn));
+    let (packages, mut diagnostics) = collect_packages(packages_result);
     let mut recovery_findings = collect_initial_recovery_findings(&diagnostics);
-    let orphan_scan = scan::scan_orphaned_install_dirs(&paths.packages, &packages);
+    let (orphan_scan, orphan_scan_duration) =
+        measure(|| scan::scan_orphaned_install_dirs(&paths.packages, &packages));
+    let (package_scan, package_scan_duration) = measure(|| scan::scan_packages(&packages));
     let scan::PackageInstallScan {
         diagnostics: package_diagnostics,
         recovery_findings: package_recovery_findings,
-    } = scan::scan_packages(&packages);
+    } = package_scan;
+    let (msi_scan, msi_scan_duration) = measure(|| scan::scan_msi_inventory(&conn, &packages));
     let scan::MsiInventoryScan {
         diagnostics: msi_diagnostics,
         recovery_findings: msi_recovery_findings,
-    } = scan::scan_msi_inventory(&conn, &packages);
+    } = msi_scan;
+    let (journal_scan, journal_scan_duration) =
+        measure(|| scan::scan_package_journals(paths, &packages));
     let scan::PackageJournalScan {
         diagnostics: journal_diagnostics,
         recovery_findings: journal_recovery_findings,
-    } = scan::scan_package_journals(paths, &packages);
+    } = journal_scan;
 
     diagnostics.extend(package_diagnostics);
     diagnostics.extend(msi_diagnostics);
@@ -137,6 +152,14 @@ pub fn health_report(ctx: &AppContext) -> Result<HealthReport> {
         packages_dir: display_path(&paths.packages),
         diagnostics,
         recovery_findings,
+        scan_timings: HealthScanTimings {
+            database_connection: database_connection_duration,
+            installed_packages: installed_packages_duration,
+            package_scan: package_scan_duration,
+            msi_scan: msi_scan_duration,
+            orphan_scan: orphan_scan_duration,
+            journal_scan: journal_scan_duration,
+        },
         scan_duration: started_at.elapsed(),
         error_count,
     })

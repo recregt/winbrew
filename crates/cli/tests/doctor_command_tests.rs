@@ -23,6 +23,7 @@ use winbrew_cli::models::domains::install::InstallerType;
 use winbrew_cli::models::domains::reporting::{
     DiagnosisResult, DiagnosisSeverity, HealthReport, RecoveryFinding,
 };
+use winbrew_cli::models::reporting::HealthScanTimings;
 use winbrew_ui::{UiBuilder, UiSettings};
 
 struct DoctorFixture {
@@ -143,6 +144,14 @@ fn sample_report(diagnostics: Vec<DiagnosisResult>) -> HealthReport {
         packages_dir: "C:\\Users\\Test\\AppData\\Local\\winbrew\\packages".to_string(),
         diagnostics,
         recovery_findings: Vec::<RecoveryFinding>::new(),
+        scan_timings: HealthScanTimings {
+            database_connection: Duration::from_millis(11),
+            installed_packages: Duration::from_millis(12),
+            package_scan: Duration::from_millis(13),
+            msi_scan: Duration::from_millis(14),
+            orphan_scan: Duration::from_millis(15),
+            journal_scan: Duration::from_millis(16),
+        },
         scan_duration: Duration::from_millis(1_234),
         error_count,
     }
@@ -253,6 +262,8 @@ fn write_json_serializes_health_report() {
     let value: serde_json::Value = serde_json::from_slice(&output).expect("json should parse");
 
     assert_eq!(value["scan_duration"], 1234);
+    assert_eq!(value["scan_timings"]["database_connection"], 11);
+    assert_eq!(value["scan_timings"]["journal_scan"], 16);
     assert_eq!(value["diagnostics"][0]["severity"], "error");
 }
 

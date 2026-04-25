@@ -78,7 +78,8 @@ impl RecoveryFinding {
             | "pkgdb_unreadable"
             | "incomplete_package_journal"
             | "unreadable_package_journal"
-            | "malformed_package_journal" => (RecoveryIssueKind::RecoveryTrailMissing, None),
+            | "malformed_package_journal"
+            | "missing_journal_metadata" => (RecoveryIssueKind::RecoveryTrailMissing, None),
             "orphan_install_directory" => (
                 RecoveryIssueKind::IncompleteInstall,
                 Some(RecoveryActionGroup::OrphanCleanup),
@@ -111,6 +112,29 @@ impl RecoveryFinding {
     }
 }
 
+/// Timing breakdown for the doctor scan pipeline.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct HealthScanTimings {
+    /// Time spent opening the database connection.
+    #[serde(serialize_with = "serialize_duration_millis")]
+    pub database_connection: Duration,
+    /// Time spent loading installed packages.
+    #[serde(serialize_with = "serialize_duration_millis")]
+    pub installed_packages: Duration,
+    /// Time spent validating package install directories.
+    #[serde(serialize_with = "serialize_duration_millis")]
+    pub package_scan: Duration,
+    /// Time spent validating MSI inventory snapshots and files.
+    #[serde(serialize_with = "serialize_duration_millis")]
+    pub msi_scan: Duration,
+    /// Time spent checking for orphaned package directories.
+    #[serde(serialize_with = "serialize_duration_millis")]
+    pub orphan_scan: Duration,
+    /// Time spent scanning committed package journals.
+    #[serde(serialize_with = "serialize_duration_millis")]
+    pub journal_scan: Duration,
+}
+
 /// The full health report emitted by the doctor workflow.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct HealthReport {
@@ -135,6 +159,8 @@ pub struct HealthReport {
     /// Recovery findings derived from the diagnostics.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub recovery_findings: Vec<RecoveryFinding>,
+    /// Timing breakdown for the scan pipeline.
+    pub scan_timings: HealthScanTimings,
     /// Total scan duration.
     #[serde(serialize_with = "serialize_duration_millis")]
     pub scan_duration: Duration,

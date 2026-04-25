@@ -463,12 +463,12 @@ mod tests {
         });
     }
 
-    fn write_commit_only_journal(env: &TestEnvironment, package_name: &str) {
-        let _ = write_journal(env, package_name, |writer| {
+    fn write_commit_only_journal(env: &TestEnvironment, package_name: &str) -> PathBuf {
+        write_journal(env, package_name, |writer| {
             writer
                 .append(&journal_commit_entry())
                 .expect("write commit");
-        });
+        })
     }
 
     fn write_committed_journal(env: &TestEnvironment, package_name: &str) -> PathBuf {
@@ -688,7 +688,7 @@ mod tests {
     fn scan_package_journals_reports_missing_journal_metadata() {
         let env = TestEnvironment::new();
 
-        write_commit_only_journal(&env, "Contoso.MissingMeta");
+        let journal_path = write_commit_only_journal(&env, "Contoso.MissingMeta");
 
         let scan = scan_package_journals(&env.paths, &[]);
 
@@ -697,7 +697,13 @@ mod tests {
             "missing_journal_metadata",
             DiagnosisSeverity::Error,
         );
-        assert!(scan.recovery_findings.is_empty());
+
+        let finding = assert_single_recovery_finding(
+            &scan.recovery_findings,
+            RecoveryIssueKind::RecoveryTrailMissing,
+            None,
+        );
+        assert_recovery_target_path(finding, &journal_path);
     }
 
     #[test]
