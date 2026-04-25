@@ -1,8 +1,8 @@
 use crate::core::hash::hash_algorithm;
-use crate::models::catalog::installer_type::CatalogInstallerType;
+use crate::models::domains::catalog::{CatalogInstaller, CatalogInstallerType, CatalogPackage};
 use crate::models::domains::install::{Architecture, InstallerType};
-use crate::models::package::PackageSource;
-use crate::models::shared::hash::HashAlgorithm as CatalogHashAlgorithm;
+use crate::models::domains::package::{PackageId, PackageSource};
+use crate::models::domains::shared::{CatalogId, HashAlgorithm as CatalogHashAlgorithm, Version};
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use std::path::Path;
@@ -20,6 +20,196 @@ pub struct CatalogInstallerSeed<'a> {
 
 pub fn catalog_package_id(package_name: &str) -> String {
     format!("winget/{}", package_name.replace(' ', "."))
+}
+
+pub fn catalog_installer(package_id: CatalogId, url: &str) -> CatalogInstaller {
+    CatalogInstaller {
+        package_id,
+        url: url.to_string(),
+        hash: "abc123".to_string(),
+        hash_algorithm: CatalogHashAlgorithm::Sha256,
+        installer_type: CatalogInstallerType::Unknown,
+        installer_switches: None,
+        platform: None,
+        commands: None,
+        protocols: None,
+        file_extensions: None,
+        capabilities: None,
+        arch: Architecture::X64,
+        kind: InstallerType::Exe,
+        nested_kind: None,
+        scope: None,
+    }
+}
+
+pub trait CatalogInstallerBuilderExt {
+    fn with_installer_type(self, installer_type: CatalogInstallerType) -> Self;
+    fn with_installer_switches<T: Into<String>>(self, installer_switches: T) -> Self;
+    fn with_hash_algorithm(self, hash_algorithm: CatalogHashAlgorithm) -> Self;
+    fn with_hash<T: Into<String>>(self, hash: T) -> Self;
+    fn with_arch(self, arch: Architecture) -> Self;
+    fn with_kind(self, kind: InstallerType) -> Self;
+    fn with_nested(self, nested_kind: InstallerType) -> Self;
+    fn with_scope<T: Into<String>>(self, scope: T) -> Self;
+}
+
+impl CatalogInstallerBuilderExt for CatalogInstaller {
+    fn with_installer_type(mut self, installer_type: CatalogInstallerType) -> Self {
+        self.installer_type = installer_type;
+        self
+    }
+
+    fn with_installer_switches<T: Into<String>>(mut self, installer_switches: T) -> Self {
+        self.installer_switches = Some(installer_switches.into());
+        self
+    }
+
+    fn with_hash_algorithm(mut self, hash_algorithm: CatalogHashAlgorithm) -> Self {
+        self.hash_algorithm = hash_algorithm;
+        self
+    }
+
+    fn with_hash<T: Into<String>>(mut self, hash: T) -> Self {
+        self.hash = hash.into();
+        self
+    }
+
+    fn with_arch(mut self, arch: Architecture) -> Self {
+        self.arch = arch;
+        self
+    }
+
+    fn with_kind(mut self, kind: InstallerType) -> Self {
+        self.kind = kind;
+        self
+    }
+
+    fn with_nested(mut self, nested_kind: InstallerType) -> Self {
+        self.nested_kind = Some(nested_kind);
+        self
+    }
+
+    fn with_scope<T: Into<String>>(mut self, scope: T) -> Self {
+        self.scope = Some(scope.into());
+        self
+    }
+}
+
+pub fn catalog_package(id: CatalogId, name: &str, version: Version) -> CatalogPackage {
+    let package_id = PackageId::parse(id.as_ref()).expect("catalog id should parse");
+
+    CatalogPackage {
+        id,
+        name: name.to_string(),
+        version,
+        source: package_id.source(),
+        namespace: package_id.namespace().map(str::to_string),
+        source_id: package_id.source_id().to_string(),
+        created_at: None,
+        updated_at: None,
+        description: None,
+        homepage: None,
+        license: None,
+        publisher: None,
+        locale: None,
+        moniker: None,
+        platform: None,
+        commands: None,
+        protocols: None,
+        file_extensions: None,
+        capabilities: None,
+        tags: None,
+        bin: None,
+    }
+}
+
+pub trait CatalogPackageBuilderExt {
+    fn with_source(self, source: PackageSource) -> Self;
+    fn with_namespace<T: Into<String>>(self, namespace: T) -> Self;
+    fn without_namespace(self) -> Self;
+    fn with_source_id<T: Into<String>>(self, source_id: T) -> Self;
+    fn with_created_at<T: Into<String>>(self, created_at: T) -> Self;
+    fn with_updated_at<T: Into<String>>(self, updated_at: T) -> Self;
+    fn with_description<T: Into<String>>(self, description: T) -> Self;
+    fn with_homepage<T: Into<String>>(self, homepage: T) -> Self;
+    fn with_license<T: Into<String>>(self, license: T) -> Self;
+    fn with_publisher<T: Into<String>>(self, publisher: T) -> Self;
+    fn with_locale<T: Into<String>>(self, locale: T) -> Self;
+    fn with_moniker<T: Into<String>>(self, moniker: T) -> Self;
+    fn with_tags<T: Into<String>>(self, tags: T) -> Self;
+    fn with_bin<T: Into<String>>(self, bin: T) -> Self;
+}
+
+impl CatalogPackageBuilderExt for CatalogPackage {
+    fn with_source(mut self, source: PackageSource) -> Self {
+        self.source = source;
+        self
+    }
+
+    fn with_namespace<T: Into<String>>(mut self, namespace: T) -> Self {
+        self.namespace = Some(namespace.into());
+        self
+    }
+
+    fn without_namespace(mut self) -> Self {
+        self.namespace = None;
+        self
+    }
+
+    fn with_source_id<T: Into<String>>(mut self, source_id: T) -> Self {
+        self.source_id = source_id.into();
+        self
+    }
+
+    fn with_created_at<T: Into<String>>(mut self, created_at: T) -> Self {
+        self.created_at = Some(created_at.into());
+        self
+    }
+
+    fn with_updated_at<T: Into<String>>(mut self, updated_at: T) -> Self {
+        self.updated_at = Some(updated_at.into());
+        self
+    }
+
+    fn with_description<T: Into<String>>(mut self, description: T) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    fn with_homepage<T: Into<String>>(mut self, homepage: T) -> Self {
+        self.homepage = Some(homepage.into());
+        self
+    }
+
+    fn with_license<T: Into<String>>(mut self, license: T) -> Self {
+        self.license = Some(license.into());
+        self
+    }
+
+    fn with_publisher<T: Into<String>>(mut self, publisher: T) -> Self {
+        self.publisher = Some(publisher.into());
+        self
+    }
+
+    fn with_locale<T: Into<String>>(mut self, locale: T) -> Self {
+        self.locale = Some(locale.into());
+        self
+    }
+
+    fn with_moniker<T: Into<String>>(mut self, moniker: T) -> Self {
+        self.moniker = Some(moniker.into());
+        self
+    }
+
+    fn with_tags<T: Into<String>>(mut self, tags: T) -> Self {
+        self.tags = Some(tags.into());
+        self
+    }
+
+    fn with_bin<T: Into<String>>(mut self, bin: T) -> Self {
+        self.bin = Some(bin.into());
+        self
+    }
 }
 
 pub fn seed_catalog_package(

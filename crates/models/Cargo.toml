@@ -7,9 +7,6 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 
-[features]
-test-support = []
-
 [dependencies]
 semver = { version = "1", features = ["serde"] }
 serde.workspace = true

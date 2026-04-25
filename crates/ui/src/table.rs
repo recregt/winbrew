@@ -149,6 +149,7 @@ mod tests {
     use winbrew_models::domains::installed::{InstalledPackage, PackageStatus};
     use winbrew_models::domains::shared::DeploymentKind;
     use winbrew_models::domains::shared::Version;
+    use winbrew_testing::{CatalogPackageBuilderExt as _, catalog_package};
 
     struct SharedBuffer {
         bytes: Arc<Mutex<Vec<u8>>>,
@@ -172,8 +173,8 @@ mod tests {
         }
     }
 
-    fn catalog_package(description: Option<&str>) -> CatalogPackage {
-        let package = CatalogPackage::test_builder(
+    fn catalog_package_with_description(description: Option<&str>) -> CatalogPackage {
+        let package = catalog_package(
             "scoop/main/Contoso.App".into(),
             "Contoso App",
             Version::parse("1.2.3").expect("version should parse"),
@@ -214,16 +215,16 @@ mod tests {
 
         let long_description = "This is a very long Scoop description that should be truncated so that it does not dominate the search table layout or wrap the row unexpectedly.";
 
-        ui.display_catalog_packages(&[catalog_package(Some(long_description))]);
+        ui.display_catalog_packages(&[catalog_package_with_description(Some(long_description))]);
         ui.display_catalog_packages(&[
-            catalog_package(Some("Short description")),
-            CatalogPackage::test_builder(
+            catalog_package_with_description(Some("Short description")),
+            catalog_package(
                 "winget/Fabrikam.Tool".into(),
                 "Fabrikam Tool",
                 Version::parse("2.0.0").expect("version should parse"),
             ),
         ]);
-        ui.display_catalog_packages(&[catalog_package(None)]);
+        ui.display_catalog_packages(&[catalog_package_with_description(None)]);
 
         let output = String::from_utf8(
             shared_bytes

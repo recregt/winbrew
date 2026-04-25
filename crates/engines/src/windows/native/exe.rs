@@ -495,10 +495,11 @@ mod tests {
     use crate::windows_dep::{
         create_test_uninstall_entry, create_test_uninstall_entry_with_install_location,
     };
+    use winbrew_testing::{CatalogInstallerBuilderExt as _, catalog_installer};
 
     #[cfg(windows)]
     fn native_exe_installer(kind: InstallerType, switches: Option<&str>) -> CatalogInstaller {
-        let mut installer = CatalogInstaller::test_builder(
+        let mut installer = catalog_installer(
             CatalogId::parse("winget/Contoso.NativeExe").expect("catalog id should parse"),
             "https://example.invalid/setup.exe",
         )

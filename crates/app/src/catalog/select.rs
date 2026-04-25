@@ -196,6 +196,7 @@ fn installer_scope_kind(scope: Option<&str>) -> InstallerScopeKind {
 mod tests {
     use super::*;
     use anyhow::Result;
+    use winbrew_testing::{CatalogInstallerBuilderExt as _, catalog_installer};
 
     fn sample_installer(
         arch: Architecture,
@@ -203,10 +204,9 @@ mod tests {
         platform: Option<&str>,
         scope: Option<&str>,
     ) -> CatalogInstaller {
-        let mut installer =
-            CatalogInstaller::test_builder("Contoso.App".into(), "https://example.test/app.exe")
-                .with_arch(arch)
-                .with_kind(kind);
+        let mut installer = catalog_installer("Contoso.App".into(), "https://example.test/app.exe")
+            .with_arch(arch)
+            .with_kind(kind);
 
         installer.platform = platform.map(str::to_string);
         installer.scope = scope.map(str::to_string);

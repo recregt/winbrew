@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use winbrew_models::catalog::package::CatalogInstaller;
 use winbrew_models::install::installer::InstallerType;
+use winbrew_testing::{CatalogInstallerBuilderExt as _, catalog_installer};
 
 pub const PACKAGE_NAME: &str = "Contoso.App";
 pub const BASE_URL: &str = "https://example.invalid/";
@@ -15,7 +16,7 @@ pub fn installer_with_url(
     url: &str,
     nested_kind: Option<InstallerType>,
 ) -> CatalogInstaller {
-    let installer = CatalogInstaller::test_builder(PACKAGE_NAME.into(), url).with_kind(kind);
+    let installer = catalog_installer(PACKAGE_NAME.into(), url).with_kind(kind);
 
     match nested_kind {
         Some(nested_kind) => installer.with_nested(nested_kind),

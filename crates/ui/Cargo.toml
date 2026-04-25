@@ -19,4 +19,4 @@ unicode-width = "0.2"
 winbrew-models = { path = "../models" }
 
 [dev-dependencies]
-winbrew-models = { path = "../models", features = ["test-support"] }
+winbrew-testing = { path = "../testing" }

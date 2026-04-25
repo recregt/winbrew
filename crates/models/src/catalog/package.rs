@@ -410,10 +410,18 @@ fn collect_json_text_array(
     Ok(())
 }
 
-#[cfg(any(test, debug_assertions, feature = "test-support"))]
-impl CatalogInstaller {
-    pub fn test_builder(package_id: CatalogId, url: &str) -> Self {
-        Self {
+#[cfg(test)]
+mod tests {
+    use super::{CatalogInstaller, CatalogPackage};
+    use crate::catalog::installer_type::CatalogInstallerType;
+    use crate::install::{Architecture, InstallerType};
+    use crate::package::PackageId;
+    use crate::package::PackageSource;
+    use crate::shared::CatalogId;
+    use crate::shared::{HashAlgorithm, Version};
+
+    fn catalog_installer(package_id: CatalogId, url: &str) -> CatalogInstaller {
+        CatalogInstaller {
             package_id,
             url: url.to_string(),
             hash: "abc123".to_string(),
@@ -425,60 +433,17 @@ impl CatalogInstaller {
             protocols: None,
             file_extensions: None,
             capabilities: None,
-            scope: None,
             arch: Architecture::X64,
             kind: InstallerType::Exe,
             nested_kind: None,
+            scope: None,
         }
     }
 
-    pub fn with_installer_type(mut self, installer_type: CatalogInstallerType) -> Self {
-        self.installer_type = installer_type;
-        self
-    }
-
-    pub fn with_installer_switches(mut self, installer_switches: impl Into<String>) -> Self {
-        self.installer_switches = Some(installer_switches.into());
-        self
-    }
-
-    pub fn with_hash_algorithm(mut self, hash_algorithm: HashAlgorithm) -> Self {
-        self.hash_algorithm = hash_algorithm;
-        self
-    }
-
-    pub fn with_hash(mut self, hash: impl Into<String>) -> Self {
-        self.hash = hash.into();
-        self
-    }
-
-    pub fn with_arch(mut self, arch: Architecture) -> Self {
-        self.arch = arch;
-        self
-    }
-
-    pub fn with_kind(mut self, kind: InstallerType) -> Self {
-        self.kind = kind;
-        self
-    }
-
-    pub fn with_nested(mut self, nested_kind: InstallerType) -> Self {
-        self.nested_kind = Some(nested_kind);
-        self
-    }
-
-    pub fn with_scope(mut self, scope: impl Into<String>) -> Self {
-        self.scope = Some(scope.into());
-        self
-    }
-}
-
-#[cfg(any(test, debug_assertions, feature = "test-support"))]
-impl CatalogPackage {
-    pub fn test_builder(id: CatalogId, name: &str, version: Version) -> Self {
+    fn catalog_package(id: CatalogId, name: &str, version: Version) -> CatalogPackage {
         let package_id = PackageId::parse(id.as_ref()).expect("catalog id should parse");
 
-        Self {
+        CatalogPackage {
             id,
             name: name.to_string(),
             version,
@@ -503,93 +468,14 @@ impl CatalogPackage {
         }
     }
 
-    pub fn with_source(mut self, source: PackageSource) -> Self {
-        self.source = source;
-        self
-    }
-
-    pub fn with_namespace(mut self, namespace: impl Into<String>) -> Self {
-        self.namespace = Some(namespace.into());
-        self
-    }
-
-    pub fn without_namespace(mut self) -> Self {
-        self.namespace = None;
-        self
-    }
-
-    pub fn with_source_id(mut self, source_id: impl Into<String>) -> Self {
-        self.source_id = source_id.into();
-        self
-    }
-
-    pub fn with_created_at(mut self, created_at: impl Into<String>) -> Self {
-        self.created_at = Some(created_at.into());
-        self
-    }
-
-    pub fn with_updated_at(mut self, updated_at: impl Into<String>) -> Self {
-        self.updated_at = Some(updated_at.into());
-        self
-    }
-
-    pub fn with_description(mut self, description: impl Into<String>) -> Self {
-        self.description = Some(description.into());
-        self
-    }
-
-    pub fn with_homepage(mut self, homepage: impl Into<String>) -> Self {
-        self.homepage = Some(homepage.into());
-        self
-    }
-
-    pub fn with_license(mut self, license: impl Into<String>) -> Self {
-        self.license = Some(license.into());
-        self
-    }
-
-    pub fn with_publisher(mut self, publisher: impl Into<String>) -> Self {
-        self.publisher = Some(publisher.into());
-        self
-    }
-
-    pub fn with_locale(mut self, locale: impl Into<String>) -> Self {
-        self.locale = Some(locale.into());
-        self
-    }
-
-    pub fn with_moniker(mut self, moniker: impl Into<String>) -> Self {
-        self.moniker = Some(moniker.into());
-        self
-    }
-
-    pub fn with_tags(mut self, tags: impl Into<String>) -> Self {
-        self.tags = Some(tags.into());
-        self
-    }
-
-    pub fn with_bin(mut self, bin: impl Into<String>) -> Self {
-        self.bin = Some(bin.into());
-        self
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{CatalogInstaller, CatalogPackage};
-    use crate::catalog::installer_type::CatalogInstallerType;
-    use crate::install::{Architecture, InstallerType};
-    use crate::package::PackageSource;
-    use crate::shared::{HashAlgorithm, Version};
-
     #[test]
     fn rejects_source_mismatch() {
-        let package = CatalogPackage::test_builder(
+        let mut package = catalog_package(
             "winget/Contoso.App".into(),
             "Contoso App",
             Version::parse("1.2.3").expect("version should parse"),
-        )
-        .with_source(PackageSource::Scoop);
+        );
+        package.source = PackageSource::Scoop;
 
         let err = package.validate().expect_err("source mismatch should fail");
 
@@ -598,31 +484,30 @@ mod tests {
 
     #[test]
     fn validates_checksumless_catalog_installer() {
-        let installer = CatalogInstaller::test_builder(
-            "winget/Contoso.App".into(),
-            "https://example.test/app.exe",
-        )
-        .with_hash("")
-        .with_arch(Architecture::Any)
-        .with_kind(InstallerType::Portable);
+        let installer =
+            catalog_installer("winget/Contoso.App".into(), "https://example.test/app.exe");
+        let installer = CatalogInstaller {
+            hash: "".to_string(),
+            arch: Architecture::Any,
+            kind: InstallerType::Portable,
+            ..installer
+        };
 
         assert!(installer.validate().is_ok());
     }
 
     #[test]
     fn catalog_installer_nested_kind_round_trips_through_serde() {
-        let installer = CatalogInstaller::test_builder(
-            "winget/Contoso.App".into(),
-            "https://example.test/app.zip",
-        )
-        .with_arch(Architecture::Any)
-        .with_kind(InstallerType::Zip)
-        .with_nested(InstallerType::Msi)
-        .with_scope("user")
-        .with_hash("deadbeef")
-        .with_hash_algorithm(HashAlgorithm::Sha256)
-        .with_installer_type(CatalogInstallerType::Zip)
-        .with_installer_switches("/S");
+        let mut installer =
+            catalog_installer("winget/Contoso.App".into(), "https://example.test/app.zip");
+        installer.arch = Architecture::Any;
+        installer.kind = InstallerType::Zip;
+        installer.nested_kind = Some(InstallerType::Msi);
+        installer.scope = Some("user".to_string());
+        installer.hash = "deadbeef".to_string();
+        installer.hash_algorithm = HashAlgorithm::Sha256;
+        installer.installer_type = CatalogInstallerType::Zip;
+        installer.installer_switches = Some("/S".to_string());
 
         let json = serde_json::to_string(&installer).expect("installer should serialize");
         assert!(json.contains("\"nested_kind\":\"msi\""));
@@ -664,15 +549,13 @@ mod tests {
 
     #[test]
     fn canonical_key_distinguishes_nested_kind_presence() {
-        let base = CatalogInstaller::test_builder(
-            "winget/Contoso.App".into(),
-            "https://example.test/app.zip",
-        )
-        .with_hash("sha256:deadbeef")
-        .with_hash_algorithm(HashAlgorithm::Sha256)
-        .with_installer_type(CatalogInstallerType::Zip)
-        .with_arch(Architecture::Any)
-        .with_kind(InstallerType::Zip);
+        let mut base =
+            catalog_installer("winget/Contoso.App".into(), "https://example.test/app.zip");
+        base.hash = "sha256:deadbeef".to_string();
+        base.hash_algorithm = HashAlgorithm::Sha256;
+        base.installer_type = CatalogInstallerType::Zip;
+        base.arch = Architecture::Any;
+        base.kind = InstallerType::Zip;
 
         let mut nested = base.clone();
         nested.nested_kind = Some(InstallerType::Msi);
@@ -682,15 +565,13 @@ mod tests {
 
     #[test]
     fn merge_metadata_unions_arrays_deterministically() {
-        let mut left = CatalogInstaller::test_builder(
-            "winget/Contoso.App".into(),
-            "https://example.test/app.zip",
-        )
-        .with_hash("sha256:deadbeef")
-        .with_hash_algorithm(HashAlgorithm::Sha256)
-        .with_installer_type(CatalogInstallerType::Zip)
-        .with_arch(Architecture::Any)
-        .with_kind(InstallerType::Zip);
+        let mut left =
+            catalog_installer("winget/Contoso.App".into(), "https://example.test/app.zip");
+        left.hash = "sha256:deadbeef".to_string();
+        left.hash_algorithm = HashAlgorithm::Sha256;
+        left.installer_type = CatalogInstallerType::Zip;
+        left.arch = Architecture::Any;
+        left.kind = InstallerType::Zip;
         left.nested_kind = Some(InstallerType::Msi);
         left.platform = Some("[\"Windows.Server\", \"Windows.Desktop\"]".to_string());
         left.commands = Some("[\"contoso\"]".to_string());
@@ -729,15 +610,13 @@ mod tests {
 
     #[test]
     fn merge_metadata_preserves_present_side_when_other_is_missing() {
-        let mut left = CatalogInstaller::test_builder(
-            "winget/Contoso.App".into(),
-            "https://example.test/app.zip",
-        )
-        .with_hash("sha256:deadbeef")
-        .with_hash_algorithm(HashAlgorithm::Sha256)
-        .with_installer_type(CatalogInstallerType::Zip)
-        .with_arch(Architecture::Any)
-        .with_kind(InstallerType::Zip);
+        let mut left =
+            catalog_installer("winget/Contoso.App".into(), "https://example.test/app.zip");
+        left.hash = "sha256:deadbeef".to_string();
+        left.hash_algorithm = HashAlgorithm::Sha256;
+        left.installer_type = CatalogInstallerType::Zip;
+        left.arch = Architecture::Any;
+        left.kind = InstallerType::Zip;
         left.nested_kind = None;
 
         let mut right = left.clone();
@@ -759,19 +638,19 @@ mod tests {
 
     #[test]
     fn catalog_package_round_trips_through_serde() {
-        let package = CatalogPackage::test_builder(
+        let mut package = catalog_package(
             "scoop/main/Contoso.App".into(),
             "Contoso App",
             Version::parse("1.2.3").expect("version should parse"),
-        )
-        .with_description("Example package")
-        .with_created_at("2026-04-14 12:00:00")
-        .with_updated_at("2026-04-14 12:34:56")
-        .with_publisher("Contoso Ltd.")
-        .with_locale("en-US")
-        .with_moniker("contoso")
-        .with_tags("[\"utility\"]")
-        .with_bin("[\"tool.exe\"]");
+        );
+        package.description = Some("Example package".to_string());
+        package.created_at = Some("2026-04-14 12:00:00".to_string());
+        package.updated_at = Some("2026-04-14 12:34:56".to_string());
+        package.publisher = Some("Contoso Ltd.".to_string());
+        package.locale = Some("en-US".to_string());
+        package.moniker = Some("contoso".to_string());
+        package.tags = Some("[\"utility\"]".to_string());
+        package.bin = Some("[\"tool.exe\"]".to_string());
 
         let json = serde_json::to_string(&package).expect("package should serialize");
         let restored: CatalogPackage =
@@ -793,7 +672,7 @@ mod tests {
 
     #[test]
     fn winget_packages_require_locale() {
-        let package = CatalogPackage::test_builder(
+        let package = catalog_package(
             "winget/Contoso.App".into(),
             "Contoso App",
             Version::parse("1.2.3").expect("version should parse"),

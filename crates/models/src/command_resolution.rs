@@ -261,22 +261,74 @@ mod tests {
         catalog_fingerprint, resolve_command_exposure,
     };
     use crate::catalog::package::{CanonicalInstallerKey, CatalogInstaller, CatalogPackage};
+    use crate::package::PackageId;
     use crate::shared::Version;
+
+    fn catalog_installer(package_id: crate::shared::CatalogId, url: &str) -> CatalogInstaller {
+        CatalogInstaller {
+            package_id,
+            url: url.to_string(),
+            hash: "abc123".to_string(),
+            hash_algorithm: crate::shared::HashAlgorithm::Sha256,
+            installer_type: crate::catalog::installer_type::CatalogInstallerType::Unknown,
+            installer_switches: None,
+            platform: None,
+            commands: None,
+            protocols: None,
+            file_extensions: None,
+            capabilities: None,
+            arch: crate::install::Architecture::X64,
+            kind: crate::install::InstallerType::Exe,
+            nested_kind: None,
+            scope: None,
+        }
+    }
+
+    fn catalog_package(
+        id: crate::shared::CatalogId,
+        name: &str,
+        version: Version,
+    ) -> CatalogPackage {
+        let package_id = PackageId::parse(id.as_ref()).expect("catalog id should parse");
+
+        CatalogPackage {
+            id,
+            name: name.to_string(),
+            version,
+            source: package_id.source(),
+            namespace: package_id.namespace().map(str::to_string),
+            source_id: package_id.source_id().to_string(),
+            created_at: None,
+            updated_at: None,
+            description: None,
+            homepage: None,
+            license: None,
+            publisher: None,
+            locale: None,
+            moniker: None,
+            platform: None,
+            commands: None,
+            protocols: None,
+            file_extensions: None,
+            capabilities: None,
+            tags: None,
+            bin: None,
+        }
+    }
 
     #[test]
     fn resolves_package_commands_with_high_confidence() {
-        let package = CatalogPackage::test_builder(
+        let mut package = catalog_package(
             "winget/Contoso.App".into(),
             "Contoso App",
             Version::parse("1.2.3").expect("version should parse"),
-        )
-        .with_moniker("contoso");
-        let mut installer = CatalogInstaller::test_builder(
+        );
+        package.moniker = Some("contoso".to_string());
+        let mut installer = catalog_installer(
             "winget/Contoso.App".into(),
             "https://example.invalid/app.exe",
-        )
-        .with_kind(crate::install::InstallerType::Exe);
-        let mut package = package;
+        );
+        installer.kind = crate::install::InstallerType::Exe;
         package.commands = Some(r#"["Contoso", "contoso"]"#.to_string());
         installer.commands = Some(r#"["Installer"]"#.to_string());
 
@@ -302,16 +354,16 @@ mod tests {
 
     #[test]
     fn resolves_installer_commands_when_package_metadata_is_empty() {
-        let package = CatalogPackage::test_builder(
+        let package = catalog_package(
             "winget/Contoso.App".into(),
             "Contoso App",
             Version::parse("1.2.3").expect("version should parse"),
         );
-        let mut installer = CatalogInstaller::test_builder(
+        let mut installer = catalog_installer(
             "winget/Contoso.App".into(),
             "https://example.invalid/app.exe",
-        )
-        .with_kind(crate::install::InstallerType::Exe);
+        );
+        installer.kind = crate::install::InstallerType::Exe;
         installer.commands = Some(r#"["contoso", "Contoso"]"#.to_string());
 
         let resolved = resolve_command_exposure(&package, &installer).expect("resolve commands");
@@ -336,17 +388,17 @@ mod tests {
 
     #[test]
     fn unresolved_when_no_command_metadata_exists() {
-        let package = CatalogPackage::test_builder(
+        let mut package = catalog_package(
             "winget/Contoso.App".into(),
             "Contoso App",
             Version::parse("1.2.3").expect("version should parse"),
-        )
-        .with_moniker("contoso");
-        let installer = CatalogInstaller::test_builder(
+        );
+        package.moniker = Some("contoso".to_string());
+        let mut installer = catalog_installer(
             "winget/Contoso.App".into(),
             "https://example.invalid/app.exe",
-        )
-        .with_kind(crate::install::InstallerType::Exe);
+        );
+        installer.kind = crate::install::InstallerType::Exe;
 
         let resolved = resolve_command_exposure(&package, &installer).expect("resolve commands");
 
