@@ -292,8 +292,8 @@ fn diagnose_committed_journal(
     };
 
     diagnose_committed_journal_metadata(journal_path, &metadata, packages)
-        .into_iter()
-        .collect()
+        .map(|diagnosis| vec![diagnosis])
+        .unwrap_or_default()
 }
 
 fn diagnose_committed_journal_metadata(
@@ -423,17 +423,13 @@ mod tests {
         assert_eq!(finding.target_path.as_deref(), Some(expected_path.as_str()));
     }
 
-    fn journal_install_dir(package_name: &str) -> String {
-        format!(r"C:\winbrew\apps\{package_name}")
-    }
-
     fn journal_metadata_entry(package_name: &str) -> database::JournalEntry {
         database::JournalEntry::Metadata {
             package_id: package_name.to_string(),
             version: "1.0.0".to_string(),
             engine: "msi".to_string(),
             deployment_kind: DeploymentKind::Installed,
-            install_dir: journal_install_dir(package_name),
+            install_dir: format!(r"C:\winbrew\apps\{package_name}"),
             dependencies: Vec::new(),
             commands: None,
             bin: None,
@@ -531,21 +527,8 @@ mod tests {
                 path: r"C:\winbrew\apps\Contoso.App\bin\tool.exe".to_string(),
                 hash: None,
             },
-            crate::database::JournalEntry::Metadata {
-                package_id: "Contoso.App".to_string(),
-                version: "1.0.0".to_string(),
-                engine: "msi".to_string(),
-                deployment_kind: DeploymentKind::Installed,
-                install_dir: r"C:\winbrew\apps\Contoso.App".to_string(),
-                dependencies: Vec::new(),
-                commands: None,
-                bin: None,
-                command_resolution: None,
-                engine_metadata: None,
-            },
-            crate::database::JournalEntry::Commit {
-                installed_at: "2026-04-12T00:00:00Z".to_string(),
-            },
+            journal_metadata_entry("Contoso.App"),
+            journal_commit_entry(),
         ];
 
         let metadata = extract_journal_metadata(&entries).expect("metadata should be found");
@@ -612,6 +595,37 @@ mod tests {
         .expect("stale package should produce a diagnosis");
 
         assert_eq!(diagnosis.error_code, "stale_package_journal");
+    }
+
+    #[test]
+    fn scan_package_journals_detects_stale_committed_journal() {
+        let env = TestEnvironment::new();
+        let journal_path = write_committed_journal(&env, "Contoso.Stale");
+
+        let mut package = sample_package();
+        package.name = "Contoso.Stale".to_string();
+        package.version = "2.0.0".to_string();
+        package.install_dir = r"C:\winbrew\apps\Contoso.Stale".to_string();
+
+        let scan = scan_package_journals(&env.paths, &[package]);
+
+        let diagnosis = assert_single_diagnosis(
+            &scan.diagnostics,
+            "stale_package_journal",
+            DiagnosisSeverity::Warning,
+        );
+        assert!(
+            diagnosis
+                .description
+                .contains("recovery journal does not match")
+        );
+
+        let finding = assert_single_recovery_finding(
+            &scan.recovery_findings,
+            RecoveryIssueKind::Conflict,
+            Some(RecoveryActionGroup::JournalReplay),
+        );
+        assert_recovery_target_path(finding, &journal_path);
     }
 
     #[test]
