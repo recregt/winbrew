@@ -410,7 +410,7 @@ fn collect_json_text_array(
     Ok(())
 }
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, debug_assertions, feature = "test-support"))]
 impl CatalogInstaller {
     pub fn test_builder(package_id: CatalogId, url: &str) -> Self {
         Self {
@@ -473,7 +473,7 @@ impl CatalogInstaller {
     }
 }
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, debug_assertions, feature = "test-support"))]
 impl CatalogPackage {
     pub fn test_builder(id: CatalogId, name: &str, version: Version) -> Self {
         let package_id = PackageId::parse(id.as_ref()).expect("catalog id should parse");

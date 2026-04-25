@@ -17,3 +17,6 @@ terminal_size = "0.4"
 tracing.workspace = true
 unicode-width = "0.2"
 winbrew-models = { path = "../models" }
+
+[dev-dependencies]
+winbrew-models = { path = "../models", features = ["test-support"] }
