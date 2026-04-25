@@ -285,12 +285,12 @@ mod tests {
             diagnostics: Vec::new(),
             recovery_findings: Vec::new(),
             scan_timings: HealthScanTimings {
-                database_connection: Duration::from_millis(11),
-                installed_packages: Duration::from_millis(12),
-                package_scan: Duration::from_millis(13),
-                msi_scan: Duration::from_millis(14),
-                orphan_scan: Duration::from_millis(15),
-                journal_scan: Duration::from_millis(16),
+                database_connection: Duration::from_micros(11),
+                installed_packages: Duration::from_micros(12),
+                package_scan: Duration::from_micros(13),
+                msi_scan: Duration::from_micros(14),
+                orphan_scan: Duration::from_micros(15),
+                journal_scan: Duration::from_micros(16),
             },
             scan_duration: Duration::from_millis(99),
             error_count: 0,
@@ -318,12 +318,12 @@ mod tests {
         assert!(
             summary
                 .iter()
-                .any(|(label, value)| { label == "Database connection" && value == "11ms" })
+                .any(|(label, value)| { label == "Database connection" && value == "11µs" })
         );
         assert!(
             summary
                 .iter()
-                .any(|(label, value)| label == "Journal scan" && value == "16ms")
+                .any(|(label, value)| label == "Journal scan" && value == "16µs")
         );
     }
 
