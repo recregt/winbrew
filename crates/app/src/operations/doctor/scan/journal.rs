@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::ErrorKind;
 use std::path::Path;
 
 use crate::core::paths::ResolvedPaths;
@@ -186,6 +187,11 @@ fn process_journal_entry(
             for diagnosis in diagnose_committed_journal(&journal_path, &entries, package_lookup) {
                 result.push(diagnosis, Some(&journal_path));
             }
+        }
+        Err(database::JournalReadError::Read { source, .. })
+            if source.kind() == ErrorKind::NotFound =>
+        {
+            debug!(path = %journal_path.display(), "missing journal file, skipping package directory");
         }
         Err(error) => {
             let (diagnosis, target_path) = journal_read_error_diagnosis(&journal_path, error);
@@ -417,6 +423,92 @@ mod tests {
         assert_eq!(finding.target_path.as_deref(), Some(expected_path.as_str()));
     }
 
+    fn journal_install_dir(package_name: &str) -> String {
+        format!(r"C:\winbrew\apps\{package_name}")
+    }
+
+    fn journal_metadata_entry(package_name: &str) -> database::JournalEntry {
+        database::JournalEntry::Metadata {
+            package_id: package_name.to_string(),
+            version: "1.0.0".to_string(),
+            engine: "msi".to_string(),
+            deployment_kind: DeploymentKind::Installed,
+            install_dir: journal_install_dir(package_name),
+            dependencies: Vec::new(),
+            commands: None,
+            bin: None,
+            command_resolution: None,
+            engine_metadata: None,
+        }
+    }
+
+    fn journal_commit_entry() -> database::JournalEntry {
+        database::JournalEntry::Commit {
+            installed_at: "2026-04-12T00:00:00Z".to_string(),
+        }
+    }
+
+    fn write_journal(
+        env: &TestEnvironment,
+        package_name: &str,
+        build: impl FnOnce(&mut database::JournalWriter),
+    ) -> PathBuf {
+        let mut writer =
+            database::JournalWriter::open_for_package(env.root(), package_name, "1.0.0")
+                .expect("open journal");
+        build(&mut writer);
+        writer.flush().expect("flush journal");
+        writer.path().to_path_buf()
+    }
+
+    fn write_metadata_only_journal(env: &TestEnvironment, package_name: &str) -> PathBuf {
+        write_journal(env, package_name, |writer| {
+            writer
+                .append(&journal_metadata_entry(package_name))
+                .expect("write metadata");
+        })
+    }
+
+    fn write_commit_only_journal(env: &TestEnvironment, package_name: &str) -> PathBuf {
+        write_journal(env, package_name, |writer| {
+            writer
+                .append(&journal_commit_entry())
+                .expect("write commit");
+        })
+    }
+
+    fn write_committed_journal(env: &TestEnvironment, package_name: &str) -> PathBuf {
+        write_journal(env, package_name, |writer| {
+            writer
+                .append(&journal_metadata_entry(package_name))
+                .expect("write metadata");
+            writer
+                .append(&journal_commit_entry())
+                .expect("write commit");
+        })
+    }
+
+    fn write_committed_journal_with_trailing_entry(
+        env: &TestEnvironment,
+        package_name: &str,
+        trailing_path: &str,
+    ) -> PathBuf {
+        write_journal(env, package_name, |writer| {
+            writer
+                .append(&journal_metadata_entry(package_name))
+                .expect("write metadata");
+            writer
+                .append(&journal_commit_entry())
+                .expect("write commit");
+            writer
+                .append(&database::JournalEntry::FsCreate {
+                    path: trailing_path.to_string(),
+                    hash: None,
+                })
+                .expect("write trailing entry");
+        })
+    }
+
     fn sample_package() -> InstalledPackage {
         InstalledPackage {
             name: "Contoso.App".to_string(),
@@ -466,12 +558,33 @@ mod tests {
     }
 
     #[test]
+    fn extract_journal_metadata_returns_none_when_no_metadata_entry() {
+        let entries = vec![journal_commit_entry()];
+
+        assert!(extract_journal_metadata(&entries).is_none());
+    }
+
+    #[test]
     fn journal_metadata_matches_package_accepts_matching_package_fields() {
         let package = sample_package();
         let metadata = JournalMetadata {
             package_id: "Contoso.App",
             version: "1.0.0",
             engine: "msi",
+            deployment_kind: DeploymentKind::Installed,
+            install_dir: r"C:\winbrew\apps\Contoso.App",
+        };
+
+        assert!(journal_metadata_matches_package(&package, &metadata));
+    }
+
+    #[test]
+    fn journal_metadata_matches_package_engine_comparison_is_case_insensitive() {
+        let package = sample_package();
+        let metadata = JournalMetadata {
+            package_id: "Contoso.App",
+            version: "1.0.0",
+            engine: "MSI",
             deployment_kind: DeploymentKind::Installed,
             install_dir: r"C:\winbrew\apps\Contoso.App",
         };
@@ -505,24 +618,7 @@ mod tests {
     fn scan_package_journals_detects_incomplete_journal() {
         let env = TestEnvironment::new();
 
-        let mut writer =
-            database::JournalWriter::open_for_package(env.root(), "Contoso.Recover", "1.0.0")
-                .expect("open journal");
-        writer
-            .append(&database::JournalEntry::Metadata {
-                package_id: "Contoso.Recover".to_string(),
-                version: "1.0.0".to_string(),
-                engine: "msi".to_string(),
-                deployment_kind: DeploymentKind::Installed,
-                install_dir: r"C:\winbrew\apps\Contoso.Recover".to_string(),
-                dependencies: Vec::new(),
-                commands: None,
-                bin: None,
-                command_resolution: None,
-                engine_metadata: None,
-            })
-            .expect("write metadata");
-        writer.flush().expect("flush journal");
+        write_metadata_only_journal(&env, "Contoso.Recover");
 
         let scan = scan_package_journals(&env.paths, &[]);
 
@@ -564,7 +660,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_package_journals_reports_unreadable_missing_journal_file() {
+    fn scan_package_journals_skips_package_directory_without_journal_file() {
         let env = TestEnvironment::new();
 
         let journal_dir = env.pkgdb_root().join("Contoso.MissingJournal");
@@ -572,26 +668,15 @@ mod tests {
 
         let scan = scan_package_journals(&env.paths, &[]);
 
-        assert_single_diagnosis(
-            &scan.diagnostics,
-            "unreadable_package_journal",
-            DiagnosisSeverity::Error,
-        );
+        assert!(scan.diagnostics.is_empty());
+        assert!(scan.recovery_findings.is_empty());
     }
 
     #[test]
     fn scan_package_journals_reports_missing_journal_metadata() {
         let env = TestEnvironment::new();
 
-        let mut writer =
-            database::JournalWriter::open_for_package(env.root(), "Contoso.MissingMeta", "1.0.0")
-                .expect("open journal");
-        writer
-            .append(&database::JournalEntry::Commit {
-                installed_at: "2026-04-12T00:00:00Z".to_string(),
-            })
-            .expect("write commit");
-        writer.flush().expect("flush journal");
+        write_commit_only_journal(&env, "Contoso.MissingMeta");
 
         let scan = scan_package_journals(&env.paths, &[]);
 
@@ -607,30 +692,7 @@ mod tests {
     fn scan_package_journals_detects_orphan_committed_journal() {
         let env = TestEnvironment::new();
 
-        let mut writer =
-            database::JournalWriter::open_for_package(env.root(), "Contoso.Orphan", "1.0.0")
-                .expect("open journal");
-        writer
-            .append(&database::JournalEntry::Metadata {
-                package_id: "Contoso.Orphan".to_string(),
-                version: "1.0.0".to_string(),
-                engine: "msi".to_string(),
-                deployment_kind: DeploymentKind::Installed,
-                install_dir: r"C:\winbrew\apps\Contoso.Orphan".to_string(),
-                dependencies: Vec::new(),
-                commands: None,
-                bin: None,
-                command_resolution: None,
-                engine_metadata: None,
-            })
-            .expect("write metadata");
-        writer
-            .append(&database::JournalEntry::Commit {
-                installed_at: "2026-04-12T00:00:00Z".to_string(),
-            })
-            .expect("write commit");
-        writer.flush().expect("flush journal");
-        let journal_path = writer.path().to_path_buf();
+        let journal_path = write_committed_journal(&env, "Contoso.Orphan");
 
         let scan = scan_package_journals(&env.paths, &[]);
 
@@ -653,36 +715,11 @@ mod tests {
     fn scan_package_journals_tracks_trailing_journal_replay_target() {
         let env = TestEnvironment::new();
 
-        let mut writer =
-            database::JournalWriter::open_for_package(env.root(), "Contoso.Trailing", "1.0.0")
-                .expect("open journal");
-        writer
-            .append(&database::JournalEntry::Metadata {
-                package_id: "Contoso.Trailing".to_string(),
-                version: "1.0.0".to_string(),
-                engine: "msi".to_string(),
-                deployment_kind: DeploymentKind::Installed,
-                install_dir: r"C:\winbrew\apps\Contoso.Trailing".to_string(),
-                dependencies: Vec::new(),
-                commands: None,
-                bin: None,
-                command_resolution: None,
-                engine_metadata: None,
-            })
-            .expect("write metadata");
-        writer
-            .append(&database::JournalEntry::Commit {
-                installed_at: "2026-04-12T00:00:00Z".to_string(),
-            })
-            .expect("write commit");
-        writer
-            .append(&database::JournalEntry::FsCreate {
-                path: r"C:\winbrew\apps\Contoso.Trailing\payload.exe".to_string(),
-                hash: None,
-            })
-            .expect("write trailing entry");
-        writer.flush().expect("flush journal");
-        let journal_path = writer.path().to_path_buf();
+        let journal_path = write_committed_journal_with_trailing_entry(
+            &env,
+            "Contoso.Trailing",
+            r"C:\winbrew\apps\Contoso.Trailing\payload.exe",
+        );
 
         let scan = scan_package_journals(&env.paths, &[]);
 
