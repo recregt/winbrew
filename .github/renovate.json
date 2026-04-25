@@ -12,17 +12,6 @@
       "customType": "regex",
       "managerFilePatterns": ["/(^|/)Cargo\\.toml$/"],
       "matchStrings": [
-        "\\bMSRV:1\\b.*?(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)",
-        "(?<currentValue>\\d+\\.\\d+(\\.\\d+)?).*?\\bMSRV:1\\b"
-      ],
-      "depNameTemplate": "MSRV:1",
-      "packageNameTemplate": "rust-lang/rust",
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/(^|/)Cargo\\.toml$/"],
-      "matchStrings": [
         "\\bMSRV:3\\b.*?(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)",
         "(?<currentValue>\\d+\\.\\d+(\\.\\d+)?).*?\\bMSRV:3\\b"
       ],
@@ -43,18 +32,19 @@
   ],
   "packageRules": [
     {
-      "commitMessageTopic": "MSRV (1 version)",
-      "matchManagers": ["custom.regex"],
-      "matchDepNames": ["MSRV:1"],
-      "extractVersion": "^(?<version>\\d+\\.\\d+)",
-      "schedule": ["at any time"],
-      "groupName": "msrv"
-    },
-    {
       "commitMessageTopic": "MSRV (3 versions)",
       "matchManagers": ["custom.regex"],
       "matchDepNames": ["MSRV:3"],
       "extractVersion": "^(?<version>\\d+\\.\\d+)",
+      "schedule": ["at any time"],
+      "minimumReleaseAge": "85 days",
+      "internalChecksFilter": "strict",
+      "groupName": "msrv"
+    },
+    {
+      "commitMessageTopic": "Rust toolchain",
+      "matchManagers": ["custom.regex"],
+      "matchDepNames": ["rust-toolchain"],
       "schedule": ["at any time"],
       "minimumReleaseAge": "85 days",
       "internalChecksFilter": "strict",
