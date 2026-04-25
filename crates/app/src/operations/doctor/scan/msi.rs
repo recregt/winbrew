@@ -292,15 +292,6 @@ mod tests {
             let install_dir = self.packages_root().join(name);
             (sample_package(name, &install_dir), install_dir)
         }
-
-        fn make_msi_snapshot(
-            &self,
-            name: &str,
-            install_dir: &Path,
-            hash_hex: &str,
-        ) -> MsiInventorySnapshot {
-            sample_snapshot(name, install_dir, hash_hex)
-        }
     }
 
     fn assert_normalized_recovery_target_path(
@@ -408,7 +399,7 @@ mod tests {
         env.create_dir(file_path.parent().expect("file parent"));
         env.write_file(&file_path, b"abc");
 
-        let snapshot = env.make_msi_snapshot(
+        let snapshot = sample_snapshot(
             "Contoso.Msi",
             &install_dir,
             "0000000000000000000000000000000000000000000000000000000000000000",
@@ -443,7 +434,7 @@ mod tests {
         let (package, install_dir) = env.make_msi_package("Contoso.Msi");
         env.create_dir(&install_dir);
 
-        let snapshot = env.make_msi_snapshot(
+        let snapshot = sample_snapshot(
             "Contoso.Msi",
             &install_dir,
             "0000000000000000000000000000000000000000000000000000000000000000",
