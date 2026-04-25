@@ -95,6 +95,84 @@ mod tests {
     }
 
     #[test]
+    fn scan_orphaned_install_dirs_skips_known_packages() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let packages_root = temp_dir.path().join("packages");
+        fs::create_dir_all(&packages_root).expect("packages root should be created");
+
+        let known_package_dir = packages_root.join("Contoso.Known");
+        fs::create_dir_all(&known_package_dir).expect("known package directory should be created");
+
+        let orphan_dir = packages_root.join("Contoso.Orphan");
+        fs::create_dir_all(&orphan_dir).expect("orphan directory should be created");
+
+        let known_package = sample_package("Contoso.Known", &known_package_dir);
+
+        let scan = scan_orphaned_install_dirs(&packages_root, &[known_package]);
+
+        assert_eq!(scan.diagnostics.len(), 1);
+        assert_eq!(scan.diagnostics[0].error_code, "orphan_install_directory");
+        assert_eq!(scan.recovery_findings.len(), 1);
+        assert_eq!(
+            scan.recovery_findings[0].issue_kind,
+            RecoveryIssueKind::IncompleteInstall
+        );
+        assert_eq!(
+            scan.recovery_findings[0].action_group,
+            Some(RecoveryActionGroup::OrphanCleanup)
+        );
+        assert_eq!(
+            scan.recovery_findings[0].target_path.as_deref(),
+            Some(orphan_dir.to_string_lossy().as_ref())
+        );
+    }
+
+    #[test]
+    fn scan_orphaned_install_dirs_ignores_files_in_packages_root() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let packages_root = temp_dir.path().join("packages");
+        fs::create_dir_all(&packages_root).expect("packages root should be created");
+
+        let file_path = packages_root.join("README.txt");
+        fs::write(&file_path, b"not a directory").expect("file should be created");
+
+        let scan = scan_orphaned_install_dirs(&packages_root, &[]);
+
+        assert!(scan.diagnostics.is_empty());
+        assert!(scan.recovery_findings.is_empty());
+    }
+
+    #[test]
+    fn scan_orphaned_install_dirs_reports_unreadable_packages_root() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let packages_root = temp_dir.path().join("packages");
+        fs::write(&packages_root, b"not a directory")
+            .expect("packages root file should be created");
+
+        let scan = scan_orphaned_install_dirs(&packages_root, &[]);
+
+        assert_eq!(scan.diagnostics.len(), 1);
+        assert_eq!(scan.diagnostics[0].error_code, "packages_root_unreadable");
+        assert_eq!(
+            scan.diagnostics[0].severity,
+            crate::models::domains::reporting::DiagnosisSeverity::Error
+        );
+        assert!(scan.recovery_findings.is_empty());
+    }
+
+    #[test]
+    fn scan_orphaned_install_dirs_returns_empty_for_empty_root() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let packages_root = temp_dir.path().join("packages");
+        fs::create_dir_all(&packages_root).expect("packages root should be created");
+
+        let scan = scan_orphaned_install_dirs(&packages_root, &[]);
+
+        assert!(scan.diagnostics.is_empty());
+        assert!(scan.recovery_findings.is_empty());
+    }
+
+    #[test]
     fn scan_orphaned_install_dirs_detects_directories_without_packages() {
         let temp_dir = tempdir().expect("temp dir should be created");
         let packages_root = temp_dir.path().join("packages");
