@@ -114,28 +114,45 @@ impl RecoveryFinding {
 
 /// Timing breakdown for the doctor scan pipeline.
 ///
-/// These fields are serialized in microseconds so JSON output preserves
-/// sub-millisecond measurements, while the CLI still renders them with
-/// human-friendly units.
+/// These fields are serialized in microseconds and exposed with `*_micros`
+/// JSON field names so the unit is explicit while keeping the values numeric.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct HealthScanTimings {
     /// Time spent opening the database connection.
-    #[serde(serialize_with = "serialize_duration_micros")]
+    #[serde(
+        rename = "database_connection_micros",
+        serialize_with = "serialize_duration_micros"
+    )]
     pub database_connection: Duration,
     /// Time spent loading installed packages.
-    #[serde(serialize_with = "serialize_duration_micros")]
+    #[serde(
+        rename = "installed_packages_micros",
+        serialize_with = "serialize_duration_micros"
+    )]
     pub installed_packages: Duration,
     /// Time spent validating package install directories.
-    #[serde(serialize_with = "serialize_duration_micros")]
+    #[serde(
+        rename = "package_scan_micros",
+        serialize_with = "serialize_duration_micros"
+    )]
     pub package_scan: Duration,
     /// Time spent validating MSI inventory snapshots and files.
-    #[serde(serialize_with = "serialize_duration_micros")]
+    #[serde(
+        rename = "msi_scan_micros",
+        serialize_with = "serialize_duration_micros"
+    )]
     pub msi_scan: Duration,
     /// Time spent checking for orphaned package directories.
-    #[serde(serialize_with = "serialize_duration_micros")]
+    #[serde(
+        rename = "orphan_scan_micros",
+        serialize_with = "serialize_duration_micros"
+    )]
     pub orphan_scan: Duration,
     /// Time spent scanning committed package journals.
-    #[serde(serialize_with = "serialize_duration_micros")]
+    #[serde(
+        rename = "journal_scan_micros",
+        serialize_with = "serialize_duration_micros"
+    )]
     pub journal_scan: Duration,
 }
 
@@ -166,7 +183,10 @@ pub struct HealthReport {
     /// Timing breakdown for the scan pipeline.
     pub scan_timings: HealthScanTimings,
     /// Total scan duration.
-    #[serde(serialize_with = "serialize_duration_millis")]
+    #[serde(
+        rename = "scan_duration_micros",
+        serialize_with = "serialize_duration_micros"
+    )]
     pub scan_duration: Duration,
     /// Count of diagnostics with error severity.
     pub error_count: usize,
@@ -193,14 +213,6 @@ impl RuntimeReport {
     pub fn new(sections: Vec<ReportSection>) -> Self {
         Self { sections }
     }
-}
-
-fn serialize_duration_millis<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let millis = duration.as_millis().min(u64::MAX as u128) as u64;
-    serializer.serialize_u64(millis)
 }
 
 fn serialize_duration_micros<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
