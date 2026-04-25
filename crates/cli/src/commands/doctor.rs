@@ -33,13 +33,16 @@ pub fn run(ctx: &CommandContext, json_output: bool, warn_as_error: bool) -> Resu
         doctor::health_report(ctx.app())
     })?;
     let (errors, warnings) = split_diagnostics(&report);
+    let has_issues = has_report_issues(&errors, &warnings);
 
     ui.display_key_values(&report_summary(&report));
     ui.info("");
     render_results(&mut ui, &errors, &warnings);
-    ui.info("");
-    render_recovery_preview(&mut ui, &report.recovery_findings);
-    ui.info("Suggestion: Try running 'winbrew repair' or reinstalling the affected packages.");
+    if has_issues {
+        ui.info("");
+        render_recovery_preview(&mut ui, &report.recovery_findings);
+        ui.info("Suggestion: Try running 'winbrew repair' or reinstalling the affected packages.");
+    }
 
     if let Some(exit_error) = exit_error(report.error_count, warnings.len(), warn_as_error) {
         return Err(exit_error);
@@ -125,6 +128,10 @@ fn split_diagnostics(report: &HealthReport) -> (Vec<&DiagnosisResult>, Vec<&Diag
     }
 
     (errors, warnings)
+}
+
+fn has_report_issues(errors: &[&DiagnosisResult], warnings: &[&DiagnosisResult]) -> bool {
+    !errors.is_empty() || !warnings.is_empty()
 }
 
 /// Renders grouped diagnostics with errors first and warnings second.
@@ -345,5 +352,21 @@ mod tests {
                 "Manual review: 1 finding".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn has_report_issues_detects_only_real_findings() {
+        let empty: Vec<&DiagnosisResult> = Vec::new();
+
+        assert!(!has_report_issues(&empty, &empty));
+
+        let warning = DiagnosisResult {
+            error_code: "orphan_install_directory".to_string(),
+            description: "orphaned package".to_string(),
+            severity: DiagnosisSeverity::Warning,
+        };
+        let warnings = vec![&warning];
+
+        assert!(has_report_issues(&empty, &warnings));
     }
 }

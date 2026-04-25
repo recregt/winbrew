@@ -152,7 +152,7 @@ fn sample_report(diagnostics: Vec<DiagnosisResult>) -> HealthReport {
             orphan_scan: Duration::from_micros(15),
             journal_scan: Duration::from_micros(16),
         },
-        scan_duration: Duration::from_millis(1_234),
+        scan_duration: Duration::from_micros(1_234),
         error_count,
     }
 }
@@ -261,9 +261,9 @@ fn write_json_serializes_health_report() {
 
     let value: serde_json::Value = serde_json::from_slice(&output).expect("json should parse");
 
-    assert_eq!(value["scan_duration"], 1234);
-    assert_eq!(value["scan_timings"]["database_connection"], 11);
-    assert_eq!(value["scan_timings"]["journal_scan"], 16);
+    assert_eq!(value["scan_duration_micros"], 1234);
+    assert_eq!(value["scan_timings"]["database_connection_micros"], 11);
+    assert_eq!(value["scan_timings"]["journal_scan_micros"], 16);
     assert_eq!(value["diagnostics"][0]["severity"], "error");
 }
 
