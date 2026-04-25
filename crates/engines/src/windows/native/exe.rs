@@ -215,11 +215,19 @@ fn capture_native_exe_metadata(
     package_name: &str,
     install_dir: &Path,
 ) -> Option<NativeExeInstallMetadata> {
+    capture_native_exe_metadata_with(package_name, install_dir, collect_uninstall_entries)
+}
+
+fn capture_native_exe_metadata_with(
+    package_name: &str,
+    install_dir: &Path,
+    collect_entries: impl FnOnce(Option<&str>) -> Result<Vec<crate::windows_dep::UninstallEntry>>,
+) -> Option<NativeExeInstallMetadata> {
     let package_name = package_name.trim();
     let mut best_match: Option<(u8, NativeExeInstallMetadata)> = None;
     let mut saw_ambiguous_match = false;
 
-    let Ok(entries) = collect_uninstall_entries(Some(package_name)) else {
+    let Ok(entries) = collect_entries(Some(package_name)) else {
         return None;
     };
 
@@ -472,8 +480,8 @@ fn has_arg_prefix(args: &[String], prefix: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        has_arg_prefix, split_switches, validate_download_path, validate_install_dir,
-        validate_package_name,
+        capture_native_exe_metadata_with, has_arg_prefix, split_switches, validate_download_path,
+        validate_install_dir, validate_package_name,
     };
 
     #[cfg(windows)]
@@ -768,6 +776,47 @@ mod tests {
 
         drop(registry_entry);
         let _ = std::fs::remove_dir_all(&install_dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn capture_native_exe_metadata_reads_quiet_only_commands() {
+        let package_name = "Contoso.NativeExe.QuietOnly";
+        let install_dir = native_exe_test_dir("quiet-only");
+        std::fs::create_dir_all(&install_dir).expect("install directory should exist");
+        let uninstall_exe = install_dir.join("uninstall.exe");
+        let quiet_uninstall_command = format!(r"{} /S", uninstall_exe.display());
+        let registry_entry = create_test_uninstall_entry(
+            package_name,
+            &install_dir,
+            Some(quiet_uninstall_command.as_str()),
+            None,
+        )
+        .expect("test uninstall entry should be creatable");
+
+        let metadata = capture_native_exe_metadata(package_name, &install_dir)
+            .expect("metadata should be captured");
+
+        assert!(matches!(
+            metadata,
+            NativeExeInstallMetadata::QuietOnly(ref uninstall_command)
+                if uninstall_command == &quiet_uninstall_command
+        ));
+
+        drop(registry_entry);
+        let _ = std::fs::remove_dir_all(&install_dir);
+    }
+
+    #[test]
+    fn capture_native_exe_metadata_returns_none_when_registry_lookup_fails() {
+        let package_name = "Contoso.NativeExe.RegistryFailure";
+        let install_dir = PathBuf::from(r"C:\Contoso\NativeExe");
+
+        let metadata = capture_native_exe_metadata_with(package_name, &install_dir, |_filter| {
+            Err(anyhow::anyhow!("registry unavailable"))
+        });
+
+        assert!(metadata.is_none());
     }
 
     #[cfg(windows)]
