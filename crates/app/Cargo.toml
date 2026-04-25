@@ -23,8 +23,14 @@ tracing.workspace = true
 zstd = "0.13"
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"
+winbrew-models = { path = "../models", features = ["test-support"] }
 winbrew-testing = { path = "../testing" }
+
+[[bench]]
+name = "doctor_health_report"
+harness = false
 
 [target.'cfg(windows)'.dependencies]
 winbrew-windows = { path = "../windows" }
