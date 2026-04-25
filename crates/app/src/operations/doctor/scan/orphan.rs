@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::models::domains::installed::InstalledPackage;
 use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity};
 
-use super::{OrphanInstallScan, sort_diagnoses, sort_recovery_findings};
+use super::{OrphanInstallScan, ScanResult, sort_diagnoses, sort_recovery_findings};
 
 /// Scan the package root for directories that do not correspond to packages in the database.
 ///
@@ -22,7 +22,7 @@ pub(super) fn scan_orphaned_install_dirs(
     let entries = match std::fs::read_dir(packages_root) {
         Ok(entries) => entries,
         Err(err) => {
-            let mut result = OrphanInstallScan::new();
+            let mut result = ScanResult::default();
             result.push(
                 DiagnosisResult {
                     error_code: "packages_root_unreadable".to_string(),
@@ -38,7 +38,7 @@ pub(super) fn scan_orphaned_install_dirs(
         }
     };
 
-    let mut result = OrphanInstallScan::new();
+    let mut result = ScanResult::default();
 
     for entry in entries.flatten() {
         let file_type = match entry.file_type() {

@@ -22,10 +22,6 @@ pub(super) struct ScanResult {
 }
 
 impl ScanResult {
-    fn new() -> Self {
-        Self::default()
-    }
-
     fn push(&mut self, diagnosis: DiagnosisResult, target_path: Option<&std::path::Path>) {
         if let Some(finding) = RecoveryFinding::from_diagnosis(&diagnosis) {
             let finding = match target_path {

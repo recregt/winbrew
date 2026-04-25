@@ -9,7 +9,7 @@ use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity};
 use crate::models::domains::shared::DeploymentKind;
 use tracing::debug;
 
-use super::{PackageJournalScan, sort_diagnoses, sort_recovery_findings};
+use super::{PackageJournalScan, ScanResult, sort_diagnoses, sort_recovery_findings};
 
 mod error_codes {
     pub const PKGDB_UNREADABLE: &str = "pkgdb_unreadable";
@@ -209,7 +209,7 @@ pub(super) fn scan_package_journals(
 
     if !pkgdb_root.exists() {
         debug!(path = %pkgdb_root.display(), "pkgdb root does not exist, skipping journal scan");
-        return PackageJournalScan::new();
+        return ScanResult::default();
     }
 
     let package_lookup: HashMap<&str, &InstalledPackage> = packages
@@ -222,10 +222,10 @@ pub(super) fn scan_package_journals(
         Err(err) => {
             if err.kind() == std::io::ErrorKind::NotFound {
                 debug!(path = %pkgdb_root.display(), "pkgdb root disappeared before journal scan");
-                return PackageJournalScan::new();
+                return ScanResult::default();
             }
 
-            let mut result = PackageJournalScan::new();
+            let mut result = ScanResult::default();
             result.push(
                 diagnosis(
                     error_codes::PKGDB_UNREADABLE,
@@ -241,7 +241,7 @@ pub(super) fn scan_package_journals(
         }
     };
 
-    let mut result = PackageJournalScan::new();
+    let mut result = ScanResult::default();
 
     for entry_result in entries {
         let entry = match entry_result {
