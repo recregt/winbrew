@@ -5,37 +5,11 @@ use anyhow::Result;
 
 use crate::database;
 use crate::models::domains::installed::InstalledPackage;
-use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity, RecoveryFinding};
+use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity};
 
-use super::{sort_diagnoses, sort_recovery_findings};
+use super::{ScanResult, sort_diagnoses, sort_recovery_findings};
 
-pub(crate) struct PackageInstallScan {
-    pub(crate) diagnostics: Vec<DiagnosisResult>,
-    pub(crate) recovery_findings: Vec<RecoveryFinding>,
-}
-
-impl PackageInstallScan {
-    fn new() -> Self {
-        Self {
-            diagnostics: Vec::new(),
-            recovery_findings: Vec::new(),
-        }
-    }
-
-    fn push(&mut self, diagnosis: DiagnosisResult, target_path: Option<&Path>) {
-        if let Some(finding) = RecoveryFinding::from_diagnosis(&diagnosis) {
-            let finding = match target_path {
-                Some(target_path) => {
-                    finding.with_target_path(target_path.to_string_lossy().into_owned())
-                }
-                None => finding,
-            };
-            self.recovery_findings.push(finding);
-        }
-
-        self.diagnostics.push(diagnosis);
-    }
-}
+pub(crate) type PackageInstallScan = ScanResult;
 
 /// Validate the install path string stored on a package record.
 ///
@@ -133,7 +107,7 @@ pub(super) fn check_package(pkg: &InstalledPackage) -> Option<DiagnosisResult> {
 }
 
 pub(crate) fn scan_packages(packages: &[InstalledPackage]) -> PackageInstallScan {
-    let mut scan = PackageInstallScan::new();
+    let mut scan: PackageInstallScan = Default::default();
 
     for pkg in packages {
         if let Some(diagnosis) = check_package(pkg) {
@@ -254,22 +228,25 @@ mod tests {
     #[test]
     fn scan_packages_sorts_diagnoses_by_error_code() {
         let temp_dir = tempdir().expect("temp dir should be created");
-        let zeta_missing_dir = temp_dir.path().join("Zeta.Missing");
-        let alpha_valid_dir = temp_dir.path().join("Alpha.Valid");
-        let beta_missing_dir = temp_dir.path().join("Beta.Missing");
-        std::fs::create_dir_all(&alpha_valid_dir).expect("valid directory should be created");
+        let missing_dir = temp_dir.path().join("Missing.Dir");
+        let file_path = temp_dir.path().join("not-a-dir.txt");
+        std::fs::write(&file_path, b"binary").expect("file should be created");
 
         let packages = vec![
-            sample_package("Zeta.Missing", &zeta_missing_dir),
-            sample_package("Alpha.Valid", &alpha_valid_dir),
-            sample_package("Beta.Missing", &beta_missing_dir),
+            sample_package("Contoso.Missing", &missing_dir),
+            sample_package("Contoso.File", &file_path),
+            sample_package("Contoso.Empty", Path::new("")),
         ];
 
         let scan = scan_packages(&packages);
 
-        assert_eq!(scan.diagnostics.len(), 2);
-        assert_eq!(scan.diagnostics[0].error_code, "missing_install_directory");
-        assert_eq!(scan.diagnostics[1].error_code, "missing_install_directory");
+        assert_eq!(scan.diagnostics.len(), 3);
+        assert_eq!(scan.diagnostics[0].error_code, "empty_install_path");
+        assert_eq!(
+            scan.diagnostics[1].error_code,
+            "install_directory_not_a_directory"
+        );
+        assert_eq!(scan.diagnostics[2].error_code, "missing_install_directory");
         assert_eq!(scan.recovery_findings.len(), 2);
         assert_eq!(
             scan.recovery_findings[0].action_group,
@@ -278,6 +255,14 @@ mod tests {
         assert_eq!(
             scan.recovery_findings[1].action_group,
             Some(RecoveryActionGroup::Reinstall)
+        );
+        assert_eq!(
+            scan.recovery_findings[0].error_code,
+            "install_directory_not_a_directory"
+        );
+        assert_eq!(
+            scan.recovery_findings[1].error_code,
+            "missing_install_directory"
         );
     }
 }
