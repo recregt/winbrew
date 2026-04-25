@@ -4,7 +4,7 @@
 //! that gathers database and filesystem diagnostics into a
 //! [`crate::models::domains::reporting::HealthReport`]. The implementation stays split across the
 //! internal helper modules so the report assembly code does not need to know the
-//! details of package scanning or diagnostic formatting.
+//! details of package scanning, scan timing breakdowns, or diagnostic formatting.
 //!
 //! The pipeline is intentionally narrow:
 //!

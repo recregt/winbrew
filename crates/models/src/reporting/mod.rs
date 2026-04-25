@@ -12,6 +12,6 @@ pub mod report;
 pub use diagnostics::{DiagnosisResult, DiagnosisSeverity};
 pub use info::InfoReport;
 pub use report::{
-    HealthReport, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind, ReportSection,
-    RuntimeReport,
+    HealthReport, HealthScanTimings, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind,
+    ReportSection, RuntimeReport,
 };

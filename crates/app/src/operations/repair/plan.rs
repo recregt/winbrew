@@ -150,6 +150,7 @@ mod tests {
     use crate::models::domains::reporting::{
         DiagnosisSeverity, HealthReport, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind,
     };
+    use crate::models::reporting::HealthScanTimings;
     use std::path::Path;
 
     #[test]
@@ -182,6 +183,7 @@ mod tests {
                     target_path: Some("C:/Tools/packages/Contoso.App/bin/tool.exe".to_string()),
                 },
             ],
+            scan_timings: HealthScanTimings::default(),
             scan_duration: std::time::Duration::from_millis(1),
             error_count: 2,
         };

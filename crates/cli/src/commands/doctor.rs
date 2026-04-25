@@ -2,7 +2,9 @@ use anyhow::Result;
 use std::io::{self, Write};
 
 use crate::commands::error::CommandError;
-use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity, HealthReport};
+use crate::models::domains::reporting::{
+    DiagnosisResult, DiagnosisSeverity, HealthReport, RecoveryActionGroup, RecoveryFinding,
+};
 use crate::{CommandContext, app::doctor};
 use winbrew_ui::Ui;
 
@@ -35,6 +37,9 @@ pub fn run(ctx: &CommandContext, json_output: bool, warn_as_error: bool) -> Resu
     ui.display_key_values(&report_summary(&report));
     ui.info("");
     render_results(&mut ui, &errors, &warnings);
+    ui.info("");
+    render_recovery_preview(&mut ui, &report.recovery_findings);
+    ui.info("Suggestion: Try running 'winbrew repair' or reinstalling the affected packages.");
 
     if let Some(exit_error) = exit_error(report.error_count, warnings.len(), warn_as_error) {
         return Err(exit_error);
@@ -44,6 +49,8 @@ pub fn run(ctx: &CommandContext, json_output: bool, warn_as_error: bool) -> Resu
 }
 
 fn report_summary(report: &HealthReport) -> Vec<(String, String)> {
+    let timings = &report.scan_timings;
+
     vec![
         ("Database".to_string(), report.database_path.clone()),
         (
@@ -71,6 +78,27 @@ fn report_summary(report: &HealthReport) -> Vec<(String, String)> {
         (
             "Scan duration".to_string(),
             format_duration(report.scan_duration),
+        ),
+        (
+            "Database connection".to_string(),
+            format_duration(timings.database_connection),
+        ),
+        (
+            "Installed packages".to_string(),
+            format_duration(timings.installed_packages),
+        ),
+        (
+            "Package scan".to_string(),
+            format_duration(timings.package_scan),
+        ),
+        ("MSI scan".to_string(), format_duration(timings.msi_scan)),
+        (
+            "Orphan scan".to_string(),
+            format_duration(timings.orphan_scan),
+        ),
+        (
+            "Journal scan".to_string(),
+            format_duration(timings.journal_scan),
         ),
         (
             "Recovery findings".to_string(),
@@ -125,9 +153,60 @@ pub fn render_results<W: std::io::Write>(
             ui.warn(format!("  - [{}] {}", entry.error_code, entry.description));
         }
     }
+}
+
+fn render_recovery_preview<W: std::io::Write>(ui: &mut Ui<W>, findings: &[RecoveryFinding]) {
+    let preview_lines = recovery_preview_lines(findings);
+
+    if preview_lines.is_empty() {
+        return;
+    }
+
+    ui.notice("Recovery preview:");
+    for line in preview_lines {
+        ui.info(format!("  - {line}"));
+    }
 
     ui.info("");
-    ui.info("Suggestion: Try running 'winbrew repair' or reinstalling the affected packages.");
+}
+
+fn recovery_preview_lines(findings: &[RecoveryFinding]) -> Vec<String> {
+    let mut journal_replay = 0usize;
+    let mut orphan_cleanup = 0usize;
+    let mut file_restore = 0usize;
+    let mut reinstall = 0usize;
+    let mut manual_review = 0usize;
+
+    for finding in findings {
+        match finding.action_group {
+            Some(RecoveryActionGroup::JournalReplay) => journal_replay += 1,
+            Some(RecoveryActionGroup::OrphanCleanup) => orphan_cleanup += 1,
+            Some(RecoveryActionGroup::FileRestore) => file_restore += 1,
+            Some(RecoveryActionGroup::Reinstall) => reinstall += 1,
+            None => manual_review += 1,
+        }
+    }
+
+    let mut lines = Vec::new();
+    push_recovery_preview_line(&mut lines, "Journal replay", journal_replay);
+    push_recovery_preview_line(&mut lines, "Orphan cleanup", orphan_cleanup);
+    push_recovery_preview_line(&mut lines, "File restore", file_restore);
+    push_recovery_preview_line(&mut lines, "Reinstall", reinstall);
+    push_recovery_preview_line(&mut lines, "Manual review", manual_review);
+
+    lines
+}
+
+fn push_recovery_preview_line(lines: &mut Vec<String>, label: &str, count: usize) {
+    if count == 0 {
+        return;
+    }
+
+    lines.push(format!("{label}: {}", findings_label(count)));
+}
+
+fn findings_label(count: usize) -> String {
+    format!("{count} finding{}", if count == 1 { "" } else { "s" })
 }
 
 /// Serializes the health report to JSON for machine consumption.
@@ -182,4 +261,89 @@ pub fn exit_error(
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::domains::reporting::{
+        DiagnosisSeverity, HealthReport, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind,
+    };
+    use crate::models::reporting::HealthScanTimings;
+    use std::time::Duration;
+
+    fn sample_report() -> HealthReport {
+        HealthReport {
+            database_path: "db.sqlite".to_string(),
+            database_exists: true,
+            catalog_database_path: "catalog.sqlite".to_string(),
+            catalog_database_exists: true,
+            install_root_source: "config:paths.root".to_string(),
+            install_root: "C:/Tools".to_string(),
+            install_root_exists: true,
+            packages_dir: "C:/Tools/packages".to_string(),
+            diagnostics: Vec::new(),
+            recovery_findings: Vec::new(),
+            scan_timings: HealthScanTimings {
+                database_connection: Duration::from_millis(11),
+                installed_packages: Duration::from_millis(12),
+                package_scan: Duration::from_millis(13),
+                msi_scan: Duration::from_millis(14),
+                orphan_scan: Duration::from_millis(15),
+                journal_scan: Duration::from_millis(16),
+            },
+            scan_duration: Duration::from_millis(99),
+            error_count: 0,
+        }
+    }
+
+    fn recovery_finding(
+        error_code: &str,
+        action_group: Option<RecoveryActionGroup>,
+    ) -> RecoveryFinding {
+        RecoveryFinding {
+            error_code: error_code.to_string(),
+            issue_kind: RecoveryIssueKind::RecoveryTrailMissing,
+            action_group,
+            description: error_code.to_string(),
+            severity: DiagnosisSeverity::Warning,
+            target_path: None,
+        }
+    }
+
+    #[test]
+    fn report_summary_includes_scan_timing_breakdown() {
+        let summary = report_summary(&sample_report());
+
+        assert!(
+            summary
+                .iter()
+                .any(|(label, value)| { label == "Database connection" && value == "11ms" })
+        );
+        assert!(
+            summary
+                .iter()
+                .any(|(label, value)| label == "Journal scan" && value == "16ms")
+        );
+    }
+
+    #[test]
+    fn recovery_preview_lines_groups_findings_by_action_group() {
+        let findings = vec![
+            recovery_finding("journal", Some(RecoveryActionGroup::JournalReplay)),
+            recovery_finding("orphan", Some(RecoveryActionGroup::OrphanCleanup)),
+            recovery_finding("manual", None),
+        ];
+
+        let lines = recovery_preview_lines(&findings);
+
+        assert_eq!(
+            lines,
+            vec![
+                "Journal replay: 1 finding".to_string(),
+                "Orphan cleanup: 1 finding".to_string(),
+                "Manual review: 1 finding".to_string(),
+            ]
+        );
+    }
 }

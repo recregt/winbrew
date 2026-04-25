@@ -79,8 +79,8 @@ pub mod domains {
         pub use crate::reporting::diagnostics::{DiagnosisResult, DiagnosisSeverity};
         pub use crate::reporting::info::InfoReport;
         pub use crate::reporting::report::{
-            HealthReport, RecoveryActionGroup, RecoveryFinding, RecoveryIssueKind, ReportSection,
-            RuntimeReport,
+            HealthReport, HealthScanTimings, RecoveryActionGroup, RecoveryFinding,
+            RecoveryIssueKind, ReportSection, RuntimeReport,
         };
     }
 
