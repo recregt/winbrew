@@ -4,7 +4,7 @@
   "configMigration": true,
   "dependencyDashboard": true,
   "labels": ["dependencies"],
-  "enabledManagers": ["cargo", "gomod", "github-actions", "custom.regex"],
+  "enabledManagers": ["cargo", "gomod", "npm", "github-actions", "custom.regex"],
   "ignorePaths": ["**/tests/**"],
   "ignoreDeps": ["curl-sys"],
   "customManagers": [
@@ -29,6 +29,16 @@
       "depNameTemplate": "MSRV:3",
       "packageNameTemplate": "rust-lang/rust",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)rust-toolchain\\.toml$/"],
+      "matchStrings": [
+        "channel\\s*=\\s*\"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)\""
+      ],
+      "depNameTemplate": "rust-toolchain",
+      "packageNameTemplate": "rust-lang/rust",
+      "datasourceTemplate": "github-releases"
     }
   ],
   "packageRules": [
@@ -51,14 +61,14 @@
       "groupName": "msrv"
     },
     {
-      "matchManagers": ["cargo", "gomod"],
+      "matchManagers": ["cargo", "gomod", "npm"],
       "matchCurrentVersion": ">=0.1.0",
       "matchUpdateTypes": ["patch"],
       "automerge": false,
       "groupName": "compatible"
     },
     {
-      "matchManagers": ["cargo", "gomod"],
+      "matchManagers": ["cargo", "gomod", "npm"],
       "matchCurrentVersion": ">=1.0.0",
       "matchUpdateTypes": ["minor"],
       "automerge": false,
