@@ -5,6 +5,8 @@ use std::process::Command;
 
 use crate::env::{LOCALAPPDATA, WINBREW_PATHS_ROOT};
 use crate::fs::{FsError, Result};
+
+#[cfg(windows)]
 use winbrew_windows::search_path_file;
 
 const SEVENZ_RELATIVE_EXE: &str = "bin/7zip/7z.exe";
@@ -44,16 +46,19 @@ impl SevenZipLauncher for SystemSevenZipLauncher {
 }
 
 pub(crate) fn extract_sevenz(archive_path: &Path, destination_dir: &Path) -> Result<()> {
-    if let Some(system_binary_path) = search_path_file("7z.exe")
-        && let Some(system_runtime_root) = system_binary_path.parent()
-        && system_runtime_root.join("7z.dll").exists()
+    #[cfg(windows)]
     {
-        return extract_sevenz_with_binary_path(
-            archive_path,
-            destination_dir,
-            &system_binary_path,
-            &SystemSevenZipLauncher,
-        );
+        if let Some(system_binary_path) = search_path_file("7z.exe")
+            && let Some(system_runtime_root) = system_binary_path.parent()
+            && system_runtime_root.join("7z.dll").exists()
+        {
+            return extract_sevenz_with_binary_path(
+                archive_path,
+                destination_dir,
+                &system_binary_path,
+                &SystemSevenZipLauncher,
+            );
+        }
     }
 
     let runtime_root = resolve_local_runtime_root().map_err(|err| {
