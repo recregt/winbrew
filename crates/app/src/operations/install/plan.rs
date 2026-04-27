@@ -2,6 +2,7 @@ use super::Result;
 use super::state;
 use super::{InstallObserver, ResolvedInstallTarget, resolve_install_target, sevenz};
 use crate::models::domains::package::PackageRef;
+use crate::models::domains::shared::DeploymentKind;
 use url::Url;
 
 /// A read-only install preview.
@@ -67,7 +68,9 @@ pub fn preview_lines(
     let engine = preview.target.manifest_engine.as_str();
     let deployment_kind = preview.target.manifest_deployment_kind.as_str();
     lines.push(format!("Engine: {engine}"));
-    if engine != deployment_kind {
+    if preview.target.manifest_deployment_kind
+        != default_deployment_kind_for_engine(preview.target.manifest_engine)
+    {
         lines.push(format!("Deployment: {deployment_kind}"));
     }
     lines.push(format!(
@@ -90,9 +93,7 @@ pub fn preview_lines(
         Some(commands) if !commands.is_empty() => {
             lines.push(format!("Command shims: {}", commands.join(", ")));
         }
-        _ => {
-            lines.push("Command shims: none".to_string());
-        }
+        _ => {}
     }
 
     if preview.target.runtime_bootstrap_required {
@@ -157,5 +158,17 @@ fn shorten_url(raw_url: &str) -> String {
         [] => host.to_string(),
         [only] => format!("{host}/{only}"),
         [.., last] => format!("{host}/.../{last}"),
+    }
+}
+
+fn default_deployment_kind_for_engine(engine: crate::engines::EngineKind) -> DeploymentKind {
+    match engine {
+        crate::engines::EngineKind::Msix
+        | crate::engines::EngineKind::Msi
+        | crate::engines::EngineKind::NativeExe
+        | crate::engines::EngineKind::Font => DeploymentKind::Installed,
+        crate::engines::EngineKind::Zip | crate::engines::EngineKind::Portable => {
+            DeploymentKind::Portable
+        }
     }
 }

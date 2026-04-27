@@ -92,7 +92,7 @@ fn install_plan_mode_is_read_only() -> anyhow::Result<()> {
 }
 
 #[test]
-fn install_plan_mode_shortens_url_and_hides_temp_root() -> anyhow::Result<()> {
+fn install_plan_mode_hides_default_deployment_and_empty_shims() -> anyhow::Result<()> {
     let fixture = InstallFixture::new();
     let catalog_db = fixture
         .root
@@ -122,7 +122,8 @@ fn install_plan_mode_shortens_url_and_hides_temp_root() -> anyhow::Result<()> {
     let text = common::output_text(&output);
     assert!(text.contains("Installer URL: storage.googleapis.com/.../claude.exe"));
     assert!(text.contains("Engine: zip"));
-    assert!(text.contains("Deployment: portable"));
+    assert!(!text.contains("Deployment:"));
+    assert!(!text.contains("Command shims: none"));
     assert!(!text.contains("Temp root:"));
 
     let verbose_output = common::run_winbrew(
