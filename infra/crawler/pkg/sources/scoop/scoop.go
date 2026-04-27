@@ -445,8 +445,8 @@ func resolveLicense(v any) string {
 func resolveInstallers(m scoopManifest) []normalize.Installer {
 	if len(m.Architecture) > 0 {
 		var installers []normalize.Installer
-		for _, arch := range []string{"x64", "amd64", "x86", "386", "arm64", "aarch64", "any", "neutral"} {
-			block, ok := m.Architecture[arch]
+		for _, group := range scoopArchitectureGroups {
+			block, ok := firstScoopArchitectureBlock(m.Architecture, group.aliases)
 			if !ok {
 				continue
 			}
@@ -457,7 +457,7 @@ func resolveInstallers(m scoopManifest) []normalize.Installer {
 				inst := normalize.Installer{
 					URL:  url,
 					Type: "portable",
-					Arch: arch,
+					Arch: group.canonical,
 				}
 				if i < len(hashes) {
 					inst.Hash = hashes[i]
@@ -485,6 +485,29 @@ func resolveInstallers(m scoopManifest) []normalize.Installer {
 		installers = append(installers, inst)
 	}
 	return installers
+}
+
+type scoopArchitectureGroup struct {
+	canonical string
+	aliases   []string
+}
+
+var scoopArchitectureGroups = []scoopArchitectureGroup{
+	{canonical: "x64", aliases: []string{"64bit", "x64", "amd64"}},
+	{canonical: "x86", aliases: []string{"32bit", "x86", "386"}},
+	{canonical: "arm64", aliases: []string{"arm64", "aarch64"}},
+	{canonical: "any", aliases: []string{"any", "neutral"}},
+}
+
+func firstScoopArchitectureBlock(architecture map[string]archBlock, aliases []string) (archBlock, bool) {
+	for _, alias := range aliases {
+		block, ok := architecture[alias]
+		if ok {
+			return block, true
+		}
+	}
+
+	return archBlock{}, false
 }
 
 func toStringSlice(v any) []string {

@@ -49,13 +49,13 @@ func TestReadManifestUsesArchitectureBlocks(t *testing.T) {
 		"description": "example package",
 		"homepage":    "https://example.invalid",
 		"architecture": map[string]any{
-			"x64": map[string]any{
-				"url":  []any{"https://example.invalid/x64.zip"},
-				"hash": []any{"hash-x64"},
+			"64bit": map[string]any{
+				"url":  []any{"https://example.invalid/64bit.zip"},
+				"hash": []any{"hash-64bit"},
 			},
-			"x86": map[string]any{
-				"url":  []any{"https://example.invalid/x86.zip"},
-				"hash": []any{"hash-x86"},
+			"32bit": map[string]any{
+				"url":  []any{"https://example.invalid/32bit.zip"},
+				"hash": []any{"hash-32bit"},
 			},
 		},
 	}
@@ -73,13 +73,13 @@ func TestReadManifestUsesArchitectureBlocks(t *testing.T) {
 	}
 
 	want := []normalize.Installer{{
-		URL:  "https://example.invalid/x64.zip",
-		Hash: "hash-x64",
+		URL:  "https://example.invalid/64bit.zip",
+		Hash: "hash-64bit",
 		Arch: "x64",
 		Type: "portable",
 	}, {
-		URL:  "https://example.invalid/x86.zip",
-		Hash: "hash-x86",
+		URL:  "https://example.invalid/32bit.zip",
+		Hash: "hash-32bit",
 		Arch: "x86",
 		Type: "portable",
 	}}
@@ -112,15 +112,60 @@ func TestResolveInstallersUsesArchitectureOrder(t *testing.T) {
 
 	installers := resolveInstallers(scoopManifest{
 		Architecture: map[string]archBlock{
-			"amd64": {URL: []any{"https://example.invalid/amd64.zip"}, Hash: []any{"hash-amd64"}},
+			"32bit": {URL: []any{"https://example.invalid/32bit.zip"}, Hash: []any{"hash-32bit"}},
+			"64bit": {URL: []any{"https://example.invalid/64bit.zip"}, Hash: []any{"hash-64bit"}},
 			"any":   {URL: []any{"https://example.invalid/any.zip"}, Hash: []any{"hash-any"}},
-			"x64":   {URL: []any{"https://example.invalid/x64.zip"}, Hash: []any{"hash-x64"}},
+			"arm64": {URL: []any{"https://example.invalid/arm64.zip"}, Hash: []any{"hash-arm64"}},
 		},
 	})
 
-	want := []normalize.Installer{{URL: "https://example.invalid/x64.zip", Hash: "hash-x64", Arch: "x64", Type: "portable"}, {URL: "https://example.invalid/amd64.zip", Hash: "hash-amd64", Arch: "amd64", Type: "portable"}, {URL: "https://example.invalid/any.zip", Hash: "hash-any", Arch: "any", Type: "portable"}}
+	want := []normalize.Installer{{URL: "https://example.invalid/64bit.zip", Hash: "hash-64bit", Arch: "x64", Type: "portable"}, {URL: "https://example.invalid/32bit.zip", Hash: "hash-32bit", Arch: "x86", Type: "portable"}, {URL: "https://example.invalid/arm64.zip", Hash: "hash-arm64", Arch: "arm64", Type: "portable"}, {URL: "https://example.invalid/any.zip", Hash: "hash-any", Arch: "any", Type: "portable"}}
 	if !reflect.DeepEqual(installers, want) {
 		t.Fatalf("installers = %#v, want %#v", installers, want)
+	}
+}
+
+func TestResolveInstallersNormalizesArchitectureAliases(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		key      string
+		wantArch string
+	}{
+		{name: "64bit", key: "64bit", wantArch: "x64"},
+		{name: "x64", key: "x64", wantArch: "x64"},
+		{name: "amd64", key: "amd64", wantArch: "x64"},
+		{name: "32bit", key: "32bit", wantArch: "x86"},
+		{name: "x86", key: "x86", wantArch: "x86"},
+		{name: "386", key: "386", wantArch: "x86"},
+		{name: "arm64", key: "arm64", wantArch: "arm64"},
+		{name: "aarch64", key: "aarch64", wantArch: "arm64"},
+		{name: "any", key: "any", wantArch: "any"},
+		{name: "neutral", key: "neutral", wantArch: "any"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			installers := resolveInstallers(scoopManifest{
+				Architecture: map[string]archBlock{
+					tt.key: {
+						URL:  []any{"https://example.invalid/installer.zip"},
+						Hash: []any{"hash"},
+					},
+				},
+			})
+
+			if len(installers) != 1 {
+				t.Fatalf("len(installers) = %d, want 1", len(installers))
+			}
+			if got, want := installers[0].Arch, tt.wantArch; got != want {
+				t.Fatalf("installer arch = %q, want %q", got, want)
+			}
+		})
 	}
 }
 
