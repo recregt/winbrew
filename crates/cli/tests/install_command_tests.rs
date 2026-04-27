@@ -7,6 +7,7 @@ use std::fs;
 use tempfile::TempDir;
 use winbrew_cli::CommandContext;
 use winbrew_cli::commands::install as install_command;
+use winbrew_cli::database;
 
 struct InstallFixture {
     root: TempDir,
@@ -28,7 +29,8 @@ impl InstallFixture {
 #[test]
 fn install_rejects_empty_query() {
     let fixture = InstallFixture::new();
-    let err = install_command::run(&fixture.ctx, &[], false).expect_err("empty query should fail");
+    let err =
+        install_command::run(&fixture.ctx, &[], false, false).expect_err("empty query should fail");
 
     assert_eq!(err.to_string(), "package query cannot be empty");
     assert!(fixture.root.path().join("packages").exists());
@@ -39,7 +41,7 @@ fn install_rejects_invalid_package_reference() {
     let fixture = InstallFixture::new();
     let query = vec!["@invalid".to_string()];
 
-    let err = install_command::run(&fixture.ctx, &query, false)
+    let err = install_command::run(&fixture.ctx, &query, false, false)
         .expect_err("invalid package reference should fail");
     let text = err.to_string();
 
@@ -47,4 +49,44 @@ fn install_rejects_invalid_package_reference() {
     assert!(text.contains(
         "expected @winget/<id>, @scoop/<bucket>/<id>, @chocolatey/<id>, or @winbrew/<id>"
     ));
+}
+
+#[test]
+fn install_plan_mode_is_read_only() -> anyhow::Result<()> {
+    let fixture = InstallFixture::new();
+    let catalog_db = fixture
+        .root
+        .path()
+        .join("data")
+        .join("db")
+        .join("catalog.db");
+
+    fs::create_dir_all(catalog_db.parent().expect("catalog db parent"))?;
+
+    common::seed_catalog_db_with_installer(
+        &catalog_db,
+        "Winbrew Test Zip",
+        "Synthetic package for install plan testing",
+        "https://example.invalid/test.zip",
+        &common::sha512_hex(b"unused"),
+        winbrew_cli::models::domains::install::InstallerType::Zip,
+        None,
+    )?;
+
+    let query = vec!["Winbrew".to_string(), "Test".to_string(), "Zip".to_string()];
+    install_command::run(&fixture.ctx, &query, false, true)?;
+
+    assert!(
+        !fixture
+            .root
+            .path()
+            .join("packages")
+            .join("Winbrew Test Zip")
+            .exists()
+    );
+
+    let conn = database::get_conn()?;
+    assert!(database::get_package(&conn, "Winbrew Test Zip")?.is_none());
+
+    Ok(())
 }

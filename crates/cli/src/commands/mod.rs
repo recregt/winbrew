@@ -32,7 +32,8 @@ pub fn run(
         Command::Install {
             query,
             ignore_checksum_security,
-        } => install::run(ctx, &query, ignore_checksum_security),
+            plan,
+        } => install::run(ctx, &query, ignore_checksum_security, plan),
         Command::Search { query } => search::run(ctx, &query),
         Command::Info => info::run(ctx),
         Command::Version => version::run(ctx),

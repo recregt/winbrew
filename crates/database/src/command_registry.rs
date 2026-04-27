@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
-use rusqlite::{Connection, Error as SqlError, ErrorCode, OptionalExtension, params};
+use rusqlite::{
+    Connection, Error as SqlError, ErrorCode, OptionalExtension, params, params_from_iter,
+};
 use std::collections::BTreeMap;
 use thiserror::Error;
 
@@ -32,6 +34,41 @@ pub fn find_command_owner(conn: &Connection, command_name: &str) -> Result<Optio
     stmt.query_row(params![command_name], |row| row.get::<_, String>(0))
         .optional()
         .context("failed to read command registry")
+}
+
+pub fn find_command_owners(
+    conn: &Connection,
+    command_names: &[String],
+) -> Result<BTreeMap<String, String>> {
+    let command_names = normalize_command_names(command_names.iter().map(|value| value.as_str()));
+
+    if command_names.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+
+    let placeholders = std::iter::repeat_n("?", command_names.len())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let query = format!(
+        "SELECT command_name, package_name
+         FROM command_registry
+         WHERE command_name IN ({placeholders})
+         ORDER BY command_name ASC"
+    );
+
+    let mut stmt = conn.prepare(&query)?;
+    let mut rows = stmt.query(params_from_iter(
+        command_names.iter().map(|value| value.as_str()),
+    ))?;
+
+    let mut owners = BTreeMap::new();
+    while let Some(row) = rows.next()? {
+        let command_name: String = row.get(0)?;
+        let package_name: String = row.get(1)?;
+        owners.insert(command_name, package_name);
+    }
+
+    Ok(owners)
 }
 
 pub fn get_package_command_names(

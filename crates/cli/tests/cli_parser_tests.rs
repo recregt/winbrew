@@ -125,22 +125,33 @@ mod install_tests {
             (vec!["brew", "install"], || Command::Install {
                 query: vec![],
                 ignore_checksum_security: false,
+                plan: false,
             }),
             (vec!["brew", "install", "gzip"], || Command::Install {
                 query: vec!["gzip".to_string()],
                 ignore_checksum_security: false,
+                plan: false,
             }),
             (
                 vec!["brew", "install", "gzip", "--ignore-checksum-security"],
                 || Command::Install {
                     query: vec!["gzip".to_string()],
                     ignore_checksum_security: true,
+                    plan: false,
                 },
             ),
+            (vec!["brew", "install", "gzip", "--plan"], || {
+                Command::Install {
+                    query: vec!["gzip".to_string()],
+                    ignore_checksum_security: false,
+                    plan: true,
+                }
+            }),
             (vec!["brew", "install", "gzip", "curl"], || {
                 Command::Install {
                     query: vec!["gzip".to_string(), "curl".to_string()],
                     ignore_checksum_security: false,
+                    plan: false,
                 }
             }),
         ];

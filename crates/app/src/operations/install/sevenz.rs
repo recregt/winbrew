@@ -32,11 +32,7 @@ pub(crate) fn ensure_runtime(
     installer_url: &str,
     mut confirm_runtime_bootstrap: impl FnMut(&str, &Path) -> Result<bool>,
 ) -> Result<(), InstallError> {
-    if !is_7z_path(installer_url) {
-        return Ok(());
-    }
-
-    if system_runtime_available() || local_runtime_available(runtime_root) {
+    if !runtime_bootstrap_required(runtime_root, installer_url) {
         return Ok(());
     }
 
@@ -48,6 +44,12 @@ pub(crate) fn ensure_runtime(
     }
 
     bootstrap_local_runtime(runtime_root).map_err(InstallError::from)
+}
+
+pub(crate) fn runtime_bootstrap_required(runtime_root: &Path, installer_url: &str) -> bool {
+    is_7z_path(installer_url)
+        && !system_runtime_available()
+        && !local_runtime_available(runtime_root)
 }
 
 fn system_runtime_available() -> bool {

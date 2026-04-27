@@ -67,6 +67,44 @@ pub enum InstallStateError {
 /// Convenience result type for install-state operations.
 pub type Result<T> = std::result::Result<T, InstallStateError>;
 
+/// A command already owned by a different package.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandConflict {
+    pub command: String,
+    pub package: String,
+}
+
+/// The current state of an install target before any mutation occurs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstallTargetState {
+    Ready,
+    AlreadyInstalled,
+    AlreadyInstalling,
+    CurrentlyUpdating,
+    Failed,
+    Orphaned,
+}
+
+/// Read-only inspection of the current install target.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallTargetInspection {
+    pub state: InstallTargetState,
+    pub command_conflicts: Vec<CommandConflict>,
+}
+
+impl InstallTargetInspection {
+    fn ready(state: InstallTargetState, command_conflicts: Vec<CommandConflict>) -> Self {
+        Self {
+            state,
+            command_conflicts,
+        }
+    }
+
+    pub fn has_conflicts(&self) -> bool {
+        !self.command_conflicts.is_empty()
+    }
+}
+
 /// Validate the target install path and clear stale failed state if present.
 ///
 /// This function enforces the database-level install preconditions before any
@@ -92,69 +130,68 @@ pub fn prepare_install_target_with_commands(
     install_dir: &Path,
     package_commands: Option<&str>,
 ) -> Result<()> {
-    if let Some(existing) =
-        database::get_package(conn, name).map_err(|source| InstallStateError::LookupFailed {
-            name: name.to_string(),
-            source,
-        })?
-    {
-        match existing.status {
-            PackageStatus::Ok => {
-                return Err(InstallStateError::AlreadyInstalled {
-                    name: name.to_string(),
-                });
-            }
-            PackageStatus::Installing => {
-                return Err(InstallStateError::AlreadyInstalling {
-                    name: name.to_string(),
-                });
-            }
-            PackageStatus::Updating => {
-                return Err(InstallStateError::CurrentlyUpdating {
-                    name: name.to_string(),
-                });
-            }
-            PackageStatus::Failed => {
-                database::delete_package(conn, name).map_err(|source| {
-                    InstallStateError::DeleteFailed {
-                        name: name.to_string(),
-                        source,
-                    }
-                })?;
-                cleanup_path(install_dir).map_err(|source| InstallStateError::CleanupFailed {
-                    path: install_dir.to_string_lossy().into_owned(),
-                    source: source.into(),
-                })?;
-            }
-        }
-    } else if install_dir.exists() {
-        cleanup_path(install_dir).map_err(|source| InstallStateError::CleanupFailed {
-            path: install_dir.to_string_lossy().into_owned(),
-            source: source.into(),
-        })?;
-    }
+    let inspection =
+        inspect_install_target_with_commands(conn, name, install_dir, package_commands)?;
 
-    for command in database::parse_command_names(package_commands).map_err(|source| {
-        InstallStateError::DatabaseOperationFailed {
-            operation: "parsing exposed commands",
-            source,
-        }
-    })? {
-        if let Some(owner) = database::find_command_owner(conn, &command).map_err(|source| {
-            InstallStateError::DatabaseOperationFailed {
-                operation: "reading command registry",
-                source,
-            }
-        })? && owner != name
-        {
-            return Err(InstallStateError::CommandAlreadyExposed {
-                command,
-                package: owner,
+    match inspection.state {
+        InstallTargetState::Ready => {}
+        InstallTargetState::AlreadyInstalled => {
+            return Err(InstallStateError::AlreadyInstalled {
+                name: name.to_string(),
             });
         }
+        InstallTargetState::AlreadyInstalling => {
+            return Err(InstallStateError::AlreadyInstalling {
+                name: name.to_string(),
+            });
+        }
+        InstallTargetState::CurrentlyUpdating => {
+            return Err(InstallStateError::CurrentlyUpdating {
+                name: name.to_string(),
+            });
+        }
+        InstallTargetState::Failed => {
+            database::delete_package(conn, name).map_err(|source| {
+                InstallStateError::DeleteFailed {
+                    name: name.to_string(),
+                    source,
+                }
+            })?;
+
+            cleanup_path(install_dir).map_err(|source| InstallStateError::CleanupFailed {
+                path: install_dir.to_string_lossy().into_owned(),
+                source: source.into(),
+            })?;
+        }
+        InstallTargetState::Orphaned => {
+            cleanup_path(install_dir).map_err(|source| InstallStateError::CleanupFailed {
+                path: install_dir.to_string_lossy().into_owned(),
+                source: source.into(),
+            })?;
+        }
+    }
+
+    if let Some(conflict) = inspection.command_conflicts.first() {
+        return Err(InstallStateError::CommandAlreadyExposed {
+            command: conflict.command.clone(),
+            package: conflict.package.clone(),
+        });
     }
 
     Ok(())
+}
+
+/// Inspect the target install state without mutating the database or disk.
+pub fn inspect_install_target_with_commands(
+    conn: &crate::database::DbConnection,
+    name: &str,
+    install_dir: &Path,
+    package_commands: Option<&str>,
+) -> Result<InstallTargetInspection> {
+    let state = inspect_install_target_state(conn, name, install_dir)?;
+    let command_conflicts = inspect_command_conflicts(conn, name, package_commands)?;
+
+    Ok(InstallTargetInspection::ready(state, command_conflicts))
 }
 
 /// Insert a package record marked as installing.
@@ -236,6 +273,66 @@ fn installing_package(
         // Provisional value for in-progress installs; database::commit_install overwrites it.
         installed_at: now(),
     }
+}
+
+fn inspect_install_target_state(
+    conn: &crate::database::DbConnection,
+    name: &str,
+    install_dir: &Path,
+) -> Result<InstallTargetState> {
+    if let Some(existing) =
+        database::get_package(conn, name).map_err(|source| InstallStateError::LookupFailed {
+            name: name.to_string(),
+            source,
+        })?
+    {
+        return Ok(match existing.status {
+            PackageStatus::Ok => InstallTargetState::AlreadyInstalled,
+            PackageStatus::Installing => InstallTargetState::AlreadyInstalling,
+            PackageStatus::Updating => InstallTargetState::CurrentlyUpdating,
+            PackageStatus::Failed => InstallTargetState::Failed,
+        });
+    }
+
+    if install_dir.exists() {
+        return Ok(InstallTargetState::Orphaned);
+    }
+
+    Ok(InstallTargetState::Ready)
+}
+
+fn inspect_command_conflicts(
+    conn: &crate::database::DbConnection,
+    name: &str,
+    package_commands: Option<&str>,
+) -> Result<Vec<CommandConflict>> {
+    let command_names = database::parse_command_names(package_commands).map_err(|source| {
+        InstallStateError::DatabaseOperationFailed {
+            operation: "parsing exposed commands",
+            source,
+        }
+    })?;
+
+    let owners = database::find_command_owners(conn, &command_names).map_err(|source| {
+        InstallStateError::DatabaseOperationFailed {
+            operation: "reading command registry",
+            source,
+        }
+    })?;
+
+    let mut conflicts = Vec::new();
+    for command in command_names {
+        if let Some(owner) = owners.get(&command)
+            && owner != name
+        {
+            conflicts.push(CommandConflict {
+                command,
+                package: owner.clone(),
+            });
+        }
+    }
+
+    Ok(conflicts)
 }
 
 #[cfg(test)]

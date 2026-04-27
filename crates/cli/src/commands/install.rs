@@ -10,12 +10,18 @@ use crate::CommandContext;
 use crate::app::install;
 use crate::app::install::InstallError;
 use crate::app::install::InstallObserver;
+use crate::app::install::plan;
 use crate::commands::error::{cancelled, reported_with_hint};
 use crate::models::domains::catalog::CatalogPackage;
 use crate::models::domains::package::PackageRef;
 use winbrew_ui::Ui;
 
-pub fn run(ctx: &CommandContext, query: &[String], ignore_checksum_security: bool) -> Result<()> {
+pub fn run(
+    ctx: &CommandContext,
+    query: &[String],
+    ignore_checksum_security: bool,
+    plan_mode: bool,
+) -> Result<()> {
     let mut ui = ctx.ui();
     ui.page_title("Install Package");
 
@@ -27,6 +33,24 @@ pub fn run(ctx: &CommandContext, query: &[String], ignore_checksum_security: boo
     let package_ref = PackageRef::parse(&query_text).map_err(anyhow::Error::msg)?;
 
     ui.info(format!("Resolving {query_text}..."));
+
+    if plan_mode {
+        let preview = {
+            let mut observer = PlanInstallUi { ui: &mut ui };
+            match plan::build_install_preview(
+                ctx.app(),
+                package_ref,
+                ignore_checksum_security,
+                &mut observer,
+            ) {
+                Ok(preview) => preview,
+                Err(err) => return handle_install_error(&mut ui, err),
+            }
+        };
+
+        render_install_preview(&mut ui, ctx.app(), &preview);
+        return Ok(());
+    }
 
     let progress = ui.progress_bar();
 
@@ -62,111 +86,7 @@ pub fn run(ctx: &CommandContext, query: &[String], ignore_checksum_security: boo
                 result.name, result.version, result.install_dir
             ));
         }
-        Err(err) => match err {
-            InstallError::AlreadyInstalled { name } => {
-                ui.notice(format!("{name} is already installed."));
-            }
-            InstallError::AlreadyInstalling { name } => {
-                ui.warn(format!("{name} is currently being installed."));
-            }
-            InstallError::CurrentlyUpdating { name } => {
-                ui.warn(format!("{name} is currently updating."));
-            }
-            InstallError::ChecksumMismatch { expected, actual } => {
-                let message =
-                    format!("Installer checksum mismatch: expected {expected}, got {actual}");
-                ui.error(&message);
-                ui.notice(
-                    "Hint: re-download the installer or refresh the catalog before retrying.",
-                );
-                return Err(reported_with_hint(
-                    message,
-                    "Re-download the installer or refresh the catalog before retrying.",
-                ));
-            }
-            InstallError::LegacyChecksumAlgorithm { algorithm } => {
-                let message = format!(
-                    "{} checksums are disabled by default for security. Re-run with --ignore-checksum-security to install this package.",
-                    algorithm.display_name()
-                );
-                ui.error(&message);
-                ui.notice("Hint: re-run with --ignore-checksum-security only if you trust the package source.");
-                return Err(reported_with_hint(
-                    message,
-                    "Re-run with --ignore-checksum-security only if you trust the package source.",
-                ));
-            }
-            InstallError::NoInstallers => {
-                let message = "This package has no installers in the catalog.".to_string();
-                ui.error(&message);
-                ui.notice("Hint: refresh the catalog or choose a different package.");
-                return Err(reported_with_hint(
-                    message,
-                    "Refresh the catalog or choose a different package.",
-                ));
-            }
-            InstallError::NoCompatibleInstaller { host } => {
-                let message = format!("No installer in the catalog matches this host ({host}).");
-                ui.error(&message);
-                ui.notice(
-                    "Hint: refresh the catalog or pick a package variant built for this machine.",
-                );
-                return Err(reported_with_hint(
-                    message,
-                    "Refresh the catalog or pick a package variant built for this machine.",
-                ));
-            }
-            InstallError::NoScopeCompatibleInstaller { host } => {
-                let message = format!(
-                    "No installer in the catalog matches the required install scope on this host ({host})."
-                );
-                ui.error(&message);
-                ui.notice("Hint: run from an elevated terminal or choose a user-scope installer.");
-                return Err(reported_with_hint(
-                    message,
-                    "Run from an elevated terminal or choose a user-scope installer.",
-                ));
-            }
-            InstallError::CommandAlreadyExposed { command, package } => {
-                let message =
-                    format!("Command '{command}' is already exposed by package '{package}'.");
-                ui.error(&message);
-                ui.notice("Hint: remove the other package or choose a different package.");
-                return Err(reported_with_hint(
-                    message,
-                    "Remove the other package or choose a different package.",
-                ));
-            }
-            InstallError::CommandClaimedWhileInProgress { command } => {
-                let message = format!(
-                    "Command '{command}' was claimed by another install while this install was in progress."
-                );
-                ui.error(&message);
-                ui.notice("Hint: re-run the install once the other install completes.");
-                return Err(reported_with_hint(
-                    message,
-                    "Re-run the install once the other install completes.",
-                ));
-            }
-            InstallError::RuntimeBootstrapDeclined { runtime } => {
-                let message = format!("{runtime} bootstrap was declined.");
-                ui.warn(&message);
-                ui.notice(
-                    "Hint: install 7-Zip system-wide or re-run and allow WinBrew to bootstrap the local runtime.",
-                );
-                return Err(reported_with_hint(
-                    message,
-                    "Install 7-Zip system-wide or re-run and allow WinBrew to bootstrap the local runtime.",
-                ));
-            }
-            InstallError::Cancelled => {
-                ui.notice("Cancelling and cleaning up...");
-                return Err(cancelled());
-            }
-            InstallError::Unexpected(err) => {
-                return Err(err);
-            }
-        },
+        Err(err) => return handle_install_error(&mut ui, err),
     }
 
     Ok(())
@@ -202,9 +122,133 @@ fn format_catalog_choice(pkg: &CatalogPackage) -> String {
     label
 }
 
+fn render_install_preview<W: io::Write>(
+    ui: &mut Ui<W>,
+    ctx: &crate::AppContext,
+    preview: &plan::InstallPreview,
+) {
+    ui.notice("Install preview:");
+
+    for line in plan::preview_lines(ctx, preview) {
+        ui.info(format!("  - {line}"));
+    }
+
+    ui.info("");
+}
+
+fn handle_install_error<W: io::Write>(ui: &mut Ui<W>, err: InstallError) -> Result<()> {
+    match err {
+        InstallError::AlreadyInstalled { name } => {
+            ui.notice(format!("{name} is already installed."));
+        }
+        InstallError::AlreadyInstalling { name } => {
+            ui.warn(format!("{name} is currently being installed."));
+        }
+        InstallError::CurrentlyUpdating { name } => {
+            ui.warn(format!("{name} is currently updating."));
+        }
+        InstallError::ChecksumMismatch { expected, actual } => {
+            let message = format!("Installer checksum mismatch: expected {expected}, got {actual}");
+            ui.error(&message);
+            ui.notice("Hint: re-download the installer or refresh the catalog before retrying.");
+            return Err(reported_with_hint(
+                message,
+                "Re-download the installer or refresh the catalog before retrying.",
+            ));
+        }
+        InstallError::LegacyChecksumAlgorithm { algorithm } => {
+            let message = format!(
+                "{} checksums are disabled by default for security. Re-run with --ignore-checksum-security to install this package.",
+                algorithm.display_name()
+            );
+            ui.error(&message);
+            ui.notice("Hint: re-run with --ignore-checksum-security only if you trust the package source.");
+            return Err(reported_with_hint(
+                message,
+                "Re-run with --ignore-checksum-security only if you trust the package source.",
+            ));
+        }
+        InstallError::NoInstallers => {
+            let message = "This package has no installers in the catalog.".to_string();
+            ui.error(&message);
+            ui.notice("Hint: refresh the catalog or choose a different package.");
+            return Err(reported_with_hint(
+                message,
+                "Refresh the catalog or choose a different package.",
+            ));
+        }
+        InstallError::NoCompatibleInstaller { host } => {
+            let message = format!("No installer in the catalog matches this host ({host}).");
+            ui.error(&message);
+            ui.notice(
+                "Hint: refresh the catalog or pick a package variant built for this machine.",
+            );
+            return Err(reported_with_hint(
+                message,
+                "Refresh the catalog or pick a package variant built for this machine.",
+            ));
+        }
+        InstallError::NoScopeCompatibleInstaller { host } => {
+            let message = format!(
+                "No installer in the catalog matches the required install scope on this host ({host})."
+            );
+            ui.error(&message);
+            ui.notice("Hint: run from an elevated terminal or choose a user-scope installer.");
+            return Err(reported_with_hint(
+                message,
+                "Run from an elevated terminal or choose a user-scope installer.",
+            ));
+        }
+        InstallError::CommandAlreadyExposed { command, package } => {
+            let message = format!("Command '{command}' is already exposed by package '{package}'.");
+            ui.error(&message);
+            ui.notice("Hint: remove the other package or choose a different package.");
+            return Err(reported_with_hint(
+                message,
+                "Remove the other package or choose a different package.",
+            ));
+        }
+        InstallError::CommandClaimedWhileInProgress { command } => {
+            let message = format!(
+                "Command '{command}' was claimed by another install while this install was in progress."
+            );
+            ui.error(&message);
+            ui.notice("Hint: re-run the install once the other install completes.");
+            return Err(reported_with_hint(
+                message,
+                "Re-run the install once the other install completes.",
+            ));
+        }
+        InstallError::RuntimeBootstrapDeclined { runtime } => {
+            let message = format!("{runtime} bootstrap was declined.");
+            ui.warn(&message);
+            ui.notice(
+                "Hint: install 7-Zip system-wide or re-run and allow WinBrew to bootstrap the local runtime.",
+            );
+            return Err(reported_with_hint(
+                message,
+                "Install 7-Zip system-wide or re-run and allow WinBrew to bootstrap the local runtime.",
+            ));
+        }
+        InstallError::Cancelled => {
+            ui.notice("Cancelling and cleaning up...");
+            return Err(cancelled());
+        }
+        InstallError::Unexpected(err) => {
+            return Err(err);
+        }
+    }
+
+    Ok(())
+}
+
 struct InstallUi<'a> {
     ui: &'a mut Ui<io::Stdout>,
     progress: &'a ProgressBar,
+}
+
+struct PlanInstallUi<'a> {
+    ui: &'a mut Ui<io::Stdout>,
 }
 
 impl InstallObserver for InstallUi<'_> {
@@ -243,4 +287,22 @@ impl InstallObserver for InstallUi<'_> {
 
         self.ui.confirm(&prompt, false)
     }
+}
+
+impl InstallObserver for PlanInstallUi<'_> {
+    fn choose_package(&mut self, query: &str, matches: &[CatalogPackage]) -> anyhow::Result<usize> {
+        let choices = matches
+            .iter()
+            .map(format_catalog_choice)
+            .collect::<Vec<_>>();
+
+        self.ui.select_index(
+            &format!("Multiple packages matched '{query}'. Choose one:"),
+            &choices,
+        )
+    }
+
+    fn on_start(&mut self, _total_bytes: Option<u64>) {}
+
+    fn on_progress(&mut self, _downloaded_bytes: u64) {}
 }
