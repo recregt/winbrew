@@ -48,7 +48,7 @@ pub fn run(
             }
         };
 
-        render_install_preview(&mut ui, ctx.app(), &preview);
+        render_install_preview(&mut ui, ctx.app(), &preview, ctx.app().verbosity > 0);
         return Ok(());
     }
 
@@ -126,10 +126,11 @@ fn render_install_preview<W: io::Write>(
     ui: &mut Ui<W>,
     ctx: &crate::AppContext,
     preview: &plan::InstallPreview,
+    show_temp_root: bool,
 ) {
     ui.notice("Install preview:");
 
-    for line in plan::preview_lines(ctx, preview) {
+    for line in plan::preview_lines(ctx, preview, show_temp_root) {
         ui.info(format!("  - {line}"));
     }
 

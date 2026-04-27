@@ -2,6 +2,7 @@ use super::Result;
 use super::state;
 use super::{InstallObserver, ResolvedInstallTarget, resolve_install_target, sevenz};
 use crate::models::domains::package::PackageRef;
+use url::Url;
 
 /// A read-only install preview.
 pub struct InstallPreview {
@@ -36,14 +37,21 @@ pub fn build_install_preview<O: InstallObserver>(
 }
 
 /// Return the human-readable lines that describe the preview.
-pub fn preview_lines(ctx: &crate::AppContext, preview: &InstallPreview) -> Vec<String> {
+pub fn preview_lines(
+    ctx: &crate::AppContext,
+    preview: &InstallPreview,
+    show_temp_root: bool,
+) -> Vec<String> {
     let mut lines = Vec::new();
 
     lines.push(format!(
         "Package: {} {}",
         preview.target.package.name, preview.target.package.version
     ));
-    lines.push(format!("Installer URL: {}", preview.target.installer.url));
+    lines.push(format!(
+        "Installer URL: {}",
+        shorten_url(&preview.target.installer.url)
+    ));
     lines.push(format!(
         "Download payload: {}",
         match preview
@@ -56,19 +64,19 @@ pub fn preview_lines(ctx: &crate::AppContext, preview: &InstallPreview) -> Vec<S
             None => preview.target.download_path.display().to_string(),
         }
     ));
-    lines.push(format!(
-        "Manifest engine: {}",
-        preview.target.manifest_engine.as_str()
-    ));
-    lines.push(format!(
-        "Deployment kind: {}",
-        preview.target.manifest_deployment_kind.as_str()
-    ));
+    let engine = preview.target.manifest_engine.as_str();
+    let deployment_kind = preview.target.manifest_deployment_kind.as_str();
+    lines.push(format!("Engine: {engine}"));
+    if engine != deployment_kind {
+        lines.push(format!("Deployment: {deployment_kind}"));
+    }
     lines.push(format!(
         "Install dir: {}",
         preview.target.install_dir.display()
     ));
-    lines.push(format!("Temp root: {}", preview.target.temp_root.display()));
+    if show_temp_root {
+        lines.push(format!("Temp root: {}", preview.target.temp_root.display()));
+    }
     lines.push(format!(
         "Checksum policy: {}",
         if preview.ignore_checksum_security {
@@ -125,4 +133,29 @@ pub fn preview_lines(ctx: &crate::AppContext, preview: &InstallPreview) -> Vec<S
     }
 
     lines
+}
+
+fn shorten_url(raw_url: &str) -> String {
+    let Ok(parsed_url) = Url::parse(raw_url) else {
+        return raw_url.to_string();
+    };
+
+    let Some(host) = parsed_url.host_str() else {
+        return raw_url.to_string();
+    };
+
+    let segments = parsed_url
+        .path_segments()
+        .map(|segments| {
+            segments
+                .filter(|segment| !segment.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    match segments.as_slice() {
+        [] => host.to_string(),
+        [only] => format!("{host}/{only}"),
+        [.., last] => format!("{host}/.../{last}"),
+    }
 }

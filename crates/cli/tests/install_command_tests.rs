@@ -90,3 +90,49 @@ fn install_plan_mode_is_read_only() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn install_plan_mode_shortens_url_and_hides_temp_root() -> anyhow::Result<()> {
+    let fixture = InstallFixture::new();
+    let catalog_db = fixture
+        .root
+        .path()
+        .join("data")
+        .join("db")
+        .join("catalog.db");
+
+    fs::create_dir_all(catalog_db.parent().expect("catalog db parent"))?;
+
+    common::seed_catalog_db_with_installer(
+        &catalog_db,
+        "Winbrew Claude Code",
+        "Synthetic package for install plan output testing",
+        "https://storage.googleapis.com/winbrew-downloads/releases/2026/04/claude.exe",
+        &common::sha512_hex(b"unused"),
+        winbrew_cli::models::domains::install::InstallerType::Zip,
+        None,
+    )?;
+
+    let output = common::run_winbrew(
+        fixture.root.path(),
+        &["install", "Winbrew", "Claude", "Code", "--plan"],
+    );
+    common::assert_success(&output, "install plan mode")?;
+
+    let text = common::output_text(&output);
+    assert!(text.contains("Installer URL: storage.googleapis.com/.../claude.exe"));
+    assert!(text.contains("Engine: zip"));
+    assert!(text.contains("Deployment: portable"));
+    assert!(!text.contains("Temp root:"));
+
+    let verbose_output = common::run_winbrew(
+        fixture.root.path(),
+        &["-v", "install", "Winbrew", "Claude", "Code", "--plan"],
+    );
+    common::assert_success(&verbose_output, "verbose install plan mode")?;
+
+    let verbose_text = common::output_text(&verbose_output);
+    assert!(verbose_text.contains("Temp root:"));
+
+    Ok(())
+}
