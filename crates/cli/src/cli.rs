@@ -38,6 +38,10 @@ pub enum Command {
 
         #[arg(long, help_heading = "Safety")]
         ignore_checksum_security: bool,
+
+        /// Render the install plan without making changes
+        #[arg(long, help_heading = "Output")]
+        plan: bool,
     },
 
     /// Show effective runtime settings and paths
