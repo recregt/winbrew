@@ -3,16 +3,12 @@ use regex::RegexBuilder;
 
 mod product_options;
 mod uninstall;
-pub(crate) mod user_fonts;
-mod windows_version;
 
 #[cfg(any(test, feature = "testing"))]
 mod test_support;
 
 pub(crate) use product_options::read_product_type;
 use uninstall::uninstall_roots;
-pub(crate) use user_fonts::{register_user_font_value, unregister_user_font_value};
-pub use windows_version::windows_version_string;
 
 #[cfg(any(test, feature = "testing"))]
 pub use test_support::{

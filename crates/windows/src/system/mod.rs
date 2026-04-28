@@ -16,6 +16,10 @@ use windows_sys::Win32::System::SystemInformation::{
 };
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
+mod version;
+
+pub use version::windows_version_string;
+
 const NORMAL_PLATFORM_TAGS: &[&str] = &["windows.desktop", "windows.ltsc", "windows.universal"];
 const SERVER_PLATFORM_TAGS: &[&str] = &["windows.server"];
 
