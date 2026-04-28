@@ -5,6 +5,7 @@ mod product_options;
 mod test_support;
 mod uninstall;
 pub(crate) mod user_fonts;
+mod windows_version;
 
 pub(crate) use product_options::read_product_type;
 pub use test_support::{
@@ -13,6 +14,7 @@ pub use test_support::{
 };
 use uninstall::uninstall_roots;
 pub(crate) use user_fonts::{register_user_font_value, unregister_user_font_value};
+pub use windows_version::windows_version_string;
 
 /// Snapshot of one uninstall registry entry.
 #[derive(Debug, Clone, Eq, PartialEq)]

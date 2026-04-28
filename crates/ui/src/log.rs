@@ -4,6 +4,11 @@ use std::fmt::Display;
 use std::io::Write;
 
 impl<W: Write> Ui<W> {
+    pub fn write_line(&mut self, message: impl Display) {
+        let _ = writeln!(self.out, "{message}");
+        let _ = self.out.flush();
+    }
+
     pub fn info(&mut self, message: impl Display) {
         let _ = writeln!(self.err, "{message}");
     }
