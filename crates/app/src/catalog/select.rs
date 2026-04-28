@@ -15,7 +15,7 @@
 
 use crate::models::domains::catalog::CatalogInstaller;
 use crate::models::domains::install::Architecture;
-use crate::windows::HostProfile;
+use crate::windows::host::HostProfile;
 use thiserror::Error;
 use tracing::debug;
 

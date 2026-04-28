@@ -2,19 +2,23 @@ use anyhow::Result;
 use regex::RegexBuilder;
 
 mod product_options;
-mod test_support;
 mod uninstall;
 pub(crate) mod user_fonts;
 mod windows_version;
 
+#[cfg(any(test, feature = "testing"))]
+mod test_support;
+
 pub(crate) use product_options::read_product_type;
+use uninstall::uninstall_roots;
+pub(crate) use user_fonts::{register_user_font_value, unregister_user_font_value};
+pub use windows_version::windows_version_string;
+
+#[cfg(any(test, feature = "testing"))]
 pub use test_support::{
     UninstallEntryGuard, create_test_uninstall_entry,
     create_test_uninstall_entry_with_install_location,
 };
-use uninstall::uninstall_roots;
-pub(crate) use user_fonts::{register_user_font_value, unregister_user_font_value};
-pub use windows_version::windows_version_string;
 
 /// Snapshot of one uninstall registry entry.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -59,7 +63,7 @@ pub struct AppInfo {
 /// # Example
 ///
 /// ```no_run
-/// use winbrew_windows::collect_installed_apps;
+/// use winbrew_windows::apps::collect_installed_apps;
 ///
 /// let apps = collect_installed_apps(Some("winbrew")).unwrap();
 /// for app in apps {

@@ -10,7 +10,7 @@ use crate::core::fs::{cleanup_path, replace_directory};
 use crate::core::hash::{hash_file, verify_hash};
 use crate::core::network::{build_client, download_url_to_temp_file, is_7z_path};
 use crate::models::shared::hash::HashAlgorithm;
-use crate::windows::search_path_file;
+use crate::windows::host::search_path_file;
 
 use super::InstallError;
 

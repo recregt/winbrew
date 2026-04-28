@@ -218,8 +218,8 @@ fn current_command_resolution(
     };
 
     let selection_context = crate::catalog::SelectionContext::new(
-        crate::windows::host_profile(),
-        crate::windows::is_elevated(),
+        crate::windows::host::host_profile(),
+        crate::windows::host::is_elevated(),
     );
     let installer = match install::types::select_installer(&installers, selection_context) {
         Ok(installer) => installer,

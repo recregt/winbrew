@@ -41,7 +41,7 @@ use crate::models::catalog::package::CatalogInstaller;
 use crate::models::install::engine::{EngineInstallReceipt, EngineKind, EngineMetadata};
 use crate::models::install::installed::InstalledPackage;
 use crate::models::install::installer::InstallerType;
-use crate::windows_dep::collect_uninstall_entries;
+use crate::windows_dep::apps::collect_uninstall_entries;
 
 const NATIVE_EXE_SUCCESS_EXIT_CODES: &[i32] = &[0, 1641, 3010];
 
@@ -221,7 +221,7 @@ fn capture_native_exe_metadata(
 fn capture_native_exe_metadata_with(
     package_name: &str,
     install_dir: &Path,
-    collect_entries: impl FnOnce(Option<&str>) -> Result<Vec<crate::windows_dep::UninstallEntry>>,
+    collect_entries: impl FnOnce(Option<&str>) -> Result<Vec<crate::windows_dep::apps::UninstallEntry>>,
 ) -> Option<NativeExeInstallMetadata> {
     let package_name = package_name.trim();
     let mut best_match: Option<(u8, NativeExeInstallMetadata)> = None;
@@ -492,7 +492,7 @@ mod tests {
     use crate::models::catalog::package::CatalogInstaller;
     use crate::models::install::installer::InstallerType;
     use crate::models::shared::CatalogId;
-    use crate::windows_dep::{
+    use crate::windows_dep::testing::{
         create_test_uninstall_entry, create_test_uninstall_entry_with_install_location,
     };
     use winbrew_testing::{CatalogInstallerBuilderExt as _, catalog_installer};

@@ -29,7 +29,7 @@ pub struct PathInfo {
 ///
 /// ```no_run
 /// use std::path::Path;
-/// use winbrew_windows::inspect_path;
+/// use winbrew_windows::paths::inspect_path;
 ///
 /// let info = inspect_path(Path::new(r"C:\Temp\payload.msix")).unwrap();
 /// println!("dir={} reparse={} links={}", info.is_directory, info.is_reparse_point, info.hard_link_count);
@@ -89,7 +89,7 @@ pub fn inspect_path(path: &Path) -> io::Result<PathInfo> {
 ///
 /// ```no_run
 /// use std::path::Path;
-/// use winbrew_windows::create_extracted_file;
+/// use winbrew_windows::paths::create_extracted_file;
 ///
 /// let _file = create_extracted_file(Path::new(r"C:\Temp\extract\tool.exe")).unwrap();
 /// ```

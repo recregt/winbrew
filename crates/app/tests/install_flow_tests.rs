@@ -20,7 +20,7 @@ use winbrew_testing::{
     init_database, md5_hex, reset_install_state, seed_catalog_db_with_installers, sha1_hex,
     sha512_hex, system_font_file_name, system_font_path, test_root,
 };
-use winbrew_windows::{host_profile, is_elevated};
+use winbrew_windows::host::{host_profile, is_elevated};
 
 struct InstallTestFixture {
     ctx: AppContext,

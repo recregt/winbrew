@@ -16,14 +16,14 @@ pub fn collect(sections: &[ConfigSection], resolved_paths: &ResolvedPaths) -> Re
 }
 
 fn system_entries() -> Vec<(String, String)> {
-    let host_profile = crate::windows::host_profile();
+    let host_profile = crate::windows::host::host_profile();
     let family = if host_profile.is_server {
         "Windows.Server"
     } else {
         "Windows.Desktop"
     };
 
-    let windows_label = crate::windows::windows_version_string()
+    let windows_label = crate::windows::host::windows_version_string()
         .map(|version| format!("{family} v{version}"))
         .unwrap_or_else(|| family.to_string());
 

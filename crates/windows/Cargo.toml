@@ -14,6 +14,9 @@ strum = "0.28"
 strum_macros = "0.28"
 winbrew-models = { path = "../models" }
 
+[features]
+testing = []
+
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = ["ApplicationModel", "Foundation", "Management_Deployment", "Win32_System_ApplicationInstallationAndServicing"] }
 winreg = "0.56"

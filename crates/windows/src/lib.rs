@@ -9,14 +9,42 @@ mod system;
 
 pub(crate) use winbrew_models as models;
 
-pub use deployment::{
-    msi_scan_inventory, msix_install, msix_installed_package_full_name, msix_remove,
-};
-pub use font::{install_user_font, remove_user_font, user_fonts_dir};
-pub use fs::{PathInfo, create_extracted_file, inspect_path};
-pub use registry::{
-    AppInfo, UninstallEntry, UninstallEntryGuard, collect_installed_apps,
-    collect_uninstall_entries, create_test_uninstall_entry,
-    create_test_uninstall_entry_with_install_location, uninstall_value, windows_version_string,
-};
-pub use system::{HostProfile, host_profile, is_elevated, search_path_file};
+/// Windows uninstall registry helpers for listing installed applications.
+pub mod apps {
+    pub use crate::registry::{
+        AppInfo, UninstallEntry, collect_installed_apps, collect_uninstall_entries, uninstall_value,
+    };
+}
+
+/// System architecture, privilege, PATH, and Windows version helpers.
+pub mod host {
+    pub use crate::registry::windows_version_string;
+    pub use crate::system::{HostProfile, host_profile, is_elevated, search_path_file};
+}
+
+/// User font install and removal helpers.
+pub mod fonts {
+    pub use crate::font::{install_user_font, remove_user_font, user_fonts_dir};
+}
+
+/// MSI and MSIX package helpers.
+pub mod packages {
+    pub use crate::deployment::{
+        msi_scan_inventory, msix_install, msix_installed_package_full_name, msix_remove,
+    };
+}
+
+/// Filesystem inspection and extraction helpers.
+pub mod paths {
+    pub use crate::fs::{PathInfo, create_extracted_file, inspect_path};
+}
+
+/// Test-only registry helpers.
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    pub use crate::registry::windows_version_string;
+    pub use crate::registry::{
+        UninstallEntryGuard, create_test_uninstall_entry,
+        create_test_uninstall_entry_with_install_location,
+    };
+}

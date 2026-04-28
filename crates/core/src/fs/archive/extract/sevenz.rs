@@ -7,7 +7,7 @@ use crate::env::{LOCALAPPDATA, WINBREW_PATHS_ROOT};
 use crate::fs::{FsError, Result};
 
 #[cfg(windows)]
-use winbrew_windows::search_path_file;
+use winbrew_windows::host::search_path_file;
 
 const SEVENZ_RELATIVE_EXE: &str = "bin/7zip/7z.exe";
 
