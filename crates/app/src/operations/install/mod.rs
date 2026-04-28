@@ -308,8 +308,8 @@ pub(crate) fn resolve_install_target(
             choose_package(query, matches)
         })?;
     let selection_context = crate::catalog::SelectionContext::new(
-        crate::windows::host_profile(),
-        crate::windows::is_elevated(),
+        crate::windows::host::host_profile(),
+        crate::windows::host::is_elevated(),
     );
     let installer = types::select_installer(
         &database::get_installers(&catalog_conn, &package.id)?,

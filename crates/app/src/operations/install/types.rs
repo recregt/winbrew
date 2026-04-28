@@ -16,7 +16,7 @@ use crate::core::hash::HashError;
 use crate::models::catalog::CatalogInstaller;
 use crate::models::domains::install::InstallFailureClass;
 use crate::models::domains::shared::HashAlgorithm;
-use crate::windows::HostProfile;
+use crate::windows::host::HostProfile;
 
 /// Select the installer that the catalog policy considers best for the package.
 ///
@@ -185,7 +185,7 @@ mod tests {
     use crate::models::domains::install::Architecture;
     use crate::models::domains::install::InstallFailureClass;
     use crate::models::domains::shared::HashAlgorithm;
-    use crate::windows::HostProfile;
+    use crate::windows::host::HostProfile;
 
     #[test]
     fn maps_state_conflicts_to_user_facing_errors() {

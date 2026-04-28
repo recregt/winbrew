@@ -9,7 +9,7 @@ use crate::models::install::engine::{EngineInstallReceipt, EngineKind};
 use crate::models::install::installed::InstalledPackage;
 
 #[cfg(windows)]
-use crate::windows_dep::{install_user_font, remove_user_font};
+use crate::windows_dep::fonts::{install_user_font, remove_user_font};
 
 /// Install a per-user font by copying the downloaded font file into the
 /// Windows user fonts directory.

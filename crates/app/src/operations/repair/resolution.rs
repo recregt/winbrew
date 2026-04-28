@@ -82,8 +82,8 @@ where
 
     let installers = crate::database::get_installers(&catalog_conn, &package.id)?;
     let selection_context = crate::catalog::SelectionContext::new(
-        crate::windows::host_profile(),
-        crate::windows::is_elevated(),
+        crate::windows::host::host_profile(),
+        crate::windows::host::is_elevated(),
     );
     let installer = install::types::select_installer(&installers, selection_context)?;
     let engine = engines::resolve_engine_for_installer(&installer)?;

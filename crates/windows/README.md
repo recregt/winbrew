@@ -1,9 +1,14 @@
-# winbrew-windows
+ # winbrew-windows
 
 `winbrew-windows` is the Windows platform abstraction layer used by WinBrew.
 It keeps Windows-specific implementation details behind a small root-level API,
 so the rest of the workspace can depend on stable, easy-to-read entry points
 instead of the Microsoft `windows` projection types directly.
+
+Consumers import the facade modules `apps`, `host`, `fonts`, `packages`, and
+`paths` instead of reaching into the internal folder tree. Test helpers live
+behind the `testing` facade and are only available to unit tests or when the
+`testing` feature is enabled.
 
 ## What this crate owns
 
@@ -22,32 +27,21 @@ layout is not part of the contract and can change without breaking consumers.
 
 | Item | Purpose | Typical caller |
 | --- | --- | --- |
-| `inspect_path` | Inspect a path and return directory / reparse-point / hard-link metadata | archive extraction and cleanup code |
-| `create_extracted_file` | Create a fresh file for extraction without following existing reparse points | archive extractors |
-| `collect_installed_apps` | Enumerate installed applications by projecting uninstall entries | list / doctor commands |
-| `collect_uninstall_entries` | Enumerate uninstall registry entries with display-name filtering | native-exe metadata capture and diagnostics |
-| `uninstall_value` | Read a string value from an uninstall key by key name | MSI install verification |
-| `HostProfile` | Snapshot of the current host family and native architecture | platform-aware installer selection |
-| `host_profile` | Return the current host snapshot | installer selection and download routing |
-| `windows_version_string` | Return the current Windows version string from the registry | info output and system banners |
-| `is_elevated` | Return whether the current process is elevated | scope-aware installer selection |
-| `user_fonts_dir` | Return the per-user Windows font directory | font install / remove helpers |
-| `install_user_font` | Copy a supported font into the user font directory, register it, and load it into the current session | font engine |
-| `remove_user_font` | Unregister a previously installed user font and remove its copied file | font engine |
-| `msix_install` | Install an MSIX package from a downloaded file and return the installed package full name | engine install flow |
-| `msix_installed_package_full_name` | Resolve the installed full name for a package name or family name | MSIX receipt creation |
-| `msix_remove` | Remove an installed MSIX package by full package name | engine remove flow |
-| `msi_scan_inventory` | Scan an MSI database and reconstruct the inventory snapshot stored in SQLite | MSI install and repair flows |
+| `apps::*` | Installed applications and uninstall registry values | list / doctor commands |
+| `host::*` | Host profile, elevation, PATH, and Windows version helpers | installer selection and info output |
+| `fonts::*` | Per-user font install and removal helpers | font engine |
+| `packages::*` | MSI / MSIX package helpers | engine install / remove flow |
+| `paths::*` | Filesystem inspection and extraction helpers | archive extraction and cleanup code |
+| `testing::*` | Test-only registry helpers | unit tests and test binaries |
 
 ## `src/lib.rs` root facade
 
 `src/lib.rs` is intentionally small. It declares private modules and then
-re-exports the stable API from the crate root:
+exposes the stable API through facade modules instead of flat root re-exports:
 
 ```rust,ignore
 #![cfg(windows)]
 #![doc = include_str!("../README.md")]
-#![allow(missing_docs)]
 
 mod deployment;
 mod font;
@@ -55,16 +49,42 @@ mod fs;
 mod registry;
 mod system;
 
-pub use deployment::{
-  msi_scan_inventory, msix_install, msix_installed_package_full_name, msix_remove,
-};
-pub use font::{install_user_font, remove_user_font, user_fonts_dir};
-pub use fs::{PathInfo, create_extracted_file, inspect_path};
-pub use registry::{
-  AppInfo, UninstallEntry, collect_installed_apps, collect_uninstall_entries,
-  uninstall_value, windows_version_string,
-};
-pub use system::{HostProfile, host_profile, is_elevated};
+pub(crate) use winbrew_models as models;
+
+pub mod apps {
+  pub use crate::registry::{
+    AppInfo, UninstallEntry, collect_installed_apps, collect_uninstall_entries,
+    uninstall_value,
+  };
+}
+
+pub mod host {
+  pub use crate::registry::windows_version_string;
+  pub use crate::system::{HostProfile, host_profile, is_elevated, search_path_file};
+}
+
+pub mod fonts {
+  pub use crate::font::{install_user_font, remove_user_font, user_fonts_dir};
+}
+
+pub mod packages {
+  pub use crate::deployment::{
+    msi_scan_inventory, msix_install, msix_installed_package_full_name, msix_remove,
+  };
+}
+
+pub mod paths {
+  pub use crate::fs::{PathInfo, create_extracted_file, inspect_path};
+}
+
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+  pub use crate::registry::windows_version_string;
+  pub use crate::registry::{
+    UninstallEntryGuard, create_test_uninstall_entry,
+    create_test_uninstall_entry_with_install_location,
+  };
+}
 ```
 
 ## System helpers
@@ -78,11 +98,11 @@ into one snapshot. Call `host_profile()` once, then inspect `is_server` and
 labels WinBrew accepts. Normal hosts currently accept `windows.desktop`,
 `windows.ltsc`, and `windows.universal`; server hosts accept `windows.server`.
 
-Use `is_elevated()` when you need to decide whether machine-scope installers
-should be preferred over user-scope installers.
+Use `host::is_elevated()` when you need to decide whether machine-scope
+installers should be preferred over user-scope installers.
 
 ```rust,no_run
-use winbrew_windows::host_profile;
+use winbrew_windows::host::host_profile;
 
 let profile = host_profile();
 println!("host: {profile}");
@@ -149,7 +169,7 @@ idempotent if Windows has already dropped the session resource.
 
 ```rust,no_run
 use std::path::Path;
-use winbrew_windows::{install_user_font, remove_user_font, user_fonts_dir};
+use winbrew_windows::fonts::{install_user_font, remove_user_font, user_fonts_dir};
 
 let installed = install_user_font(Path::new(r"C:\Temp\fixture.ttf")).unwrap();
 println!("installed font: {}", installed.display());
@@ -170,7 +190,7 @@ information, and returns the three bits of state that WinBrew needs.
 
 ```rust,no_run
 use std::path::Path;
-use winbrew_windows::inspect_path;
+use winbrew_windows::paths::inspect_path;
 
 let info = inspect_path(Path::new(r"C:\Temp\payload.msix")).unwrap();
 println!("dir={} reparse={} links={}", info.is_directory, info.is_reparse_point, info.hard_link_count);
@@ -187,7 +207,7 @@ fresh extraction targets.
 
 ```rust,no_run
 use std::path::Path;
-use winbrew_windows::create_extracted_file;
+use winbrew_windows::paths::create_extracted_file;
 
 let _file = create_extracted_file(Path::new(r"C:\Temp\extract\tool.exe")).unwrap();
 ```
@@ -208,7 +228,7 @@ contains plain Rust strings for the commonly used uninstall fields, so callers
 do not need to work with registry handles or root snapshots.
 
 ```rust,no_run
-use winbrew_windows::collect_uninstall_entries;
+use winbrew_windows::apps::collect_uninstall_entries;
 
 for entry in collect_uninstall_entries(Some("winbrew")).unwrap() {
   println!("{} {}", entry.display_name, entry.version);
@@ -232,7 +252,7 @@ for each application name, which is good enough for display and removal workflow
 but it is not a semantic-version comparison.
 
 ```rust,no_run
-use winbrew_windows::collect_installed_apps;
+use winbrew_windows::apps::collect_installed_apps;
 
 let apps = collect_installed_apps(Some("winbrew")).unwrap();
 
@@ -250,7 +270,7 @@ so the engine can record the final path Windows reports instead of assuming the
 requested install directory is always the truth.
 
 ```rust,no_run
-use winbrew_windows::uninstall_value;
+use winbrew_windows::apps::uninstall_value;
 
 let install_location = uninstall_value(
   "{11111111-1111-1111-1111-111111111111}",
@@ -272,7 +292,7 @@ the caller can store it in a receipt.
 
 ```rust,no_run
 use std::path::Path;
-use winbrew_windows::msix_install;
+use winbrew_windows::packages::msix_install;
 
 let full_name = msix_install(Path::new(r"C:\Temp\packages\Contoso.App.msix"), "Contoso.App").unwrap();
 println!("installed package: {}", full_name);
@@ -299,7 +319,7 @@ it expects the value that was stored in the install receipt, not just a friendly
 package display name.
 
 ```rust,no_run
-use winbrew_windows::msix_remove;
+use winbrew_windows::packages::msix_remove;
 
 msix_remove("Contoso.App_1.0.0.0_x64__8wekyb3d8bbwe!App").unwrap();
 ```
@@ -351,7 +371,7 @@ inventing a path that might be wrong.
 ```rust,no_run
 use std::path::Path;
 use winbrew_models::domains::install::InstallScope;
-use winbrew_windows::msi_scan_inventory;
+use winbrew_windows::packages::msi_scan_inventory;
 
 let snapshot = msi_scan_inventory(
   Path::new(r"C:\Temp\packages\Contoso.App.msi"),

@@ -9,7 +9,8 @@ use crate::models::install::engine::{
 };
 use crate::models::install::installed::InstalledPackage;
 use crate::models::msi_inventory::records::MsiInventorySnapshot;
-use crate::windows_dep::{msi_scan_inventory, uninstall_value};
+use crate::windows_dep::apps::uninstall_value;
+use crate::windows_dep::packages::msi_scan_inventory;
 
 const MSI_INSTALL_EXIT_CODES: &[i32] = &[0, 1641, 3010];
 const INSTALL_LOCATION_VALUE: &str = "InstallLocation";
