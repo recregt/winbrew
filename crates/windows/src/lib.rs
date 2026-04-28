@@ -43,9 +43,9 @@ pub mod paths {
 /// Test-only registry helpers.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    pub use crate::host::windows_version_string;
     pub use crate::registry::{
         UninstallEntryGuard, create_test_uninstall_entry,
         create_test_uninstall_entry_with_install_location,
     };
+    pub use crate::system::windows_version_string;
 }
