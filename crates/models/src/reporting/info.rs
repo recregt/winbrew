@@ -7,6 +7,8 @@ use super::report::RuntimeReport;
 pub struct InfoReport {
     /// Winbrew version string.
     pub version: String,
+    /// System header entries displayed before the WinBrew tables.
+    pub system: Vec<(String, String)>,
     /// Structured runtime sections for rendering.
     pub runtime: RuntimeReport,
 }

@@ -93,7 +93,21 @@ fn read_only_commands_cover_cli_views() -> Result<()> {
 
     let info_output = common::run_winbrew(fixture.root.path(), &["info"]);
     common::assert_success(&info_output, "info command")?;
-    common::assert_output_contains_all(&info_output, &["Version:", "Runtime settings displayed."])?;
+    common::assert_output_contains_all(
+        &info_output,
+        &[
+            &format!("WinBrew Package Manager v{}", version::package_version()),
+            "Copyright (c) 2026 The WinBrew Contributors.",
+            "Licensed under either of MIT or Apache 2.0 at your option.",
+            "Windows:",
+            "System Architecture:",
+            "WinBrew Paths",
+            "WinBrew Settings",
+            "Database",
+            "log_level",
+        ],
+    )?;
+    assert!(!common::output_text(&info_output).contains("Runtime settings displayed."));
 
     let version_output = common::run_winbrew(fixture.root.path(), &["version"]);
     common::assert_success(&version_output, "version command")?;

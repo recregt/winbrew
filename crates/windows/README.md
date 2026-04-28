@@ -29,6 +29,7 @@ layout is not part of the contract and can change without breaking consumers.
 | `uninstall_value` | Read a string value from an uninstall key by key name | MSI install verification |
 | `HostProfile` | Snapshot of the current host family and native architecture | platform-aware installer selection |
 | `host_profile` | Return the current host snapshot | installer selection and download routing |
+| `windows_version_string` | Return the current Windows version string from the registry | info output and system banners |
 | `is_elevated` | Return whether the current process is elevated | scope-aware installer selection |
 | `user_fonts_dir` | Return the per-user Windows font directory | font install / remove helpers |
 | `install_user_font` | Copy a supported font into the user font directory, register it, and load it into the current session | font engine |
@@ -59,7 +60,10 @@ pub use deployment::{
 };
 pub use font::{install_user_font, remove_user_font, user_fonts_dir};
 pub use fs::{PathInfo, create_extracted_file, inspect_path};
-pub use registry::{AppInfo, UninstallEntry, collect_installed_apps, collect_uninstall_entries, uninstall_value};
+pub use registry::{
+  AppInfo, UninstallEntry, collect_installed_apps, collect_uninstall_entries,
+  uninstall_value, windows_version_string,
+};
 pub use system::{HostProfile, host_profile, is_elevated};
 ```
 
@@ -89,6 +93,17 @@ println!("architecture: {}", profile.architecture);
 If Windows cannot read the product-type registry value, the helper falls back
 to a normal client host. Unknown processor architecture codes still map to
 `Architecture::Any`.
+
+### `windows_version_string`
+
+`windows_version_string` returns the current Windows version string when the
+registry exposes the required values. It prefers the numeric
+`CurrentMajorVersionNumber` and `CurrentMinorVersionNumber` values, falls back
+to `CurrentVersion` when needed, and appends `CurrentBuildNumber` plus `UBR`
+when they are available.
+
+Use this helper for version banners or `info`-style output when you want the
+version line to stay registry-backed but still return a plain string.
 
 That shape matters for two reasons:
 

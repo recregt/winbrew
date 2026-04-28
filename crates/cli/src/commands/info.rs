@@ -10,6 +10,7 @@ use crate::{
     CommandContext,
     app::{AppContext, info},
 };
+use winbrew_app::models::domains::reporting::{InfoReport, ReportSection, RuntimeReport};
 use winbrew_ui::Ui;
 
 pub fn run(ctx: &CommandContext) -> Result<()> {
@@ -18,20 +19,37 @@ pub fn run(ctx: &CommandContext) -> Result<()> {
 }
 
 fn run_with_ui<W: Write>(ui: &mut Ui<W>, app: &AppContext) -> Result<()> {
-    ui.page_title("System Information");
-
     let report = info::collect(&app.sections, &app.paths)?;
-    ui.notice(format!("Version: {}", report.version));
-
-    for section in report.runtime.sections {
-        ui.notice(&section.title);
-        ui.display_key_values(&section.entries);
-        ui.info("");
-    }
-
-    ui.success("Runtime settings displayed.");
+    render_info_report(ui, &report);
 
     Ok(())
+}
+
+fn render_info_report<W: Write>(ui: &mut Ui<W>, report: &InfoReport) {
+    ui.write_line(format!("WinBrew Package Manager v{}", report.version));
+    ui.write_line("Copyright (c) 2026 The WinBrew Contributors.");
+    ui.write_line("Licensed under either of MIT or Apache 2.0 at your option.");
+    ui.write_line("");
+
+    for (key, value) in &report.system {
+        ui.write_line(format!("{key}: {value}"));
+    }
+
+    ui.write_line("");
+    ui.write_line("WinBrew Paths");
+    ui.display_key_values(&runtime_section(&report.runtime, "Paths").entries);
+    ui.write_line("");
+
+    ui.write_line("WinBrew Settings");
+    ui.display_key_values(&runtime_section(&report.runtime, "Core").entries);
+}
+
+fn runtime_section<'a>(report: &'a RuntimeReport, title: &str) -> &'a ReportSection {
+    report
+        .sections
+        .iter()
+        .find(|section| section.title == title)
+        .expect("runtime report should contain the expected section")
 }
 
 #[cfg(test)]
@@ -55,11 +73,15 @@ mod tests {
         let out = buffer_text(&out);
         let err = buffer_text(&err);
 
+        assert!(out.contains("WinBrew Package Manager v"));
+        assert!(out.contains("Copyright (c) 2026 The WinBrew Contributors."));
+        assert!(out.contains("Licensed under either of MIT or Apache 2.0 at your option."));
+        assert!(out.contains("Windows:"));
+        assert!(out.contains("System Architecture:"));
+        assert!(out.contains("WinBrew Paths"));
+        assert!(out.contains("WinBrew Settings"));
         assert!(out.contains("Key"));
         assert!(out.contains("Value"));
-        assert!(err.contains("Version: "));
-        assert!(err.contains("Core"));
-        assert!(err.contains("Paths"));
-        assert!(err.contains("Runtime settings displayed."));
+        assert!(err.is_empty());
     }
 }

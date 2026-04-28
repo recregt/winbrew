@@ -17,6 +17,6 @@ pub use fs::{PathInfo, create_extracted_file, inspect_path};
 pub use registry::{
     AppInfo, UninstallEntry, UninstallEntryGuard, collect_installed_apps,
     collect_uninstall_entries, create_test_uninstall_entry,
-    create_test_uninstall_entry_with_install_location, uninstall_value,
+    create_test_uninstall_entry_with_install_location, uninstall_value, windows_version_string,
 };
 pub use system::{HostProfile, host_profile, is_elevated, search_path_file};

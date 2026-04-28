@@ -5,3 +5,7 @@ pub fn version_string() -> String {
         env!("WINBREW_GIT_HASH")
     )
 }
+
+pub fn package_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
