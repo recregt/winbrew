@@ -2,7 +2,9 @@ use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::registry::{register_user_font_value, unregister_user_font_value};
+mod user_fonts;
+
+use self::user_fonts::{register_user_font_value, unregister_user_font_value};
 use windows_sys::Win32::Graphics::Gdi::{
     AddFontResourceExW, FR_NOT_ENUM, FR_PRIVATE, RemoveFontResourceExW,
 };
@@ -207,11 +209,11 @@ fn validate_font_source(source_path: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use super::user_fonts::USER_FONTS_REGISTRY_PATH;
     use super::{
         FONT_RESOURCE_FLAGS, font_registry_value_name, install_user_font, register_user_font,
         remove_user_font, unregister_user_font_by_name, validate_font_source,
     };
-    use crate::registry::user_fonts::USER_FONTS_REGISTRY_PATH;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};

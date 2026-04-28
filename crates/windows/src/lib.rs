@@ -18,8 +18,9 @@ pub mod apps {
 
 /// System architecture, privilege, PATH, and Windows version helpers.
 pub mod host {
-    pub use crate::registry::windows_version_string;
-    pub use crate::system::{HostProfile, host_profile, is_elevated, search_path_file};
+    pub use crate::system::{
+        HostProfile, host_profile, is_elevated, search_path_file, windows_version_string,
+    };
 }
 
 /// User font install and removal helpers.
@@ -42,7 +43,7 @@ pub mod paths {
 /// Test-only registry helpers.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    pub use crate::registry::windows_version_string;
+    pub use crate::host::windows_version_string;
     pub use crate::registry::{
         UninstallEntryGuard, create_test_uninstall_entry,
         create_test_uninstall_entry_with_install_location,
