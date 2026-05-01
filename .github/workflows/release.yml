@@ -15,6 +15,7 @@ jobs:
     env:
       WINBREW_EXE: .\target\x86_64-pc-windows-msvc\release\winbrew.exe
       CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+      RELEASE_TAG: ${{ github.ref_name }}
 
     steps:
       - name: Checkout
@@ -38,15 +39,17 @@ jobs:
 
       - name: Package
         run: |
+          $archiveName = "winbrew-$env:RELEASE_TAG-windows-x86_64.zip"
           mkdir release_pkg
           copy $env:WINBREW_EXE release_pkg\
           copy README.md release_pkg\
-          Compress-Archive -Path release_pkg\* -DestinationPath winbrew-${{ github.ref_name }}-windows-x86_64.zip
+          Compress-Archive -Path release_pkg\* -DestinationPath $archiveName
 
       - name: Checksum
         run: |
-          $hash = Get-FileHash winbrew-${{ github.ref_name }}-windows-x86_64.zip -Algorithm SHA256
-          $hash.Hash | Out-File -FilePath winbrew-${{ github.ref_name }}-windows-x86_64.zip.sha256
+          $archiveName = "winbrew-$env:RELEASE_TAG-windows-x86_64.zip"
+          $hash = Get-FileHash $archiveName -Algorithm SHA256
+          $hash.Hash | Out-File -FilePath ("{0}.sha256" -f $archiveName)
 
       - name: Generate changelog
         id: changelog
@@ -77,6 +80,6 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: | 
-            winbrew-${{ github.ref_name }}-windows-x86_64.zip
-            winbrew-${{ github.ref_name }}-windows-x86_64.zip.sha256
+            winbrew-${{ env.RELEASE_TAG }}-windows-x86_64.zip
+            winbrew-${{ env.RELEASE_TAG }}-windows-x86_64.zip.sha256
           body: ${{ steps.changelog.outputs.changelog }}
