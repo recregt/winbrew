@@ -5,8 +5,8 @@ It keeps Windows-specific implementation details behind a small root-level API,
 so the rest of the workspace can depend on stable, easy-to-read entry points
 instead of the Microsoft `windows` projection types directly.
 
-Consumers import the facade modules `apps`, `host`, `fonts`, `packages`, and
-`paths` instead of reaching into the internal folder tree. Test helpers live
+Consumers import the facade modules `installed`, `host`, `fonts`, `fs`, and
+`packages` instead of reaching into the internal folder tree. Test helpers live
 behind the `testing` facade and are only available to unit tests or when the
 `testing` feature is enabled.
 
@@ -27,11 +27,11 @@ layout is not part of the contract and can change without breaking consumers.
 
 | Item | Purpose | Typical caller |
 | --- | --- | --- |
-| `apps::*` | Installed applications and uninstall registry values | list / doctor commands |
+| `installed::*` | Installed applications and uninstall registry values | list / doctor commands |
 | `host::*` | Host profile, elevation, PATH, and Windows version helpers | installer selection and info output |
 | `fonts::*` | Per-user font install and removal helpers | font engine |
 | `packages::*` | MSI / MSIX package helpers | engine install / remove flow |
-| `paths::*` | Filesystem inspection and extraction helpers | archive extraction and cleanup code |
+| `fs::*` | Filesystem inspection and extraction helpers | archive extraction and cleanup code |
 | `testing::*` | Test-only registry helpers | unit tests and test binaries |
 
 ## `src/lib.rs` root facade
@@ -45,16 +45,17 @@ exposes the stable API through facade modules instead of flat root re-exports:
 
 mod deployment;
 mod font;
-mod fs;
+#[path = "fs/mod.rs"]
+mod filesystem;
 mod registry;
 mod system;
 
 pub(crate) use winbrew_models as models;
 
-pub mod apps {
+pub mod installed {
   pub use crate::registry::{
-    AppInfo, UninstallEntry, collect_installed_apps, collect_uninstall_entries,
-    uninstall_value,
+    AppInfo, UninstallEntry, installed_apps, installed_apps_matching,
+    read_uninstall_registry_value, uninstall_entries, uninstall_entries_matching,
   };
 }
 
@@ -74,8 +75,8 @@ pub mod packages {
   };
 }
 
-pub mod paths {
-  pub use crate::fs::{PathInfo, create_extracted_file, inspect_path};
+pub mod fs {
+  pub use crate::filesystem::{PathInfo, create_extraction_target_file, inspect_path};
 }
 
 #[cfg(any(test, feature = "testing"))]
@@ -191,15 +192,15 @@ information, and returns the three bits of state that WinBrew needs.
 
 ```rust,no_run
 use std::path::Path;
-use winbrew_windows::paths::inspect_path;
+use winbrew_windows::fs::inspect_path;
 
 let info = inspect_path(Path::new(r"C:\Temp\payload.msix")).unwrap();
 println!("dir={} reparse={} links={}", info.is_directory, info.is_reparse_point, info.hard_link_count);
 ```
 
-### `create_extracted_file`
+### `create_extraction_target_file`
 
-Use `create_extracted_file` when you are creating a brand-new file that came
+Use `create_extraction_target_file` when you are creating a brand-new file that came
 out of an archive or package and you want the filesystem operation to fail if
 the target already exists.
 
@@ -208,14 +209,14 @@ fresh extraction targets.
 
 ```rust,no_run
 use std::path::Path;
-use winbrew_windows::paths::create_extracted_file;
+use winbrew_windows::fs::create_extraction_target_file;
 
-let _file = create_extracted_file(Path::new(r"C:\Temp\extract\tool.exe")).unwrap();
+let _file = create_extraction_target_file(Path::new(r"C:\Temp\extract\tool.exe")).unwrap();
 ```
 
-## Registry helpers
+## Installed app helpers
 
-### `UninstallEntry` and `collect_uninstall_entries`
+### `UninstallEntry` and `uninstall_entries`
 
 The uninstall registry data comes from three common locations:
 
@@ -223,28 +224,26 @@ The uninstall registry data comes from three common locations:
 - `HKLM\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall`
 - `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall`
 
-`collect_uninstall_entries()` returns a vector of registry snapshots for the
-entries that match an optional display-name filter. Each `UninstallEntry`
-contains plain Rust strings for the commonly used uninstall fields, so callers
-do not need to work with registry handles or root snapshots.
+`uninstall_entries()` returns a vector of registry snapshots for all available
+entries. Use `uninstall_entries_matching()` when you want a case-insensitive
+literal display-name filter. Each `UninstallEntry` contains plain Rust strings
+for the commonly used uninstall fields, so callers do not need to work with
+registry handles or root snapshots.
 
 ```rust,no_run
-use winbrew_windows::apps::collect_uninstall_entries;
+use winbrew_windows::installed::uninstall_entries_matching;
 
-for entry in collect_uninstall_entries(Some("winbrew")).unwrap() {
+for entry in uninstall_entries_matching("winbrew").unwrap() {
   println!("{} {}", entry.display_name, entry.version);
 }
 ```
 
-### `AppInfo` and `collect_installed_apps`
+### `AppInfo` and `installed_apps`
 
-`collect_installed_apps` walks the available uninstall roots, reads the
-`DisplayName`, `DisplayVersion`, and `Publisher` values, and returns them as
-`AppInfo` entries.
-
-The `filter` argument is treated as a case-insensitive literal search. Any regex
-metacharacters in the filter are escaped before matching, so the caller does not
-need to think about regex syntax.
+`installed_apps()` walks the available uninstall roots, reads the `DisplayName`,
+`DisplayVersion`, and `Publisher` values, and returns them as `AppInfo`
+entries. Use `installed_apps_matching()` when you want to filter by a literal
+display-name match.
 
 The result list is sorted by name first and then by version in descending
 lexicographic order. After sorting, entries with the same name are deduplicated
@@ -253,27 +252,27 @@ for each application name, which is good enough for display and removal workflow
 but it is not a semantic-version comparison.
 
 ```rust,no_run
-use winbrew_windows::apps::collect_installed_apps;
+use winbrew_windows::installed::installed_apps_matching;
 
-let apps = collect_installed_apps(Some("winbrew")).unwrap();
+let apps = installed_apps_matching("winbrew").unwrap();
 
 for app in apps {
     println!("{} {} - {}", app.name, app.version, app.publisher);
 }
 ```
 
-### `uninstall_value`
+### `read_uninstall_registry_value`
 
-`uninstall_value` searches the uninstall roots for a key name and then reads
-the first non-empty string value with the requested value name. MSI install
-flows use it to read `InstallLocation` immediately after `msiexec` completes,
-so the engine can record the final path Windows reports instead of assuming the
-requested install directory is always the truth.
+`read_uninstall_registry_value` searches the uninstall roots for a key name and
+then reads the first non-empty string value with the requested value name. MSI
+install flows use it to read `InstallLocation` immediately after `msiexec`
+completes, so the engine can record the final path Windows reports instead of
+assuming the requested install directory is always the truth.
 
 ```rust,no_run
-use winbrew_windows::apps::uninstall_value;
+use winbrew_windows::installed::read_uninstall_registry_value;
 
-let install_location = uninstall_value(
+let install_location = read_uninstall_registry_value(
   "{11111111-1111-1111-1111-111111111111}",
   "InstallLocation",
 );
@@ -391,9 +390,9 @@ directory, a reparse point, or a path with unexpected hard-link behavior.
 
 ### 4. Discover installed software
 
-`collect_installed_apps(None)` gives you a broad inventory. Passing
-`Some("contoso")` narrows it down to matching display names without exposing
-the caller to regex syntax.
+`installed_apps()` gives you a broad inventory. Passing `installed_apps_matching("contoso")`
+narrows it down to matching display names without exposing the caller to regex
+syntax.
 
 ## Non-Windows behavior
 

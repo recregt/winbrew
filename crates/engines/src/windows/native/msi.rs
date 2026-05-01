@@ -9,7 +9,7 @@ use crate::models::install::engine::{
 };
 use crate::models::install::installed::InstalledPackage;
 use crate::models::msi_inventory::records::MsiInventorySnapshot;
-use crate::windows_dep::apps::uninstall_value;
+use crate::windows_dep::installed::read_uninstall_registry_value;
 use crate::windows_dep::packages::msi_scan_inventory;
 
 const MSI_INSTALL_EXIT_CODES: &[i32] = &[0, 1641, 3010];
@@ -144,7 +144,7 @@ fn resolve_install_dir(
     requested_install_dir: &Path,
     package_name: &str,
 ) -> PathBuf {
-    match uninstall_value(&snapshot.receipt.product_code, INSTALL_LOCATION_VALUE) {
+    match read_uninstall_registry_value(&snapshot.receipt.product_code, INSTALL_LOCATION_VALUE) {
         Some(install_location) => {
             let actual_install_dir = PathBuf::from(&install_location);
 
