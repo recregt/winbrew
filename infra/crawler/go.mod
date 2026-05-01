@@ -18,5 +18,5 @@ require (
 
 require (
 	golang.org/x/sync v0.20.0 // direct
-	modernc.org/sqlite v1.49.1
+	modernc.org/sqlite v1.50.0
 )
