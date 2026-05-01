@@ -29,7 +29,7 @@ pub struct PathInfo {
 ///
 /// ```no_run
 /// use std::path::Path;
-/// use winbrew_windows::paths::inspect_path;
+/// use winbrew_windows::fs::inspect_path;
 ///
 /// let info = inspect_path(Path::new(r"C:\Temp\payload.msix")).unwrap();
 /// println!("dir={} reparse={} links={}", info.is_directory, info.is_reparse_point, info.hard_link_count);
@@ -89,16 +89,22 @@ pub fn inspect_path(path: &Path) -> io::Result<PathInfo> {
 ///
 /// ```no_run
 /// use std::path::Path;
-/// use winbrew_windows::paths::create_extracted_file;
+/// use winbrew_windows::fs::create_extraction_target_file;
 ///
-/// let _file = create_extracted_file(Path::new(r"C:\Temp\extract\tool.exe")).unwrap();
+/// let _file = create_extraction_target_file(Path::new(r"C:\Temp\extract\tool.exe")).unwrap();
 /// ```
-pub fn create_extracted_file(path: &Path) -> io::Result<fs::File> {
+pub fn create_extraction_target_file(path: &Path) -> io::Result<fs::File> {
     OpenOptions::new()
         .write(true)
         .create_new(true)
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
         .open(path)
+}
+
+#[deprecated(note = "use create_extraction_target_file")]
+#[doc(hidden)]
+pub fn create_extracted_file(path: &Path) -> io::Result<fs::File> {
+    create_extraction_target_file(path)
 }
 
 struct HandleGuard(HANDLE);

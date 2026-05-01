@@ -41,7 +41,7 @@ use crate::models::catalog::package::CatalogInstaller;
 use crate::models::install::engine::{EngineInstallReceipt, EngineKind, EngineMetadata};
 use crate::models::install::installed::InstalledPackage;
 use crate::models::install::installer::InstallerType;
-use crate::windows_dep::apps::collect_uninstall_entries;
+use crate::windows_dep::installed::uninstall_entries_matching;
 
 const NATIVE_EXE_SUCCESS_EXIT_CODES: &[i32] = &[0, 1641, 3010];
 
@@ -215,19 +215,19 @@ fn capture_native_exe_metadata(
     package_name: &str,
     install_dir: &Path,
 ) -> Option<NativeExeInstallMetadata> {
-    capture_native_exe_metadata_with(package_name, install_dir, collect_uninstall_entries)
+    capture_native_exe_metadata_with(package_name, install_dir, uninstall_entries_matching)
 }
 
 fn capture_native_exe_metadata_with(
     package_name: &str,
     install_dir: &Path,
-    collect_entries: impl FnOnce(Option<&str>) -> Result<Vec<crate::windows_dep::apps::UninstallEntry>>,
+    collect_entries: impl FnOnce(&str) -> Result<Vec<crate::windows_dep::installed::UninstallEntry>>,
 ) -> Option<NativeExeInstallMetadata> {
     let package_name = package_name.trim();
     let mut best_match: Option<(u8, NativeExeInstallMetadata)> = None;
     let mut saw_ambiguous_match = false;
 
-    let Ok(entries) = collect_entries(Some(package_name)) else {
+    let Ok(entries) = collect_entries(package_name) else {
         return None;
     };
 

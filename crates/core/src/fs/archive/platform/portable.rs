@@ -19,7 +19,7 @@ impl PlatformAdapter for PortablePlatform {
         })
     }
 
-    fn create_extracted_file(path: &Path) -> io::Result<fs::File> {
+    fn create_extraction_target_file(path: &Path) -> io::Result<fs::File> {
         OpenOptions::new().write(true).create_new(true).open(path)
     }
 }

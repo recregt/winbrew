@@ -2,17 +2,19 @@
 #![doc = include_str!("../README.md")]
 
 mod deployment;
+#[path = "fs/mod.rs"]
+mod filesystem;
 mod font;
-mod fs;
 mod registry;
 mod system;
 
 pub(crate) use winbrew_models as models;
 
-/// Windows uninstall registry helpers for listing installed applications.
-pub mod apps {
+/// Installed application registry helpers.
+pub mod installed {
     pub use crate::registry::{
-        AppInfo, UninstallEntry, collect_installed_apps, collect_uninstall_entries, uninstall_value,
+        AppInfo, UninstallEntry, installed_apps, installed_apps_matching,
+        read_uninstall_registry_value, uninstall_entries, uninstall_entries_matching,
     };
 }
 
@@ -36,8 +38,24 @@ pub mod packages {
 }
 
 /// Filesystem inspection and extraction helpers.
+pub mod fs {
+    pub use crate::filesystem::{PathInfo, create_extraction_target_file, inspect_path};
+}
+
+/// Deprecated compatibility alias for installed application helpers.
+#[doc(hidden)]
+#[deprecated(note = "use winbrew_windows::installed instead")]
+#[allow(deprecated)]
+pub mod apps {
+    pub use crate::registry::*;
+}
+
+/// Deprecated compatibility alias for filesystem helpers.
+#[doc(hidden)]
+#[deprecated(note = "use winbrew_windows::fs instead")]
+#[allow(deprecated)]
 pub mod paths {
-    pub use crate::fs::{PathInfo, create_extracted_file, inspect_path};
+    pub use crate::filesystem::*;
 }
 
 /// Test-only registry helpers.

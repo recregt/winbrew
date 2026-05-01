@@ -10,7 +10,7 @@ use std::process;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[cfg(windows)]
-use winbrew_windows::paths::inspect_path as winfs_inspect_path;
+use winbrew_windows::fs::inspect_path as winfs_inspect_path;
 
 static DEFERRED_DELETE_SUFFIX: AtomicUsize = AtomicUsize::new(0);
 

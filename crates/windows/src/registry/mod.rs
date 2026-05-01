@@ -46,27 +46,48 @@ pub struct AppInfo {
 
 /// Collect installed applications from the available uninstall registry entries.
 ///
-/// The optional `filter` is treated as a case-insensitive literal search. Any
-/// regex metacharacters are escaped before matching, so the caller can pass a
-/// human-friendly package name instead of a regex.
+/// Use [`installed_apps_matching`] when you want a case-insensitive literal
+/// filter on the display name.
 ///
 /// Results are sorted by name first and then by version in descending
 /// lexicographic order. After sorting, entries with the same name are removed so
 /// the first entry for each name wins. That keeps the highest version encountered
 /// for each application name, which is good enough for display and removal
 /// workflows, but it is not a semantic-version comparison.
+pub fn installed_apps() -> Result<Vec<AppInfo>> {
+    installed_apps_with_filter(None)
+}
+
+/// Collect installed applications whose display name matches the filter.
+///
+/// The filter is treated as a case-insensitive literal search. Any regex
+/// metacharacters are escaped before matching, so the caller can pass a
+/// human-friendly package name instead of a regex.
 ///
 /// # Example
 ///
 /// ```no_run
-/// use winbrew_windows::apps::collect_installed_apps;
+/// use winbrew_windows::installed::installed_apps_matching;
 ///
-/// let apps = collect_installed_apps(Some("winbrew")).unwrap();
+/// let apps = installed_apps_matching("winbrew").unwrap();
 /// for app in apps {
 ///     println!("{} {} - {}", app.name, app.version, app.publisher);
 /// }
 /// ```
+pub fn installed_apps_matching(filter: &str) -> Result<Vec<AppInfo>> {
+    installed_apps_with_filter(Some(filter))
+}
+
+#[deprecated(note = "use installed_apps() or installed_apps_matching()")]
+#[doc(hidden)]
 pub fn collect_installed_apps(filter: Option<&str>) -> Result<Vec<AppInfo>> {
+    match filter {
+        Some(filter) => installed_apps_matching(filter),
+        None => installed_apps(),
+    }
+}
+
+fn installed_apps_with_filter(filter: Option<&str>) -> Result<Vec<AppInfo>> {
     let mut apps = Vec::new();
 
     visit_uninstall_entries(filter, |entry| {
@@ -86,12 +107,45 @@ pub fn collect_installed_apps(filter: Option<&str>) -> Result<Vec<AppInfo>> {
     Ok(apps)
 }
 
-/// Collect uninstall registry entries that match the optional display-name filter.
+/// Collect uninstall registry entries from the available uninstall roots.
 ///
-/// The optional `filter` is treated as a case-insensitive literal search on the
-/// entry display name. Missing values are normalized to `None` or empty strings
-/// so callers can work with plain Rust types instead of registry handles.
+/// Use [`uninstall_entries_matching`] when you want a case-insensitive literal
+/// filter on the entry display name.
+///
+/// Missing values are normalized to `None` or empty strings so callers can work
+/// with plain Rust types instead of registry handles.
+pub fn uninstall_entries() -> Result<Vec<UninstallEntry>> {
+    uninstall_entries_with_filter(None)
+}
+
+/// Collect uninstall registry entries that match the display-name filter.
+///
+/// The filter is treated as a case-insensitive literal search on the entry
+/// display name.
+///
+/// # Example
+///
+/// ```no_run
+/// use winbrew_windows::installed::uninstall_entries_matching;
+///
+/// for entry in uninstall_entries_matching("winbrew").unwrap() {
+///   println!("{} {}", entry.display_name, entry.version);
+/// }
+/// ```
+pub fn uninstall_entries_matching(filter: &str) -> Result<Vec<UninstallEntry>> {
+    uninstall_entries_with_filter(Some(filter))
+}
+
+#[deprecated(note = "use uninstall_entries() or uninstall_entries_matching()")]
+#[doc(hidden)]
 pub fn collect_uninstall_entries(filter: Option<&str>) -> Result<Vec<UninstallEntry>> {
+    match filter {
+        Some(filter) => uninstall_entries_matching(filter),
+        None => uninstall_entries(),
+    }
+}
+
+fn uninstall_entries_with_filter(filter: Option<&str>) -> Result<Vec<UninstallEntry>> {
     let mut entries = Vec::new();
 
     visit_uninstall_entries(filter, |entry| entries.push(entry))?;
@@ -147,11 +201,11 @@ where
     Ok(())
 }
 
-/// Read the first non-empty string value from an uninstall entry identified by key name.
+/// Read the first non-empty string value from an uninstall registry entry.
 ///
 /// MSI install flows use this to read `InstallLocation` after `msiexec`
 /// completes so the engine can store the final path reported by Windows.
-pub fn uninstall_value(key_name: &str, value_name: &str) -> Option<String> {
+pub fn read_uninstall_registry_value(key_name: &str, value_name: &str) -> Option<String> {
     for root in uninstall_roots() {
         let Ok(app_key) = root.key().open_subkey(key_name) else {
             continue;
@@ -167,6 +221,12 @@ pub fn uninstall_value(key_name: &str, value_name: &str) -> Option<String> {
     }
 
     None
+}
+
+#[deprecated(note = "use read_uninstall_registry_value")]
+#[doc(hidden)]
+pub fn uninstall_value(key_name: &str, value_name: &str) -> Option<String> {
+    read_uninstall_registry_value(key_name, value_name)
 }
 
 fn read_optional_string(app_key: &winreg::RegKey, value_name: &str) -> Option<String> {
@@ -185,7 +245,7 @@ fn read_optional_string(app_key: &winreg::RegKey, value_name: &str) -> Option<St
 
 #[cfg(test)]
 mod tests {
-    use super::{collect_installed_apps, collect_uninstall_entries};
+    use super::{installed_apps_matching, uninstall_entries_matching};
     use crate::registry::create_test_uninstall_entry_with_install_location;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -213,7 +273,7 @@ mod tests {
         )
         .expect("test uninstall entry should be created");
 
-        let entries = collect_uninstall_entries(Some(package_name))
+        let entries = uninstall_entries_matching(package_name)
             .expect("uninstall entries should be collected");
 
         assert_eq!(entries.len(), 1);
@@ -226,7 +286,7 @@ mod tests {
         assert_eq!(entry.quiet_uninstall_string.as_deref(), Some("/quiet"));
         assert_eq!(entry.uninstall_string.as_deref(), Some("/uninstall"));
 
-        let apps = collect_installed_apps(Some(package_name)).expect("apps should be collected");
+        let apps = installed_apps_matching(package_name).expect("apps should be collected");
         assert_eq!(apps.len(), 1);
         assert_eq!(apps[0].name, package_name);
     }

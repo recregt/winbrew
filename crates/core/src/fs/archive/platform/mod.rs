@@ -7,7 +7,7 @@ use super::extract::PathInfo;
 pub(super) trait PlatformAdapter {
     fn inspect_path(path: &Path) -> io::Result<PathInfo>;
 
-    fn create_extracted_file(path: &Path) -> io::Result<fs::File>;
+    fn create_extraction_target_file(path: &Path) -> io::Result<fs::File>;
 }
 
 #[cfg(not(windows))]
