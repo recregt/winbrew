@@ -492,9 +492,7 @@ mod tests {
     use crate::models::catalog::package::CatalogInstaller;
     use crate::models::install::installer::InstallerType;
     use crate::models::shared::CatalogId;
-    use crate::windows_dep::testing::{
-        create_test_uninstall_entry, create_test_uninstall_entry_with_install_location,
-    };
+    use crate::windows_dep::testing::create_test_uninstall_entry;
     use winbrew_testing::{CatalogInstallerBuilderExt as _, catalog_installer};
 
     #[cfg(windows)]
@@ -522,6 +520,23 @@ mod tests {
             .tempdir()
             .expect("create native exe test dir")
             .keep()
+    }
+
+    #[cfg(windows)]
+    fn uninstall_entry(
+        package_name: &str,
+        install_location: Option<&Path>,
+        quiet_uninstall_string: Option<&str>,
+        uninstall_string: Option<&str>,
+    ) -> crate::windows_dep::installed::UninstallEntry {
+        crate::windows_dep::installed::UninstallEntry {
+            display_name: package_name.to_string(),
+            version: String::new(),
+            publisher: String::new(),
+            install_location: install_location.map(|path| path.to_string_lossy().into_owned()),
+            quiet_uninstall_string: quiet_uninstall_string.map(str::to_string),
+            uninstall_string: uninstall_string.map(str::to_string),
+        }
     }
 
     #[test]
@@ -832,25 +847,27 @@ mod tests {
 
         let fallback_uninstall_exe = fallback_install_dir.join("uninstall.exe");
         let fallback_uninstall_command = fallback_uninstall_exe.display().to_string();
-        let fallback_registry_entry = create_test_uninstall_entry_with_install_location(
-            package_name,
-            None,
-            None,
-            Some(fallback_uninstall_command.as_str()),
-        )
-        .expect("locationless fallback uninstall entry should be creatable");
 
         let exact_uninstall_exe = exact_install_dir.join("uninstall.exe");
         let exact_uninstall_command = exact_uninstall_exe.display().to_string();
-        let exact_registry_entry = create_test_uninstall_entry(
-            package_name,
-            &exact_install_dir,
-            None,
-            Some(exact_uninstall_command.as_str()),
-        )
-        .expect("exact uninstall entry should be creatable");
 
-        let metadata = capture_native_exe_metadata(package_name, &exact_install_dir)
+        let metadata =
+            capture_native_exe_metadata_with(package_name, &exact_install_dir, |_filter| {
+                Ok(vec![
+                    uninstall_entry(
+                        package_name,
+                        None,
+                        None,
+                        Some(fallback_uninstall_command.as_str()),
+                    ),
+                    uninstall_entry(
+                        package_name,
+                        Some(&exact_install_dir),
+                        None,
+                        Some(exact_uninstall_command.as_str()),
+                    ),
+                ])
+            })
             .expect("metadata should be captured");
 
         assert!(matches!(
@@ -859,8 +876,6 @@ mod tests {
                 if uninstall_command == &exact_uninstall_command
         ));
 
-        drop(exact_registry_entry);
-        drop(fallback_registry_entry);
         let _ = std::fs::remove_dir_all(&exact_install_dir);
         let _ = std::fs::remove_dir_all(&fallback_install_dir);
     }
