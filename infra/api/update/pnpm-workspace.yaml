@@ -1,3 +1,6 @@
+overrides:
+  undici: 8.2.0
+
 packages:
   - '.'
 
