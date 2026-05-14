@@ -88,7 +88,7 @@ mod tests {
     }
 
     #[test]
-    fn engine_kind_for_type_maps_supported_types() {
+    fn engine_kind_from_installer_type_maps_supported_types() {
         assert_eq!(
             EngineKind::from_installer_type(InstallerType::Msi),
             EngineKind::Msi
