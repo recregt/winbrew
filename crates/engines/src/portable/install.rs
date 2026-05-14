@@ -7,7 +7,7 @@ use crate::core::fs::{cleanup_path, replace_directory};
 use crate::models::install::engine::EngineInstallReceipt;
 use crate::models::install::engine::EngineKind;
 
-pub fn install(
+pub(crate) fn install(
     download_path: &Path,
     install_dir: &Path,
     _package_name: &str,

@@ -17,7 +17,7 @@ use super::validation::validate_install_inputs;
 /// The installer family is expected to come from catalog metadata. The backend
 /// validates the inputs, builds family-specific switches, executes the installer
 /// process, and records uninstall metadata when Windows exposes it.
-pub fn install(
+pub(crate) fn install(
     installer: &CatalogInstaller,
     download_path: &Path,
     install_dir: &Path,

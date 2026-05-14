@@ -13,7 +13,7 @@ use crate::payload::archive_kind_for_url;
 ///
 /// This preserves the packaged directory tree as-is and does not try to
 /// discover or promote a primary binary.
-pub fn install(
+pub(crate) fn install(
     download_path: &Path,
     install_dir: &Path,
     installer_url: &str,

@@ -38,7 +38,7 @@ mod validation;
 #[cfg(test)]
 mod tests;
 
-pub use install::install;
-pub use remove::remove;
+pub(crate) use install::install;
+pub(crate) use remove::remove;
 
 pub(super) const NATIVE_EXE_SUCCESS_EXIT_CODES: &[i32] = &[0, 1641, 3010];
