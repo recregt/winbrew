@@ -180,10 +180,8 @@ pub fn run<O: InstallObserver>(
                 |downloaded_bytes| observer.borrow_mut().on_progress(downloaded_bytes),
             )?;
 
-            let resolved_kind = engines::resolve_downloaded_installer_kind(
-                &target.installer,
-                &target.download_path,
-            )?;
+            let resolved_kind =
+                engines::probe_installer_from_download(&target.installer, &target.download_path)?;
             let mut resolved_installer = target.installer.clone();
             resolved_installer.kind = resolved_kind;
 

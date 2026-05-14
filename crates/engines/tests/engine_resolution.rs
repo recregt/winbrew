@@ -8,7 +8,7 @@ use std::io::Write;
 use common::{BASE_URL, assert_expected, installer, installer_with_url};
 use tempfile::tempdir;
 use winbrew_engines::{
-    DeploymentKind, EngineKind, resolve_deployment_kind, resolve_downloaded_installer_kind,
+    DeploymentKind, EngineKind, probe_installer_from_download, resolve_deployment_kind,
     resolve_engine_for_installer,
 };
 use winbrew_models::install::installer::InstallerType;
@@ -230,14 +230,14 @@ fn resolve_engine_for_installer_routes_public_families() {
 }
 
 #[test]
-fn resolve_downloaded_installer_kind_uses_probe_results() {
+fn probe_installer_from_download_uses_probe_results() {
     for case in DOWNLOADED_ROUTING_SCENARIOS {
         let temp_dir = tempdir().expect("temp dir");
         let download_path = temp_dir.path().join("payload.bin");
         fs::write(&download_path, case.payload).expect("write payload");
 
         let installer = installer(case.kind, "payload.exe", None);
-        let resolved_kind = resolve_downloaded_installer_kind(&installer, &download_path)
+        let resolved_kind = probe_installer_from_download(&installer, &download_path)
             .expect("resolve downloaded kind");
 
         assert_expected(resolved_kind, case.expected_kind, case.description);
@@ -259,7 +259,7 @@ fn resolve_downloaded_installer_kind_uses_probe_results() {
 }
 
 #[test]
-fn resolve_downloaded_installer_kind_detects_msix_like_zip_payloads() {
+fn probe_installer_from_download_detects_msix_like_zip_payloads() {
     let temp_dir = tempdir().expect("temp dir");
     let download_path = temp_dir.path().join("payload.zip");
     let file = fs::File::create(&download_path).expect("create zip file");
@@ -274,8 +274,8 @@ fn resolve_downloaded_installer_kind_detects_msix_like_zip_payloads() {
     writer.finish().expect("finish zip file");
 
     let installer = installer(InstallerType::Portable, "payload.zip", None);
-    let resolved_kind = resolve_downloaded_installer_kind(&installer, &download_path)
-        .expect("resolve downloaded kind");
+    let resolved_kind =
+        probe_installer_from_download(&installer, &download_path).expect("resolve downloaded kind");
 
     assert_expected(
         resolved_kind,
@@ -315,13 +315,13 @@ fn resolve_engine_for_installer_rejects_cab_urls() {
 }
 
 #[test]
-fn resolve_downloaded_installer_kind_rejects_cab_payloads() {
+fn probe_installer_from_download_rejects_cab_payloads() {
     let temp_dir = tempdir().expect("temp dir");
     let download_path = temp_dir.path().join("payload.bin");
     fs::write(&download_path, b"MSCFcab payload").expect("write cab payload");
 
     let installer = installer(InstallerType::Portable, "payload.exe", None);
-    let error = resolve_downloaded_installer_kind(&installer, &download_path)
+    let error = probe_installer_from_download(&installer, &download_path)
         .expect_err("CAB payloads should be rejected");
 
     assert!(

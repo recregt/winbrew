@@ -55,7 +55,7 @@ fn matches_portable_installer(installer: &CatalogInstaller) -> bool {
         && matches!(classify_payload(&installer.url), PayloadKind::Raw)
 }
 
-pub(crate) fn resolve_downloaded_installer_kind(
+pub(crate) fn probe_installer_from_download(
     installer: &CatalogInstaller,
     download_path: &Path,
 ) -> Result<InstallerType> {
