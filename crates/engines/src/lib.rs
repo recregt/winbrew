@@ -16,8 +16,8 @@ pub(crate) use winbrew_models as models;
 #[cfg(windows)]
 pub(crate) use winbrew_windows as windows_dep;
 
-pub use fs::archive::zip;
 pub use fs::portable;
+pub use fs::zip;
 
 use anyhow::Result;
 use std::path::Path;
