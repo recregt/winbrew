@@ -1,4 +1,4 @@
-//! MSIX adapter surface used by the Windows API facade.
+//! MSIX backend surface used by the Windows facade.
 //!
 //! What this module does:
 //!

@@ -18,7 +18,6 @@ pub(crate) use winbrew_windows as windows_dep;
 
 pub use filesystem::archive::zip;
 pub use filesystem::portable;
-pub use windows::api::msix;
 
 use anyhow::Result;
 use std::path::Path;

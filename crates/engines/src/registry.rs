@@ -12,11 +12,10 @@ use crate::filesystem::{archive::zip, portable};
 use crate::payload::{
     DetectedArtifactKind, PayloadKind, classify_payload, probe_downloaded_artifact_kind,
 };
-use crate::windows::api::msix;
-use crate::windows::font;
+use crate::windows::{font, msix};
 
 #[cfg(windows)]
-use crate::windows::native::{exe, msi};
+use crate::windows::{exe, msi};
 
 type InstallFn = fn(&CatalogInstaller, &Path, &Path, &str) -> Result<EngineInstallReceipt>;
 type RemoveFn = fn(&InstalledPackage) -> Result<()>;
