@@ -8,8 +8,8 @@ use std::io::Write;
 use common::{BASE_URL, assert_expected, installer, installer_with_url};
 use tempfile::tempdir;
 use winbrew_engines::{
-    DeploymentKind, EngineKind, engine_kind_for_type, resolve_deployment_kind,
-    resolve_downloaded_installer_kind, resolve_engine_for_installer,
+    DeploymentKind, EngineKind, resolve_deployment_kind, resolve_downloaded_installer_kind,
+    resolve_engine_for_installer,
 };
 use winbrew_models::install::installer::InstallerType;
 use zip::ZipWriter;
@@ -196,7 +196,7 @@ const DOWNLOADED_ROUTING_SCENARIOS: &[DownloadedRoutingScenario] = &[
 fn engine_kind_for_type_maps_supported_cases() {
     for case in ENGINE_MAPPING_CASES {
         assert_expected(
-            engine_kind_for_type(case.input).unwrap(),
+            EngineKind::from_installer_type(case.input),
             case.expected,
             case.description,
         );

@@ -54,10 +54,6 @@ pub fn resolve_deployment_kind(installer: &CatalogInstaller) -> DeploymentKind {
     registry::resolve_deployment_kind(installer)
 }
 
-pub fn engine_kind_for_type(kind: InstallerType) -> Result<EngineKind> {
-    Ok(EngineKind::from_installer_type(kind))
-}
-
 impl PackageEngine for EngineKind {
     fn install(
         &self,
@@ -76,7 +72,7 @@ impl PackageEngine for EngineKind {
 
 #[cfg(test)]
 mod tests {
-    use super::{DeploymentKind, EngineKind, engine_kind_for_type, resolve_deployment_kind};
+    use super::{DeploymentKind, EngineKind, resolve_deployment_kind};
     use crate::models::catalog::package::CatalogInstaller;
     use crate::models::install::installer::InstallerType;
     use winbrew_testing::{CatalogInstallerBuilderExt as _, catalog_installer};
@@ -94,35 +90,35 @@ mod tests {
     #[test]
     fn engine_kind_for_type_maps_supported_types() {
         assert_eq!(
-            engine_kind_for_type(InstallerType::Msi).unwrap(),
+            EngineKind::from_installer_type(InstallerType::Msi),
             EngineKind::Msi
         );
         assert_eq!(
-            engine_kind_for_type(InstallerType::Appx).unwrap(),
+            EngineKind::from_installer_type(InstallerType::Appx),
             EngineKind::Msix
         );
         assert_eq!(
-            engine_kind_for_type(InstallerType::Msix).unwrap(),
+            EngineKind::from_installer_type(InstallerType::Msix),
             EngineKind::Msix
         );
         assert_eq!(
-            engine_kind_for_type(InstallerType::Wix).unwrap(),
+            EngineKind::from_installer_type(InstallerType::Wix),
             EngineKind::Msi
         );
         assert_eq!(
-            engine_kind_for_type(InstallerType::Zip).unwrap(),
+            EngineKind::from_installer_type(InstallerType::Zip),
             EngineKind::Zip
         );
         assert_eq!(
-            engine_kind_for_type(InstallerType::Portable).unwrap(),
+            EngineKind::from_installer_type(InstallerType::Portable),
             EngineKind::Portable
         );
         assert_eq!(
-            engine_kind_for_type(InstallerType::Exe).unwrap(),
+            EngineKind::from_installer_type(InstallerType::Exe),
             EngineKind::NativeExe
         );
         assert_eq!(
-            engine_kind_for_type(InstallerType::Font).unwrap(),
+            EngineKind::from_installer_type(InstallerType::Font),
             EngineKind::Font
         );
     }
@@ -134,16 +130,8 @@ mod tests {
             InstallerType::Nullsoft,
             InstallerType::Burn,
         ] {
-            assert_eq!(engine_kind_for_type(kind).unwrap(), EngineKind::NativeExe);
+            assert_eq!(EngineKind::from_installer_type(kind), EngineKind::NativeExe);
         }
-    }
-
-    #[test]
-    fn engine_kind_for_type_recognizes_font_family() {
-        assert_eq!(
-            engine_kind_for_type(InstallerType::Font).unwrap(),
-            EngineKind::Font
-        );
     }
 
     #[test]
