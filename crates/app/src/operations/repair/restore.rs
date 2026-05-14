@@ -34,7 +34,7 @@ pub fn restore_file_restore_target(
         )?;
 
         let resolved_kind =
-            engines::resolve_downloaded_installer_kind(&target.installer, &download_path)?;
+            engines::probe_installer_from_download(&target.installer, &download_path)?;
         let mut resolved_installer = target.installer.clone();
         resolved_installer.kind = resolved_kind;
         let engine = engines::resolve_engine_for_installer(&resolved_installer)?;
