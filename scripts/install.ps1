@@ -7,36 +7,55 @@ param(
     [switch]$Force
 )
 
+Set-StrictMode -Version Latest
+
+$InstallRoot = [System.IO.Path]::GetFullPath($InstallRoot)
+
 function Write-Info {
     param([string]$Message)
     Write-Host $Message
 }
 
-function Get-LatestBinaryReleaseAsset {
-    param(
-        [string]$Repo
-    )
+function Assert-CommandAvailable {
+    param([string]$Name)
 
-    $headers = @{ 'User-Agent' = 'winbrew-installer' }
-    $releases = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$Repo/releases?per_page=100"
-    $release = $releases | Where-Object { $_.tag_name -match '^v' -and -not $_.draft -and -not $_.prerelease } | Select-Object -First 1
-
-    if (-not $release) {
-        throw "Could not find a published binary release for $Repo."
+    if (-not (Get-Command -Name $Name -ErrorAction SilentlyContinue)) {
+        throw "Required command '$Name' was not found on PATH."
     }
+}
 
-    $zipAsset = $release.assets | Where-Object { $_.name -match '^winbrew-.*-windows-x86_64\.zip$' } | Select-Object -First 1
-
-    if (-not $zipAsset) {
-        throw "Could not find a Windows release asset in the latest binary release for $Repo."
+function Test-Administrator {
+    try {
+        $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        $principal = [System.Security.Principal.WindowsPrincipal]::new($identity)
+        return $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
     }
+    catch {
+        return $false
+    }
+}
 
-    $checksumAsset = $release.assets | Where-Object { $_.name -eq ($zipAsset.name + '.sha256') } | Select-Object -First 1
+function Resolve-RepositoryUri {
+    param([string]$Repo)
 
-    [pscustomobject]@{
-        TagName = $release.tag_name
-        ZipAsset = $zipAsset
-        ChecksumAsset = $checksumAsset
+    $normalizedRepo = $Repo.Trim()
+
+    switch -Regex ($normalizedRepo) {
+        '^recregt/winbrew(?:\.git)?$' {
+            return 'https://github.com/recregt/winbrew.git'
+        }
+        '^https://github\.com/recregt/winbrew(?:\.git)?$' {
+            return 'https://github.com/recregt/winbrew.git'
+        }
+        '^git@github\.com:recregt/winbrew(?:\.git)?$' {
+            return 'https://github.com/recregt/winbrew.git'
+        }
+        '^ssh://git@github\.com/recregt/winbrew(?:\.git)?$' {
+            return 'https://github.com/recregt/winbrew.git'
+        }
+        default {
+            throw "Repository '$Repo' is not allowed. Use recregt/winbrew or the canonical Winbrew GitHub URL."
+        }
     }
 }
 
@@ -44,7 +63,7 @@ function Ensure-Directory {
     param([string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path)) {
-        New-Item -ItemType Directory -Path $Path | Out-Null
+        New-Item -ItemType Directory -Path $Path -Force | Out-Null
     }
 }
 
@@ -63,9 +82,37 @@ function Add-UserPathEntry {
         [Environment]::SetEnvironmentVariable('Path', $updated, 'User')
     }
 
-    if ($env:Path -notlike "*$Path*") {
-        $env:Path = "$env:Path;$Path"
+    if ([string]::IsNullOrWhiteSpace($env:Path)) {
+        $env:Path = $Path
     }
+    else {
+        $envEntries = $env:Path -split ';' | Where-Object { $_ -and $_.Trim() }
+        if ($envEntries -notcontains $Path) {
+            $env:Path = @($envEntries + $Path) -join ';'
+        }
+    }
+}
+
+function Remove-UserPathEntry {
+    param([string]$Path)
+
+    $current = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if ($current) {
+        $entries = $current -split ';' | Where-Object { $_ -and $_.Trim() -and $_ -ne $Path }
+        [Environment]::SetEnvironmentVariable('Path', @($entries) -join ';', 'User')
+    }
+
+    if ($env:Path) {
+        $envEntries = $env:Path -split ';' | Where-Object { $_ -and $_.Trim() -and $_ -ne $Path }
+        $env:Path = @($envEntries) -join ';'
+    }
+}
+
+function Remove-InstallRootPathEntries {
+    param([string]$InstallRoot)
+
+    Remove-UserPathEntry -Path (Join-Path $InstallRoot 'bin')
+    Remove-UserPathEntry -Path $InstallRoot
 }
 
 function Grant-CurrentUserAccess {
@@ -75,86 +122,167 @@ function Grant-CurrentUserAccess {
     & icacls $Path /grant "$identity:(OI)(CI)F" /T /C | Out-Null
 }
 
-function Expand-ZipToTemp {
+function Assert-SufficientDiskSpace {
+    param([string]$Path)
+
+    $minimumFreeBytes = 3GB
+    $pathRoot = [System.IO.Path]::GetPathRoot($Path)
+
+    if (-not $pathRoot) {
+        throw "Unable to determine the drive root for '$Path'."
+    }
+
+    $driveName = $pathRoot.TrimEnd('\').TrimEnd(':')
+    $drive = Get-PSDrive -Name $driveName -ErrorAction Stop
+    $freeBytes = [int64]$drive.Free
+
+    if ($freeBytes -lt $minimumFreeBytes) {
+        $requiredMb = [math]::Round($minimumFreeBytes / 1MB, 0)
+        $availableMb = [math]::Round($freeBytes / 1MB, 0)
+        throw "Not enough free disk space on $driveName:. Required at least $requiredMb MB, available $availableMb MB."
+    }
+}
+
+function Assert-RepositoryReachable {
+    param([string]$RepositoryUri)
+
+    Write-Info "Checking repository access..."
+    & git ls-remote --heads $RepositoryUri 1>$null 2>$null
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to reach repository '$RepositoryUri'."
+    }
+}
+
+function New-TempRoot {
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("winbrew-install-" + [Guid]::NewGuid().ToString('N'))
+    Ensure-Directory -Path $tempRoot
+    return $tempRoot
+}
+
+function Invoke-GitClone {
     param(
-        [string]$ZipFile,
+        [string]$RepositoryUri,
         [string]$Destination
     )
 
-    if (Test-Path -LiteralPath $Destination) {
-        Remove-Item -LiteralPath $Destination -Recurse -Force
-    }
-
-    Expand-Archive -LiteralPath $ZipFile -DestinationPath $Destination -Force
+    Write-Info "Cloning $RepositoryUri..."
+    & git clone --depth 1 --single-branch $RepositoryUri $Destination
 }
 
-Write-Info "Fetching latest binary release from GitHub..."
-$release = Get-LatestBinaryReleaseAsset -Repo $Repository
+function Invoke-CargoBuild {
+    param([string]$SourceRoot)
 
-$binDir = Join-Path $InstallRoot 'bin'
-$packagesDir = Join-Path $InstallRoot 'packages'
-$dataDir = Join-Path $InstallRoot 'data'
-$dbDir = Join-Path $dataDir 'db'
-$logsDir = Join-Path $dataDir 'logs'
-$cacheDir = Join-Path $dataDir 'cache'
-
-Write-Info "Preparing install layout under $InstallRoot..."
-Ensure-Directory -Path $InstallRoot
-Ensure-Directory -Path $binDir
-Ensure-Directory -Path $packagesDir
-Ensure-Directory -Path $dataDir
-Ensure-Directory -Path $dbDir
-Ensure-Directory -Path $logsDir
-Ensure-Directory -Path $cacheDir
-
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("winbrew-install-" + [Guid]::NewGuid().ToString('N'))
-Ensure-Directory -Path $tempRoot
-
-$zipPath = Join-Path $tempRoot $release.ZipAsset.name
-$extractPath = Join-Path $tempRoot 'extract'
-
-Write-Info "Downloading $($release.ZipAsset.name)..."
-Invoke-WebRequest -Uri $release.ZipAsset.browser_download_url -OutFile $zipPath
-
-if ($release.ChecksumAsset) {
-    Write-Info 'Verifying archive checksum...'
-    $checksumPath = Join-Path $tempRoot $release.ChecksumAsset.name
-    Invoke-WebRequest -Uri $release.ChecksumAsset.browser_download_url -OutFile $checksumPath
-    $expectedHash = (Get-Content -LiteralPath $checksumPath -Raw).Trim()
-    $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath).Hash
-
-    if ($expectedHash -ne $actualHash) {
-        throw "Checksum mismatch for $($release.ZipAsset.name). Expected $expectedHash, got $actualHash."
+    Write-Info 'Building release binary...'
+    Push-Location $SourceRoot
+    try {
+        & cargo build --release --locked --bin winbrew -p winbrew-bin
+    }
+    finally {
+        Pop-Location
     }
 }
 
-Write-Info 'Extracting archive...'
-Expand-ZipToTemp -ZipFile $zipPath -Destination $extractPath
+function Invoke-VersionSmokeTest {
+    param(
+        [string]$BinaryPath,
+        [string]$Label
+    )
 
-$winbrewExe = Get-ChildItem -Path $extractPath -Recurse -Filter 'winbrew.exe' | Select-Object -First 1
+    $versionOutput = & $BinaryPath --version 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Label failed version verification at '$BinaryPath'."
+    }
 
-if (-not $winbrewExe) {
-    throw 'winbrew.exe was not found in the downloaded archive.'
+    if (-not $versionOutput) {
+        throw "$Label did not produce version output at '$BinaryPath'."
+    }
+
+    $versionText = ($versionOutput | Select-Object -First 1).ToString()
+    Write-Info "$Label version: $versionText"
 }
 
-$targetExe = Join-Path $binDir 'winbrew.exe'
-if ((Test-Path -LiteralPath $targetExe) -and -not $Force) {
-    throw "$targetExe already exists. Re-run with -Force to overwrite it."
+function Remove-InstallRoot {
+    param([string]$Path)
+
+    if (Test-Path -LiteralPath $Path) {
+        Remove-InstallRootPathEntries -InstallRoot $Path
+        Remove-Item -LiteralPath $Path -Recurse -Force
+    }
 }
 
-Write-Info "Installing winbrew.exe to $targetExe..."
-Copy-Item -LiteralPath $winbrewExe.FullName -Destination $targetExe -Force
+Assert-CommandAvailable -Name 'git'
+Assert-CommandAvailable -Name 'cargo'
 
-Write-Info 'Applying permissions...'
-Grant-CurrentUserAccess -Path $InstallRoot
+if (-not (Test-Administrator)) {
+    Write-Warning 'This script is usually run from an elevated PowerShell session so permission setup is predictable.'
+}
 
-Write-Info 'Adding bin directory to user PATH...'
-Add-UserPathEntry -Path $binDir
+$repositoryUri = Resolve-RepositoryUri -Repo $Repository
 
-Remove-Item -LiteralPath $tempRoot -Recurse -Force
+if ((Test-Path -LiteralPath $InstallRoot) -and -not $Force) {
+    throw "$InstallRoot already exists. Re-run with -Force to replace it cleanly."
+}
 
-Write-Info ''
-Write-Info "Winbrew $($release.TagName) installed successfully."
-Write-Info "Binary: $targetExe"
-Write-Info "Root:    $InstallRoot"
-Write-Info 'Open a new terminal to use winbrew from PATH.'
+Assert-SufficientDiskSpace -Path $InstallRoot
+Assert-SufficientDiskSpace -Path ([System.IO.Path]::GetTempPath())
+Assert-RepositoryReachable -RepositoryUri $repositoryUri
+
+$tempRoot = New-TempRoot
+$sourceRoot = Join-Path $tempRoot 'source'
+$builtExe = Join-Path $sourceRoot 'target\release\winbrew.exe'
+$targetExe = Join-Path $InstallRoot 'winbrew.exe'
+$installRootPrepared = $false
+
+try {
+    Invoke-GitClone -RepositoryUri $repositoryUri -Destination $sourceRoot
+    Invoke-CargoBuild -SourceRoot $sourceRoot
+
+    if (-not (Test-Path -LiteralPath $builtExe)) {
+        throw "Built executable was not found at $builtExe."
+    }
+
+    Invoke-VersionSmokeTest -BinaryPath $builtExe -Label 'Built binary'
+
+    Write-Info "Preparing install root at $InstallRoot..."
+    if (Test-Path -LiteralPath $InstallRoot) {
+        Remove-InstallRoot -Path $InstallRoot
+    }
+
+    Ensure-Directory -Path $InstallRoot
+    $installRootPrepared = $true
+
+    Write-Info "Installing winbrew.exe to $targetExe..."
+    Copy-Item -LiteralPath $builtExe -Destination $targetExe -Force
+
+    Invoke-VersionSmokeTest -BinaryPath $targetExe -Label 'Installed binary'
+
+    Write-Info 'Applying permissions...'
+    Grant-CurrentUserAccess -Path $InstallRoot
+
+    Write-Info 'Updating user PATH...'
+    Remove-InstallRootPathEntries -InstallRoot $InstallRoot
+    Add-UserPathEntry -Path $InstallRoot
+
+    Write-Info ''
+    Write-Info 'Winbrew built and installed successfully.'
+    Write-Info "Binary: $targetExe"
+    Write-Info "Root:    $InstallRoot"
+    Write-Info 'The source checkout, build output, and temp workspace were cleaned up automatically.'
+}
+catch {
+    if ($installRootPrepared) {
+        try {
+            Remove-InstallRoot -Path $InstallRoot
+        }
+        catch {
+        }
+    }
+
+    throw
+}
+finally {
+    if (Test-Path -LiteralPath $tempRoot) {
+        Remove-Item -LiteralPath $tempRoot -Recurse -Force
+    }
+}
