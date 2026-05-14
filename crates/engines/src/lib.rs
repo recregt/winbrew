@@ -1,23 +1,21 @@
 //! Engine dispatch and platform-specific installers for WinBrew.
 //!
 //! `winbrew-engines` maps installer metadata to execution backends and owns
-//! the filesystem and Windows-specific install/remove implementations. The
-//! crate stays focused on engine selection, engine receipts, and platform
+//! the archive, portable, and Windows-specific install/remove implementations.
+//! The crate stays focused on engine selection, engine receipts, and platform
 //! adapters so the app layer can orchestrate without embedding OS details.
 
 mod payload;
 mod registry;
 
-pub mod fs;
+pub mod archive;
+pub mod portable;
 pub mod windows;
 
 pub(crate) use winbrew_core as core;
 pub(crate) use winbrew_models as models;
 #[cfg(windows)]
 pub(crate) use winbrew_windows as windows_dep;
-
-pub use fs::portable;
-pub use fs::zip;
 
 use anyhow::Result;
 use std::path::Path;

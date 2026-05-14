@@ -8,11 +8,11 @@ use crate::models::install::installer::InstallerType;
 use crate::models::shared::DeploymentKind;
 
 use super::EngineKind;
-use crate::fs::{portable, zip};
 use crate::payload::{
     DetectedArtifactKind, PayloadKind, classify_payload, probe_downloaded_artifact_kind,
 };
 use crate::windows::{font, msix};
+use crate::{archive, portable};
 
 #[cfg(windows)]
 use crate::windows::{exe, msi};
@@ -137,13 +137,13 @@ fn msi_install(
     msi::install(download_path, install_dir, package_name)
 }
 
-fn zip_install(
+fn archive_install(
     installer: &CatalogInstaller,
     download_path: &Path,
     install_dir: &Path,
     _package_name: &str,
 ) -> Result<EngineInstallReceipt> {
-    zip::install::install(download_path, install_dir, &installer.url)
+    archive::install(download_path, install_dir, &installer.url)
 }
 
 fn portable_install(
@@ -152,7 +152,7 @@ fn portable_install(
     install_dir: &Path,
     package_name: &str,
 ) -> Result<EngineInstallReceipt> {
-    portable::install::install(download_path, install_dir, package_name)
+    portable::install(download_path, install_dir, package_name)
 }
 
 fn msix_remove(package: &InstalledPackage) -> Result<()> {
@@ -190,17 +190,17 @@ fn msi_remove(package: &InstalledPackage) -> Result<()> {
     msi::remove(package)
 }
 
-fn zip_remove(package: &InstalledPackage) -> Result<()> {
-    zip::remove::remove(package)
+fn archive_remove(package: &InstalledPackage) -> Result<()> {
+    archive::remove(package)
 }
 
 fn portable_remove(package: &InstalledPackage) -> Result<()> {
-    portable::remove::remove(package)
+    portable::remove(package)
 }
 
-// Native executable and font families must appear before Zip so explicit
-// installer kinds win over archive URL heuristics. Zip must still appear before
-// Portable so archive payloads do not fall back to the raw-copy engine.
+// Native executable and font families must appear before Archive so explicit
+// installer kinds win over archive URL heuristics. Archive must still appear
+// before Portable so archive payloads do not fall back to the raw-copy engine.
 const ENGINE_DESCRIPTORS: &[EngineDescriptor] = &[
     #[cfg(windows)]
     EngineDescriptor {
@@ -229,8 +229,8 @@ const ENGINE_DESCRIPTORS: &[EngineDescriptor] = &[
     },
     EngineDescriptor {
         kind: EngineKind::Zip,
-        install: zip_install,
-        remove: zip_remove,
+        install: archive_install,
+        remove: archive_remove,
         matches_installer: matches_archive_installer,
     },
     EngineDescriptor {
