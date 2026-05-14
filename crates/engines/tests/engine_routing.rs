@@ -193,7 +193,7 @@ const DOWNLOADED_ROUTING_SCENARIOS: &[DownloadedRoutingScenario] = &[
 ];
 
 #[test]
-fn engine_kind_for_type_maps_supported_cases() {
+fn engine_kind_from_installer_type_maps_supported_cases() {
     for case in ENGINE_MAPPING_CASES {
         assert_expected(
             EngineKind::from_installer_type(case.input),
