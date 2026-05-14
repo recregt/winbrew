@@ -4,7 +4,7 @@ use std::io::ErrorKind;
 
 use crate::models::install::installed::InstalledPackage;
 
-pub fn remove(package: &InstalledPackage) -> Result<()> {
+pub(crate) fn remove(package: &InstalledPackage) -> Result<()> {
     match fs::remove_dir_all(&package.install_dir) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == ErrorKind::NotFound => Ok(()),

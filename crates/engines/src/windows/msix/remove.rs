@@ -18,7 +18,7 @@ use crate::windows_dep::packages::msix_remove;
 ///
 /// Returns an error when the installed package does not carry MSIX metadata or
 /// when Windows rejects the uninstall call.
-pub fn remove(package: &WinbrewPackage) -> Result<()> {
+pub(crate) fn remove(package: &WinbrewPackage) -> Result<()> {
     let package_full_name = match package.engine_metadata.as_ref() {
         Some(EngineMetadata::Msix {
             package_full_name, ..

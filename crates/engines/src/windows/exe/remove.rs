@@ -16,7 +16,7 @@ use super::validation::{validate_install_dir, validate_package_name};
 /// `EngineMetadata::NativeExe` when one is available. If the uninstall command
 /// fails or is missing, the module falls back to direct directory cleanup so the
 /// install tree is still removed.
-pub fn remove(package: &InstalledPackage) -> Result<()> {
+pub(crate) fn remove(package: &InstalledPackage) -> Result<()> {
     validate_package_name(&package.name)?;
     validate_install_dir(Path::new(&package.install_dir))?;
 

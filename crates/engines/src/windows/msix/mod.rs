@@ -21,9 +21,9 @@ mod remove;
 /// The function delegates the actual package registration to Windows, creates
 /// the target install directory, and returns an `EngineInstallReceipt` that
 /// stores the MSIX package full name and install scope.
-pub use install::install;
+pub(crate) use install::install;
 /// Remove an MSIX package using the package full name stored in the receipt.
 ///
 /// The function expects `EngineMetadata::Msix` to be present on the installed
 /// package and delegates the uninstall operation to Windows.
-pub use remove::remove;
+pub(crate) use remove::remove;

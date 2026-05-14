@@ -20,17 +20,8 @@
 //! - [`msi`] for Windows Installer packages
 //! - [`msix`] for Windows package integration such as MSIX
 //!
-//! Example: pick the backend family without reaching into a nested namespace.
-//!
-//! ```rust,no_run
-//! use winbrew_engines::windows::{exe, msix};
-//!
-//! #[cfg(windows)]
-//! fn choose_backend() {
-//!     let _ = msix::install;
-//!     let _ = exe::install;
-//! }
-//! ```
+//! The leaf install/remove functions stay crate-private; callers should go
+//! through the registry facade instead of bypassing it.
 
 #[cfg(windows)]
 pub mod exe;

@@ -21,7 +21,7 @@ const INSTALL_LOCATION_VALUE: &str = "InstallLocation";
 /// can preserve the product code, upgrade code, and the stable registry/
 /// shortcut references stored in the package database. The actual installation
 /// then runs through `msiexec` in silent mode.
-pub fn install(
+pub(crate) fn install(
     download_path: &Path,
     install_dir: &Path,
     package_name: &str,
@@ -84,7 +84,7 @@ pub fn install(
 }
 
 /// Remove an installed MSI package using the product code stored in metadata.
-pub fn remove(package: &InstalledPackage) -> Result<()> {
+pub(crate) fn remove(package: &InstalledPackage) -> Result<()> {
     let product_code = match package.engine_metadata.as_ref() {
         Some(EngineMetadata::Msi { product_code, .. }) => product_code.as_str(),
         _ => bail!("missing MSI receipt metadata for '{}'", package.name),

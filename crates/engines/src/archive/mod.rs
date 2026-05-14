@@ -6,5 +6,5 @@
 mod install;
 mod remove;
 
-pub use install::install;
-pub use remove::remove;
+pub(crate) use install::install;
+pub(crate) use remove::remove;

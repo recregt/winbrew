@@ -20,7 +20,7 @@ use crate::windows_dep::packages::msix_install;
 /// The function calls into Windows to register the package, creates the target
 /// install directory so the install record has a concrete path, and returns an
 /// `EngineInstallReceipt` with `EngineKind::Msix` plus `EngineMetadata::Msix`.
-pub fn install(
+pub(crate) fn install(
     download_path: &Path,
     install_dir: &Path,
     package_name: &str,

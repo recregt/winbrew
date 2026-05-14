@@ -13,7 +13,7 @@ use crate::windows_dep::fonts::{install_user_font, remove_user_font};
 
 /// Install a per-user font by copying the downloaded font file into the
 /// Windows user fonts directory.
-pub fn install(
+pub(crate) fn install(
     _installer: &CatalogInstaller,
     download_path: &Path,
     _install_dir: &Path,
@@ -39,7 +39,7 @@ pub fn install(
 }
 
 /// Remove a per-user font file and its backing filesystem registration.
-pub fn remove(package: &InstalledPackage) -> Result<()> {
+pub(crate) fn remove(package: &InstalledPackage) -> Result<()> {
     #[cfg(not(windows))]
     {
         let _ = package;
