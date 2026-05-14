@@ -8,7 +8,7 @@
 mod payload;
 mod registry;
 
-pub mod filesystem;
+pub mod fs;
 pub mod windows;
 
 pub(crate) use winbrew_core as core;
@@ -16,8 +16,8 @@ pub(crate) use winbrew_models as models;
 #[cfg(windows)]
 pub(crate) use winbrew_windows as windows_dep;
 
-pub use filesystem::archive::zip;
-pub use filesystem::portable;
+pub use fs::archive::zip;
+pub use fs::portable;
 
 use anyhow::Result;
 use std::path::Path;

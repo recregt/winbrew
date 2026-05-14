@@ -8,7 +8,7 @@ use crate::models::install::installer::InstallerType;
 use crate::models::shared::DeploymentKind;
 
 use super::EngineKind;
-use crate::filesystem::{archive::zip, portable};
+use crate::fs::{archive::zip, portable};
 use crate::payload::{
     DetectedArtifactKind, PayloadKind, classify_payload, probe_downloaded_artifact_kind,
 };
