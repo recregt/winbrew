@@ -27,7 +27,7 @@
 //! - it does not extract archives or copy payload files
 //! - it does not infer installer family from URLs alone
 //! - it does not own MSIX / App Installer behavior, which lives in the MSIX
-//!   API adapter
+//!   module
 
 mod install;
 mod metadata;

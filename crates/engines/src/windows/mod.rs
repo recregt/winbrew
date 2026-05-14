@@ -1,17 +1,7 @@
 //! Windows platform boundary for `winbrew-engines`.
 //!
-//! This module exists so WinBrew can keep operating-system-specific behavior
-//! in one place instead of scattering `cfg(windows)` checks throughout the
-//! engine registry and crate root.
-//!
-//! WinBrew has four different Windows-facing responsibilities:
-//!
-//! - [`native`] launches installers as processes, which covers MSI and native
-//!   executable families.
-//! - [`font`] installs and removes per-user Windows fonts.
-//! - [`api`] delegates to Windows package APIs, which currently covers MSIX.
-//! - the rest of the crate stays platform-neutral and only calls into this
-//!   layer when the selected engine needs Windows-specific behavior.
+//! This module keeps all Windows-specific engine backends at one level so the
+//! public surface stays direct: `exe`, `font`, `msi`, and `msix`.
 //!
 //! Why this layer is useful:
 //!
@@ -24,26 +14,28 @@
 //!
 //! What to read next:
 //!
-//! - [`native`] for process-driven installer backends such as MSI and native
-//!   `.exe` installers
+//! - [`exe`] for process-driven installer backends such as native `.exe`
+//!   installers
 //! - [`font`] for per-user Windows font installation and removal
-//! - [`api`] for Windows package API adapters such as MSIX
+//! - [`msi`] for Windows Installer packages
+//! - [`msix`] for Windows package integration such as MSIX
 //!
-//! Example: pick the backend family without reaching into the lower-level
-//! implementation details.
+//! Example: pick the backend family without reaching into a nested namespace.
 //!
 //! ```rust,no_run
-//! use winbrew_engines::windows::{api, native};
+//! use winbrew_engines::windows::{exe, msix};
 //!
 //! #[cfg(windows)]
 //! fn choose_backend() {
-//!     let _ = api::msix::install;
-//!     let _ = native::exe::install;
+//!     let _ = msix::install;
+//!     let _ = exe::install;
 //! }
 //! ```
 
+#[cfg(windows)]
+pub mod exe;
 pub mod font;
 #[cfg(windows)]
-pub mod native;
+pub mod msi;
 
-pub mod api;
+pub mod msix;
