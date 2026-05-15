@@ -78,16 +78,27 @@ mod tests {
     use crate::models::shared::HashAlgorithm;
     use rusqlite::{Connection, params};
 
-    fn create_catalog_installers_table(conn: &Connection) {
-        conn.execute_batch(
-            "CREATE TABLE catalog_installers (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    package_id TEXT NOT NULL,\n    url TEXT NOT NULL,\n    hash TEXT,\n    hash_algorithm TEXT NOT NULL DEFAULT 'sha256',\n    installer_type TEXT NOT NULL DEFAULT 'unknown',\n    installer_switches TEXT,\n    platform TEXT,\n    commands TEXT,\n    protocols TEXT,\n    file_extensions TEXT,\n    capabilities TEXT,\n    scope TEXT,\n    arch TEXT NOT NULL DEFAULT '',\n    kind TEXT NOT NULL DEFAULT '',\n    nested_kind TEXT\n);",
+    const CATALOG_SCHEMA: &str = include_str!("../../../../infra/parser/schema/catalog.sql");
+
+    fn insert_catalog_package(conn: &Connection) {
+        conn.execute(
+            "INSERT INTO catalog_packages (id, name, version, source, source_id) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                "winget/Contoso.App",
+                "Contoso App",
+                "1.2.3",
+                "winget",
+                "Contoso.App",
+            ],
         )
-        .expect("catalog installers table should be created");
+        .expect("seed catalog package");
     }
 
     fn open_test_db() -> Connection {
         let conn = Connection::open_in_memory().expect("open in-memory database");
-        create_catalog_installers_table(&conn);
+        conn.execute_batch(CATALOG_SCHEMA)
+            .expect("load catalog schema");
+        insert_catalog_package(&conn);
         conn
     }
 
