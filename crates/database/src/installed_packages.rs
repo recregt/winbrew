@@ -3,11 +3,11 @@ use rusqlite::{Connection, Error as SqlError, OptionalExtension, params, types::
 use thiserror::Error;
 
 use crate::core::now;
-use winbrew_models::command_resolution::ResolverResult;
-use winbrew_models::install::engine::{EngineInstallReceipt, EngineKind, EngineMetadata};
-use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
-use winbrew_models::install::installer::InstallerType;
-use winbrew_models::shared::DeploymentKind;
+use crate::models::command_resolution::ResolverResult;
+use crate::models::install::engine::{EngineInstallReceipt, EngineKind, EngineMetadata};
+use crate::models::install::installed::{InstalledPackage, PackageStatus};
+use crate::models::install::installer::InstallerType;
+use crate::models::shared::DeploymentKind;
 
 #[derive(Debug, Error)]
 #[error("package '{name}' not found")]
@@ -313,15 +313,15 @@ mod tests {
         update_status_and_engine_metadata,
     };
     use crate::migration;
-    use rusqlite::Connection;
-    use std::path::PathBuf;
-    use winbrew_models::command_resolution::{
+    use crate::models::command_resolution::{
         CommandSource, Confidence, ResolverResult, VersionScope,
     };
-    use winbrew_models::install::engine::{EngineKind, EngineMetadata, InstallScope};
-    use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
-    use winbrew_models::install::installer::InstallerType;
-    use winbrew_models::shared::DeploymentKind;
+    use crate::models::install::engine::{EngineKind, EngineMetadata, InstallScope};
+    use crate::models::install::installed::{InstalledPackage, PackageStatus};
+    use crate::models::install::installer::InstallerType;
+    use crate::models::shared::DeploymentKind;
+    use rusqlite::Connection;
+    use std::path::PathBuf;
 
     fn sample_package(name: &str) -> InstalledPackage {
         InstalledPackage {

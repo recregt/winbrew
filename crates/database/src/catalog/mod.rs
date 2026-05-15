@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension};
 
 use super::CatalogSchemaVersionMismatchError;
-use winbrew_models::catalog::metadata::CATALOG_DB_SCHEMA_VERSION as CATALOG_SCHEMA_VERSION;
+use crate::models::catalog::metadata::CATALOG_DB_SCHEMA_VERSION as CATALOG_SCHEMA_VERSION;
 
 mod installers;
 mod search;
