@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
 
+use super::conversion_err;
 use crate::models::catalog::installer_type::CatalogInstallerType;
 use crate::models::catalog::package::CatalogInstaller;
 use crate::models::catalog::raw::RawCatalogInstaller;
@@ -60,14 +61,6 @@ where
     T::Err: std::error::Error + Send + Sync + 'static,
 {
     value.parse::<T>().map_err(conversion_err)
-}
-
-fn conversion_err<E>(err: E) -> rusqlite::Error
-where
-    E: std::error::Error + Send + Sync + 'static,
-{
-    // Column index is not surfaced in our error path; 0 is a conventional placeholder.
-    rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
 }
 
 #[cfg(test)]
