@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-mod errors;
+mod error;
 mod keys;
 mod lookup;
 mod registry;
@@ -11,7 +11,7 @@ mod storage;
 mod types;
 mod validation;
 
-pub use errors::{ConfigError, ConfigValidationError};
+pub use error::{ConfigError, ConfigValidationError};
 pub use storage::{config_sections, config_set, config_unset, get_effective_value};
 pub use types::*;
 

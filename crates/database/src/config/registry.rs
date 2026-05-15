@@ -1,6 +1,6 @@
 use tracing_subscriber::EnvFilter;
 
-use super::errors::ConfigValidationError;
+use super::error::ConfigValidationError;
 
 pub type Validator = fn(&str) -> std::result::Result<(), ConfigValidationError>;
 

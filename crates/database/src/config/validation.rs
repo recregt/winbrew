@@ -1,4 +1,4 @@
-use super::errors::{ConfigError, ConfigResult};
+use super::error::{ConfigError, ConfigResult};
 
 use super::{registry, types::Config};
 
