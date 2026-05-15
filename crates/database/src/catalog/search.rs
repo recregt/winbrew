@@ -1,8 +1,16 @@
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
 
+use super::conversion_err;
 use crate::models::catalog::package::CatalogPackage;
 
+/// Search catalog packages by a full-text query.
+///
+/// Blank or whitespace-only queries return an empty result set.
+///
+/// # Errors
+///
+/// Returns an error if SQLite query execution or row conversion fails.
 pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
     let query = query.trim();
     if query.is_empty() {
@@ -22,6 +30,11 @@ pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
         .context("failed to read catalog package")
 }
 
+/// Return a single catalog package by its catalog package id.
+///
+/// # Errors
+///
+/// Returns an error if SQLite query execution or row conversion fails.
 pub fn get_package_by_id(conn: &Connection, package_id: &str) -> Result<Option<CatalogPackage>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher, locale, moniker, platform, commands, protocols, file_extensions, capabilities, tags, bin
@@ -35,12 +48,14 @@ pub fn get_package_by_id(conn: &Connection, package_id: &str) -> Result<Option<C
 }
 
 fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
-    let version = row.get::<_, String>("version")?.parse().map_err(|err| {
-        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
-    })?;
-    let source = row.get::<_, String>("source")?.parse().map_err(|err| {
-        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
-    })?;
+    let version = row
+        .get::<_, String>("version")?
+        .parse()
+        .map_err(conversion_err)?;
+    let source = row
+        .get::<_, String>("source")?
+        .parse()
+        .map_err(conversion_err)?;
 
     let package = CatalogPackage {
         id: row.get::<_, String>("id")?.into(),
@@ -66,9 +81,7 @@ fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
         bin: row.get("bin")?,
     };
 
-    package.validate().map_err(|err| {
-        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
-    })?;
+    package.validate().map_err(conversion_err)?;
 
     Ok(package)
 }
@@ -79,6 +92,13 @@ mod tests {
     use rusqlite::{Connection, params};
 
     const CATALOG_SCHEMA: &str = include_str!("../../../../infra/parser/schema/catalog.sql");
+
+    fn open_test_db() -> Connection {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        conn.execute_batch(CATALOG_SCHEMA)
+            .expect("catalog schema should load");
+        conn
+    }
 
     fn insert_catalog_package(conn: &Connection) {
         conn.execute(
@@ -92,11 +112,11 @@ mod tests {
                 "Contoso App",
                 "1.2.3",
                 "winget",
-                Option::<String>::None,
+                None::<String>,
                 "Contoso.App",
                 Some("Example package"),
-                Option::<String>::None,
-                Option::<String>::None,
+                None::<String>,
+                None::<String>,
                 Some("Contoso Ltd."),
                 Some("en-US"),
                 "2026-04-14 12:00:00",
@@ -108,9 +128,7 @@ mod tests {
 
     #[test]
     fn package_queries_read_timestamps() {
-        let conn = Connection::open_in_memory().expect("open in-memory database");
-        conn.execute_batch(CATALOG_SCHEMA)
-            .expect("catalog schema should load");
+        let conn = open_test_db();
 
         insert_catalog_package(&conn);
 
@@ -134,9 +152,7 @@ mod tests {
 
     #[test]
     fn package_updates_refresh_updated_at_automatically() {
-        let conn = Connection::open_in_memory().expect("open in-memory database");
-        conn.execute_batch(CATALOG_SCHEMA)
-            .expect("catalog schema should load");
+        let conn = open_test_db();
 
         insert_catalog_package(&conn);
 
@@ -155,7 +171,11 @@ mod tests {
             .expect("package should exist");
 
         assert_eq!(package.description.as_deref(), Some("Updated package"));
-        assert_ne!(package.updated_at.as_deref(), Some("2026-04-14 12:34:56"));
+        let updated_at = package
+            .updated_at
+            .as_deref()
+            .expect("package should have updated_at");
+        assert!(updated_at > "2026-04-14 12:34:56");
         assert_eq!(package.created_at.as_deref(), Some("2026-04-14 12:00:00"));
     }
 }
