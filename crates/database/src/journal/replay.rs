@@ -5,12 +5,12 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use super::{JournalEntry, JournalReadError, JournalReader};
-use winbrew_core::ResolvedPaths;
-use winbrew_models::command_resolution::ResolverResult;
-use winbrew_models::install::engine::EngineKind;
-use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
-use winbrew_models::install::installer::InstallerType;
-use winbrew_models::shared::error::ModelError;
+use crate::core::ResolvedPaths;
+use crate::models::command_resolution::ResolverResult;
+use crate::models::install::engine::EngineKind;
+use crate::models::install::installed::{InstalledPackage, PackageStatus};
+use crate::models::install::installer::InstallerType;
+use crate::models::shared::error::ModelError;
 
 #[derive(Debug, Clone)]
 pub struct CommittedJournalPackage {
@@ -54,7 +54,7 @@ pub enum JournalReplayError {
 
 impl JournalReader {
     pub fn committed_paths(root: &Path) -> Result<Vec<PathBuf>, JournalReplayError> {
-        enumerate_committed_journals(&winbrew_core::pkgdb_dir_at(root))
+        enumerate_committed_journals(&crate::core::pkgdb_dir_at(root))
     }
 
     pub fn committed_paths_in(paths: &ResolvedPaths) -> Result<Vec<PathBuf>, JournalReplayError> {

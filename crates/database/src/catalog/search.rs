@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use winbrew_models::catalog::package::CatalogPackage;
+use crate::models::catalog::package::CatalogPackage;
 
 pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
     let query = query.trim();

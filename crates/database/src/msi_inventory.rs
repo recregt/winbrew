@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use winbrew_models::install::engine::InstallScope;
-use winbrew_models::msi_inventory::records::{
+use crate::models::install::engine::InstallScope;
+use crate::models::msi_inventory::records::{
     MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
     MsiRegistryRecord, MsiShortcutRecord,
 };
-use winbrew_models::shared::hash::HashAlgorithm;
+use crate::models::shared::hash::HashAlgorithm;
 
 pub fn upsert_receipt(conn: &Connection, receipt: &MsiInventoryReceipt) -> Result<()> {
     conn.execute(
@@ -364,15 +364,15 @@ mod tests {
         HashAlgorithm, find_packages_by_normalized_path,
         find_packages_by_normalized_registry_key_path, get_snapshot, replace_snapshot,
     };
-    use crate::{insert_package, migration};
-    use rusqlite::Connection;
-    use winbrew_models::install::engine::{EngineKind, EngineMetadata, InstallScope};
-    use winbrew_models::install::installed::{InstalledPackage, PackageStatus};
-    use winbrew_models::install::installer::InstallerType;
-    use winbrew_models::msi_inventory::records::{
+    use crate::models::install::engine::{EngineKind, EngineMetadata, InstallScope};
+    use crate::models::install::installed::{InstalledPackage, PackageStatus};
+    use crate::models::install::installer::InstallerType;
+    use crate::models::msi_inventory::records::{
         MsiComponentRecord, MsiFileRecord, MsiInventoryReceipt, MsiInventorySnapshot,
         MsiRegistryRecord, MsiShortcutRecord,
     };
+    use crate::{insert_package, migration};
+    use rusqlite::Connection;
 
     fn sample_package(name: &str) -> InstalledPackage {
         InstalledPackage {

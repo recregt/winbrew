@@ -12,6 +12,7 @@
 #![cfg(windows)]
 
 pub use winbrew_core as core;
+pub use winbrew_models as models;
 
 pub mod catalog;
 pub mod command_registry;
@@ -24,13 +25,13 @@ pub mod migration;
 pub mod msi_inventory;
 
 use self::connection::SqliteConnectionManager;
+use crate::core::ResolvedPaths;
 use anyhow::{Context, Result};
 use r2d2::{Pool, PooledConnection};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
-use winbrew_core::paths::ResolvedPaths;
 
 pub type DbConnection = PooledConnection<SqliteConnectionManager>;
 

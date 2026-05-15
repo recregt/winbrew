@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use winbrew_models::command_resolution::ResolverResult;
-use winbrew_models::install::engine::EngineMetadata;
-use winbrew_models::shared::DeploymentKind;
-use winbrew_models::shared::hash::HashAlgorithm;
+use crate::models::command_resolution::ResolverResult;
+use crate::models::install::engine::EngineMetadata;
+use crate::models::shared::DeploymentKind;
+use crate::models::shared::hash::HashAlgorithm;
 
 mod reader;
 mod replay;
@@ -164,13 +164,13 @@ pub enum JournalEntry {
 #[cfg(test)]
 mod tests {
     use super::{FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader, JournalWriter};
+    use crate::core::{ResolvedPaths, package_journal_key, resolved_paths};
+    use crate::models::install::installer::InstallerType;
     use std::fs;
     use std::path::Path;
     use std::path::PathBuf;
     use std::process;
     use std::time::{SystemTime, UNIX_EPOCH};
-    use winbrew_core::{ResolvedPaths, package_journal_key, resolved_paths};
-    use winbrew_models::install::installer::InstallerType;
 
     fn temp_root() -> PathBuf {
         let unique_id = SystemTime::now()
@@ -198,7 +198,7 @@ mod tests {
             package_id: "winget/Contoso.App".to_string(),
             version: "1.0.0".to_string(),
             engine: "msi".to_string(),
-            deployment_kind: winbrew_models::shared::DeploymentKind::Installed,
+            deployment_kind: crate::models::shared::DeploymentKind::Installed,
             install_dir: r"C:\winbrew\apps\Contoso.App".to_string(),
             dependencies: vec!["winget/Contoso.Shared".to_string()],
             commands: None,
@@ -481,7 +481,7 @@ mod tests {
                 package_id: "winget/Contoso.Committed".to_string(),
                 version: "1.0.0".to_string(),
                 engine: "msi".to_string(),
-                deployment_kind: winbrew_models::shared::DeploymentKind::Installed,
+                deployment_kind: crate::models::shared::DeploymentKind::Installed,
                 install_dir: r"C:\winbrew\apps\Contoso.Committed".to_string(),
                 dependencies: Vec::new(),
                 commands: None,
@@ -501,7 +501,7 @@ mod tests {
                 package_id: "winget/Contoso.Incomplete".to_string(),
                 version: "1.0.0".to_string(),
                 engine: "msi".to_string(),
-                deployment_kind: winbrew_models::shared::DeploymentKind::Installed,
+                deployment_kind: crate::models::shared::DeploymentKind::Installed,
                 install_dir: r"C:\winbrew\apps\Contoso.Incomplete".to_string(),
                 dependencies: Vec::new(),
                 commands: None,

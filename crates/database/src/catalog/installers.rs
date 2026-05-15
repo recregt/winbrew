@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
 
-use winbrew_models::catalog::installer_type::CatalogInstallerType;
-use winbrew_models::catalog::package::CatalogInstaller;
-use winbrew_models::catalog::raw::RawCatalogInstaller;
-use winbrew_models::shared::HashAlgorithm;
+use crate::models::catalog::installer_type::CatalogInstallerType;
+use crate::models::catalog::package::CatalogInstaller;
+use crate::models::catalog::raw::RawCatalogInstaller;
+use crate::models::shared::HashAlgorithm;
 
 /// Returns all catalog installers for the given `package_id`.
 ///
@@ -69,10 +69,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::get_installers;
+    use crate::models::catalog::CatalogInstallerType;
+    use crate::models::install::installer::InstallerType;
+    use crate::models::shared::HashAlgorithm;
     use rusqlite::{Connection, params};
-    use winbrew_models::catalog::CatalogInstallerType;
-    use winbrew_models::install::installer::InstallerType;
-    use winbrew_models::shared::HashAlgorithm;
 
     fn create_catalog_installers_table(conn: &Connection) {
         conn.execute_batch(
