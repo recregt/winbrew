@@ -51,9 +51,7 @@ fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
         nested_kind: row.get("nested_kind")?,
     };
 
-    CatalogInstaller::try_from(raw).map_err(|err| {
-        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
-    })
+    CatalogInstaller::try_from(raw).map_err(conversion_err)
 }
 
 fn parse_text<T>(value: String) -> rusqlite::Result<T>
@@ -61,9 +59,15 @@ where
     T: std::str::FromStr,
     T::Err: std::error::Error + Send + Sync + 'static,
 {
-    value.parse::<T>().map_err(|err| {
-        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
-    })
+    value.parse::<T>().map_err(conversion_err)
+}
+
+fn conversion_err<E>(err: E) -> rusqlite::Error
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    // Column index is not surfaced in our error path; 0 is a conventional placeholder.
+    rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
 }
 
 #[cfg(test)]
