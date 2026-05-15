@@ -6,6 +6,14 @@ use winbrew_models::catalog::package::CatalogInstaller;
 use winbrew_models::catalog::raw::RawCatalogInstaller;
 use winbrew_models::shared::HashAlgorithm;
 
+/// Returns all catalog installers for the given `package_id`.
+///
+/// Results are ordered by the canonical installer identity columns so the
+/// downstream installer selector sees deterministic ties.
+///
+/// # Errors
+///
+/// Returns an error if SQLite query execution or row conversion fails.
 pub fn get_installers(conn: &Connection, package_id: &str) -> Result<Vec<CatalogInstaller>> {
     let mut stmt = conn.prepare(
         "SELECT package_id, url, hash, hash_algorithm, installer_type, installer_switches, platform, commands, protocols, file_extensions, capabilities, scope, arch, kind, nested_kind
@@ -20,32 +28,17 @@ pub fn get_installers(conn: &Connection, package_id: &str) -> Result<Vec<Catalog
 }
 
 fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
+    // Raw catalog rows normalize a missing checksum to an empty string.
     let hash = row.get::<_, Option<String>>("hash")?.unwrap_or_default();
 
     let raw = RawCatalogInstaller {
         package_id: row.get::<_, String>("package_id")?,
         url: row.get("url")?,
         hash,
-        hash_algorithm: row
-            .get::<_, String>("hash_algorithm")?
-            .parse::<HashAlgorithm>()
-            .map_err(|err| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    0,
-                    rusqlite::types::Type::Text,
-                    Box::new(err),
-                )
-            })?,
-        installer_type: row
-            .get::<_, String>("installer_type")?
-            .parse::<CatalogInstallerType>()
-            .map_err(|err| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    0,
-                    rusqlite::types::Type::Text,
-                    Box::new(err),
-                )
-            })?,
+        hash_algorithm: parse_text::<HashAlgorithm>(row.get::<_, String>("hash_algorithm")?)?,
+        installer_type: parse_text::<CatalogInstallerType>(
+            row.get::<_, String>("installer_type")?,
+        )?,
         installer_switches: row.get("installer_switches")?,
         platform: row.get("platform")?,
         commands: row.get("commands")?,
@@ -59,6 +52,16 @@ fn row_to_installer(row: &rusqlite::Row) -> rusqlite::Result<CatalogInstaller> {
     };
 
     CatalogInstaller::try_from(raw).map_err(|err| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
+    })
+}
+
+fn parse_text<T>(value: String) -> rusqlite::Result<T>
+where
+    T: std::str::FromStr,
+    T::Err: std::error::Error + Send + Sync + 'static,
+{
+    value.parse::<T>().map_err(|err| {
         rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
     })
 }
@@ -78,10 +81,15 @@ mod tests {
         .expect("catalog installers table should be created");
     }
 
-    #[test]
-    fn get_installers_reads_nested_kind_when_present() {
+    fn open_test_db() -> Connection {
         let conn = Connection::open_in_memory().expect("open in-memory database");
         create_catalog_installers_table(&conn);
+        conn
+    }
+
+    #[test]
+    fn get_installers_reads_nested_kind_when_present() {
+        let conn = open_test_db();
 
         conn.execute(
             r#"
@@ -135,8 +143,7 @@ mod tests {
 
     #[test]
     fn get_installers_reads_null_hash_as_empty_string() {
-        let conn = Connection::open_in_memory().expect("open in-memory database");
-        create_catalog_installers_table(&conn);
+        let conn = open_test_db();
 
         conn.execute(
             r#"
