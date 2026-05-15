@@ -11,7 +11,7 @@ mod search;
 pub use installers::get_installers;
 pub use search::{get_package_by_id, search};
 
-pub fn ensure_schema_version(conn: &Connection) -> Result<()> {
+pub(crate) fn ensure_schema_version(conn: &Connection) -> Result<()> {
     let version_text: Option<String> = conn
         .query_row(
             "SELECT value FROM schema_meta WHERE name = 'schema_version'",

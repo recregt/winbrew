@@ -159,7 +159,7 @@ pub fn commit_install_with_commands(
         &installed_at,
     )?;
 
-    crate::command_registry::sync_package_commands(&tx, name, package_commands)?;
+    crate::sync_package_commands(&tx, name, package_commands)?;
 
     if let Some(snapshot) = engine_receipt.msi_inventory_snapshot.as_ref() {
         crate::apply_snapshot(&tx, snapshot)?;
@@ -195,11 +195,7 @@ pub fn replay_committed_journal(
         ResolverResult::Unresolved { .. } => None,
     };
 
-    crate::command_registry::sync_package_commands(
-        &tx,
-        &journal.package.name,
-        commands_json.as_deref(),
-    )?;
+    crate::sync_package_commands(&tx, &journal.package.name, commands_json.as_deref())?;
 
     tx.commit()
         .context("failed to commit journal replay transaction")?;
