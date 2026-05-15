@@ -5,18 +5,11 @@ use super::CatalogSchemaVersionMismatchError;
 use crate::models::catalog::metadata::CATALOG_DB_SCHEMA_VERSION as CATALOG_SCHEMA_VERSION;
 
 mod installers;
+mod row;
 mod search;
 
 pub use installers::get_installers;
 pub use search::{get_package_by_id, search};
-
-pub(crate) fn conversion_err<E>(err: E) -> rusqlite::Error
-where
-    E: std::error::Error + Send + Sync + 'static,
-{
-    // Column index is not surfaced in our error path; 0 is a conventional placeholder.
-    rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
-}
 
 pub fn ensure_schema_version(conn: &Connection) -> Result<()> {
     let version_text: Option<String> = conn

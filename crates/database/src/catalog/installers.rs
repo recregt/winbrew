@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
 
-use super::conversion_err;
+use super::row::conversion_err;
 use crate::models::catalog::installer_type::CatalogInstallerType;
 use crate::models::catalog::package::CatalogInstaller;
 use crate::models::catalog::raw::RawCatalogInstaller;
@@ -110,7 +110,7 @@ mod tests {
                 "sha256:deadbeef",
                 "sha256",
                 "zip",
-                Option::<String>::None,
+                None::<String>,
                 "x64",
                 "zip",
                 "portable",
@@ -129,7 +129,7 @@ mod tests {
                 "sha256:deadbeef",
                 "sha256",
                 "zip",
-                Option::<String>::None,
+                None::<String>,
                 "x64",
                 "zip",
                 "msi",
@@ -161,13 +161,13 @@ mod tests {
             params![
                 "winget/Contoso.App",
                 "https://example.test/app.exe",
-                Option::<String>::None,
+                None::<String>,
                 "sha256",
                 "exe",
-                Option::<String>::None,
+                None::<String>,
                 "x64",
                 "exe",
-                Option::<String>::None,
+                None::<String>,
             ],
         )
         .expect("insert checksumless installer");

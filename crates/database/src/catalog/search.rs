@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::conversion_err;
+use super::row::conversion_err;
 use crate::models::catalog::package::CatalogPackage;
 
 /// Search catalog packages by a full-text query.
