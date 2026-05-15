@@ -15,7 +15,7 @@ use crate::models::shared::HashAlgorithm;
 /// # Errors
 ///
 /// Returns an error if SQLite query execution or row conversion fails.
-pub fn get_installers(conn: &Connection, package_id: &str) -> Result<Vec<CatalogInstaller>> {
+pub(crate) fn get_installers(conn: &Connection, package_id: &str) -> Result<Vec<CatalogInstaller>> {
     let mut stmt = conn.prepare(
         "SELECT package_id, url, hash, hash_algorithm, installer_type, installer_switches, platform, commands, protocols, file_extensions, capabilities, scope, arch, kind, nested_kind
          FROM catalog_installers

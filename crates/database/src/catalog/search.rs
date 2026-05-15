@@ -11,7 +11,7 @@ use crate::models::catalog::package::CatalogPackage;
 /// # Errors
 ///
 /// Returns an error if SQLite query execution or row conversion fails.
-pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
+pub(crate) fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
     let query = query.trim();
     if query.is_empty() {
         return Ok(Vec::new());
@@ -35,7 +35,10 @@ pub fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackage>> {
 /// # Errors
 ///
 /// Returns an error if SQLite query execution or row conversion fails.
-pub fn get_package_by_id(conn: &Connection, package_id: &str) -> Result<Option<CatalogPackage>> {
+pub(crate) fn get_package_by_id(
+    conn: &Connection,
+    package_id: &str,
+) -> Result<Option<CatalogPackage>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher, locale, moniker, platform, commands, protocols, file_extensions, capabilities, tags, bin
          FROM catalog_packages
