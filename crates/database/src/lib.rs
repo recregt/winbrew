@@ -14,15 +14,15 @@
 pub use winbrew_core as core;
 pub use winbrew_models as models;
 
-pub mod catalog;
-pub mod command_registry;
-pub mod config;
+mod catalog;
+mod command_registry;
+mod config;
 pub mod connection;
 pub mod error;
-pub mod installed_packages;
-pub mod journal;
-pub mod migration;
-pub mod msi_inventory;
+mod installed_packages;
+mod journal;
+mod migration;
+mod msi_inventory;
 
 use self::connection::SqliteConnectionManager;
 use crate::core::ResolvedPaths;
@@ -96,8 +96,7 @@ fn resolved_paths() -> Result<ResolvedPaths> {
     })
 }
 
-/// Return the primary database connection pool.
-pub fn get_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
+fn get_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
     pool_for(
         DB_POOLS.get_or_init(|| Mutex::new(HashMap::new())),
         resolved_paths()?.db.clone(),
@@ -129,8 +128,7 @@ pub fn get_catalog_conn() -> Result<PooledConnection<SqliteConnectionManager>> {
     Ok(conn)
 }
 
-/// Return the catalog database connection pool.
-pub fn get_catalog_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
+fn get_catalog_pool() -> Result<&'static Pool<SqliteConnectionManager>> {
     pool_for(
         CATALOG_DB_POOLS.get_or_init(|| Mutex::new(HashMap::new())),
         resolved_paths()?.catalog_db.clone(),
