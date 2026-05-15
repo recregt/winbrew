@@ -8,8 +8,8 @@ mod installers;
 mod row;
 mod search;
 
-pub use installers::get_installers;
-pub use search::{get_package_by_id, search};
+pub(crate) use installers::get_installers;
+pub(crate) use search::{get_package_by_id, search};
 
 pub(crate) fn ensure_schema_version(conn: &Connection) -> Result<()> {
     let version_text: Option<String> = conn

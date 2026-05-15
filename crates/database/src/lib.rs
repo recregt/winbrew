@@ -37,7 +37,6 @@ pub type DbConnection = PooledConnection<SqliteConnectionManager>;
 
 pub use error::{CatalogNotFoundError, CatalogSchemaVersionMismatchError};
 
-pub use catalog::{get_installers, get_package_by_id, search};
 pub use command_registry::{
     CommandRegistryConflictError, find_command_owner, find_command_owners,
     get_package_command_names, list_commands_for_package, parse_command_names,
@@ -60,6 +59,30 @@ pub use msi_inventory::{
     apply_snapshot, find_packages_by_normalized_path,
     find_packages_by_normalized_registry_key_path, get_snapshot, replace_snapshot, upsert_receipt,
 };
+
+/// Search the catalog database for packages matching the query.
+pub fn search(
+    conn: &rusqlite::Connection,
+    query: &str,
+) -> Result<Vec<crate::models::catalog::package::CatalogPackage>> {
+    catalog::search(conn, query)
+}
+
+/// Return a single catalog package by its catalog package id.
+pub fn get_package_by_id(
+    conn: &rusqlite::Connection,
+    package_id: &str,
+) -> Result<Option<crate::models::catalog::package::CatalogPackage>> {
+    catalog::get_package_by_id(conn, package_id)
+}
+
+/// Return all catalog installers for a package id.
+pub fn get_installers(
+    conn: &rusqlite::Connection,
+    package_id: &str,
+) -> Result<Vec<crate::models::catalog::package::CatalogInstaller>> {
+    catalog::get_installers(conn, package_id)
+}
 
 thread_local! {
     static CURRENT_PATHS: RefCell<Option<ResolvedPaths>> = const { RefCell::new(None) };
