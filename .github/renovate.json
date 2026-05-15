@@ -28,6 +28,16 @@
       "depNameTemplate": "rust-toolchain",
       "packageNameTemplate": "rust-lang/rust",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)crates/app/src/operations/install/sevenz\\.rs$/"],
+      "matchStrings": [
+        "const\\s+SEVENZ_BOOTSTRAP_VERSION:\\s*&str\\s*=\\s*\"(?<currentValue>\\d+\\.\\d+)\";"
+      ],
+      "depNameTemplate": "7zip",
+      "packageNameTemplate": "ip7z/7zip",
+      "datasourceTemplate": "github-releases"
     }
   ],
   "packageRules": [
@@ -49,6 +59,16 @@
       "minimumReleaseAge": "85 days",
       "internalChecksFilter": "strict",
       "groupName": "msrv"
+    },
+    {
+      "commitMessageTopic": "7-Zip bootstrap",
+      "matchManagers": ["custom.regex"],
+      "matchDepNames": ["7zip"],
+      "extractVersion": "^(?<version>\\d+\\.\\d+)",
+      "schedule": ["at any time"],
+      "minimumReleaseAge": "7 days",
+      "automerge": false,
+      "groupName": "bootstrap"
     },
     {
       "matchManagers": ["cargo", "gomod", "npm"],

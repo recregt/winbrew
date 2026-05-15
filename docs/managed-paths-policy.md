@@ -72,6 +72,8 @@ Current ownership rules:
 - `data/winbrew.toml` is the persisted configuration file.
 - `bin/7zip/` holds the optional locally bootstrapped 7-Zip runtime, not a
   general-purpose binary directory.
+- `bin/7zip/VERSION` records the bootstrapped 7-Zip runtime version so WinBrew
+  can validate a local runtime against the expected bootstrap version.
 
 ## 3. Directory Creation Rules
 
