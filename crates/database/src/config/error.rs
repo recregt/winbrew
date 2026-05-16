@@ -7,16 +7,17 @@ use thiserror::Error;
 /// rejected a value that was otherwise structurally valid.
 #[derive(Debug, Error)]
 pub enum ConfigValidationError {
-    /// `core.log_level` accepts only the built-in log level names.
-    #[error("invalid core.log_level value '{value}'; allowed values: {allowed}")]
-    InvalidLogLevel { value: String, allowed: String },
+    /// `core.log_level` is parsed by `tracing_subscriber::EnvFilter`, so the
+    /// original parser reason is preserved in the error.
+    #[error("invalid core.log_level '{value}': {reason}")]
+    InvalidLogLevel { value: String, reason: String },
 
     /// `core.file_log_level` is parsed by `tracing_subscriber::EnvFilter`, so
     /// the original parser reason is preserved in the error.
     #[error("invalid core.file_log_level '{value}': {reason}")]
     InvalidFileLogLevel { value: String, reason: String },
 
-    #[error("expected a boolean value (true/false), got '{value}'")]
+    #[error("expected a boolean value (true/false, 1/0, yes/no, on/off), got '{value}'")]
     ExpectedBoolean { value: String },
 }
 

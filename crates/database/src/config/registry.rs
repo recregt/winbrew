@@ -13,15 +13,10 @@ pub static KEYS: &[KeyDef] = &[
     KeyDef {
         key: "core.log_level",
         validator: Some(|value| {
-            let allowed = ["trace", "debug", "info", "warn", "error"];
-
-            if !allowed.contains(&value.to_ascii_lowercase().as_str()) {
-                return Err(ConfigValidationError::InvalidLogLevel {
-                    value: value.to_string(),
-                    allowed: allowed.join(", "),
-                });
-            }
-
+            EnvFilter::try_new(value).map_err(|err| ConfigValidationError::InvalidLogLevel {
+                value: value.to_string(),
+                reason: err.to_string(),
+            })?;
             Ok(())
         }),
     },
