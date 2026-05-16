@@ -1,5 +1,7 @@
 use std::env;
 
+const PREFIXED_SECTIONS: &[&str] = &["core", "paths"];
+
 pub(crate) fn env_override(key: &str) -> Option<String> {
     env_override_from(key, |name| env::var(name).ok())
 }
@@ -11,13 +13,17 @@ where
     lookup(&env_override_name(key)).filter(|value| !value.trim().is_empty())
 }
 
-/// Keep this mapping in sync with the known config sections owned by the config registry.
+/// Returns a section-qualified key for the known prefixed config sections.
+///
+/// `PREFIXED_SECTIONS` is the single source of truth for section names that
+/// should keep their section prefix in the flattened key.
 pub(crate) fn section_key(section_title: &str, key: &str) -> String {
     let section = section_title.to_lowercase();
 
-    match section.as_str() {
-        "core" | "paths" => format!("{section}.{key}"),
-        _ => key.to_string(),
+    if PREFIXED_SECTIONS.contains(&section.as_str()) {
+        format!("{section}.{key}")
+    } else {
+        key.to_string()
     }
 }
 
@@ -38,6 +44,18 @@ mod tests {
     #[test]
     fn section_key_leaves_unknown_sections_unmodified() {
         assert_eq!(section_key("Custom", "value"), "value");
+    }
+
+    #[test]
+    fn section_key_covers_all_prefixed_sections() {
+        for &section in super::PREFIXED_SECTIONS {
+            let result = section_key(section, "key");
+            assert_eq!(
+                result,
+                format!("{section}.key"),
+                "section '{section}' should be prefixed"
+            );
+        }
     }
 
     #[test]
