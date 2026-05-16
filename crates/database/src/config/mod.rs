@@ -2,6 +2,7 @@ use crate::core::paths;
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 mod error;
 mod keys;
@@ -30,21 +31,13 @@ impl Config {
         }
     }
 
-    pub fn load_default() -> Result<Self> {
-        let env = ConfigEnv::capture();
-        let root = env
-            .root_override()
-            .map(str::to_owned)
-            .unwrap_or_else(default_root_path);
-        let root = PathBuf::from(root);
-        let config_path = paths::config_file_at(&root);
-        Ok(Self::load(&config_path)?.with_env(env))
-    }
-
     pub fn load_at(root: &Path) -> Result<Self> {
         let mut config = Self::load(&paths::config_file_at(root))?;
-        config.paths.root = root.to_string_lossy().to_string();
-        Ok(config.with_env(ConfigEnv::default()))
+        config.paths.root = root.to_string_lossy().into_owned();
+
+        // Explicit-root loads are used by tests and isolated stores, so they
+        // intentionally ignore ambient WINBREW_* overrides.
+        Ok(config.with_env(ConfigEnv::default()).with_config_root(root))
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
@@ -52,41 +45,34 @@ impl Config {
         storage::atomic_write(path, &contents)
     }
 
+    /// Save the config back to the root it was loaded from.
+    ///
+    /// For [`Config::load_current`], this is the environment/default-selected
+    /// config storage root. For [`Config::load_at`], this remains the explicit
+    /// root passed by the caller, so ambient `WINBREW_*` overrides stay ignored.
+    /// This storage root can differ from the effective runtime `paths.root`.
     pub fn save_default(&self) -> Result<()> {
-        let root = self
-            .env
-            .root_override()
-            .map(str::to_owned)
-            .or_else(|| {
-                self.effective_value("paths.root")
-                    .ok()
-                    .map(|(value, _)| value)
-            })
-            .unwrap_or_else(default_root_path);
-
-        let root = PathBuf::from(root);
+        let root = self.config_storage_root();
         let config_path = paths::config_file_at(&root);
         self.save(&config_path)
     }
 
     pub fn load_current() -> Result<Self> {
         let env = ConfigEnv::capture();
-        let root = env
-            .root_override()
-            .map(str::to_owned)
-            .unwrap_or_else(default_root_path);
-
-        let root = PathBuf::from(root);
+        let root = Self::resolve_root_from_env(&env);
         let config_path = paths::config_file_at(&root);
-        Ok(Self::load(&config_path)?.with_env(env))
+        Ok(Self::load(&config_path)?
+            .with_env(env)
+            .with_config_root(&root))
     }
 
+    /// Build runtime paths from the effective config values.
+    ///
+    /// This uses effective `paths.root`, including environment overrides. That
+    /// is intentionally separate from the config storage root used by
+    /// [`Config::save_default`].
     pub fn resolved_paths(&self) -> paths::ResolvedPaths {
-        let root = self
-            .effective_value("paths.root")
-            .map(|(value, _)| value)
-            .unwrap_or_else(|_| self.paths.root.clone());
-        let root = std::path::PathBuf::from(root);
+        let root = self.runtime_root();
         paths::resolved_paths(
             &root,
             &self.paths.packages,
@@ -99,5 +85,34 @@ impl Config {
     fn with_env(mut self, env: ConfigEnv) -> Self {
         self.env = env;
         self
+    }
+
+    fn with_config_root(mut self, root: &Path) -> Self {
+        self.config_root = Some(root.to_path_buf());
+        self
+    }
+
+    fn config_storage_root(&self) -> PathBuf {
+        self.config_root
+            .clone()
+            .unwrap_or_else(|| Self::resolve_root_from_env(&self.env))
+    }
+
+    fn runtime_root(&self) -> PathBuf {
+        self.effective_value("paths.root")
+            .map(|(value, _)| PathBuf::from(value))
+            .unwrap_or_else(|err| {
+                warn!(
+                    error = %err,
+                    "falling back to file config root while resolving paths"
+                );
+                PathBuf::from(&self.paths.root)
+            })
+    }
+
+    fn resolve_root_from_env(env: &ConfigEnv) -> PathBuf {
+        env.root_override()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(default_root_path()))
     }
 }

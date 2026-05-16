@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use super::keys::env_override;
 use super::registry;
@@ -16,6 +17,9 @@ pub struct Config {
 
     #[serde(skip, default)]
     pub env: ConfigEnv,
+
+    #[serde(skip, default)]
+    pub(crate) config_root: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Default)]
