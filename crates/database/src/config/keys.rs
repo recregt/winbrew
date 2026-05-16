@@ -1,5 +1,6 @@
 use std::env;
 
+#[cfg(test)]
 const PREFIXED_SECTIONS: &[&str] = &["core", "paths"];
 
 pub(crate) fn env_override(key: &str) -> Option<String> {
@@ -17,7 +18,8 @@ where
 ///
 /// `PREFIXED_SECTIONS` is the single source of truth for section names that
 /// should keep their section prefix in the flattened key.
-pub(crate) fn section_key(section_title: &str, key: &str) -> String {
+#[cfg(test)]
+fn section_key(section_title: &str, key: &str) -> String {
     let section = section_title.to_lowercase();
 
     if PREFIXED_SECTIONS.contains(&section.as_str()) {
