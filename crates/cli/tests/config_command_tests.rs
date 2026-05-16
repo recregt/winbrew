@@ -59,7 +59,11 @@ fn removed_network_config_keys_are_rejected() {
         "core.proxy",
         "core.github_token",
     ] {
-        assert!(config.get_value(key).is_err(), "{key} should be removed");
+        assert_eq!(
+            config.get_value(key).unwrap(),
+            None,
+            "{key} should be removed"
+        );
         assert!(
             config.set_value(key, "value").is_err(),
             "{key} should not be settable"
