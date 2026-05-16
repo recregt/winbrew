@@ -12,7 +12,7 @@ impl Config {
 
         let value = value.trim();
         validate_config_value(key, value)?;
-        let value = normalize_config_value(key, value);
+        let value = value.to_string();
 
         match key {
             "core.log_level" => self.core.log_level = value,
@@ -43,6 +43,8 @@ impl Config {
             return Err(ConfigError::EmptyKey);
         }
 
+        ensure_known_key(key)?;
+
         let defaults = Config::default();
 
         match key {
@@ -69,47 +71,34 @@ impl Config {
 }
 
 fn parse_bool(key: &str, value: &str) -> ConfigResult<bool> {
-    match value {
-        "true" | "1" | "yes" | "on" => Ok(true),
-        "false" | "0" | "no" | "off" => Ok(false),
-        value => Err(ConfigError::InvalidValue {
-            key: key.to_string(),
-            value: value.to_string(),
-        }),
-    }
+    registry::parse_bool_value(value).ok_or_else(|| ConfigError::InvalidValue {
+        key: key.to_string(),
+        value: value.to_string(),
+    })
 }
 
 fn validate_config_value(key: &str, value: &str) -> ConfigResult<()> {
-    if let Some(def) = registry::find(key) {
-        if let Some(validator) = def.validator {
-            if let Err(source) = validator(value) {
-                return Err(ConfigError::Validation {
-                    key: key.to_string(),
-                    source,
-                });
-            }
+    let def = ensure_known_key(key)?;
 
-            return Ok(());
-        }
-
-        return Ok(());
+    if let Some(validator) = def.validator {
+        validator(value).map_err(|source| ConfigError::Validation {
+            key: key.to_string(),
+            source,
+        })?;
     }
 
-    Err(ConfigError::UnknownKey {
+    Ok(())
+}
+
+fn ensure_known_key(key: &str) -> ConfigResult<&'static registry::KeyDef> {
+    registry::find(key).ok_or_else(|| ConfigError::UnknownKey {
         key: key.to_string(),
     })
 }
 
-fn normalize_config_value(key: &str, value: &str) -> String {
-    match key {
-        "core.log_level" | "core.file_log_level" => value.trim().to_string(),
-        _ => value.to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::Config;
+    use super::{Config, ConfigError};
 
     #[test]
     fn set_value_accepts_boolean_aliases_in_validation() {
@@ -149,5 +138,14 @@ mod tests {
 
         assert_eq!(config.core.auto_update, defaults.core.auto_update);
         assert_eq!(config.paths.packages, defaults.paths.packages);
+    }
+
+    #[test]
+    fn unset_value_rejects_unknown_keys() {
+        let mut config = Config::default();
+
+        let err = config.unset_value("core.proxy").unwrap_err();
+
+        assert!(matches!(err, ConfigError::UnknownKey { .. }));
     }
 }

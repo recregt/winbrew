@@ -75,10 +75,17 @@ pub fn find(key: &str) -> Option<&'static KeyDef> {
 }
 
 fn validate_bool(value: &str) -> std::result::Result<(), ConfigValidationError> {
-    match value {
-        "true" | "false" | "1" | "0" | "yes" | "no" | "on" | "off" => Ok(()),
-        _ => Err(ConfigValidationError::ExpectedBoolean {
+    parse_bool_value(value)
+        .map(|_| ())
+        .ok_or_else(|| ConfigValidationError::ExpectedBoolean {
             value: value.to_string(),
-        }),
+        })
+}
+
+pub(super) fn parse_bool_value(value: &str) -> Option<bool> {
+    match value {
+        "true" | "1" | "yes" | "on" => Some(true),
+        "false" | "0" | "no" | "off" => Some(false),
+        _ => None,
     }
 }
