@@ -7,6 +7,8 @@ use crate::core::env::LOCALAPPDATA;
 pub use crate::models::shared::config::{ConfigSection, ConfigValueSource as ConfigSource};
 use serde::{Deserialize, Serialize};
 
+const FALLBACK_ROOT_PATH: &str = r"C:\winbrew";
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default)]
@@ -127,12 +129,14 @@ fn default_file_log_level() -> String {
 }
 
 pub fn default_root_path() -> String {
-    let local_app_data = std::env::var(LOCALAPPDATA).expect("LOCALAPPDATA must be set on Windows");
-
-    std::path::PathBuf::from(local_app_data)
-        .join("winbrew")
-        .to_string_lossy()
-        .to_string()
+    std::env::var(LOCALAPPDATA)
+        .map(|local_app_data| {
+            PathBuf::from(local_app_data)
+                .join("winbrew")
+                .to_string_lossy()
+                .into_owned()
+        })
+        .unwrap_or_else(|_| FALLBACK_ROOT_PATH.to_string())
 }
 
 // These path defaults are templates, not final paths.
