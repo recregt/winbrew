@@ -9,7 +9,7 @@ pub(crate) fn atomic_write(path: &Path, contents: &str) -> Result<()> {
 }
 
 pub fn config_set(key: &str, value: &str) -> Result<()> {
-    let mut config = Config::load_default()?;
+    let mut config = Config::load_current()?;
 
     config.set_value(key, value)?;
     config.save_default()?;
@@ -17,7 +17,7 @@ pub fn config_set(key: &str, value: &str) -> Result<()> {
 }
 
 pub fn config_unset(key: &str) -> Result<()> {
-    let mut config = Config::load_default()?;
+    let mut config = Config::load_current()?;
 
     config.unset_value(key)?;
     config.save_default()?;
