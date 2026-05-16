@@ -33,7 +33,10 @@ impl Config {
 
     pub fn load_at(root: &Path) -> Result<Self> {
         let mut config = Self::load(&paths::config_file_at(root))?;
-        config.paths.root = root.to_string_lossy().into_owned();
+        config.paths.root = root
+            .to_str()
+            .context("config root path is not valid UTF-8")?
+            .to_owned();
 
         // Explicit-root loads are used by tests and isolated stores, so they
         // intentionally ignore ambient WINBREW_* overrides.
@@ -104,7 +107,7 @@ impl Config {
             .unwrap_or_else(|err| {
                 warn!(
                     error = %err,
-                    "falling back to file config root while resolving paths"
+                    "effective_value(\"paths.root\") failed, using raw config field as fallback"
                 );
                 PathBuf::from(&self.paths.root)
             })
