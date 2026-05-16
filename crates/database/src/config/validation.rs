@@ -102,8 +102,7 @@ fn validate_config_value(key: &str, value: &str) -> ConfigResult<()> {
 
 fn normalize_config_value(key: &str, value: &str) -> String {
     match key {
-        "core.log_level" => value.trim().to_ascii_lowercase(),
-        "core.file_log_level" => value.trim().to_string(),
+        "core.log_level" | "core.file_log_level" => value.trim().to_string(),
         _ => value.to_string(),
     }
 }
@@ -123,6 +122,17 @@ mod tests {
         assert!(config.core.auto_update);
         assert!(config.core.confirm_remove);
         assert!(config.core.default_yes);
+    }
+
+    #[test]
+    fn set_value_accepts_env_filter_syntax_for_console_log_level() {
+        let mut config = Config::default();
+
+        config
+            .set_value("core.log_level", "winbrew=debug,info")
+            .unwrap();
+
+        assert_eq!(config.core.log_level, "winbrew=debug,info");
     }
 
     #[test]
