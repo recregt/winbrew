@@ -1,4 +1,4 @@
-use crate::core::paths;
+use crate::core::{fs::atomic_write_toml_temp, paths};
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -45,7 +45,7 @@ impl Config {
 
     pub fn save(&self, path: &Path) -> Result<()> {
         let contents = toml::to_string_pretty(self).context("failed to serialize config file")?;
-        storage::atomic_write(path, &contents)
+        Ok(atomic_write_toml_temp(path, &contents)?)
     }
 
     /// Save the config back to the root it was loaded from.
