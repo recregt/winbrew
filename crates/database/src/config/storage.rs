@@ -1,12 +1,5 @@
-use std::path::Path;
-
 use super::types::{Config, ConfigSection};
-use crate::core::fs::atomic_write_toml_temp;
 use anyhow::Result;
-
-pub(crate) fn atomic_write(path: &Path, contents: &str) -> Result<()> {
-    Ok(atomic_write_toml_temp(path, contents)?)
-}
 
 pub fn config_set(key: &str, value: &str) -> Result<()> {
     let mut config = Config::load_current()?;
