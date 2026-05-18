@@ -41,6 +41,7 @@ jobs:
         run: cargo build --release
 
       - name: Sign Release Binary
+        if: env.WINBREW_SIGNING_PFX_BASE64 != '' && env.WINBREW_SIGNING_PFX_PASSWORD != ''
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
