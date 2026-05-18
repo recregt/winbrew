@@ -20,7 +20,9 @@ use tracing::{debug, warn};
 use std::path::{Path, PathBuf};
 
 use crate::core::fs::cleanup_path;
-use crate::core::paths::install_root_from_package_dir;
+use crate::core::paths::{
+    install_root_from_package_dir, package_journal_file_at, package_journal_key,
+};
 use crate::database;
 use crate::engines::{EngineKind, PackageEngine};
 use crate::operations::shims;
@@ -104,6 +106,16 @@ fn execute_removal_with_conn(
                     "failed to remove package shims"
                 );
             }
+
+            if let Err(err) =
+                cleanup_committed_journal(&install_dir, &plan.package.name, &plan.package.version)
+            {
+                warn!(
+                    package = plan.package.name.as_str(),
+                    error = %err,
+                    "failed to remove committed package journal"
+                );
+            }
         }
         EngineKind::Zip | EngineKind::Portable => {
             if install_dir.exists() {
@@ -134,6 +146,18 @@ fn execute_removal_with_conn(
                     );
                 }
 
+                if let Err(err) = cleanup_committed_journal(
+                    &install_dir,
+                    &plan.package.name,
+                    &plan.package.version,
+                ) {
+                    warn!(
+                        package = plan.package.name.as_str(),
+                        error = %err,
+                        "failed to remove committed package journal"
+                    );
+                }
+
                 if let Err(err) = engine_kind.remove(&trash_package) {
                     warn!(
                         "failed to completely remove trash for {}: {err}",
@@ -151,6 +175,18 @@ fn execute_removal_with_conn(
                         "failed to remove package shims"
                     );
                 }
+
+                if let Err(err) = cleanup_committed_journal(
+                    &install_dir,
+                    &plan.package.name,
+                    &plan.package.version,
+                ) {
+                    warn!(
+                        package = plan.package.name.as_str(),
+                        error = %err,
+                        "failed to remove committed package journal"
+                    );
+                }
             }
         }
     }
@@ -159,6 +195,25 @@ fn execute_removal_with_conn(
         package = plan.package.name.as_str(),
         force, "remove completed"
     );
+
+    Ok(())
+}
+
+fn cleanup_committed_journal(
+    install_dir: &Path,
+    package_name: &str,
+    package_version: &str,
+) -> anyhow::Result<()> {
+    let install_root = install_root_from_package_dir(install_dir);
+    let package_key = package_journal_key(package_name, package_version);
+    let journal_path = package_journal_file_at(&install_root, &package_key);
+
+    cleanup_path(&journal_path).with_context(|| {
+        format!(
+            "failed to remove committed journal at {}",
+            journal_path.display()
+        )
+    })?;
 
     Ok(())
 }
