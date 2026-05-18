@@ -43,6 +43,8 @@ sqlite3 catalog.db "SELECT id, name FROM catalog_packages_fts WHERE catalog_pack
 
 Older snapshots are published as dated nightly archives on [GitHub Releases](https://github.com/recregt/winbrew/releases).
 
+Official release binaries are Authenticode-signed in GitHub Actions before packaging. The release workflow expects `WINBREW_SIGNING_PFX_BASE64` and `WINBREW_SIGNING_PFX_PASSWORD`, and it uses `WINBREW_SIGNING_TIMESTAMP_URL` when present.
+
 ## Catalog Schema
 
 The SQLite catalog keeps the normalized data in a small set of tables:
