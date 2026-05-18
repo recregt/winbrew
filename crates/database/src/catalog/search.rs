@@ -22,7 +22,7 @@ pub(crate) fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackag
          FROM catalog_packages p
          JOIN catalog_packages_fts fts ON p.rowid = fts.rowid
          WHERE catalog_packages_fts MATCH ?1
-         ORDER BY bm25(catalog_packages_fts), p.name ASC",
+            ORDER BY bm25(catalog_packages_fts, 10.0, 5.0, 6.0, 1.0), p.name ASC",
     )?;
 
     stmt.query_map(params![query], row_to_package)?
@@ -103,25 +103,34 @@ mod tests {
         conn
     }
 
-    fn insert_catalog_package(conn: &Connection) {
+    fn insert_catalog_package(
+        conn: &Connection,
+        id: &str,
+        name: &str,
+        description: Option<&str>,
+        moniker: Option<&str>,
+        tags: Option<&str>,
+    ) {
         conn.execute(
             r#"
             INSERT INTO catalog_packages (
-                id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, tags, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             "#,
             params![
-                "winget/Contoso.App",
-                "Contoso App",
+                id,
+                name,
                 "1.2.3",
                 "winget",
                 None::<String>,
-                "Contoso.App",
-                Some("Example package"),
+                id.split('/').nth(1).unwrap_or(id),
+                description,
                 None::<String>,
                 None::<String>,
-                Some("Contoso Ltd."),
+                Some("Example publisher"),
                 Some("en-US"),
+                moniker,
+                tags,
                 "2026-04-14 12:00:00",
                 "2026-04-14 12:34:56",
             ],
@@ -133,7 +142,14 @@ mod tests {
     fn package_queries_read_timestamps() {
         let conn = open_test_db();
 
-        insert_catalog_package(&conn);
+        insert_catalog_package(
+            &conn,
+            "winget/Contoso.App",
+            "Contoso App",
+            Some("Example package"),
+            None,
+            None,
+        );
 
         let package = get_package_by_id(&conn, "winget/Contoso.App")
             .expect("package lookup should succeed")
@@ -157,7 +173,14 @@ mod tests {
     fn package_updates_refresh_updated_at_automatically() {
         let conn = open_test_db();
 
-        insert_catalog_package(&conn);
+        insert_catalog_package(
+            &conn,
+            "winget/Contoso.App",
+            "Contoso App",
+            Some("Example package"),
+            None,
+            None,
+        );
 
         conn.execute(
             r#"
@@ -180,5 +203,52 @@ mod tests {
             .expect("package should have updated_at");
         assert!(updated_at > "2026-04-14 12:34:56");
         assert_eq!(package.created_at.as_deref(), Some("2026-04-14 12:00:00"));
+    }
+
+    #[test]
+    fn search_matches_accentless_queries_against_diacritics() {
+        let conn = open_test_db();
+
+        insert_catalog_package(
+            &conn,
+            "winget/CocCoc.Browser",
+            "Cốc Cốc",
+            Some("Vietnamese browser"),
+            None,
+            Some(r#"["browser"]"#),
+        );
+
+        let searched = search(&conn, "coc").expect("catalog search should succeed");
+
+        assert_eq!(searched.len(), 1);
+        assert_eq!(searched[0].name, "Cốc Cốc");
+    }
+
+    #[test]
+    fn search_prioritizes_name_matches_over_tag_noise() {
+        let conn = open_test_db();
+
+        insert_catalog_package(
+            &conn,
+            "winget/Google.Chrome",
+            "Google Chrome",
+            Some("Web browser"),
+            None,
+            Some(r#"["browser"]"#),
+        );
+        insert_catalog_package(
+            &conn,
+            "winget/NodeJs.ChromeNoise",
+            "NodeJS",
+            Some("JavaScript runtime"),
+            None,
+            Some(r#"["chrome", "chrome", "chrome"]"#),
+        );
+
+        let searched = search(&conn, "chrome").expect("catalog search should succeed");
+
+        assert_eq!(searched.len(), 2);
+        assert_eq!(searched[0].name, "Google Chrome");
+        assert_eq!(searched[1].name, "NodeJS");
     }
 }

@@ -69,7 +69,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS catalog_packages_fts USING fts5(
     moniker,
     tags,
     content=catalog_packages,
-    content_rowid=rowid
+    content_rowid=rowid,
+    tokenize = 'unicode61 remove_diacritics 2'
 );
 
 CREATE INDEX IF NOT EXISTS idx_catalog_packages_name    ON catalog_packages(name);
