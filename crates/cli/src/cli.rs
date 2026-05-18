@@ -66,7 +66,7 @@ pub enum Command {
 
     /// Remove a package and its tracked files
     Remove {
-        #[arg(value_name = "PACKAGE", num_args = 1..)]
+        #[arg(value_name = "PACKAGE", num_args = 1.., required = true)]
         name: Vec<String>,
 
         #[arg(long, short = 'y', help_heading = "Safety")]
