@@ -42,6 +42,8 @@ impl PackageRef {
             Ok(Self::ById(PackageId::parse(rest)?))
         } else if trimmed.is_empty() {
             Err(ModelError::empty("package_ref"))
+        } else if trimmed.contains('/') {
+            Err(invalid_package_id(trimmed))
         } else {
             Ok(Self::ByName(PackageName::parse(trimmed)?))
         }
@@ -278,6 +280,15 @@ mod tests {
     #[test]
     fn invalid_package_id_has_helpful_error() {
         let err = PackageRef::parse("@invalid").unwrap_err();
+
+        assert!(err.to_string().contains(
+            "expected @winget/<id>, @scoop/<bucket>/<id>, @chocolatey/<id>, or @winbrew/<id>"
+        ));
+    }
+
+    #[test]
+    fn rejects_bare_package_ids_with_slashes() {
+        let err = PackageRef::parse("scoop/main/curl").unwrap_err();
 
         assert!(err.to_string().contains(
             "expected @winget/<id>, @scoop/<bucket>/<id>, @chocolatey/<id>, or @winbrew/<id>"

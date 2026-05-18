@@ -4,6 +4,7 @@ use std::path::Path;
 use anyhow::Result;
 
 use crate::database;
+use crate::models::domains::install::EngineKind;
 use crate::models::domains::installed::InstalledPackage;
 use crate::models::domains::reporting::{DiagnosisResult, DiagnosisSeverity};
 
@@ -81,8 +82,19 @@ fn diagnose_install_dir_error(pkg: &InstalledPackage, err: std::io::Error) -> Di
 /// checks that the directory exists, and confirms that the path is actually a
 /// directory. Anything else is turned into a diagnosis instead of a hard error.
 pub(super) fn check_package(pkg: &InstalledPackage) -> Option<DiagnosisResult> {
+    check_package_with_registry(pkg, native_exe_registry_entry_exists)
+}
+
+fn check_package_with_registry(
+    pkg: &InstalledPackage,
+    native_exe_registry_entry_exists: impl Fn(&InstalledPackage) -> bool,
+) -> Option<DiagnosisResult> {
     if let Some(diagnosis) = validate_install_path(pkg) {
         return Some(diagnosis);
+    }
+
+    if matches!(pkg.engine_kind, EngineKind::NativeExe) && native_exe_registry_entry_exists(pkg) {
+        return None;
     }
 
     let install_dir = Path::new(&pkg.install_dir);
@@ -104,6 +116,24 @@ pub(super) fn check_package(pkg: &InstalledPackage) -> Option<DiagnosisResult> {
     }
 
     None
+}
+
+#[cfg(windows)]
+fn native_exe_registry_entry_exists(pkg: &InstalledPackage) -> bool {
+    match crate::windows::installed::uninstall_entries_matching(&pkg.name) {
+        Ok(entries) => entries.into_iter().any(|entry| {
+            entry
+                .display_name
+                .trim()
+                .eq_ignore_ascii_case(pkg.name.as_str())
+        }),
+        Err(_) => false,
+    }
+}
+
+#[cfg(not(windows))]
+fn native_exe_registry_entry_exists(_pkg: &InstalledPackage) -> bool {
+    false
 }
 
 pub(crate) fn scan_packages(packages: &[InstalledPackage]) -> PackageInstallScan {
@@ -223,6 +253,28 @@ mod tests {
             scan.recovery_findings[0].target_path.as_deref(),
             Some(missing_dir_string.as_str())
         );
+    }
+
+    #[test]
+    fn check_package_treats_native_exe_registry_presence_as_installed() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let missing_dir = temp_dir.path().join("nativeexe");
+        let package = InstalledPackage {
+            name: "Contoso.NativeExe".to_string(),
+            version: "1.0.0".to_string(),
+            kind: InstallerType::Exe,
+            deployment_kind: InstallerType::Exe.deployment_kind(),
+            engine_kind: EngineKind::NativeExe,
+            engine_metadata: None,
+            install_dir: missing_dir.to_string_lossy().into_owned(),
+            dependencies: Vec::new(),
+            status: PackageStatus::Ok,
+            installed_at: "2026-04-05T00:00:00Z".to_string(),
+        };
+
+        let diagnosis = check_package_with_registry(&package, |_| true);
+
+        assert!(diagnosis.is_none());
     }
 
     #[test]

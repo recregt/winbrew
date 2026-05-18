@@ -152,7 +152,11 @@ fn insert_registry_entries(conn: &Connection, entries: &[MsiRegistryRecord]) -> 
     let mut stmt = conn.prepare(
         "INSERT INTO msi_registry_entries
          (package_name, hive, key_path, normalized_key_path, value_name, value_data, previous_value)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(package_name, hive, normalized_key_path, value_name) DO UPDATE SET
+             key_path = excluded.key_path,
+             value_data = excluded.value_data,
+             previous_value = excluded.previous_value",
     )?;
 
     for entry in entries {
@@ -362,7 +366,8 @@ fn load_components(conn: &Connection, package_name: &str) -> Result<Vec<MsiCompo
 mod tests {
     use super::{
         HashAlgorithm, find_packages_by_normalized_path,
-        find_packages_by_normalized_registry_key_path, get_snapshot, replace_snapshot,
+        find_packages_by_normalized_registry_key_path, get_snapshot, insert_registry_entries,
+        replace_snapshot,
     };
     use crate::models::install::engine::{EngineKind, EngineMetadata, InstallScope};
     use crate::models::install::installed::{InstalledPackage, PackageStatus};
@@ -510,5 +515,54 @@ mod tests {
         let new_owners = find_packages_by_normalized_path(&conn, "c:/tools/demo/bin/demo2.exe")
             .expect("lookup new owners");
         assert_eq!(new_owners, vec![package_name.to_string()]);
+    }
+
+    #[test]
+    fn insert_registry_entries_upserts_duplicate_primary_keys() {
+        let conn = Connection::open_in_memory().expect("open in-memory database");
+        migration::migrate(&conn).expect("run migration");
+
+        let package_name = "demo";
+        insert_package(&conn, &sample_package(package_name)).expect("insert package");
+
+        let snapshot = sample_snapshot(package_name);
+        insert_registry_entries(&conn, &snapshot.registry_entries)
+            .expect("insert initial registry rows");
+
+        let mut updated = sample_snapshot(package_name);
+        updated.registry_entries[0].key_path = "Software\\Demo\\Updated".to_string();
+        updated.registry_entries[0].value_data = Some("C:/Tools/Demo2".to_string());
+        updated.registry_entries[0].previous_value = Some("C:/Tools/Demo".to_string());
+
+        insert_registry_entries(&conn, &updated.registry_entries)
+            .expect("upsert duplicate registry rows");
+
+        let registry_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM msi_registry_entries WHERE package_name = ?1",
+                [package_name],
+                |row| row.get(0),
+            )
+            .expect("count registry rows");
+        assert_eq!(registry_count, 1);
+
+        let (key_path, value_data, previous_value): (String, Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT key_path, value_data, previous_value
+                 FROM msi_registry_entries
+                 WHERE package_name = ?1 AND hive = ?2 AND normalized_key_path = ?3 AND value_name = ?4",
+                rusqlite::params![
+                    package_name,
+                    "HKLM",
+                    "software\\demo",
+                    "InstallPath"
+                ],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("load registry row");
+
+        assert_eq!(key_path, "Software\\Demo\\Updated");
+        assert_eq!(value_data.as_deref(), Some("C:/Tools/Demo2"));
+        assert_eq!(previous_value.as_deref(), Some("C:/Tools/Demo"));
     }
 }

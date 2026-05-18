@@ -137,6 +137,58 @@ fn remove_deletes_portable_installation_and_database_row() -> Result<()> {
 }
 
 #[test]
+fn remove_deletes_committed_journal_for_removed_package() -> Result<()> {
+    let test_root = test_root();
+    let root = test_root.path();
+    init_database(root)?;
+    reset_install_state(root)?;
+    let conn = database::get_conn()?;
+
+    let install_dir = root.join("packages").join("Contoso.Journal");
+    fs::create_dir_all(&install_dir)?;
+    fs::write(install_dir.join("tool.exe"), b"binary")?;
+
+    let package = sample_package(
+        "Contoso.Journal",
+        InstallerType::Portable,
+        &install_dir,
+        Vec::new(),
+    );
+
+    database::insert_package(&conn, &package)?;
+
+    let mut writer =
+        database::JournalWriter::open_for_package(root, &package.name, &package.version)?;
+    writer.append(&database::JournalEntry::Metadata {
+        package_id: package.name.clone(),
+        version: package.version.clone(),
+        engine: "portable".to_string(),
+        deployment_kind: package.deployment_kind,
+        install_dir: install_dir.to_string_lossy().to_string(),
+        dependencies: Vec::new(),
+        commands: None,
+        bin: None,
+        command_resolution: None,
+        engine_metadata: None,
+    })?;
+    writer.append(&database::JournalEntry::Commit {
+        installed_at: package.installed_at.clone(),
+    })?;
+    writer.flush()?;
+    let journal_path = writer.path().to_path_buf();
+
+    assert!(journal_path.exists());
+
+    remove::remove(&package.name, false)?;
+
+    assert!(!journal_path.exists());
+    assert!(!install_dir.exists());
+    assert!(database::get_package(&conn, &package.name)?.is_none());
+
+    Ok(())
+}
+
+#[test]
 fn remove_removes_command_shims_after_install() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
