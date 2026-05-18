@@ -354,6 +354,28 @@ fn remove_runs_through_the_binary() -> Result<()> {
     Ok(())
 }
 
+/// Integration test for the binary remove flow with a package name that spans multiple words.
+#[test]
+fn remove_multi_token_name_runs_through_the_binary() -> Result<()> {
+    let fixture = BinaryFixture::new();
+    let package_name = "Contoso Visual Studio";
+    fixture.insert_package(package_name, "1.0.0", InstallerType::Portable);
+
+    let output = fixture.run(&["remove", "Contoso", "Visual", "Studio", "--yes"]);
+
+    common::assert_success(&output, "remove command")?;
+    common::assert_output_contains(&output, "Successfully removed Contoso Visual Studio.")?;
+    fixture.assert_dir_missing(package_name)?;
+
+    let conn = fixture.conn();
+    anyhow::ensure!(
+        database::get_package(conn, package_name)?.is_none(),
+        "package should be completely removed from database"
+    );
+
+    Ok(())
+}
+
 /// Integration test for the binary remove flow when the installed package is a native executable.
 ///
 /// Scenario:

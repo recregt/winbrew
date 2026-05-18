@@ -95,7 +95,8 @@ fn remove_removes_portable_package_when_confirmed() -> Result<()> {
     let package_name = "Contoso.App";
     let install_dir = fixture.insert_portable_package(package_name)?;
 
-    remove_command::run(&fixture.ctx, package_name, true, false).expect("remove should succeed");
+    let name_parts = vec![package_name.to_string()];
+    remove_command::run(&fixture.ctx, &name_parts, true, false).expect("remove should succeed");
 
     anyhow::ensure!(!install_dir.exists(), "install directory should be removed");
 
@@ -117,9 +118,32 @@ fn remove_removes_native_exe_package_when_confirmed() -> Result<()> {
     );
     let install_dir = fixture.insert_native_exe_package(package_name, uninstall_command)?;
 
-    remove_command::run(&fixture.ctx, package_name, true, false).expect("remove should succeed");
+    let name_parts = vec![package_name.to_string()];
+    remove_command::run(&fixture.ctx, &name_parts, true, false).expect("remove should succeed");
 
     anyhow::ensure!(uninstall_marker.exists(), "uninstall command should run");
+    anyhow::ensure!(!install_dir.exists(), "install directory should be removed");
+
+    let conn = fixture.conn();
+    let package = database::get_package(conn, package_name)?;
+    anyhow::ensure!(package.is_none(), "package should be removed from database");
+
+    Ok(())
+}
+
+#[test]
+fn remove_accepts_multi_token_package_name_when_confirmed() -> Result<()> {
+    let fixture = RemoveFixture::new();
+    let package_name = "Contoso Visual Studio";
+    let install_dir = fixture.insert_portable_package(package_name)?;
+
+    let name_parts = vec![
+        "Contoso".to_string(),
+        "Visual".to_string(),
+        "Studio".to_string(),
+    ];
+    remove_command::run(&fixture.ctx, &name_parts, true, false).expect("remove should succeed");
+
     anyhow::ensure!(!install_dir.exists(), "install directory should be removed");
 
     let conn = fixture.conn();

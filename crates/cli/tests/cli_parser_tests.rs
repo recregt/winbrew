@@ -169,20 +169,20 @@ mod remove_tests {
     fn parses_remove_variants() {
         let cases: Vec<ParseCase> = vec![
             (vec!["brew", "remove", "ripgrep"], || Command::Remove {
-                name: "ripgrep".to_string(),
+                name: vec!["ripgrep".to_string()],
                 yes: false,
                 force: false,
             }),
             (vec!["brew", "remove", "ripgrep", "--yes"], || {
                 Command::Remove {
-                    name: "ripgrep".to_string(),
+                    name: vec!["ripgrep".to_string()],
                     yes: true,
                     force: false,
                 }
             }),
             (vec!["brew", "remove", "ripgrep", "--force"], || {
                 Command::Remove {
-                    name: "ripgrep".to_string(),
+                    name: vec!["ripgrep".to_string()],
                     yes: false,
                     force: true,
                 }
@@ -190,9 +190,21 @@ mod remove_tests {
             (
                 vec!["brew", "remove", "package", "--yes", "--force"],
                 || Command::Remove {
-                    name: "package".to_string(),
+                    name: vec!["package".to_string()],
                     yes: true,
                     force: true,
+                },
+            ),
+            (
+                vec!["brew", "remove", "Visual", "Studio", "Code", "--yes"],
+                || Command::Remove {
+                    name: vec![
+                        "Visual".to_string(),
+                        "Studio".to_string(),
+                        "Code".to_string(),
+                    ],
+                    yes: true,
+                    force: false,
                 },
             ),
         ];

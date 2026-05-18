@@ -359,6 +359,80 @@ impl TempRootGuard {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::write_install_journal;
+    use crate::core::paths::package_journal_key;
+    use crate::database;
+    use crate::models::domains::command_resolution::{
+        CommandSource, Confidence, ResolverResult, VersionScope,
+    };
+    use crate::models::domains::install::InstallerType;
+    use crate::models::domains::installed::{InstalledPackage, PackageStatus};
+    use anyhow::Result;
+    use std::fs;
+    use std::path::Path;
+    use winbrew_testing::{init_database, reset_install_state, test_root};
+
+    fn sample_package(name: &str, kind: InstallerType, install_dir: &Path) -> InstalledPackage {
+        InstalledPackage {
+            name: name.to_string(),
+            version: "1.0.0".to_string(),
+            kind,
+            deployment_kind: kind.deployment_kind(),
+            engine_kind: kind.into(),
+            engine_metadata: None,
+            install_dir: install_dir.to_string_lossy().into_owned(),
+            dependencies: Vec::new(),
+            status: PackageStatus::Ok,
+            installed_at: "2026-04-05T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn write_install_journal_normalizes_single_string_bin_metadata() -> Result<()> {
+        let test_root = test_root();
+        let root = test_root.path();
+        let config = init_database(root)?;
+        reset_install_state(root)?;
+        let conn = database::get_conn()?;
+
+        let install_dir = root.join("packages").join("Contoso.Journal");
+        fs::create_dir_all(&install_dir)?;
+
+        let package = sample_package("Contoso.Journal", InstallerType::Portable, &install_dir);
+        database::insert_package(&conn, &package)?;
+
+        let paths = config.resolved_paths();
+        let command_resolution = ResolverResult::Resolved {
+            commands: vec!["contoso".to_string()],
+            confidence: Confidence::High,
+            sources: vec![CommandSource::PackageLevel],
+            version_scope: VersionScope::Specific(package.version.clone()),
+            catalog_fingerprint: "sha256:dummy".to_string(),
+        };
+        let commands = vec!["contoso".to_string()];
+
+        write_install_journal(
+            &paths,
+            &conn,
+            &package.name,
+            &command_resolution,
+            Some(commands.as_slice()),
+            Some(r#""bin/tool.exe""#),
+        )?;
+
+        let journal_path =
+            paths.package_journal_file(&package_journal_key(&package.name, &package.version));
+        let committed = database::JournalReader::read_committed_package(&journal_path)?;
+
+        assert_eq!(committed.commands, Some(vec!["contoso".to_string()]));
+        assert_eq!(committed.bin, Some(vec!["bin\\tool.exe".to_string()]));
+
+        Ok(())
+    }
+}
+
 impl Drop for TempRootGuard {
     fn drop(&mut self) {
         flow::cleanup_temp_root(&self.path);
@@ -384,13 +458,13 @@ fn write_install_journal(
     )?;
 
     let bin = match bin {
-        Some(raw_bin) => match serde_json::from_str::<Vec<String>>(raw_bin) {
+        Some(raw_bin) => match shims::parse_target_paths(Some(raw_bin)) {
             Ok(bin) => Some(bin),
             Err(err) => {
                 warn!(
                     package = %package_name,
                     error = %err,
-                    "failed to serialize install bin metadata into journal"
+                    "failed to normalize install bin metadata into journal"
                 );
                 None
             }
