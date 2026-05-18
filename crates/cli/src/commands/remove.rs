@@ -7,12 +7,17 @@ use crate::commands::error::reported_with_hint;
 use crate::{CommandContext, app::remove};
 use winbrew_ui::Ui;
 
-pub fn run(ctx: &CommandContext, name: &str, yes: bool, force: bool) -> Result<()> {
+pub fn run(ctx: &CommandContext, name: &[String], yes: bool, force: bool) -> Result<()> {
     let mut ui = ctx.ui();
     ui.page_title("Remove Package");
 
-    ui.info(format!("Assessing impact for {name}..."));
-    let plan = remove::plan_removal(name)?;
+    let name_text = name.join(" ").trim().to_owned();
+    if name_text.is_empty() {
+        return Err(anyhow::anyhow!("package name cannot be empty"));
+    }
+
+    ui.info(format!("Assessing impact for {name_text}..."));
+    let plan = remove::plan_removal(&name_text)?;
 
     if !plan.dependents.is_empty() {
         ui.warn(format!(

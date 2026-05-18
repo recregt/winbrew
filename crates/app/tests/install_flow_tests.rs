@@ -309,7 +309,7 @@ fn install_publishes_command_shims_for_catalog_commands() -> Result<()> {
 
     let committed = read_committed_install_journal(&fixture)?;
     assert_eq!(committed.commands, Some(vec!["contoso".to_string()]));
-    assert_eq!(committed.bin, Some(vec!["bin/tool.exe".to_string()]));
+    assert_eq!(committed.bin, Some(vec!["bin\\tool.exe".to_string()]));
     assert!(matches!(
         committed.command_resolution,
         Some(ResolverResult::Resolved {

@@ -147,13 +147,30 @@ fn legacy_command_shim_script(install_dir: &Path, command_name: &str) -> String 
     )
 }
 
-fn parse_target_paths(raw_targets: Option<&str>) -> Result<Vec<String>> {
+pub(crate) fn parse_target_paths(raw_targets: Option<&str>) -> Result<Vec<String>> {
     let Some(raw_targets) = raw_targets else {
         return Ok(Vec::new());
     };
 
-    let targets: Vec<String> =
-        serde_json::from_str(raw_targets).with_context(|| "failed to parse shim target JSON")?;
+    let raw_targets = serde_json::from_str::<serde_json::Value>(raw_targets)
+        .with_context(|| "failed to parse shim target JSON")?;
+
+    let targets = match raw_targets {
+        serde_json::Value::String(target) => vec![target],
+        serde_json::Value::Array(values) => values
+            .into_iter()
+            .map(|value| {
+                value.as_str().map(str::to_owned).ok_or_else(|| {
+                    anyhow::anyhow!("failed to parse shim target JSON: expected string values")
+                })
+            })
+            .collect::<Result<Vec<_>>>()?,
+        _ => {
+            return Err(anyhow::anyhow!(
+                "failed to parse shim target JSON: expected a string or array of strings"
+            ));
+        }
+    };
 
     Ok(normalize_target_paths(targets))
 }
@@ -190,4 +207,74 @@ fn resolve_target_path(index: usize, target_paths: &[String]) -> Option<String> 
         .get(index)
         .or_else(|| target_paths.first())
         .map(|target_path| target_path.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{command_shim_path, parse_target_paths, publish_package_shims};
+    use crate::database;
+    use crate::models::domains::install::InstallerType;
+    use crate::models::domains::installed::{InstalledPackage, PackageStatus};
+    use anyhow::Result;
+    use std::fs;
+    use std::path::Path;
+    use winbrew_testing::{init_database, reset_install_state, test_root};
+
+    fn sample_package(name: &str, kind: InstallerType, install_dir: &Path) -> InstalledPackage {
+        InstalledPackage {
+            name: name.to_string(),
+            version: "1.0.0".to_string(),
+            kind,
+            deployment_kind: kind.deployment_kind(),
+            engine_kind: kind.into(),
+            engine_metadata: None,
+            install_dir: install_dir.to_string_lossy().into_owned(),
+            dependencies: Vec::new(),
+            status: PackageStatus::Ok,
+            installed_at: "2026-04-05T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn parse_target_paths_accepts_single_string_and_array() -> Result<()> {
+        let single = parse_target_paths(Some(r#""bin/tool.exe""#))?;
+        assert_eq!(single, vec!["bin\\tool.exe".to_string()]);
+
+        let multiple = parse_target_paths(Some(r#"["bin/tool.exe", "bin/other.exe"]"#))?;
+        assert_eq!(
+            multiple,
+            vec!["bin\\tool.exe".to_string(), "bin\\other.exe".to_string()]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn publish_package_shims_accepts_single_string_bin_metadata() -> Result<()> {
+        let test_root = test_root();
+        let root = test_root.path();
+        init_database(root)?;
+        reset_install_state(root)?;
+        let conn = database::get_conn()?;
+
+        let install_dir = root.join("packages").join("Contoso.Shim");
+        fs::create_dir_all(&install_dir)?;
+
+        let package = sample_package("Contoso.Shim", InstallerType::Portable, &install_dir);
+        database::insert_package(&conn, &package)?;
+        database::sync_package_commands(&conn, &package.name, Some(r#"["contoso"]"#))?;
+
+        let shims_root = root.join("shims");
+        let written = publish_package_shims(&shims_root, &package.name, Some(r#""bin/tool.exe""#))?;
+
+        assert_eq!(written, 1);
+
+        let shim_path = command_shim_path(&shims_root, "contoso");
+        assert!(shim_path.exists());
+
+        let shim_contents = fs::read_to_string(shim_path)?;
+        assert!(shim_contents.contains("WINBREW_SHIM_TARGET=bin\\tool.exe"));
+
+        Ok(())
+    }
 }
