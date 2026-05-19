@@ -45,6 +45,7 @@ pub fn run(
         Command::Remove { name, yes, force } => remove::run(ctx, &name, yes, force),
         Command::Repair { yes } => repair::run(ctx, yes),
         Command::Config { command } => config::run(ctx, config, command),
+        Command::Completions { .. } => unreachable!("completion command is handled during startup"),
     }
 }
 

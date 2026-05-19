@@ -74,6 +74,35 @@ pub fn find(key: &str) -> Option<&'static KeyDef> {
     KEYS.iter().find(|def| def.key == key)
 }
 
+pub fn suggest_key(key: &str) -> Option<&'static str> {
+    let key = key.trim();
+
+    if key.is_empty() {
+        return None;
+    }
+
+    if let Some(exact) = KEYS.iter().find(|def| def.key.eq_ignore_ascii_case(key)) {
+        return Some(exact.key);
+    }
+
+    if key.contains('.') {
+        return None;
+    }
+
+    for section in ["core", "paths"] {
+        let candidate = format!("{section}.{key}");
+
+        if let Some(exact) = KEYS
+            .iter()
+            .find(|def| def.key.eq_ignore_ascii_case(&candidate))
+        {
+            return Some(exact.key);
+        }
+    }
+
+    None
+}
+
 fn validate_bool(value: &str) -> std::result::Result<(), ConfigValidationError> {
     parse_bool_value(value)
         .map(|_| ())

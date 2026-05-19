@@ -44,7 +44,7 @@ pub use command_registry::{
 };
 pub use config::{
     Config, ConfigEnv, ConfigError, ConfigSection, ConfigSource, ConfigValidationError, CoreConfig,
-    PathsConfig, config_sections, config_set, config_unset, get_effective_value,
+    PathsConfig, config_sections, config_set, config_unset, get_effective_value, suggest_key,
 };
 pub use installed_packages::{
     PackageNotFoundError, commit_install, commit_install_with_commands, delete_package,

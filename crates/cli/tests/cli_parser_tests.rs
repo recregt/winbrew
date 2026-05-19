@@ -2,7 +2,7 @@ use std::env;
 use std::ffi::OsString;
 
 use clap::{Parser, error::ErrorKind};
-use winbrew_cli::cli::{Cli, Command, ConfigCommand};
+use winbrew_cli::cli::{Cli, Command, CompletionShell, ConfigCommand};
 use winbrew_cli::run_app;
 
 type ParseCase = (Vec<&'static str>, fn() -> Command);
@@ -279,6 +279,21 @@ mod config_tests {
             assert_command_case(args, expected);
         }
     }
+
+    #[test]
+    fn parses_completion_shells() {
+        assert_command_case(vec!["brew", "completions", "bash"], || {
+            Command::Completions {
+                shell: CompletionShell::Bash,
+            }
+        });
+
+        assert_command_case(vec!["brew", "completions", "powershell"], || {
+            Command::Completions {
+                shell: CompletionShell::PowerShell,
+            }
+        });
+    }
 }
 
 mod doctor_tests {
@@ -426,6 +441,15 @@ mod help_validation {
             ["brew", "config", "--help"].as_slice(),
             ErrorKind::DisplayHelp,
             &["list", "get", "set", "unset"],
+        );
+    }
+
+    #[test]
+    fn config_help_documents_hierarchical_keys() {
+        assert_parse_error(
+            ["brew", "config", "--help"].as_slice(),
+            ErrorKind::DisplayHelp,
+            &["core.log_level", "paths.root", "paths.cache"],
         );
     }
 }

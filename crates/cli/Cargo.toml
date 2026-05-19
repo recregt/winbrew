@@ -16,6 +16,7 @@ serde_json = "1"
 tracing.workspace = true
 
 clap = { version = "4", default-features = false, features = ["color", "derive", "error-context", "help", "std", "suggestions", "usage"] }
+clap_complete = "4"
 indicatif = { version = "0.18", default-features = false, features = ["unicode-width"] }
 thiserror = "2.0"
 tempfile = "3"

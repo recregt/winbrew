@@ -135,6 +135,28 @@ fn config_set_rejects_empty_values() {
 }
 
 #[test]
+fn config_set_unknown_key_suggests_the_hierarchical_name() {
+    let mut fixture = ConfigFixture::new();
+    let err = config_command::run(
+        &fixture.ctx,
+        &mut fixture.config,
+        ConfigCommand::Set {
+            key: "log_level".to_string(),
+            value: Some("debug".to_string()),
+        },
+    )
+    .expect_err("unknown key should fail");
+
+    let cmd_err = err.downcast_ref::<CommandError>().expect("command error");
+    assert_eq!(
+        cmd_err.hint(),
+        Some(
+            "Did you mean 'core.log_level'? Use 'winbrew config list' to browse the available keys."
+        )
+    );
+}
+
+#[test]
 fn config_set_accepts_valid_value() {
     let mut fixture = ConfigFixture::new();
 

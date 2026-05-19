@@ -36,6 +36,10 @@ mod process;
 /// runtime state can react to the caller's requested verbosity without mutating
 /// the persisted configuration snapshot.
 pub(crate) fn run(command: Command, verbosity: u8) -> Result<()> {
+    if let Command::Completions { shell } = &command {
+        return crate::services::completions::run(*shell);
+    }
+
     let mut app_config = config::load()?;
     let context = config::build_context(&app_config, verbosity)?;
 

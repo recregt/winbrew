@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
 #[command(
@@ -83,14 +83,50 @@ pub enum Command {
         yes: bool,
     },
 
-    /// Get or set winbrew configuration values
+    /// Get or set winbrew configuration values.
+    ///
+    /// Configuration keys are hierarchical:
+    /// - `core.*` controls runtime behavior and logging
+    /// - `paths.*` controls storage locations
+    ///
+    /// Examples:
+    /// - `winbrew config get core.log_level`
+    /// - `winbrew config get paths.root`
+    /// - `winbrew config set core.color false`
+    /// - `winbrew config unset paths.cache`
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+
+    /// Generate shell completions for winbrew.
+    Completions {
+        #[arg(value_enum)]
+        shell: CompletionShell,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum CompletionShell {
+    Bash,
+    Fish,
+    Zsh,
+    #[value(name = "powershell")]
+    PowerShell,
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
+/// Get or set winbrew configuration values.
+///
+/// Configuration keys are hierarchical:
+/// - `core.*` controls runtime behavior and logging
+/// - `paths.*` controls storage locations
+///
+/// Examples:
+/// - `winbrew config get core.log_level`
+/// - `winbrew config get paths.root`
+/// - `winbrew config set core.color false`
+/// - `winbrew config unset paths.cache`
 pub enum ConfigCommand {
     /// List all configuration values
     List,

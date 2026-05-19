@@ -3,12 +3,12 @@
 //! This module routes `config` subcommands, reads effective values,
 //! updates persisted values, and removes overrides when requested.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::io::Write;
 
 use crate::cli::ConfigCommand;
-use crate::commands::error::reported;
-use crate::database::Config;
+use crate::commands::error::{reported, reported_with_hint};
+use crate::database::{Config, ConfigError, suggest_key};
 use crate::{CommandContext, app::config};
 use winbrew_ui::Ui;
 
@@ -45,7 +45,7 @@ fn list<W: Write>(config: &Config, ui: &mut Ui<W>) -> Result<()> {
 /// Displays the effective value for a configuration key.
 fn get<W: Write>(config: &Config, ui: &mut Ui<W>, key: &str) -> Result<()> {
     let value = config::get_display_value(config, key)
-        .with_context(|| format!("Failed to retrieve configuration for key: '{key}'"))?;
+        .map_err(|err| config_key_error("retrieve", key, err))?;
 
     ui.info(format_args!(
         "{key} = {}{}",
@@ -80,8 +80,7 @@ fn set<W: Write>(
         ));
     }
 
-    config::set_value(config, key, clean_value)
-        .with_context(|| format!("Failed to set configuration for key: '{key}'"))?;
+    config::set_value(config, key, clean_value).map_err(|err| config_key_error("set", key, err))?;
 
     ui.success(format!("{key} updated."));
     Ok(())
@@ -89,8 +88,7 @@ fn set<W: Write>(
 
 /// Removes a configuration key by restoring its default value.
 fn unset<W: Write>(config: &mut Config, ui: &mut Ui<W>, key: &str) -> Result<()> {
-    config::unset_value(config, key)
-        .with_context(|| format!("Failed to remove configuration for key: '{key}'"))?;
+    config::unset_value(config, key).map_err(|err| config_key_error("remove", key, err))?;
 
     ui.success(format!("{key} removed."));
     Ok(())
@@ -102,4 +100,19 @@ fn source_suffix(source: config::ConfigValueSource) -> &'static str {
         config::ConfigValueSource::Env => " (overridden by environment)",
         config::ConfigValueSource::File => "",
     }
+}
+
+fn config_key_error(action: &str, key: &str, err: anyhow::Error) -> anyhow::Error {
+    if let Some(ConfigError::UnknownKey { key: unknown_key }) = err.downcast_ref::<ConfigError>() {
+        let hint = match suggest_key(unknown_key) {
+            Some(suggested) => format!(
+                "Did you mean '{suggested}'? Use 'winbrew config list' to browse the available keys."
+            ),
+            None => "Use 'winbrew config list' to browse the available keys.".to_string(),
+        };
+
+        return reported_with_hint(format!("unknown config key '{unknown_key}'"), hint);
+    }
+
+    err.context(format!("Failed to {action} configuration for key: '{key}'"))
 }
