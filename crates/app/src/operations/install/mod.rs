@@ -76,6 +76,12 @@ pub trait InstallObserver {
     /// Report cumulative installer download progress in bytes.
     fn on_progress(&mut self, downloaded_bytes: u64);
 
+    /// Signal that the post-download install phase is starting.
+    fn on_install_start(&mut self, _message: &str) {}
+
+    /// Signal that the post-download install phase has completed.
+    fn on_install_complete(&mut self) {}
+
     /// Confirm whether WinBrew may bootstrap a local 7-Zip runtime.
     fn confirm_runtime_bootstrap(
         &mut self,
@@ -200,6 +206,11 @@ pub fn run<O: InstallObserver>(
                     engine,
                 )?;
             }
+
+            observer
+                .borrow_mut()
+                .on_install_start(&format!("Installing {}...", target.package.name));
+            let _install_phase_guard = InstallPhaseGuard::new(&observer);
 
             let engine_receipt = flow::execute_engine_install(
                 engine,
@@ -356,6 +367,22 @@ struct TempRootGuard {
 impl TempRootGuard {
     fn new(path: PathBuf) -> Self {
         Self { path }
+    }
+}
+
+struct InstallPhaseGuard<'a, O: InstallObserver> {
+    observer: &'a RefCell<&'a mut O>,
+}
+
+impl<'a, O: InstallObserver> InstallPhaseGuard<'a, O> {
+    fn new(observer: &'a RefCell<&'a mut O>) -> Self {
+        Self { observer }
+    }
+}
+
+impl<O: InstallObserver> Drop for InstallPhaseGuard<'_, O> {
+    fn drop(&mut self) {
+        self.observer.borrow_mut().on_install_complete();
     }
 }
 
