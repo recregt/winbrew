@@ -39,10 +39,6 @@ impl InstallObserver for NoopInstallObserver {
     ) -> anyhow::Result<usize> {
         unreachable!("install should not prompt for an exact match")
     }
-
-    fn on_start(&mut self, _total_bytes: Option<u64>) {}
-
-    fn on_progress(&mut self, _downloaded_bytes: u64) {}
 }
 
 fn font_fixture_prefix(root: &Path, base: &str) -> String {
