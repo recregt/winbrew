@@ -16,6 +16,10 @@ pub use error::{ConfigError, ConfigValidationError};
 pub use storage::{config_sections, config_set, config_unset, get_effective_value};
 pub use types::*;
 
+pub fn suggest_key(key: &str) -> Option<&'static str> {
+    registry::suggest_key(key)
+}
+
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
         match fs::read_to_string(path) {
