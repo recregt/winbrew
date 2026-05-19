@@ -79,6 +79,9 @@ pub trait InstallObserver {
     fn on_install_start(&mut self, _message: &str) {}
 
     /// Signal that the post-download install phase has completed.
+    ///
+    /// The engine work has finished, but the install flow may still continue
+    /// with commit, journal, and shim publication before returning.
     fn on_install_complete(&mut self) {}
 
     /// Confirm whether WinBrew may bootstrap a local 7-Zip runtime.
