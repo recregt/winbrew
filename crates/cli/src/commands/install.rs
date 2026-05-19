@@ -14,7 +14,7 @@ use crate::app::install::plan;
 use crate::commands::error::{cancelled, reported_with_hint};
 use crate::models::domains::catalog::CatalogPackage;
 use crate::models::domains::package::PackageRef;
-use winbrew_ui::Ui;
+use winbrew_ui::{SpinnerGuard, Ui};
 
 pub fn run(
     ctx: &CommandContext,
@@ -247,7 +247,7 @@ fn handle_install_error<W: io::Write>(ui: &mut Ui<W>, err: InstallError) -> Resu
 struct InstallUi<'a> {
     ui: &'a mut Ui<io::Stdout>,
     progress: &'a ProgressBar,
-    install_spinner: Option<ProgressBar>,
+    install_spinner: Option<SpinnerGuard>,
 }
 
 struct PlanInstallUi<'a> {
@@ -285,9 +285,7 @@ impl InstallObserver for InstallUi<'_> {
     }
 
     fn on_install_complete(&mut self) {
-        if let Some(spinner) = self.install_spinner.take() {
-            spinner.finish_and_clear();
-        }
+        self.install_spinner = None;
     }
 
     fn confirm_runtime_bootstrap(
