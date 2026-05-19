@@ -51,24 +51,24 @@ pub fn run(
         return Ok(());
     }
 
-    let progress = ui.progress_bar();
-
     let result = {
-        let mut observer = InstallUi {
-            ui: &mut ui,
-            progress: &progress,
-            install_spinner: None,
-        };
+        let progress = ui.progress_bar();
 
-        install::run(
-            ctx.app(),
-            package_ref,
-            ignore_checksum_security,
-            &mut observer,
-        )
+        {
+            let mut observer = InstallUi {
+                ui: &mut ui,
+                progress: &progress,
+                install_spinner: None,
+            };
+
+            install::run(
+                ctx.app(),
+                package_ref,
+                ignore_checksum_security,
+                &mut observer,
+            )
+        }
     };
-
-    progress.finish_and_clear();
 
     match result {
         Ok(outcome) => {

@@ -22,23 +22,22 @@ where
     W: Write,
     R: CatalogRefresher + ?Sized,
 {
-    let progress: ProgressHandle = ui.progress_bar();
+    {
+        let progress: ProgressHandle = ui.progress_bar();
 
-    let result = refresher.refresh_catalog(
-        paths,
-        |total_bytes| {
-            if let Some(total_bytes) = total_bytes {
-                progress.set_length(total_bytes);
-            }
-            progress.set_message("Downloading catalog bundle");
-        },
-        |downloaded_bytes| {
-            progress.inc(downloaded_bytes);
-        },
-    );
-
-    progress.finish_and_clear();
-    result?;
+        refresher.refresh_catalog(
+            paths,
+            |total_bytes| {
+                if let Some(total_bytes) = total_bytes {
+                    progress.set_length(total_bytes);
+                }
+                progress.set_message("Downloading catalog bundle");
+            },
+            |downloaded_bytes| {
+                progress.inc(downloaded_bytes);
+            },
+        )?;
+    }
 
     ui.success("Package catalog updated.");
     Ok(())

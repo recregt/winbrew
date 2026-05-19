@@ -4,19 +4,11 @@ use std::io::Write;
 use std::time::Duration;
 
 #[must_use = "progress handles must be held until the operation completes"]
-pub struct ProgressHandle(Option<ProgressBar>);
+pub struct ProgressHandle(ProgressBar);
 
 impl ProgressHandle {
     fn progress(&self) -> &ProgressBar {
-        self.0
-            .as_ref()
-            .expect("progress handle is unexpectedly empty")
-    }
-
-    fn clear(&mut self) {
-        if let Some(progress) = self.0.take() {
-            progress.finish_and_clear();
-        }
+        &self.0
     }
 
     pub fn set_length(&self, length: u64) {
@@ -30,15 +22,11 @@ impl ProgressHandle {
     pub fn inc(&self, amount: u64) {
         self.progress().inc(amount);
     }
-
-    pub fn finish_and_clear(mut self) {
-        self.clear();
-    }
 }
 
 impl Drop for ProgressHandle {
     fn drop(&mut self) {
-        self.clear();
+        self.0.finish_and_clear();
     }
 }
 
@@ -61,7 +49,7 @@ impl<W: Write> Ui<W> {
     pub fn progress_bar(&self) -> ProgressHandle {
         let pb = ProgressBar::new(0);
         pb.set_style(ProgressStyle::clone(&self.progress_style));
-        ProgressHandle(Some(pb))
+        ProgressHandle(pb)
     }
 
     pub fn start_spinner(&self, message: impl Into<String>) -> SpinnerGuard {
