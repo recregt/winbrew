@@ -51,24 +51,7 @@ pub fn run(
         return Ok(());
     }
 
-    let result = {
-        let progress = ui.progress_bar();
-
-        {
-            let mut observer = InstallUi {
-                ui: &mut ui,
-                progress: &progress,
-                install_spinner: None,
-            };
-
-            install::run(
-                ctx.app(),
-                package_ref,
-                ignore_checksum_security,
-                &mut observer,
-            )
-        }
-    };
+    let result = run_install(&mut ui, ctx.app(), package_ref, ignore_checksum_security);
 
     match result {
         Ok(outcome) => {
@@ -245,7 +228,7 @@ fn handle_install_error<W: io::Write>(ui: &mut Ui<W>, err: InstallError) -> Resu
 
 struct InstallUi<'a> {
     ui: &'a mut Ui<io::Stdout>,
-    progress: &'a ProgressHandle,
+    progress: ProgressHandle,
     install_spinner: Option<SpinnerGuard>,
 }
 
@@ -312,8 +295,21 @@ impl InstallObserver for PlanInstallUi<'_> {
             &choices,
         )
     }
+}
 
-    fn on_start(&mut self, _total_bytes: Option<u64>) {}
+fn run_install(
+    ui: &mut Ui<io::Stdout>,
+    ctx: &crate::AppContext,
+    package_ref: PackageRef,
+    ignore_checksum_security: bool,
+) -> install::Result<install::InstallOutcome> {
+    let progress = ui.progress_bar();
 
-    fn on_progress(&mut self, _downloaded_bytes: u64) {}
+    let mut observer = InstallUi {
+        ui,
+        progress,
+        install_spinner: None,
+    };
+
+    install::run(ctx, package_ref, ignore_checksum_security, &mut observer)
 }

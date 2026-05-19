@@ -56,10 +56,9 @@ pub mod types;
 /// Interactive hooks used by the installation pipeline.
 ///
 /// The install flow uses this trait for the pieces of user interaction it
-/// needs to support: choosing between multiple catalog matches, reporting
-/// download progress, and approving an optional 7-Zip runtime bootstrap.
-/// Implementations should stay responsive because these callbacks are invoked
-/// while the install is actively running.
+/// needs to support. Package selection is required; the remaining hooks are
+/// optional and default to no-op behavior so callers only override the phases
+/// they care about.
 pub trait InstallObserver {
     /// Choose one package from the catalog matches returned for a reference.
     ///
@@ -71,10 +70,10 @@ pub trait InstallObserver {
     ///
     /// `total_bytes` is `Some` when the server provided a content length and
     /// `None` when the size is unknown ahead of time.
-    fn on_start(&mut self, total_bytes: Option<u64>);
+    fn on_start(&mut self, _total_bytes: Option<u64>) {}
 
     /// Report cumulative installer download progress in bytes.
-    fn on_progress(&mut self, downloaded_bytes: u64);
+    fn on_progress(&mut self, _downloaded_bytes: u64) {}
 
     /// Signal that the post-download install phase is starting.
     fn on_install_start(&mut self, _message: &str) {}
