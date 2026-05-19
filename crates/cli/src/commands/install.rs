@@ -58,6 +58,7 @@ pub fn run(
         let mut observer = InstallUi {
             ui: &mut ui,
             progress: &progress,
+            install_spinner: None,
         };
 
         install::run(
@@ -246,6 +247,7 @@ fn handle_install_error<W: io::Write>(ui: &mut Ui<W>, err: InstallError) -> Resu
 struct InstallUi<'a> {
     ui: &'a mut Ui<io::Stdout>,
     progress: &'a ProgressBar,
+    install_spinner: Option<ProgressBar>,
 }
 
 struct PlanInstallUi<'a> {
@@ -274,6 +276,18 @@ impl InstallObserver for InstallUi<'_> {
 
     fn on_progress(&mut self, downloaded_bytes: u64) {
         self.progress.inc(downloaded_bytes);
+    }
+
+    fn on_install_start(&mut self, message: &str) {
+        if self.install_spinner.is_none() {
+            self.install_spinner = Some(self.ui.start_spinner(message));
+        }
+    }
+
+    fn on_install_complete(&mut self) {
+        if let Some(spinner) = self.install_spinner.take() {
+            spinner.finish_and_clear();
+        }
     }
 
     fn confirm_runtime_bootstrap(

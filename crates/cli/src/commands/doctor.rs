@@ -80,7 +80,7 @@ fn report_summary(report: &HealthReport) -> Vec<(String, String)> {
         ("Packages dir".to_string(), report.packages_dir.clone()),
         (
             "Scan duration".to_string(),
-            format_duration(report.scan_duration),
+            format_precise_duration(report.scan_duration),
         ),
         (
             "Database connection".to_string(),
@@ -240,6 +240,14 @@ pub fn format_duration(duration: std::time::Duration) -> String {
     }
 }
 
+fn format_precise_duration(duration: std::time::Duration) -> String {
+    if duration.as_secs() > 0 {
+        format!("{:.2}s", duration.as_secs_f64())
+    } else {
+        format!("{}µs", duration.as_micros())
+    }
+}
+
 pub fn exit_error(
     error_count: usize,
     warning_count: usize,
@@ -299,7 +307,7 @@ mod tests {
                 orphan_scan: Duration::from_micros(15),
                 journal_scan: Duration::from_micros(16),
             },
-            scan_duration: Duration::from_millis(99),
+            scan_duration: Duration::from_micros(812),
             error_count: 0,
         }
     }
@@ -331,6 +339,11 @@ mod tests {
             summary
                 .iter()
                 .any(|(label, value)| label == "Journal scan" && value == "16µs")
+        );
+        assert!(
+            summary
+                .iter()
+                .any(|(label, value)| label == "Scan duration" && value == "812µs")
         );
     }
 

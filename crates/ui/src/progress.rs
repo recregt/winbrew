@@ -10,11 +10,16 @@ impl<W: Write> Ui<W> {
         pb
     }
 
-    pub fn spinner<T, F: FnOnce() -> T>(&self, message: impl Into<String>, f: F) -> T {
+    pub fn start_spinner(&self, message: impl Into<String>) -> ProgressBar {
         let spinner = ProgressBar::new_spinner();
         spinner.set_style(ProgressStyle::clone(&self.spinner_style));
         spinner.set_message(message.into());
         spinner.enable_steady_tick(Duration::from_millis(SPINNER_TICK_MS));
+        spinner
+    }
+
+    pub fn spinner<T, F: FnOnce() -> T>(&self, message: impl Into<String>, f: F) -> T {
+        let spinner = self.start_spinner(message);
 
         let result = f();
         spinner.finish_and_clear();
