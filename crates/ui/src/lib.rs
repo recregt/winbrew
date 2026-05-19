@@ -16,6 +16,7 @@ mod theme;
 
 /// Builder for `Ui` instances.
 pub use builder::UiBuilder;
+pub use progress::SpinnerGuard;
 
 use indicatif::ProgressStyle;
 use std::io::{self, BufWriter, Write};
