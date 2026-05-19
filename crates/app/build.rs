@@ -3,6 +3,29 @@ use std::process::Command;
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
 
+    #[cfg(target_os = "windows")]
+    {
+        let mut res = winresource::WindowsResource::new();
+        res.set_manifest(
+            r#"
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+    <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+        <security>
+            <requestedPrivileges>
+                <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+            </requestedPrivileges>
+        </security>
+    </trustInfo>
+</assembly>
+"#,
+        );
+
+        if let Err(err) = res.compile() {
+            println!("cargo::error=failed to compile Windows resources: {err}");
+            std::process::exit(1);
+        }
+    }
+
     if let Some(git_dir) = git_dir() {
         println!("cargo::rerun-if-changed={git_dir}/HEAD");
 
