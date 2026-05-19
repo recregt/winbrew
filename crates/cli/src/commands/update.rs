@@ -8,7 +8,7 @@ use std::io::Write;
 
 use crate::core::paths::ResolvedPaths;
 use crate::{CommandContext, app::update};
-use winbrew_ui::Ui;
+use winbrew_ui::{ProgressHandle, Ui};
 
 pub fn run(ctx: &CommandContext) -> Result<()> {
     let mut ui = ctx.ui();
@@ -22,7 +22,7 @@ where
     W: Write,
     R: CatalogRefresher + ?Sized,
 {
-    let progress = ui.progress_bar();
+    let progress: ProgressHandle = ui.progress_bar();
 
     let result = refresher.refresh_catalog(
         paths,

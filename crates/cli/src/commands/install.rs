@@ -2,7 +2,6 @@
 //! user-facing install outcomes.
 
 use anyhow::Result;
-use indicatif::ProgressBar;
 use std::io;
 use std::path::Path;
 
@@ -14,7 +13,7 @@ use crate::app::install::plan;
 use crate::commands::error::{cancelled, reported_with_hint};
 use crate::models::domains::catalog::CatalogPackage;
 use crate::models::domains::package::PackageRef;
-use winbrew_ui::{SpinnerGuard, Ui};
+use winbrew_ui::{ProgressHandle, SpinnerGuard, Ui};
 
 pub fn run(
     ctx: &CommandContext,
@@ -246,7 +245,7 @@ fn handle_install_error<W: io::Write>(ui: &mut Ui<W>, err: InstallError) -> Resu
 
 struct InstallUi<'a> {
     ui: &'a mut Ui<io::Stdout>,
-    progress: &'a ProgressBar,
+    progress: &'a ProgressHandle,
     install_spinner: Option<SpinnerGuard>,
 }
 
@@ -279,12 +278,11 @@ impl InstallObserver for InstallUi<'_> {
     }
 
     fn on_install_start(&mut self, message: &str) {
-        if self.install_spinner.is_none() {
-            self.install_spinner = Some(self.ui.start_spinner(message));
-        }
+        self.install_spinner = Some(self.ui.start_spinner(message));
     }
 
     fn on_install_complete(&mut self) {
+        // Drop the phase spinner before commit and the final status output.
         self.install_spinner = None;
     }
 

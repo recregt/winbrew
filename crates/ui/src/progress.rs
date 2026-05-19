@@ -3,6 +3,45 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::io::Write;
 use std::time::Duration;
 
+#[must_use = "progress handles must be held until the operation completes"]
+pub struct ProgressHandle(Option<ProgressBar>);
+
+impl ProgressHandle {
+    fn progress(&self) -> &ProgressBar {
+        self.0
+            .as_ref()
+            .expect("progress handle is unexpectedly empty")
+    }
+
+    fn clear(&mut self) {
+        if let Some(progress) = self.0.take() {
+            progress.finish_and_clear();
+        }
+    }
+
+    pub fn set_length(&self, length: u64) {
+        self.progress().set_length(length);
+    }
+
+    pub fn set_message(&self, message: impl Into<String>) {
+        self.progress().set_message(message.into());
+    }
+
+    pub fn inc(&self, amount: u64) {
+        self.progress().inc(amount);
+    }
+
+    pub fn finish_and_clear(mut self) {
+        self.clear();
+    }
+}
+
+impl Drop for ProgressHandle {
+    fn drop(&mut self) {
+        self.clear();
+    }
+}
+
 #[must_use = "spinner guards must be held until the phase ends"]
 pub struct SpinnerGuard(ProgressBar);
 
@@ -19,10 +58,10 @@ impl Drop for SpinnerGuard {
 }
 
 impl<W: Write> Ui<W> {
-    pub fn progress_bar(&self) -> ProgressBar {
+    pub fn progress_bar(&self) -> ProgressHandle {
         let pb = ProgressBar::new(0);
         pb.set_style(ProgressStyle::clone(&self.progress_style));
-        pb
+        ProgressHandle(Some(pb))
     }
 
     pub fn start_spinner(&self, message: impl Into<String>) -> SpinnerGuard {
