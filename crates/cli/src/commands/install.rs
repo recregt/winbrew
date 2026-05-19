@@ -265,7 +265,7 @@ impl InstallObserver for InstallUi<'_> {
     }
 
     fn on_install_complete(&mut self) {
-        // Drop the phase spinner before commit and the final status output.
+        // Clear the phase spinner before commit, journal, and final status output.
         self.install_spinner = None;
     }
 
