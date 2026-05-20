@@ -13,9 +13,11 @@ Ensure you have the following installed on your system before proceeding:
 - [go-task](https://taskfile.dev/)
 - PowerShell 7 or later
 
-## Automated Build (Recommended)
+## Automated Installation
 
-You can quickly set up and build the project using the provided installation script. 
+This script builds WinBrew from source and installs the binary to `C:\winbrew`. 
+It does **not** set up a development environment — the source checkout and build 
+artifacts are removed automatically after installation.
 
 Run PowerShell as an administrator and execute the following command:
 
