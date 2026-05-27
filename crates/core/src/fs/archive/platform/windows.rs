@@ -1,7 +1,7 @@
 use std::io;
 use std::path::Path;
 
-use super::super::PathInfo;
+use super::super::types::PathInfo;
 use super::{PlatformAdapter, WindowsPlatform};
 
 impl PlatformAdapter for WindowsPlatform {

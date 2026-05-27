@@ -4,8 +4,9 @@ use std::path::Path;
 
 use crate::fs::{FsError, Result};
 
+use super::super::context::ExtractionContext;
+use super::super::limits::ExtractionLimits;
 use super::super::platform::PlatformAdapter;
-use super::{ExtractionContext, ExtractionLimits};
 
 pub(crate) fn extract_zip_archive_with_platform<P: PlatformAdapter>(
     zip_path: &Path,
