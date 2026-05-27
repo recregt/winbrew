@@ -7,8 +7,9 @@ use flate2::read::GzDecoder;
 
 use crate::fs::{FsError, Result};
 
+use super::super::context::ExtractionContext;
+use super::super::limits::ExtractionLimits;
 use super::super::platform::PlatformAdapter;
-use super::{ExtractionContext, ExtractionLimits};
 
 const TAR_COPY_BUFFER_SIZE: usize = 256 * 1024;
 

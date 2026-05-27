@@ -7,9 +7,6 @@ mod sevenz;
 mod tar;
 mod zip;
 
-#[allow(unused_imports)]
-pub(crate) use super::{ExtractionContext, ExtractionLimits};
-
 use super::ArchiveKind;
 use crate::fs::{FsError, Result};
 use std::path::Path;
@@ -31,7 +28,7 @@ pub fn extract_archive(
         ArchiveKind::Zip => extract_zip_archive_with_limits(
             archive_path,
             destination_dir,
-            ExtractionLimits::default(),
+            super::limits::ExtractionLimits::default(),
         )
         .map_err(Box::new),
         ArchiveKind::Gzip => {
@@ -43,7 +40,7 @@ pub fn extract_archive(
         ArchiveKind::Tar => tar::extract_tar_archive_with_platform::<DefaultPlatform>(
             archive_path,
             destination_dir,
-            ExtractionLimits::default(),
+            super::limits::ExtractionLimits::default(),
         )
         .map_err(Box::new),
         _ => Err(Box::new(FsError::archive_backend_unavailable(
@@ -63,7 +60,7 @@ pub fn extract_zip_archive(zip_path: &Path, destination_dir: &Path) -> BoxedResu
 fn extract_zip_archive_with_limits(
     zip_path: &Path,
     destination_dir: &Path,
-    limits: ExtractionLimits,
+    limits: super::limits::ExtractionLimits,
 ) -> Result<()> {
     zip::extract_zip_archive_with_platform::<DefaultPlatform>(zip_path, destination_dir, limits)
 }

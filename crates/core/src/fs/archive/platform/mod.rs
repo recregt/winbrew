@@ -2,7 +2,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use super::PathInfo;
+use super::types::PathInfo;
 
 pub(crate) trait PlatformAdapter {
     fn inspect_path(path: &Path) -> io::Result<PathInfo>;

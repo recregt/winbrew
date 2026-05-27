@@ -6,8 +6,10 @@ use std::path::{Path, PathBuf};
 
 use crate::fs::{FsError, Result};
 
+use super::cleanup::ExtractionCleanup;
+use super::limits::ExtractionLimits;
 use super::platform::PlatformAdapter;
-use super::{CachedPath, ExtractionCleanup, ExtractionLimits, PathInfo};
+use super::types::{CachedPath, PathInfo};
 
 pub(crate) struct ExtractionContext<P: PlatformAdapter> {
     cached_paths: HashMap<PathBuf, CachedPath>,
