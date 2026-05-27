@@ -39,10 +39,15 @@ mod archive;
 mod cleanup;
 mod error;
 mod move_or_copy;
+mod sevenz;
 mod write;
 
 pub use archive::{ArchiveKind, extract_archive, extract_zip_archive};
 pub use cleanup::cleanup_path;
 pub use error::{FsError, Result};
 pub use move_or_copy::{backup_path_for, replace_directory};
+pub use sevenz::{
+    sevenz_bin_path_from_runtime_root, sevenz_dll_path_from_runtime_root,
+    sevenz_runtime_dir_from_runtime_root, system_sevenz_binary_path,
+};
 pub use write::{atomic_write, atomic_write_toml_temp, finalize_temp_file};

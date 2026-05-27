@@ -4,10 +4,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::env::{LOCALAPPDATA, WINBREW_PATHS_ROOT};
-use crate::fs::{FsError, Result};
+use crate::fs::{FsError, Result, system_sevenz_binary_path};
 
-#[cfg(windows)]
-use winbrew_windows::host::search_path_file;
+pub(crate) use crate::fs::{sevenz_bin_path_from_runtime_root, sevenz_dll_path_from_runtime_root};
 
 const SEVENZ_RELATIVE_EXE: &str = "bin/7zip/7z.exe";
 
@@ -48,10 +47,7 @@ impl SevenZipLauncher for SystemSevenZipLauncher {
 pub(crate) fn extract_sevenz(archive_path: &Path, destination_dir: &Path) -> Result<()> {
     #[cfg(windows)]
     {
-        if let Some(system_binary_path) = search_path_file("7z.exe")
-            && let Some(system_runtime_root) = system_binary_path.parent()
-            && system_runtime_root.join("7z.dll").exists()
-        {
+        if let Some(system_binary_path) = system_sevenz_binary_path() {
             return extract_sevenz_with_binary_path(
                 archive_path,
                 destination_dir,
@@ -71,18 +67,6 @@ pub(crate) fn extract_sevenz(archive_path: &Path, destination_dir: &Path) -> Res
         &runtime_root,
         &SystemSevenZipLauncher,
     )
-}
-
-pub(crate) fn sevenz_bin_path_from_runtime_root(runtime_root: &Path) -> PathBuf {
-    sevenz_runtime_dir_from_runtime_root(runtime_root).join("7z.exe")
-}
-
-pub(crate) fn sevenz_dll_path_from_runtime_root(runtime_root: &Path) -> PathBuf {
-    sevenz_runtime_dir_from_runtime_root(runtime_root).join("7z.dll")
-}
-
-pub(crate) fn sevenz_runtime_dir_from_runtime_root(runtime_root: &Path) -> PathBuf {
-    runtime_root.join("bin/7zip")
 }
 
 pub(crate) fn extract_sevenz_with_runtime_root<L: SevenZipLauncher>(

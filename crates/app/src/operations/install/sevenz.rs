@@ -6,11 +6,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::core::env::WINBREW_PATHS_ROOT;
-use crate::core::fs::{cleanup_path, replace_directory};
+use crate::core::fs::{cleanup_path, replace_directory, system_sevenz_binary_path};
+pub(crate) use crate::core::fs::{
+    sevenz_bin_path_from_runtime_root, sevenz_dll_path_from_runtime_root,
+    sevenz_runtime_dir_from_runtime_root,
+};
 use crate::core::hash::{hash_file, verify_hash};
 use crate::core::network::{build_client, download_url_to_temp_file, is_7z_path};
 use crate::models::shared::hash::HashAlgorithm;
-use crate::windows::host::search_path_file;
 
 use super::InstallError;
 
@@ -69,16 +72,8 @@ pub(crate) fn ensure_runtime(
 
 pub(crate) fn runtime_bootstrap_required(runtime_root: &Path, installer_url: &str) -> bool {
     is_7z_path(installer_url)
-        && !system_runtime_available()
+        && system_sevenz_binary_path().is_none()
         && !local_runtime_available(runtime_root)
-}
-
-fn system_runtime_available() -> bool {
-    search_path_file("7z.exe").is_some_and(|binary_path| {
-        binary_path
-            .parent()
-            .is_some_and(|runtime_root| runtime_root.join("7z.dll").exists())
-    })
 }
 
 fn local_runtime_available(runtime_root: &Path) -> bool {
@@ -224,18 +219,6 @@ fn create_bootstrap_root() -> PathBuf {
     ));
 
     bootstrap_root
-}
-
-pub(crate) fn sevenz_bin_path_from_runtime_root(runtime_root: &Path) -> PathBuf {
-    sevenz_runtime_dir_from_runtime_root(runtime_root).join("7z.exe")
-}
-
-pub(crate) fn sevenz_dll_path_from_runtime_root(runtime_root: &Path) -> PathBuf {
-    sevenz_runtime_dir_from_runtime_root(runtime_root).join("7z.dll")
-}
-
-pub(crate) fn sevenz_runtime_dir_from_runtime_root(runtime_root: &Path) -> PathBuf {
-    runtime_root.join("bin/7zip")
 }
 
 struct BootstrapArtifacts {
