@@ -139,3 +139,109 @@ fn sanitize_entry_path(path: &Path) -> Result<PathBuf> {
 
     Ok(enclosed)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::fs::archive::{ArchiveKind, extract_archive};
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn create_tar_archive(path: &std::path::Path, file_name: &str, contents: &[u8]) {
+        let file = fs::File::create(path).expect("create tar file");
+        let mut builder = tar::Builder::new(file);
+        let mut header = tar::Header::new_gnu();
+        header.set_size(contents.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+
+        builder
+            .append_data(&mut header, file_name, contents)
+            .expect("append tar entry");
+        builder.finish().expect("finish tar file");
+    }
+
+    fn create_tar_gz_archive(path: &std::path::Path, file_name: &str, contents: &[u8]) {
+        let file = fs::File::create(path).expect("create tar.gz file");
+        let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+        let mut builder = tar::Builder::new(encoder);
+        let mut header = tar::Header::new_gnu();
+        header.set_size(contents.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+
+        builder
+            .append_data(&mut header, file_name, contents)
+            .expect("append tar.gz entry");
+        let encoder = builder.into_inner().expect("finish tar builder");
+        encoder.finish().expect("finish tar.gz file");
+    }
+
+    fn create_tar_bz2_archive(path: &std::path::Path, file_name: &str, contents: &[u8]) {
+        let file = fs::File::create(path).expect("create tar.bz2 file");
+        let encoder = bzip2::write::BzEncoder::new(file, bzip2::Compression::default());
+        let mut builder = tar::Builder::new(encoder);
+        let mut header = tar::Header::new_gnu();
+        header.set_size(contents.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+
+        builder
+            .append_data(&mut header, file_name, contents)
+            .expect("append tar.bz2 entry");
+        let encoder = builder.into_inner().expect("finish tar builder");
+        encoder.finish().expect("finish tar.bz2 file");
+    }
+
+    #[test]
+    fn extract_tar_archive_extracts_plain_tar() {
+        let temp_dir = tempdir().expect("temp dir");
+        let destination_dir = temp_dir.path().join("dest");
+        let archive_path = temp_dir.path().join("archive.tar");
+
+        fs::create_dir_all(&destination_dir).expect("destination dir");
+        create_tar_archive(&archive_path, "bin/tool.exe", b"tar payload");
+
+        extract_archive(ArchiveKind::Tar, &archive_path, &destination_dir).expect("tar extraction");
+
+        assert_eq!(
+            fs::read(destination_dir.join("bin/tool.exe")).expect("read"),
+            b"tar payload"
+        );
+    }
+
+    #[test]
+    fn extract_tar_archive_extracts_tar_gz() {
+        let temp_dir = tempdir().expect("temp dir");
+        let destination_dir = temp_dir.path().join("dest");
+        let archive_path = temp_dir.path().join("archive.tar.gz");
+
+        fs::create_dir_all(&destination_dir).expect("destination dir");
+        create_tar_gz_archive(&archive_path, "bin/tool.exe", b"tar gz payload");
+
+        extract_archive(ArchiveKind::Tar, &archive_path, &destination_dir)
+            .expect("tar.gz extraction");
+
+        assert_eq!(
+            fs::read(destination_dir.join("bin/tool.exe")).expect("read"),
+            b"tar gz payload"
+        );
+    }
+
+    #[test]
+    fn extract_tar_archive_extracts_tar_bz2() {
+        let temp_dir = tempdir().expect("temp dir");
+        let destination_dir = temp_dir.path().join("dest");
+        let archive_path = temp_dir.path().join("archive.tar.bz2");
+
+        fs::create_dir_all(&destination_dir).expect("destination dir");
+        create_tar_bz2_archive(&archive_path, "bin/tool.exe", b"tar bz2 payload");
+
+        extract_archive(ArchiveKind::Tar, &archive_path, &destination_dir)
+            .expect("tar.bz2 extraction");
+
+        assert_eq!(
+            fs::read(destination_dir.join("bin/tool.exe")).expect("read"),
+            b"tar bz2 payload"
+        );
+    }
+}
