@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::fs::{FsError, Result};
 
-use super::super::platform::PlatformAdapter;
+use super::platform::PlatformAdapter;
 use super::{CachedPath, ExtractionCleanup, ExtractionLimits, PathInfo};
 
 pub(crate) struct ExtractionContext<P: PlatformAdapter> {
@@ -83,13 +83,10 @@ impl<P: PlatformAdapter> ExtractionContext<P> {
             }
         }
 
-        // missing_directories is collected deepest-first, so the first entry is the
-        // deepest full path and create_dir_all on it materializes the whole chain.
         if let Some(deepest_missing) = missing_directories.first() {
             fs::create_dir_all(deepest_missing)
                 .map_err(|err| FsError::create_directory(deepest_missing, err))?;
 
-            // Record parents before children so drop can clean up deepest paths first.
             for directory in missing_directories.iter().rev() {
                 self.record_directory(directory);
             }
@@ -114,8 +111,6 @@ impl<P: PlatformAdapter> ExtractionContext<P> {
             ));
         }
 
-        // Empty entries do not have a meaningful compression ratio, but they still
-        // count toward quota and entry-count limits.
         if entry_size > 0
             && (compressed_size == 0
                 || entry_size > compressed_size.saturating_mul(self.limits.max_compression_ratio))

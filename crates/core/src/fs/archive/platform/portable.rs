@@ -2,7 +2,7 @@ use std::fs::{self, OpenOptions};
 use std::io;
 use std::path::Path;
 
-use super::super::extract::PathInfo;
+use super::super::PathInfo;
 use super::{PlatformAdapter, PortablePlatform};
 
 impl PlatformAdapter for PortablePlatform {

@@ -116,3 +116,36 @@ fn temporary_output_path_for(output_path: &Path) -> PathBuf {
 
     output_path.with_file_name(format!("{file_name}.tmp"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    fn create_gz_archive(path: &std::path::Path, contents: &[u8]) {
+        let file = fs::File::create(path).expect("create gz file");
+        let mut encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+
+        encoder.write_all(contents).expect("write gz contents");
+        encoder.finish().expect("finish gz file");
+    }
+
+    #[test]
+    fn extract_gzip_archive_extracts_file() {
+        let temp_dir = tempdir().expect("temp dir");
+        let destination_dir = temp_dir.path().join("dest");
+        let archive_path = temp_dir.path().join("tool.exe.gz");
+
+        fs::create_dir_all(&destination_dir).expect("destination dir");
+        create_gz_archive(&archive_path, b"gzip payload");
+
+        extract_gzip_archive(&archive_path, &destination_dir).expect("gzip extraction");
+
+        assert_eq!(
+            fs::read(destination_dir.join("tool.exe")).expect("read"),
+            b"gzip payload"
+        );
+    }
+}

@@ -2,22 +2,13 @@
 //! This module provides a high-level API for extracting archive payloads while
 //! preserving the ZIP security and rollback behavior WinBrew already relies on.
 
-mod cleanup;
-mod context;
-mod engine;
 mod gzip;
-mod limits;
 mod sevenz;
 mod tar;
-mod types;
+mod zip;
 
-#[cfg(test)]
-mod tests;
-
-pub(crate) use cleanup::ExtractionCleanup;
-pub(crate) use context::ExtractionContext;
-pub(crate) use limits::ExtractionLimits;
-pub(crate) use types::{CachedPath, PathInfo};
+#[allow(unused_imports)]
+pub(crate) use super::{ExtractionContext, ExtractionLimits};
 
 use super::ArchiveKind;
 use crate::fs::{FsError, Result};
@@ -74,5 +65,5 @@ fn extract_zip_archive_with_limits(
     destination_dir: &Path,
     limits: ExtractionLimits,
 ) -> Result<()> {
-    engine::extract_zip_archive_with_platform::<DefaultPlatform>(zip_path, destination_dir, limits)
+    zip::extract_zip_archive_with_platform::<DefaultPlatform>(zip_path, destination_dir, limits)
 }

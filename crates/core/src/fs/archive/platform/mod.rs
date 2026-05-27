@@ -2,9 +2,9 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use super::extract::PathInfo;
+use super::PathInfo;
 
-pub(super) trait PlatformAdapter {
+pub(crate) trait PlatformAdapter {
     fn inspect_path(path: &Path) -> io::Result<PathInfo>;
 
     fn create_extraction_target_file(path: &Path) -> io::Result<fs::File>;
