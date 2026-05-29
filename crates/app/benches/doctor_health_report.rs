@@ -133,6 +133,15 @@ mod doctor_health_report {
             deployment_kind: DeploymentKind,
             install_dir: &Path,
         ) {
+            fs::create_dir_all(
+                self.ctx
+                    .paths
+                    .root
+                    .join("data")
+                    .join("pkgdb")
+                    .join(database::package_journal_key(package_name, version)),
+            )
+            .expect("journal dir should exist");
             let mut writer = JournalWriter::open_for_package(
                 self.ctx.paths.root.as_path(),
                 package_name,
@@ -162,6 +171,15 @@ mod doctor_health_report {
         }
 
         fn write_commit_only_journal(&self, package_name: &str, version: &str) {
+            fs::create_dir_all(
+                self.ctx
+                    .paths
+                    .root
+                    .join("data")
+                    .join("pkgdb")
+                    .join(database::package_journal_key(package_name, version)),
+            )
+            .expect("journal dir should exist");
             let mut writer = JournalWriter::open_for_package(
                 self.ctx.paths.root.as_path(),
                 package_name,

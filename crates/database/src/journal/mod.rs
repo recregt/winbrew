@@ -181,10 +181,23 @@ mod tests {
             .expect("system clock should be after unix epoch")
             .as_nanos();
 
-        std::env::temp_dir().join(format!(
+        let root = std::env::temp_dir().join(format!(
             "winbrew-database-journal-{}-{unique_id}",
             process::id()
-        ))
+        ));
+        let paths = resolved_root_paths(&root);
+
+        crate::init(&paths).expect("bootstrap journal test root");
+        for package_key in [
+            package_journal_key("winget/Contoso.App", "1.0.0"),
+            package_journal_key("winget/Contoso.Committed", "1.0.0"),
+            package_journal_key("winget/Contoso.Incomplete", "1.0.0"),
+        ] {
+            fs::create_dir_all(paths.package_journal_dir(&package_key))
+                .expect("create journal package directory");
+        }
+
+        root
     }
 
     fn resolved_root_paths(root: &Path) -> ResolvedPaths {

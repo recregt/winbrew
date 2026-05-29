@@ -294,6 +294,12 @@ fn write_committed_journal(
     version: &str,
     install_dir: &Path,
 ) -> PathBuf {
+    std::fs::create_dir_all(
+        root.join("data")
+            .join("pkgdb")
+            .join(database::package_journal_key(package_name, version)),
+    )
+    .expect("journal dir should exist");
     let mut writer = database::JournalWriter::open_for_package(root, package_name, version)
         .expect("open committed journal");
     writer
@@ -321,6 +327,12 @@ fn write_committed_journal(
 }
 
 fn write_commit_only_journal(root: &Path, package_name: &str, version: &str) -> PathBuf {
+    std::fs::create_dir_all(
+        root.join("data")
+            .join("pkgdb")
+            .join(database::package_journal_key(package_name, version)),
+    )
+    .expect("journal dir should exist");
     let mut writer = database::JournalWriter::open_for_package(root, package_name, version)
         .expect("open legacy journal");
     writer

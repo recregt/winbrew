@@ -62,10 +62,6 @@ pub(crate) fn build_pool(
     max_size: u32,
     migrate: Option<fn(&Connection) -> Result<()>>,
 ) -> Result<Pool<SqliteConnectionManager>> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).context("failed to create winbrew database directory")?;
-    }
-
     let pool = Pool::builder()
         .max_size(max_size)
         .build(SqliteConnectionManager { path, read_only })
