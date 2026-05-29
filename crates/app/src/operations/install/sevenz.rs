@@ -6,13 +6,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::core::env::WINBREW_PATHS_ROOT;
-use crate::core::fs::{cleanup_path, replace_directory, system_sevenz_binary_path};
-pub(crate) use crate::core::fs::{
+use crate::core::fs::{cleanup_path, replace_directory};
+use crate::core::hash::{hash_file, verify_hash};
+use crate::core::network::{build_client, download_url_to_temp_file, is_7z_path};
+use crate::core::paths::system_sevenz_binary_path;
+pub(crate) use crate::core::paths::{
     sevenz_bin_path_from_runtime_root, sevenz_dll_path_from_runtime_root,
     sevenz_runtime_dir_from_runtime_root,
 };
-use crate::core::hash::{hash_file, verify_hash};
-use crate::core::network::{build_client, download_url_to_temp_file, is_7z_path};
 use crate::models::shared::hash::HashAlgorithm;
 
 use super::InstallError;

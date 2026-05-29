@@ -4,9 +4,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::env::{LOCALAPPDATA, WINBREW_PATHS_ROOT};
-use crate::fs::{FsError, Result, system_sevenz_binary_path};
-
-pub(crate) use crate::fs::{sevenz_bin_path_from_runtime_root, sevenz_dll_path_from_runtime_root};
+use crate::fs::{FsError, Result};
+use crate::paths::{
+    sevenz_bin_path_from_runtime_root, sevenz_dll_path_from_runtime_root, system_sevenz_binary_path,
+};
 
 const SEVENZ_RELATIVE_EXE: &str = "bin/7zip/7z.exe";
 
@@ -145,20 +146,6 @@ mod tests {
     use std::cell::RefCell;
     use std::fs;
     use tempfile::tempdir;
-
-    #[test]
-    fn sevenz_runtime_layout_uses_expected_relative_paths() {
-        let runtime_root = PathBuf::from("C:/winbrew");
-
-        assert_eq!(
-            sevenz_bin_path_from_runtime_root(&runtime_root),
-            PathBuf::from("C:/winbrew/bin/7zip/7z.exe")
-        );
-        assert_eq!(
-            sevenz_dll_path_from_runtime_root(&runtime_root),
-            PathBuf::from("C:/winbrew/bin/7zip/7z.dll")
-        );
-    }
 
     struct RecordingSevenZipLauncher {
         calls: RefCell<Vec<(PathBuf, PathBuf, PathBuf)>>,

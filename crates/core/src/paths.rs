@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 
 use crate::hash::Hasher;
 use winbrew_models::shared::hash::HashAlgorithm;
+#[cfg(windows)]
+use winbrew_windows::host::search_path_file;
 
 /// Fully resolved path set for the active WinBrew root.
 #[derive(Debug, Clone)]
@@ -155,6 +157,41 @@ pub fn cache_file_at(root: &Path, name: &str, version: &str, ext: &str) -> PathB
     cache_dir_at(root).join(cache_filename(name, version, ext))
 }
 
+/// Return the 7-Zip runtime directory for a managed root.
+pub fn sevenz_runtime_dir_from_runtime_root(runtime_root: &Path) -> PathBuf {
+    runtime_root.join("bin/7zip")
+}
+
+/// Return the 7-Zip binary path for a managed root.
+pub fn sevenz_bin_path_from_runtime_root(runtime_root: &Path) -> PathBuf {
+    sevenz_runtime_dir_from_runtime_root(runtime_root).join("7z.exe")
+}
+
+/// Return the 7-Zip DLL path for a managed root.
+pub fn sevenz_dll_path_from_runtime_root(runtime_root: &Path) -> PathBuf {
+    sevenz_runtime_dir_from_runtime_root(runtime_root).join("7z.dll")
+}
+
+/// Return the first usable 7-Zip binary found on the current PATH.
+#[cfg(windows)]
+pub fn system_sevenz_binary_path() -> Option<PathBuf> {
+    search_path_file("7z.exe").and_then(|binary_path| {
+        let runtime_root = binary_path.parent()?;
+
+        if runtime_root.join("7z.dll").exists() {
+            Some(binary_path)
+        } else {
+            None
+        }
+    })
+}
+
+/// Return the first usable 7-Zip binary found on the current PATH.
+#[cfg(not(windows))]
+pub fn system_sevenz_binary_path() -> Option<PathBuf> {
+    None
+}
+
 /// Return the stable key used for per-package recovery journals.
 pub fn package_journal_key(package_id: &str, version: &str) -> String {
     let mut key = sanitize_package_key_component(package_id);
@@ -296,9 +333,11 @@ mod tests {
     use super::{
         cache_dir_at, catalog_db_at, config_file_at, data_dir_at, db_path_at, ensure_dirs_at,
         log_dir_at, log_file_at, package_journal_file_at, package_journal_key, packages_dir_at,
-        pkgdb_dir_at, resolved_paths,
+        pkgdb_dir_at, resolved_paths, sevenz_bin_path_from_runtime_root,
+        sevenz_dll_path_from_runtime_root, sevenz_runtime_dir_from_runtime_root,
     };
     use sha2::{Digest, Sha256};
+    use std::path::PathBuf;
     use tempfile::tempdir;
 
     #[test]
@@ -334,6 +373,24 @@ mod tests {
             pkgdb_dir_at(root.path())
                 .join(&package_key)
                 .join("journal.jsonl")
+        );
+    }
+
+    #[test]
+    fn sevenz_runtime_layout_uses_expected_relative_paths() {
+        let runtime_root = PathBuf::from("C:/winbrew");
+
+        assert_eq!(
+            sevenz_runtime_dir_from_runtime_root(&runtime_root),
+            PathBuf::from("C:/winbrew/bin/7zip")
+        );
+        assert_eq!(
+            sevenz_bin_path_from_runtime_root(&runtime_root),
+            PathBuf::from("C:/winbrew/bin/7zip/7z.exe")
+        );
+        assert_eq!(
+            sevenz_dll_path_from_runtime_root(&runtime_root),
+            PathBuf::from("C:/winbrew/bin/7zip/7z.dll")
         );
     }
 
