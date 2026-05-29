@@ -14,7 +14,7 @@ pub struct JournalWriter {
 
 impl JournalWriter {
     pub fn open_for_package(root: &Path, package_id: &str, version: &str) -> Result<Self> {
-        let package_key = crate::core::package_journal_key(package_id, version);
+        let package_key = crate::journal::package_journal_key(package_id, version);
         let journal_path = crate::core::package_journal_file_at(root, &package_key);
 
         Self::open_at(journal_path)
@@ -25,7 +25,7 @@ impl JournalWriter {
         package_id: &str,
         version: &str,
     ) -> Result<Self> {
-        let package_key = crate::core::package_journal_key(package_id, version);
+        let package_key = crate::journal::package_journal_key(package_id, version);
         let journal_path = paths.package_journal_file(&package_key);
 
         Self::open_at(journal_path)

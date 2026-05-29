@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 
 use crate::catalog;
 use crate::core::network::installer_filename;
-use crate::core::paths::{ensure_install_dirs_at, install_root_from_package_dir};
+use crate::core::paths::install_root_from_package_dir;
 use crate::core::temp_workspace;
 use crate::database;
 use crate::engines;
@@ -52,6 +52,10 @@ pub mod plan;
 mod sevenz;
 pub mod state;
 pub mod types;
+
+fn ensure_install_dirs(install_root: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(install_root)
+}
 
 /// Interactive hooks used by the installation pipeline.
 ///
@@ -161,7 +165,7 @@ pub fn run<O: InstallObserver>(
         )?;
     }
 
-    ensure_install_dirs_at(&target.install_root)?;
+    ensure_install_dirs(&target.install_root)?;
     fs::create_dir_all(&target.temp_root)?;
 
     let _temp_root_guard = TempRootGuard::new(target.temp_root.clone());
@@ -391,8 +395,8 @@ impl<O: InstallObserver> Drop for InstallPhaseGuard<'_, O> {
 #[cfg(test)]
 mod tests {
     use super::write_install_journal;
-    use crate::core::paths::package_journal_key;
     use crate::database;
+    use crate::database::package_journal_key;
     use crate::models::domains::command_resolution::{
         CommandSource, Confidence, ResolverResult, VersionScope,
     };
@@ -451,8 +455,8 @@ mod tests {
             Some(r#""bin/tool.exe""#),
         )?;
 
-        let journal_path =
-            paths.package_journal_file(&package_journal_key(&package.name, &package.version));
+        let journal_key = package_journal_key(&package.name, &package.version);
+        let journal_path = paths.package_journal_file(&journal_key);
         let committed = database::JournalReader::read_committed_package(&journal_path)?;
 
         assert_eq!(committed.commands, Some(vec!["contoso".to_string()]));

@@ -14,6 +14,7 @@
 pub use winbrew_core as core;
 pub use winbrew_models as models;
 
+mod bootstrap;
 mod catalog;
 mod command_registry;
 mod config;
@@ -53,7 +54,7 @@ pub use installed_packages::{
 };
 pub use journal::{
     CommittedJournalPackage, FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader,
-    JournalReplayError, JournalWriter,
+    JournalReplayError, JournalWriter, package_journal_key,
 };
 pub use msi_inventory::{
     apply_snapshot, find_packages_by_normalized_path,
@@ -95,6 +96,8 @@ static CATALOG_DB_POOLS: OnceLock<Mutex<HashMap<PathBuf, &'static Pool<SqliteCon
 
 /// Initialize the process-local storage state for the given resolved paths.
 pub fn init(paths: &ResolvedPaths) -> Result<()> {
+    bootstrap::ensure_managed_root_dirs(paths)?;
+
     CURRENT_PATHS.with(|current_paths| {
         *current_paths.borrow_mut() = Some(paths.clone());
     });

@@ -6,10 +6,12 @@ use crate::models::install::engine::EngineMetadata;
 use crate::models::shared::DeploymentKind;
 use crate::models::shared::hash::HashAlgorithm;
 
+mod key;
 mod reader;
 mod replay;
 mod writer;
 
+pub use key::package_journal_key;
 pub use reader::{JournalReadError, JournalReader};
 pub use replay::{CommittedJournalPackage, JournalReplayError};
 pub use writer::JournalWriter;
@@ -163,8 +165,9 @@ pub enum JournalEntry {
 
 #[cfg(test)]
 mod tests {
+    use super::package_journal_key;
     use super::{FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader, JournalWriter};
-    use crate::core::{ResolvedPaths, package_journal_key, resolved_paths};
+    use crate::core::{ResolvedPaths, resolved_paths};
     use crate::models::install::installer::InstallerType;
     use std::fs;
     use std::path::Path;

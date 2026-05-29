@@ -20,10 +20,9 @@ use tracing::{debug, warn};
 use std::path::{Path, PathBuf};
 
 use crate::core::fs::cleanup_path;
-use crate::core::paths::{
-    install_root_from_package_dir, package_journal_file_at, package_journal_key,
-};
+use crate::core::paths::{install_root_from_package_dir, package_journal_file_at};
 use crate::database;
+use crate::database::package_journal_key;
 use crate::engines::{EngineKind, PackageEngine};
 use crate::operations::shims;
 
