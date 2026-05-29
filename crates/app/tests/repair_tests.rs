@@ -8,6 +8,13 @@ use winbrew_models::domains::shared::DeploymentKind;
 #[test]
 fn prepare_journal_replay_targets_rejects_missing_command_resolution_metadata() -> Result<()> {
     let root = tempdir().expect("temp dir");
+    std::fs::create_dir_all(
+        root.path()
+            .join("data")
+            .join("pkgdb")
+            .join(database::package_journal_key("Contoso.Legacy", "1.0.0")),
+    )
+    .expect("journal dir should exist");
     let mut writer =
         database::JournalWriter::open_for_package(root.path(), "Contoso.Legacy", "1.0.0")
             .expect("open journal");

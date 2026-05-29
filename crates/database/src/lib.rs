@@ -61,6 +61,37 @@ pub use msi_inventory::{
     find_packages_by_normalized_registry_key_path, get_snapshot, replace_snapshot, upsert_receipt,
 };
 
+#[cfg(test)]
+mod tests {
+    use super::{JournalWriter, get_conn, init, package_journal_key};
+    use crate::core::resolved_paths;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn init_bootstraps_primary_pool_and_journal_paths() {
+        let root = tempdir().expect("temp dir");
+        let paths = resolved_paths(
+            root.path(),
+            "${root}\\packages",
+            "${root}\\data",
+            "${root}\\data\\logs",
+            "${root}\\data\\cache",
+        );
+
+        init(&paths).expect("initialize database state");
+
+        let _conn = get_conn().expect("open primary database connection");
+        let journal_key = package_journal_key("winget/Contoso.App", "1.0.0");
+        fs::create_dir_all(paths.package_journal_dir(&journal_key))
+            .expect("create journal directory");
+        let writer = JournalWriter::open_for_package_in(&paths, "winget/Contoso.App", "1.0.0")
+            .expect("open journal writer");
+
+        assert_eq!(writer.path(), &paths.package_journal_file(&journal_key));
+    }
+}
+
 /// Search the catalog database for packages matching the query.
 pub fn search(
     conn: &rusqlite::Connection,

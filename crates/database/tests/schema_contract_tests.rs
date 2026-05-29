@@ -347,6 +347,13 @@ fn main_database_contract_matches_database_schema() -> Result<()> {
 #[test]
 fn journal_contract_round_trips_metadata_and_commit() -> Result<()> {
     let test_root = test_root();
+    std::fs::create_dir_all(
+        test_root
+            .path()
+            .join("data")
+            .join("pkgdb")
+            .join(database::package_journal_key("winget/Contoso.App", "1.0.0")),
+    )?;
 
     let mut writer =
         database::JournalWriter::open_for_package(test_root.path(), "winget/Contoso.App", "1.0.0")?;

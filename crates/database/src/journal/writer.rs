@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
@@ -32,11 +32,6 @@ impl JournalWriter {
     }
 
     fn open_at(journal_path: PathBuf) -> Result<Self> {
-        if let Some(parent) = journal_path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("failed to create {}", parent.display()))?;
-        }
-
         if journal_path.exists() {
             match JournalReader::read_committed(&journal_path) {
                 Ok(_) => {

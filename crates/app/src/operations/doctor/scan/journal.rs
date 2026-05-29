@@ -447,6 +447,9 @@ mod tests {
         package_name: &str,
         build: impl FnOnce(&mut database::JournalWriter),
     ) -> PathBuf {
+        let package_key = database::package_journal_key(package_name, "1.0.0");
+        fs::create_dir_all(env.root().join("data").join("pkgdb").join(&package_key))
+            .expect("journal package directory should be created");
         let mut writer =
             database::JournalWriter::open_for_package(env.root(), package_name, "1.0.0")
                 .expect("open journal");

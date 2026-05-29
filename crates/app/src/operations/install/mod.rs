@@ -484,6 +484,13 @@ fn write_install_journal(
         anyhow::anyhow!("package '{package_name}' was not found after a successful install commit")
     })?;
 
+    let journal_key = database::package_journal_key(
+        committed_package.name.as_str(),
+        committed_package.version.as_str(),
+    );
+
+    fs::create_dir_all(paths.package_journal_dir(&journal_key))?;
+
     let mut writer = database::JournalWriter::open_for_package_in(
         paths,
         committed_package.name.as_str(),

@@ -178,6 +178,14 @@ fn repair_replays_committed_journal_into_database() {
         )
         .expect("seed current catalog commands");
 
+    fs::create_dir_all(
+        fixture
+            .root_path()
+            .join("data")
+            .join("pkgdb")
+            .join(database::package_journal_key(package_name, "1.0.0")),
+    )
+    .expect("journal dir should exist");
     let mut writer =
         database::JournalWriter::open_for_package(fixture.root_path(), package_name, "1.0.0")
             .expect("open journal");
@@ -253,6 +261,14 @@ fn repair_replays_committed_journal_using_resolver_commands() {
     create_catalog_db_with_hash(&fixture, catalog_package_name, installer_url, &sha512_hash)
         .expect("seed catalog package");
 
+    fs::create_dir_all(
+        fixture
+            .root_path()
+            .join("data")
+            .join("pkgdb")
+            .join(database::package_journal_key(package_name, "1.0.0")),
+    )
+    .expect("journal dir should exist");
     let mut writer =
         database::JournalWriter::open_for_package(fixture.root_path(), package_name, "1.0.0")
             .expect("open journal");
@@ -315,6 +331,14 @@ fn repair_replays_committed_journal_and_removes_stale_shims() {
     create_catalog_db_with_hash(&fixture, catalog_package_name, installer_url, &sha512_hash)
         .expect("seed catalog package");
 
+    fs::create_dir_all(
+        fixture
+            .root_path()
+            .join("data")
+            .join("pkgdb")
+            .join(database::package_journal_key(package_name, "1.0.0")),
+    )
+    .expect("journal dir should exist");
     let mut writer =
         database::JournalWriter::open_for_package(fixture.root_path(), package_name, "1.0.0")
             .expect("open journal");
@@ -379,6 +403,14 @@ fn repair_reports_journal_command_resolution_summary() -> Result<()> {
         )
         .expect("seed current catalog commands");
 
+    fs::create_dir_all(
+        fixture
+            .root_path()
+            .join("data")
+            .join("pkgdb")
+            .join(database::package_journal_key(package_name, "1.0.0")),
+    )
+    .expect("journal dir should exist");
     let mut writer =
         database::JournalWriter::open_for_package(fixture.root_path(), package_name, "1.0.0")
             .expect("open journal");

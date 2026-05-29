@@ -153,6 +153,9 @@ fn remove_deletes_committed_journal_for_removed_package() -> Result<()> {
 
     database::insert_package(&conn, &package)?;
 
+    let package_key = database::package_journal_key(&package.name, &package.version);
+    std::fs::create_dir_all(root.join("data").join("pkgdb").join(&package_key))?;
+
     let mut writer =
         database::JournalWriter::open_for_package(root, &package.name, &package.version)?;
     writer.append(&database::JournalEntry::Metadata {
