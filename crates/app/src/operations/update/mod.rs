@@ -56,7 +56,7 @@ use self::types::CatalogDownloadPlan;
 
 use crate::core::fs::{cleanup_path, finalize_temp_file};
 use crate::core::network::{Client, build_client};
-use crate::core::paths::{ResolvedPaths, ensure_dirs_at};
+use crate::core::paths::ResolvedPaths;
 
 const CATALOG_UPDATE_API_URL: &str = "https://api.winbrew.dev/v1/update";
 
@@ -98,8 +98,6 @@ where
     let catalog_dir = catalog_path
         .parent()
         .context("failed to resolve catalog database directory")?;
-
-    ensure_dirs_at(&paths.root).context("failed to create catalog directories")?;
 
     let catalog_temp_path = catalog_dir.join("catalog.db.download");
     let metadata_temp_path = catalog_dir.join("metadata.json.download");

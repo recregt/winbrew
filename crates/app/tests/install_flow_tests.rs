@@ -4,11 +4,11 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, params};
 
+use winbrew_app::database::package_journal_key;
 use winbrew_app::install;
 use winbrew_app::install::InstallError;
 use winbrew_app::install::InstallObserver;
 use winbrew_app::{AppContext, database};
-use winbrew_core::package_journal_key;
 use winbrew_models::domains::catalog::CatalogPackage;
 use winbrew_models::domains::command_resolution::{CommandSource, Confidence, ResolverResult};
 use winbrew_models::domains::install::{Architecture, EngineKind, InstallerType};
