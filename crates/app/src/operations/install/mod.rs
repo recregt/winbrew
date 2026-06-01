@@ -521,6 +521,7 @@ fn write_install_journal(
         dependencies: committed_package.dependencies.clone(),
         commands: commands.map(|commands| commands.to_vec()),
         bin,
+        env_add_path: Vec::new(),
         command_resolution: Some(command_resolution.clone()),
         engine_metadata: committed_package.engine_metadata.clone(),
     })?;

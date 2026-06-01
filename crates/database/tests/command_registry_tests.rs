@@ -145,6 +145,7 @@ fn replay_committed_journal_restores_command_registry() -> Result<()> {
         },
         commands: Some(vec!["grep".to_string(), "git".to_string()]),
         bin: None,
+        env_add_path: Vec::new(),
         command_resolution: Some(ResolverResult::Resolved {
             commands: vec!["grep".to_string(), "git".to_string()],
             confidence: Confidence::High,

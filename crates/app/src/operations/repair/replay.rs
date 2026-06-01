@@ -129,12 +129,13 @@ pub fn replay_prepared_journal_targets(targets: &[JournalReplayTarget]) -> Resul
         let desired_commands = journal_commands(committed);
         let empty_paths: &[String] = &[];
         let target_paths = committed.bin.as_deref().unwrap_or(empty_paths);
+        let targets = shims::legacy_shim_targets(target_paths);
 
         if let Err(err) = shims::publish_shims_for_install_dir(
             &shims_root,
             Path::new(&committed.package.install_dir),
             desired_commands,
-            target_paths,
+            &targets,
         ) {
             warn!(
                 package = committed.package.name.as_str(),
@@ -337,6 +338,7 @@ mod tests {
             },
             commands: Some(vec!["contoso".to_string()]),
             bin: Some(vec!["bin/tool.exe".to_string()]),
+            env_add_path: Vec::new(),
             command_resolution: Some(ResolverResult::Resolved {
                 commands: vec!["contoso".to_string()],
                 confidence: Confidence::High,

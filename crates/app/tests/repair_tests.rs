@@ -33,6 +33,7 @@ fn prepare_journal_replay_targets_rejects_missing_command_resolution_metadata() 
             dependencies: Vec::new(),
             commands: Some(vec!["contoso".to_string()]),
             bin: None,
+            env_add_path: Vec::new(),
             command_resolution: None,
             engine_metadata: None,
         })

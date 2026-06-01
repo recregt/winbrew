@@ -367,6 +367,7 @@ fn journal_contract_round_trips_metadata_and_commit() -> Result<()> {
         dependencies: vec!["winget/Contoso.Shared".to_string()],
         commands: Some(vec!["contoso".to_string()]),
         bin: Some(vec!["bin/tool.exe".to_string()]),
+        env_add_path: Vec::new(),
         command_resolution: None,
         engine_metadata: None,
     })?;
@@ -394,6 +395,7 @@ fn journal_contract_round_trips_metadata_and_commit() -> Result<()> {
             dependencies,
             commands,
             bin,
+            env_add_path: _,
             command_resolution,
             engine_metadata,
         } => {

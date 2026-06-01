@@ -199,6 +199,7 @@ fn repair_replays_committed_journal_into_database() {
             dependencies: vec!["winget/Contoso.Dependency".to_string()],
             commands: Some(vec!["contoso".to_string()]),
             bin: Some(vec!["bin/tool.exe".to_string()]),
+            env_add_path: Vec::new(),
             command_resolution: Some(ResolverResult::Resolved {
                 commands: vec!["contoso".to_string()],
                 confidence: Confidence::High,
@@ -282,6 +283,7 @@ fn repair_replays_committed_journal_using_resolver_commands() {
             dependencies: vec!["winget/Contoso.Dependency".to_string()],
             commands: None,
             bin: Some(vec!["bin/tool.exe".to_string()]),
+            env_add_path: Vec::new(),
             command_resolution: Some(ResolverResult::Resolved {
                 commands: vec!["contoso".to_string()],
                 confidence: Confidence::High,
@@ -352,6 +354,7 @@ fn repair_replays_committed_journal_and_removes_stale_shims() {
             dependencies: vec!["winget/Contoso.Dependency".to_string()],
             commands: None,
             bin: Some(vec!["bin/tool.exe".to_string()]),
+            env_add_path: Vec::new(),
             command_resolution: Some(ResolverResult::Resolved {
                 commands: vec!["contoso".to_string()],
                 confidence: Confidence::High,
@@ -424,6 +427,7 @@ fn repair_reports_journal_command_resolution_summary() -> Result<()> {
             dependencies: vec!["winget/Contoso.Dependency".to_string()],
             commands: None,
             bin: Some(vec!["bin/tool.exe".to_string()]),
+            env_add_path: Vec::new(),
             command_resolution: Some(ResolverResult::Resolved {
                 commands: vec!["contoso".to_string()],
                 confidence: Confidence::High,
