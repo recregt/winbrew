@@ -43,6 +43,8 @@ pub struct RawFetchedPackage {
     pub tags: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bin: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env_add_path: Option<serde_json::Value>,
     #[serde(default)]
     pub installers: Vec<RawFetchedInstaller>,
 }
@@ -136,6 +138,7 @@ mod tests {
                 capabilities: None,
                 tags: None,
                 bin: None,
+                env_add_path: None,
                 installers: vec![RawFetchedInstaller {
                     url: "https://example.invalid/example.zip".to_string(),
                     hash: "sha256:deadbeef".to_string(),
@@ -179,6 +182,7 @@ mod tests {
                 capabilities: None,
                 tags: None,
                 bin: None,
+                env_add_path: None,
                 installers: Vec::new(),
             },
         };

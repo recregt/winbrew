@@ -158,6 +158,7 @@ mod doctor_health_report {
                     dependencies: Vec::new(),
                     commands: None,
                     bin: None,
+                    env_add_path: Vec::new(),
                     command_resolution: None,
                     engine_metadata: None,
                 })

@@ -174,6 +174,7 @@ type packageSnapshot struct {
 	Moniker     string              `json:"moniker,omitempty"`
 	Tags        []string            `json:"tags,omitempty"`
 	Bin         json.RawMessage     `json:"bin,omitempty"`
+	EnvAddPath  json.RawMessage     `json:"env_add_path,omitempty"`
 	Installers  []installerSnapshot `json:"installers,omitempty"`
 }
 
@@ -207,6 +208,7 @@ func packageSnapshotFromPackage(pkg normalize.Package) packageSnapshot {
 		Moniker:     pkg.Moniker,
 		Tags:        append([]string(nil), pkg.Tags...),
 		Bin:         append(json.RawMessage(nil), pkg.Bin...),
+		EnvAddPath:  append(json.RawMessage(nil), pkg.EnvAddPath...),
 		Installers:  installers,
 	}
 }
@@ -343,6 +345,7 @@ type scoopManifest struct {
 	URL          any                  `json:"url"`  // string or []string
 	Hash         any                  `json:"hash"` // string or []string
 	Bin          any                  `json:"bin"`  // string, []string or [][]string
+	EnvAddPath   any                  `json:"env_add_path,omitempty"`
 	Architecture map[string]archBlock `json:"architecture"`
 }
 
@@ -396,6 +399,7 @@ func readManifest(ctx context.Context, bucketName, dir, filename string) (normal
 		Moniker:     m.Moniker,
 		Tags:        append([]string(nil), m.Tags...),
 		Bin:         rawJSONValue(m.Bin),
+		EnvAddPath:  rawJSONValue(m.EnvAddPath),
 		Installers:  resolveInstallers(m),
 		Raw:         append(json.RawMessage(nil), raw.Bytes()...),
 	}

@@ -32,6 +32,10 @@ pub(crate) fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, Par
         .map(|tags| serde_json::to_string(&tags))
         .transpose()?;
     let bin = raw.bin.map(|bin| serde_json::to_string(&bin)).transpose()?;
+    let env_add_path = raw
+        .env_add_path
+        .map(|env_add_path| serde_json::to_string(&env_add_path))
+        .transpose()?;
 
     let package = CatalogPackage {
         id: raw.id.clone().into(),
@@ -55,6 +59,7 @@ pub(crate) fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, Par
         capabilities,
         tags,
         bin,
+        env_add_path,
     };
     package.validate()?;
 
@@ -165,6 +170,7 @@ mod tests {
             capabilities: Some(vec!["internetClient".to_string()]),
             tags: Some(vec!["utility".to_string()]),
             bin: Some(serde_json::json!(["tool.exe"])),
+            env_add_path: Some(serde_json::json!(["bin"])),
             installers: vec![RawFetchedInstaller {
                 url: "https://example.invalid/app.zip".to_string(),
                 hash: "".to_string(),
@@ -217,6 +223,7 @@ mod tests {
         );
         assert!(parsed.package.tags.as_deref().is_some());
         assert!(parsed.package.bin.as_deref().is_some());
+        assert_eq!(parsed.package.env_add_path.as_deref(), Some("[\"bin\"]"));
         assert!(parsed.raw_json.contains("Contoso.App"));
         assert!(parsed.raw_json.contains("NestedInstallerType"));
     }
@@ -240,6 +247,7 @@ mod tests {
             capabilities: Some(vec!["internetClient".to_string()]),
             tags: Some(vec!["terminal".to_string()]),
             bin: None,
+            env_add_path: None,
             installers: vec![RawFetchedInstaller {
                 url: "https://example.invalid/wezterm.zip".to_string(),
                 hash: String::new(),

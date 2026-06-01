@@ -18,7 +18,7 @@ pub(crate) fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackag
     }
 
     let mut stmt = conn.prepare(
-        "SELECT p.id, p.name, p.version, p.source, p.namespace, p.source_id, p.created_at, p.updated_at, p.description, p.homepage, p.license, p.publisher, p.locale, p.moniker, p.platform, p.commands, p.protocols, p.file_extensions, p.capabilities, p.tags, p.bin
+        "SELECT p.id, p.name, p.version, p.source, p.namespace, p.source_id, p.created_at, p.updated_at, p.description, p.homepage, p.license, p.publisher, p.locale, p.moniker, p.platform, p.commands, p.protocols, p.file_extensions, p.capabilities, p.tags, p.bin, p.env_add_path
          FROM catalog_packages p
          JOIN catalog_packages_fts fts ON p.rowid = fts.rowid
          WHERE catalog_packages_fts MATCH ?1
@@ -40,7 +40,7 @@ pub(crate) fn get_package_by_id(
     package_id: &str,
 ) -> Result<Option<CatalogPackage>> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher, locale, moniker, platform, commands, protocols, file_extensions, capabilities, tags, bin
+        "SELECT id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher, locale, moniker, platform, commands, protocols, file_extensions, capabilities, tags, bin, env_add_path
          FROM catalog_packages
          WHERE id = ?1",
     )?;
@@ -82,6 +82,7 @@ fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
         capabilities: row.get("capabilities")?,
         tags: row.get("tags")?,
         bin: row.get("bin")?,
+        env_add_path: row.get("env_add_path")?,
     };
 
     package.validate().map_err(conversion_err)?;
@@ -203,6 +204,36 @@ mod tests {
             .expect("package should have updated_at");
         assert!(updated_at > "2026-04-14 12:34:56");
         assert_eq!(package.created_at.as_deref(), Some("2026-04-14 12:00:00"));
+    }
+
+    #[test]
+    fn package_queries_read_env_add_path() {
+        let conn = open_test_db();
+
+        insert_catalog_package(
+            &conn,
+            "winget/Contoso.App",
+            "Contoso App",
+            Some("Example package"),
+            None,
+            None,
+        );
+
+        conn.execute(
+            r#"
+            UPDATE catalog_packages
+            SET env_add_path = ?1
+            WHERE id = ?2
+            "#,
+            params![r#"["bin","tools"]"#, "winget/Contoso.App"],
+        )
+        .expect("update env_add_path");
+
+        let package = get_package_by_id(&conn, "winget/Contoso.App")
+            .expect("package lookup should succeed")
+            .expect("package should exist");
+
+        assert_eq!(package.env_add_path.as_deref(), Some("[\"bin\",\"tools\"]"));
     }
 
     #[test]
