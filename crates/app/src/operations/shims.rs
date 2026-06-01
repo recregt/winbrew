@@ -1,10 +1,17 @@
 use anyhow::{Context, Result};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::database;
+
+#[derive(Debug, Clone)]
+pub(crate) struct ShimTarget {
+    alias: Option<String>,
+    target_path: String,
+    default_args: Vec<String>,
+}
 
 /// Publish command shims for the given installed package.
 ///
@@ -20,13 +27,13 @@ pub fn publish_package_shims(
         format!("package '{package_name}' was not found while publishing shims")
     })?;
     let commands = database::list_commands_for_package(&conn, package_name)?;
-    let target_paths = parse_target_paths(bin_metadata)?;
+    let targets = parse_shim_targets(bin_metadata)?;
 
     publish_shims_for_install_dir(
         shims_root,
         Path::new(&package.install_dir),
         &commands,
-        &target_paths,
+        &targets,
     )
 }
 
@@ -35,7 +42,7 @@ pub fn publish_shims_for_install_dir(
     shims_root: &Path,
     install_dir: &Path,
     commands: &[String],
-    target_paths: &[String],
+    targets: &[ShimTarget],
 ) -> Result<usize> {
     if commands.is_empty() {
         return Ok(0);
@@ -45,11 +52,23 @@ pub fn publish_shims_for_install_dir(
         .with_context(|| format!("failed to create {}", shims_root.display()))?;
 
     let mut written = 0usize;
+    let mut alias_lookup = BTreeMap::new();
+
+    for (index, target) in targets.iter().enumerate() {
+        if let Some(alias) = target.alias.as_deref() {
+            alias_lookup
+                .entry(normalize_command_name(alias))
+                .or_insert(index);
+        }
+    }
 
     for (index, command) in commands.iter().enumerate() {
         let shim_path = command_shim_path(shims_root, command);
-        let target_path = resolve_target_path(index, target_paths);
-        write_command_shim(&shim_path, install_dir, command, target_path.as_deref())?;
+        let target = alias_lookup
+            .get(&normalize_command_name(command))
+            .and_then(|index| targets.get(*index))
+            .or_else(|| targets.get(index));
+        write_command_shim(&shim_path, install_dir, command, target)?;
         written += 1;
     }
 
@@ -84,7 +103,7 @@ fn write_command_shim(
     path: &Path,
     install_dir: &Path,
     command_name: &str,
-    target_path: Option<&str>,
+    target: Option<&ShimTarget>,
 ) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -98,7 +117,7 @@ fn write_command_shim(
         .open(path)
         .with_context(|| format!("failed to open {}", path.display()))?;
 
-    let script = command_shim_script(install_dir, command_name, target_path);
+    let script = command_shim_script(install_dir, command_name, target);
     file.write_all(script.as_bytes())
         .with_context(|| format!("failed to write {}", path.display()))?;
 
@@ -108,10 +127,15 @@ fn write_command_shim(
 fn command_shim_script(
     install_dir: &Path,
     command_name: &str,
-    target_path: Option<&str>,
+    target: Option<&ShimTarget>,
 ) -> String {
-    match target_path {
-        Some(target_path) => explicit_command_shim_script(install_dir, command_name, target_path),
+    match target {
+        Some(target) => explicit_command_shim_script(
+            install_dir,
+            command_name,
+            &target.target_path,
+            &target.default_args,
+        ),
         None => legacy_command_shim_script(install_dir, command_name),
     }
 }
@@ -120,18 +144,20 @@ fn explicit_command_shim_script(
     install_dir: &Path,
     command_name: &str,
     target_path: &str,
+    default_args: &[String],
 ) -> String {
     let install_dir = install_dir.to_string_lossy();
     let target_path = normalize_path_separators(target_path);
+    let default_args = render_default_args(default_args);
     let target_extension = Path::new(&target_path)
         .extension()
         .and_then(|extension| extension.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
     let invocation = if matches!(target_extension.as_str(), "cmd" | "bat") {
-        "call \"%WINBREW_PACKAGE_DIR%\\%WINBREW_SHIM_TARGET%\" %*".to_string()
+        format!("call \"%WINBREW_PACKAGE_DIR%\\%WINBREW_SHIM_TARGET%\"{default_args} %*")
     } else {
-        "\"%WINBREW_PACKAGE_DIR%\\%WINBREW_SHIM_TARGET%\" %*".to_string()
+        format!("\"%WINBREW_PACKAGE_DIR%\\%WINBREW_SHIM_TARGET%\"{default_args} %*")
     };
 
     format!(
@@ -175,6 +201,128 @@ pub(crate) fn parse_target_paths(raw_targets: Option<&str>) -> Result<Vec<String
     Ok(normalize_target_paths(targets))
 }
 
+fn parse_shim_targets(raw_targets: Option<&str>) -> Result<Vec<ShimTarget>> {
+    let Some(raw_targets) = raw_targets else {
+        return Ok(Vec::new());
+    };
+
+    let raw_targets = serde_json::from_str::<serde_json::Value>(raw_targets)
+        .with_context(|| "failed to parse shim target JSON")?;
+
+    let targets = match raw_targets {
+        serde_json::Value::String(target_path) => vec![parse_shim_target_string(target_path)],
+        serde_json::Value::Array(values) => parse_shim_target_array(values)?,
+        _ => {
+            return Err(anyhow::anyhow!(
+                "failed to parse shim target JSON: expected a string or array"
+            ));
+        }
+    };
+
+    Ok(targets)
+}
+
+pub(crate) fn legacy_shim_targets(target_paths: &[String]) -> Vec<ShimTarget> {
+    target_paths
+        .iter()
+        .map(|target_path| ShimTarget {
+            alias: None,
+            target_path: normalize_path_separators(target_path.trim()),
+            default_args: Vec::new(),
+        })
+        .collect()
+}
+
+fn parse_shim_target_array(values: Vec<serde_json::Value>) -> Result<Vec<ShimTarget>> {
+    values.into_iter().map(parse_shim_target_value).collect()
+}
+
+fn parse_shim_target_value(value: serde_json::Value) -> Result<ShimTarget> {
+    match value {
+        serde_json::Value::String(target_path) => Ok(parse_shim_target_string(target_path)),
+        serde_json::Value::Array(values) => parse_shim_tuple_target(values),
+        _ => Err(anyhow::anyhow!(
+            "failed to parse shim target JSON: expected string entries or array entries"
+        )),
+    }
+}
+
+fn parse_shim_tuple_target(values: Vec<serde_json::Value>) -> Result<ShimTarget> {
+    let mut values = values.into_iter();
+    let Some(target_path) = values
+        .next()
+        .and_then(|value| value.as_str().map(str::to_owned))
+    else {
+        return Err(anyhow::anyhow!(
+            "failed to parse shim target JSON: expected target path as first tuple entry"
+        ));
+    };
+
+    let alias = values
+        .next()
+        .and_then(|value| value.as_str().map(|value| value.trim().to_owned()))
+        .filter(|value| !value.is_empty());
+
+    let default_args = values
+        .map(|value| {
+            value
+                .as_str()
+                .map(|value| value.trim().to_owned())
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "failed to parse shim target JSON: expected tuple args to be strings"
+                    )
+                })
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .collect();
+
+    Ok(ShimTarget {
+        alias,
+        target_path: normalize_path_separators(target_path.trim()),
+        default_args,
+    })
+}
+
+fn parse_shim_target_string(target_path: String) -> ShimTarget {
+    ShimTarget {
+        alias: None,
+        target_path: normalize_path_separators(target_path.trim()),
+        default_args: Vec::new(),
+    }
+}
+
+fn normalize_command_name(command_name: &str) -> String {
+    command_name.trim().to_ascii_lowercase()
+}
+
+fn render_default_args(default_args: &[String]) -> String {
+    if default_args.is_empty() {
+        return String::new();
+    }
+
+    let rendered = default_args
+        .iter()
+        .map(|argument| render_cmd_argument(argument))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    format!(" {rendered}")
+}
+
+fn render_cmd_argument(argument: &str) -> String {
+    if argument
+        .chars()
+        .any(|character| character.is_whitespace() || matches!(character, '"'))
+    {
+        format!("\"{}\"", argument.replace('"', "\"\""))
+    } else {
+        argument.to_owned()
+    }
+}
+
 fn normalize_target_paths<I, S>(targets: I) -> Vec<String>
 where
     I: IntoIterator<Item = S>,
@@ -200,13 +348,6 @@ where
 
 fn normalize_path_separators(path: &str) -> String {
     path.replace('/', "\\")
-}
-
-fn resolve_target_path(index: usize, target_paths: &[String]) -> Option<String> {
-    target_paths
-        .get(index)
-        .or_else(|| target_paths.first())
-        .map(|target_path| target_path.to_string())
 }
 
 #[cfg(test)]
@@ -274,6 +415,41 @@ mod tests {
 
         let shim_contents = fs::read_to_string(shim_path)?;
         assert!(shim_contents.contains("WINBREW_SHIM_TARGET=bin\\tool.exe"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn publish_package_shims_supports_tuple_bin_default_args() -> Result<()> {
+        let test_root = test_root();
+        let root = test_root.path();
+        init_database(root)?;
+        reset_install_state(root)?;
+        let conn = database::get_conn()?;
+
+        let install_dir = root.join("packages").join("Contoso.Tuple");
+        fs::create_dir_all(&install_dir)?;
+
+        let package = sample_package("Contoso.Tuple", InstallerType::Portable, &install_dir);
+        database::insert_package(&conn, &package)?;
+        database::sync_package_commands(&conn, &package.name, Some(r#"["git", "git-lfs"]"#))?;
+
+        let shims_root = root.join("shims");
+        let written = publish_package_shims(
+            &shims_root,
+            &package.name,
+            Some(r#"[["bin/git.exe", "git", "--version"], ["bin/git-lfs.exe", "git-lfs"]]"#),
+        )?;
+
+        assert_eq!(written, 2);
+
+        let git_shim = fs::read_to_string(command_shim_path(&shims_root, "git"))?;
+        assert!(git_shim.contains("WINBREW_SHIM_TARGET=bin\\git.exe"));
+        assert!(git_shim.contains("--version"));
+
+        let git_lfs_shim = fs::read_to_string(command_shim_path(&shims_root, "git-lfs"))?;
+        assert!(git_lfs_shim.contains("WINBREW_SHIM_TARGET=bin\\git-lfs.exe"));
+        assert!(!git_lfs_shim.contains("--version"));
 
         Ok(())
     }

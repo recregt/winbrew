@@ -19,6 +19,7 @@ pub struct CommittedJournalPackage {
     pub package: InstalledPackage,
     pub commands: Option<Vec<String>>,
     pub bin: Option<Vec<String>>,
+    pub env_add_path: Vec<String>,
     pub command_resolution: Option<ResolverResult>,
 }
 
@@ -113,6 +114,7 @@ fn parse_committed_package_journal(
         dependencies,
         commands,
         bin,
+        env_add_path,
         command_resolution,
         engine_metadata,
     ) = entries
@@ -127,6 +129,7 @@ fn parse_committed_package_journal(
                 dependencies,
                 commands,
                 bin,
+                env_add_path,
                 command_resolution,
                 engine_metadata,
             } => Some((
@@ -138,6 +141,7 @@ fn parse_committed_package_journal(
                 dependencies.clone(),
                 commands.clone(),
                 bin.clone(),
+                env_add_path.clone(),
                 command_resolution.clone(),
                 engine_metadata.clone(),
             )),
@@ -219,6 +223,7 @@ fn parse_committed_package_journal(
         package,
         commands,
         bin,
+        env_add_path,
         command_resolution,
     })
 }

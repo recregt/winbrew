@@ -149,6 +149,7 @@ pub(super) fn extract_journal_metadata(
             dependencies: _,
             commands: _,
             bin: _,
+            env_add_path: _,
             command_resolution: _,
             engine_metadata: _,
         } => Some(JournalMetadata {
@@ -431,6 +432,7 @@ mod tests {
             dependencies: Vec::new(),
             commands: None,
             bin: None,
+            env_add_path: Vec::new(),
             command_resolution: None,
             engine_metadata: None,
         }

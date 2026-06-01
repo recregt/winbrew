@@ -130,6 +130,8 @@ pub enum JournalEntry {
         commands: Option<Vec<String>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         bin: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        env_add_path: Vec<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         command_resolution: Option<ResolverResult>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -219,6 +221,7 @@ mod tests {
             dependencies: vec!["winget/Contoso.Shared".to_string()],
             commands: None,
             bin: None,
+            env_add_path: Vec::new(),
             command_resolution: None,
             engine_metadata: None,
         }
@@ -502,6 +505,7 @@ mod tests {
                 dependencies: Vec::new(),
                 commands: None,
                 bin: None,
+                env_add_path: Vec::new(),
                 command_resolution: None,
                 engine_metadata: None,
             })
@@ -522,6 +526,7 @@ mod tests {
                 dependencies: Vec::new(),
                 commands: None,
                 bin: None,
+                env_add_path: Vec::new(),
                 command_resolution: None,
                 engine_metadata: None,
             })
