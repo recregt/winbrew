@@ -120,6 +120,7 @@ pub fn catalog_package(id: CatalogId, name: &str, version: Version) -> CatalogPa
         capabilities: None,
         tags: None,
         bin: None,
+        env_add_path: None,
     }
 }
 
@@ -138,6 +139,7 @@ pub trait CatalogPackageBuilderExt {
     fn with_moniker<T: Into<String>>(self, moniker: T) -> Self;
     fn with_tags<T: Into<String>>(self, tags: T) -> Self;
     fn with_bin<T: Into<String>>(self, bin: T) -> Self;
+    fn with_env_add_path<T: Into<String>>(self, env_add_path: T) -> Self;
 }
 
 impl CatalogPackageBuilderExt for CatalogPackage {
@@ -208,6 +210,11 @@ impl CatalogPackageBuilderExt for CatalogPackage {
 
     fn with_bin<T: Into<String>>(mut self, bin: T) -> Self {
         self.bin = Some(bin.into());
+        self
+    }
+
+    fn with_env_add_path<T: Into<String>>(mut self, env_add_path: T) -> Self {
+        self.env_add_path = Some(env_add_path.into());
         self
     }
 }

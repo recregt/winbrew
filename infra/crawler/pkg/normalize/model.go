@@ -17,6 +17,7 @@ type Package struct {
 	Moniker     string
 	Tags        []string
 	Bin         json.RawMessage
+	EnvAddPath  json.RawMessage
 
 	Installers []Installer
 

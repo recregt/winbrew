@@ -56,6 +56,9 @@ pub struct RawCatalogPackage {
     /// Optional package bin metadata encoded as JSON text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bin: Option<String>,
+    /// Optional package PATH add metadata encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env_add_path: Option<String>,
 }
 
 /// Raw installer payload exactly as it is received from the upstream feed.

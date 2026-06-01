@@ -313,6 +313,7 @@ mod tests {
             capabilities: None,
             tags: None,
             bin: None,
+            env_add_path: None,
         }
     }
 

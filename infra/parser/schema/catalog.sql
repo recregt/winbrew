@@ -1,6 +1,6 @@
 -- Canonical catalog schema for parser-generated snapshots.
 -- Parser code and tests include this file directly to avoid schema drift.
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
 
 CREATE TABLE IF NOT EXISTS schema_meta (
     name  TEXT PRIMARY KEY,
@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 );
 
 INSERT OR REPLACE INTO schema_meta (name, value)
-VALUES ('schema_version', '1');
+VALUES ('schema_version', '2');
 
 CREATE TABLE IF NOT EXISTS catalog_packages (
     id          TEXT PRIMARY KEY,
@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS catalog_packages (
     file_extensions TEXT CHECK (file_extensions IS NULL OR json_valid(file_extensions)),
     capabilities TEXT CHECK (capabilities IS NULL OR json_valid(capabilities)),
     bin         TEXT CHECK (bin IS NULL OR json_valid(bin)),
+    env_add_path TEXT CHECK (env_add_path IS NULL OR json_valid(env_add_path)),
     created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

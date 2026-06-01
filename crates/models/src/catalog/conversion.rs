@@ -38,6 +38,7 @@ impl From<&Package> for CatalogPackage {
             capabilities: None,
             tags: None,
             bin: None,
+            env_add_path: None,
         }
     }
 }
@@ -70,6 +71,7 @@ impl TryFrom<RawCatalogPackage> for CatalogPackage {
             capabilities: raw.capabilities,
             tags: raw.tags,
             bin: raw.bin,
+            env_add_path: raw.env_add_path,
         };
 
         package.validate()?;
@@ -134,6 +136,7 @@ mod tests {
             capabilities: Some("[\"internetClient\"]".to_string()),
             tags: Some("[\"utility\"]".to_string()),
             bin: Some("[\"tool.exe\"]".to_string()),
+            env_add_path: Some("[\"bin\"]".to_string()),
         };
 
         let converted = CatalogPackage::try_from(package).expect("raw package should convert");
@@ -157,6 +160,7 @@ mod tests {
         );
         assert_eq!(converted.tags.as_deref(), Some("[\"utility\"]"));
         assert_eq!(converted.bin.as_deref(), Some("[\"tool.exe\"]"));
+        assert_eq!(converted.env_add_path.as_deref(), Some("[\"bin\"]"));
     }
 
     #[test]

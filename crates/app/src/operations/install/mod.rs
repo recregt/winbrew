@@ -280,6 +280,7 @@ pub fn run<O: InstallObserver>(
         &target.command_resolution,
         target.resolved_commands.as_deref(),
         target.package.bin.as_deref(),
+        target.package.env_add_path.as_deref(),
     ) {
         warn!(
             package = %target.package.name,
@@ -453,6 +454,7 @@ mod tests {
             &command_resolution,
             Some(commands.as_slice()),
             Some(r#""bin/tool.exe""#),
+            Some(r#""env/add""#),
         )?;
 
         let journal_key = package_journal_key(&package.name, &package.version);
@@ -461,6 +463,7 @@ mod tests {
 
         assert_eq!(committed.commands, Some(vec!["contoso".to_string()]));
         assert_eq!(committed.bin, Some(vec!["bin\\tool.exe".to_string()]));
+        assert_eq!(committed.env_add_path, vec![r"env\add".to_string()]);
 
         Ok(())
     }
@@ -479,6 +482,7 @@ fn write_install_journal(
     command_resolution: &ResolverResult,
     commands: Option<&[String]>,
     bin: Option<&str>,
+    env_add_path: Option<&str>,
 ) -> anyhow::Result<()> {
     let committed_package = database::get_package(conn, package_name)?.ok_or_else(|| {
         anyhow::anyhow!("package '{package_name}' was not found after a successful install commit")
@@ -512,6 +516,24 @@ fn write_install_journal(
         None => None,
     };
 
+    // env_add_path is recorded for replay and diagnostics, but WinBrew keeps
+    // command exposure on the managed shims path instead of synthesizing PATH
+    // entries from package install roots.
+    let env_add_path = match env_add_path {
+        Some(raw_env_add_path) => match shims::parse_target_paths(Some(raw_env_add_path)) {
+            Ok(env_add_path) => Some(env_add_path),
+            Err(err) => {
+                warn!(
+                    package = %package_name,
+                    error = %err,
+                    "failed to normalize install env_add_path metadata into journal"
+                );
+                None
+            }
+        },
+        None => None,
+    };
+
     writer.append(&database::JournalEntry::Metadata {
         package_id: committed_package.name.clone(),
         version: committed_package.version.clone(),
@@ -521,7 +543,7 @@ fn write_install_journal(
         dependencies: committed_package.dependencies.clone(),
         commands: commands.map(|commands| commands.to_vec()),
         bin,
-        env_add_path: Vec::new(),
+        env_add_path: env_add_path.unwrap_or_default(),
         command_resolution: Some(command_resolution.clone()),
         engine_metadata: committed_package.engine_metadata.clone(),
     })?;

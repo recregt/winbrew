@@ -71,6 +71,9 @@ pub struct CatalogPackage {
     /// Optional package bin metadata encoded as JSON text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bin: Option<String>,
+    /// Optional package PATH add metadata encoded as JSON text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env_add_path: Option<String>,
 }
 
 /// A validated installer entry associated with a catalog package.
@@ -231,6 +234,10 @@ impl CatalogPackage {
 
         if let Some(bin) = self.bin.as_deref() {
             ensure_non_empty("catalog_package.bin", bin)?;
+        }
+
+        if let Some(env_add_path) = self.env_add_path.as_deref() {
+            ensure_non_empty("catalog_package.env_add_path", env_add_path)?;
         }
 
         Ok(())
@@ -465,6 +472,7 @@ mod tests {
             capabilities: None,
             tags: None,
             bin: None,
+            env_add_path: None,
         }
     }
 
@@ -651,6 +659,7 @@ mod tests {
         package.moniker = Some("contoso".to_string());
         package.tags = Some("[\"utility\"]".to_string());
         package.bin = Some("[\"tool.exe\"]".to_string());
+        package.env_add_path = Some("[\"bin\"]".to_string());
 
         let json = serde_json::to_string(&package).expect("package should serialize");
         let restored: CatalogPackage =
@@ -668,6 +677,7 @@ mod tests {
         assert_eq!(restored.moniker, package.moniker);
         assert_eq!(restored.tags, package.tags);
         assert_eq!(restored.bin, package.bin);
+        assert_eq!(restored.env_add_path, package.env_add_path);
     }
 
     #[test]
