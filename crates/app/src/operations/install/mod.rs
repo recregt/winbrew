@@ -501,19 +501,28 @@ fn write_install_journal(
         committed_package.version.as_str(),
     )?;
 
-    let bin = match bin {
-        Some(raw_bin) => match shims::parse_target_paths(Some(raw_bin)) {
-            Ok(bin) => Some(bin),
+    let (bin, bin_bindings) = match bin {
+        Some(raw_bin) => match shims::parse_journal_shim_bindings(Some(raw_bin)) {
+            Ok(bin_bindings) => {
+                let bin = shims::target_paths_from_journal_bindings(&bin_bindings);
+                let bin = if bin.is_empty() { None } else { Some(bin) };
+                let bin_bindings = if bin_bindings.is_empty() {
+                    None
+                } else {
+                    Some(bin_bindings)
+                };
+                (bin, bin_bindings)
+            }
             Err(err) => {
                 warn!(
                     package = %package_name,
                     error = %err,
                     "failed to normalize install bin metadata into journal"
                 );
-                None
+                (None, None)
             }
         },
-        None => None,
+        None => (None, None),
     };
 
     // env_add_path is recorded for replay and diagnostics, but WinBrew keeps
@@ -543,6 +552,7 @@ fn write_install_journal(
         dependencies: committed_package.dependencies.clone(),
         commands: commands.map(|commands| commands.to_vec()),
         bin,
+        bin_bindings,
         env_add_path: env_add_path.unwrap_or_default(),
         command_resolution: Some(command_resolution.clone()),
         engine_metadata: committed_package.engine_metadata.clone(),

@@ -167,6 +167,7 @@ fn remove_deletes_committed_journal_for_removed_package() -> Result<()> {
         dependencies: Vec::new(),
         commands: None,
         bin: None,
+        bin_bindings: None,
         env_add_path: Vec::new(),
         command_resolution: None,
         engine_metadata: None,

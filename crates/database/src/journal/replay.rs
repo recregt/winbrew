@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
-use super::{JournalEntry, JournalReadError, JournalReader};
+use super::{JournalEntry, JournalReadError, JournalReader, JournalShimBinding};
 use crate::core::ResolvedPaths;
 use crate::models::command_resolution::ResolverResult;
 use crate::models::install::engine::EngineKind;
@@ -19,6 +19,7 @@ pub struct CommittedJournalPackage {
     pub package: InstalledPackage,
     pub commands: Option<Vec<String>>,
     pub bin: Option<Vec<String>>,
+    pub bin_bindings: Option<Vec<JournalShimBinding>>,
     pub env_add_path: Vec<String>,
     pub command_resolution: Option<ResolverResult>,
 }
@@ -114,6 +115,7 @@ fn parse_committed_package_journal(
         dependencies,
         commands,
         bin,
+        bin_bindings,
         env_add_path,
         command_resolution,
         engine_metadata,
@@ -129,6 +131,7 @@ fn parse_committed_package_journal(
                 dependencies,
                 commands,
                 bin,
+                bin_bindings,
                 env_add_path,
                 command_resolution,
                 engine_metadata,
@@ -141,6 +144,7 @@ fn parse_committed_package_journal(
                 dependencies.clone(),
                 commands.clone(),
                 bin.clone(),
+                bin_bindings.clone(),
                 env_add_path.clone(),
                 command_resolution.clone(),
                 engine_metadata.clone(),
@@ -223,6 +227,7 @@ fn parse_committed_package_journal(
         package,
         commands,
         bin,
+        bin_bindings,
         env_add_path,
         command_resolution,
     })
