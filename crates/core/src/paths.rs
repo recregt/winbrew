@@ -5,7 +5,7 @@
 //! paths, package-scoped evidence directories, and reserved shim locations.
 
 use std::path::{Path, PathBuf};
-
+/// Return the journal file for the given package key.
 #[cfg(windows)]
 use winbrew_windows::host::search_path_file;
 
@@ -284,7 +284,7 @@ mod tests {
         assert_eq!(
             journal_file,
             pkgdb_dir_at(root.path())
-                .join(&package_key)
+                .join(package_key)
                 .join("journal.jsonl")
         );
     }

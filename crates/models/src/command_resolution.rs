@@ -131,6 +131,26 @@ pub fn resolve_command_exposure(
         });
     }
 
+    if let Some(bin_commands) = package.bin.as_deref().map(commands_from_bin).transpose()?
+        && !bin_commands.is_empty()
+    {
+        let catalog_fingerprint = catalog_fingerprint(
+            &package_commands,
+            package.bin.as_deref(),
+            package.moniker.as_deref(),
+            &installer_commands,
+            &installer.canonical_key(),
+        )?;
+
+        return Ok(ResolverResult::Resolved {
+            commands: bin_commands,
+            confidence: Confidence::Low,
+            sources: vec![CommandSource::Inferred],
+            version_scope: VersionScope::Specific(package.version.to_string()),
+            catalog_fingerprint,
+        });
+    }
+
     Ok(ResolverResult::Unresolved {
         reason: UnresolvedReason::NoMetadata,
     })
@@ -195,6 +215,22 @@ fn parse_command_list(raw: Option<&str>) -> Result<Vec<String>, serde_json::Erro
     Ok(normalize_command_names(commands))
 }
 
+fn commands_from_bin(raw: &str) -> Result<Vec<String>, serde_json::Error> {
+    let parsed: serde_json::Value = serde_json::from_str(raw)?;
+    let commands = match parsed {
+        serde_json::Value::String(command) => vec![command],
+        serde_json::Value::Array(values) => values
+            .into_iter()
+            .filter_map(|value| value.as_str().map(str::to_string))
+            .collect(),
+        _ => Vec::new(),
+    };
+
+    Ok(normalize_command_names(commands.into_iter().filter_map(
+        |command| command_name_from_bin_entry(&command),
+    )))
+}
+
 fn normalize_command_names<I, S>(commands: I) -> Vec<String>
 where
     I: IntoIterator<Item = S>,
@@ -207,13 +243,32 @@ where
         if trimmed.is_empty() {
             continue;
         }
-
         normalized
             .entry(trimmed.to_ascii_lowercase())
             .or_insert_with(|| trimmed.to_string());
     }
 
     normalized.into_values().collect()
+}
+
+fn command_name_from_bin_entry(command: &str) -> Option<String> {
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let file_name = trimmed.rsplit(['/', '\\']).next().unwrap_or(trimmed);
+    let command_name = match file_name.rfind('.') {
+        Some(index) if index > 0 => &file_name[..index],
+        _ => file_name,
+    }
+    .trim();
+
+    if command_name.is_empty() {
+        None
+    } else {
+        Some(command_name.to_string())
+    }
 }
 
 fn normalize_text(value: Option<&str>) -> Option<String> {
@@ -258,7 +313,7 @@ impl From<&CanonicalInstallerKey> for CanonicalFingerprintInstallerIdentity {
 mod tests {
     use super::{
         CommandSource, Confidence, ResolverResult, UnresolvedReason, VersionScope,
-        catalog_fingerprint, resolve_command_exposure,
+        catalog_fingerprint, commands_from_bin, resolve_command_exposure,
     };
     use crate::catalog::package::{CanonicalInstallerKey, CatalogInstaller, CatalogPackage};
     use crate::package::PackageId;
@@ -385,6 +440,48 @@ mod tests {
             }
             other => panic!("expected resolved commands, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn resolves_bin_commands_when_package_and_installer_commands_are_missing() {
+        let mut package = catalog_package(
+            "scoop/main/jq".into(),
+            "jq",
+            Version::parse("1.7.1").expect("version should parse"),
+        );
+        let installer = catalog_installer("scoop/main/jq".into(), "https://example.invalid/jq.exe");
+        package.bin = Some(r#"["jq.exe", "jq2.exe"]"#.to_string());
+
+        let resolved = resolve_command_exposure(&package, &installer).expect("resolve commands");
+
+        match resolved {
+            ResolverResult::Resolved {
+                commands,
+                confidence,
+                sources,
+                version_scope,
+                catalog_fingerprint,
+            } => {
+                assert_eq!(commands, vec!["jq".to_string(), "jq2".to_string()]);
+                assert_eq!(confidence, Confidence::Low);
+                assert_eq!(sources, vec![CommandSource::Inferred]);
+                assert_eq!(version_scope, VersionScope::Specific("1.7.1".to_string()));
+                assert!(catalog_fingerprint.starts_with("sha256:"));
+            }
+            other => panic!("expected resolved commands, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_bin_commands_from_json_string_or_array() {
+        assert_eq!(
+            commands_from_bin(r#""jq.exe""#).expect("bin"),
+            vec!["jq".to_string()]
+        );
+        assert_eq!(
+            commands_from_bin(r#"["jq.exe", "jq2.exe"]"#).expect("bin"),
+            vec!["jq".to_string(), "jq2".to_string(),]
+        );
     }
 
     #[test]
