@@ -589,3 +589,77 @@ fn repair_is_a_noop_when_no_recovery_targets_exist() {
 
     repair::run(&fixture.ctx, true).expect("repair should succeed with no targets");
 }
+
+#[test]
+fn repair_replays_bin_bindings_with_alias_and_default_args() {
+    let fixture = RepairFixture::new();
+    let package_name = "winget/Contoso.BinBindings";
+    let catalog_package_name = "Contoso.BinBindings";
+    let journal_install_dir = fixture
+        .root_path()
+        .join("packages")
+        .join("Contoso.BinBindings");
+    fixture.insert_stale_package(package_name);
+
+    let zip_bytes = create_dummy_zip_bytes().expect("create zip bytes");
+    let sha512_hash = sha512_hex(&zip_bytes);
+    let installer_url = "https://example.invalid/bindings.zip";
+    create_catalog_db_with_hash(&fixture, catalog_package_name, installer_url, &sha512_hash)
+        .expect("seed catalog package");
+
+    fs::create_dir_all(
+        fixture
+            .root_path()
+            .join("data")
+            .join("pkgdb")
+            .join(database::package_journal_key(package_name, "1.0.0")),
+    )
+    .expect("journal dir should exist");
+
+    let mut writer =
+        database::JournalWriter::open_for_package(fixture.root_path(), package_name, "1.0.0")
+            .expect("open journal");
+
+    writer
+        .append(&database::JournalEntry::Metadata {
+            package_id: package_name.to_string(),
+            version: "1.0.0".to_string(),
+            engine: "portable".to_string(),
+            deployment_kind: DeploymentKind::Portable,
+            install_dir: journal_install_dir.to_string_lossy().to_string(),
+            dependencies: Vec::new(),
+            commands: None,
+            bin: Some(vec!["bin\\git.exe".to_string()]),
+            bin_bindings: Some(vec![database::JournalShimBinding {
+                alias: Some("git".to_string()),
+                target_path: "bin\\git.exe".to_string(),
+                default_args: vec!["--no-pager".to_string()],
+            }]),
+            env_add_path: Vec::new(),
+            command_resolution: Some(ResolverResult::Resolved {
+                commands: vec!["git".to_string()],
+                confidence: Confidence::High,
+                sources: vec![CommandSource::PackageLevel],
+                version_scope: VersionScope::Specific("1.0.0".to_string()),
+                catalog_fingerprint: "sha256:deadbeef".to_string(),
+            }),
+            engine_metadata: None,
+        })
+        .expect("write metadata");
+    writer
+        .append(&database::JournalEntry::Commit {
+            installed_at: "2026-04-12T00:00:00Z".to_string(),
+        })
+        .expect("write commit");
+    writer.flush().expect("flush journal");
+
+    repair::run(&fixture.ctx, true).expect("repair should succeed");
+
+    let shim_path = fixture.root_path().join("shims").join("git.cmd");
+    assert!(shim_path.exists(), "shim should exist");
+
+    let shim_contents = fs::read_to_string(&shim_path).expect("read shim");
+    assert!(shim_contents.contains("WINBREW_SHIM_TARGET=bin\\git.exe"));
+    assert!(shim_contents.contains("--no-pager"));
+    assert!(!shim_contents.contains("WINBREW_SHIM_NAME"));
+}
