@@ -403,6 +403,7 @@ mod tests {
             package: replay_package,
             commands: Some(vec!["contoso".to_string()]),
             bin: Some(vec!["bin/tool.exe".to_string()]),
+            bin_bindings: None,
             env_add_path: Vec::new(),
             command_resolution: Some(ResolverResult::Resolved {
                 commands: vec!["contoso".to_string()],
@@ -443,6 +444,7 @@ mod tests {
             },
             commands: Some(vec!["grep".to_string(), "git".to_string()]),
             bin: None,
+            bin_bindings: None,
             env_add_path: Vec::new(),
             command_resolution: None,
         };
