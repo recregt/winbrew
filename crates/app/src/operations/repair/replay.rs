@@ -127,9 +127,7 @@ pub fn replay_prepared_journal_targets(targets: &[JournalReplayTarget]) -> Resul
         let shims_root =
             install_root_from_package_dir(Path::new(&committed.package.install_dir)).join("shims");
         let desired_commands = journal_commands(committed);
-        let empty_paths: &[String] = &[];
-        let target_paths = committed.bin.as_deref().unwrap_or(empty_paths);
-        let targets = shims::legacy_shim_targets(target_paths);
+        let targets = journal_shim_targets(committed);
 
         if let Err(err) = shims::publish_shims_for_install_dir(
             &shims_root,
@@ -187,6 +185,15 @@ fn journal_commands(committed: &database::CommittedJournalPackage) -> &[String] 
         Some(ResolverResult::Resolved { commands, .. }) => commands.as_slice(),
         Some(ResolverResult::Unresolved { .. }) | None => &[],
     }
+}
+
+fn journal_shim_targets(committed: &database::CommittedJournalPackage) -> Vec<shims::ShimTarget> {
+    if let Some(bindings) = committed.bin_bindings.as_deref() {
+        return shims::shim_targets_from_journal_bindings(bindings);
+    }
+
+    let empty_paths: &[String] = &[];
+    shims::legacy_shim_targets(committed.bin.as_deref().unwrap_or(empty_paths))
 }
 
 fn current_command_resolution(
@@ -338,6 +345,7 @@ mod tests {
             },
             commands: Some(vec!["contoso".to_string()]),
             bin: Some(vec!["bin/tool.exe".to_string()]),
+            bin_bindings: None,
             env_add_path: Vec::new(),
             command_resolution: Some(ResolverResult::Resolved {
                 commands: vec!["contoso".to_string()],

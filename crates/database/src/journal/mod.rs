@@ -110,6 +110,16 @@ impl fmt::Display for FileHash {
     }
 }
 
+/// Lossless command shim binding captured at install time.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JournalShimBinding {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
+    pub target_path: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub default_args: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)]
 #[serde(tag = "action", rename_all = "snake_case")]
@@ -130,6 +140,8 @@ pub enum JournalEntry {
         commands: Option<Vec<String>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         bin: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bin_bindings: Option<Vec<JournalShimBinding>>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         env_add_path: Vec<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -221,6 +233,7 @@ mod tests {
             dependencies: vec!["winget/Contoso.Shared".to_string()],
             commands: None,
             bin: None,
+            bin_bindings: None,
             env_add_path: Vec::new(),
             command_resolution: None,
             engine_metadata: None,
@@ -505,6 +518,7 @@ mod tests {
                 dependencies: Vec::new(),
                 commands: None,
                 bin: None,
+                bin_bindings: None,
                 env_add_path: Vec::new(),
                 command_resolution: None,
                 engine_metadata: None,
@@ -526,6 +540,7 @@ mod tests {
                 dependencies: Vec::new(),
                 commands: None,
                 bin: None,
+                bin_bindings: None,
                 env_add_path: Vec::new(),
                 command_resolution: None,
                 engine_metadata: None,

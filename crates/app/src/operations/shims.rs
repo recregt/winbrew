@@ -174,31 +174,55 @@ fn legacy_command_shim_script(install_dir: &Path, command_name: &str) -> String 
 }
 
 pub(crate) fn parse_target_paths(raw_targets: Option<&str>) -> Result<Vec<String>> {
-    let Some(raw_targets) = raw_targets else {
-        return Ok(Vec::new());
-    };
+    let targets = parse_shim_targets(raw_targets)?;
+    Ok(normalize_target_paths(
+        targets.iter().map(|target| target.target_path.as_str()),
+    ))
+}
 
-    let raw_targets = serde_json::from_str::<serde_json::Value>(raw_targets)
-        .with_context(|| "failed to parse shim target JSON")?;
+pub(crate) fn parse_journal_shim_bindings(
+    raw_targets: Option<&str>,
+) -> Result<Vec<database::JournalShimBinding>> {
+    Ok(parse_shim_targets(raw_targets)?
+        .into_iter()
+        .map(journal_shim_binding_from_target)
+        .collect())
+}
 
-    let targets = match raw_targets {
-        serde_json::Value::String(target) => vec![target],
-        serde_json::Value::Array(values) => values
-            .into_iter()
-            .map(|value| {
-                value.as_str().map(str::to_owned).ok_or_else(|| {
-                    anyhow::anyhow!("failed to parse shim target JSON: expected string values")
-                })
+pub(crate) fn target_paths_from_journal_bindings(
+    bindings: &[database::JournalShimBinding],
+) -> Vec<String> {
+    normalize_target_paths(bindings.iter().map(|binding| binding.target_path.as_str()))
+}
+
+pub(crate) fn shim_targets_from_journal_bindings(
+    bindings: &[database::JournalShimBinding],
+) -> Vec<ShimTarget> {
+    bindings
+        .iter()
+        .filter_map(|binding| {
+            let target_path = normalize_path_separators(binding.target_path.trim());
+            if target_path.is_empty() {
+                return None;
+            }
+
+            Some(ShimTarget {
+                alias: binding
+                    .alias
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|alias| !alias.is_empty())
+                    .map(str::to_owned),
+                target_path,
+                default_args: binding
+                    .default_args
+                    .iter()
+                    .map(|value| value.trim().to_owned())
+                    .filter(|value| !value.is_empty())
+                    .collect(),
             })
-            .collect::<Result<Vec<_>>>()?,
-        _ => {
-            return Err(anyhow::anyhow!(
-                "failed to parse shim target JSON: expected a string or array of strings"
-            ));
-        }
-    };
-
-    Ok(normalize_target_paths(targets))
+        })
+        .collect()
 }
 
 fn parse_shim_targets(raw_targets: Option<&str>) -> Result<Vec<ShimTarget>> {
@@ -291,6 +315,14 @@ fn parse_shim_target_string(target_path: String) -> ShimTarget {
         alias: None,
         target_path: normalize_path_separators(target_path.trim()),
         default_args: Vec::new(),
+    }
+}
+
+fn journal_shim_binding_from_target(target: ShimTarget) -> database::JournalShimBinding {
+    database::JournalShimBinding {
+        alias: target.alias,
+        target_path: target.target_path,
+        default_args: target.default_args,
     }
 }
 

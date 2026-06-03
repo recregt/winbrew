@@ -312,6 +312,7 @@ fn write_committed_journal(
             dependencies: Vec::new(),
             commands: None,
             bin: None,
+            bin_bindings: None,
             env_add_path: Vec::new(),
             command_resolution: None,
             engine_metadata: None,
