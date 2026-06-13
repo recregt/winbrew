@@ -75,7 +75,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         id: gitleaks
         continue-on-error: true
         env:
