@@ -4,6 +4,12 @@
   "configMigration": true,
   "dependencyDashboard": true,
   "labels": ["dependencies"],
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 0,
+  "vulnerabilityAlerts": {
+    "schedule": ["at any time"],
+    "labels": ["dependencies", "security"]
+  },
   "enabledManagers": ["cargo", "gomod", "npm", "github-actions", "custom.regex"],
   "ignorePaths": ["**/tests/**"],
   "ignoreDeps": ["curl-sys"],
@@ -42,19 +48,22 @@
   ],
   "packageRules": [
     {
-      "commitMessageTopic": "MSRV (3 versions)",
-      "matchManagers": ["custom.regex"],
-      "matchDepNames": ["MSRV:3"],
-      "extractVersion": "^(?<version>\\d+\\.\\d+)",
-      "schedule": ["at any time"],
-      "minimumReleaseAge": "85 days",
-      "internalChecksFilter": "strict",
-      "groupName": "msrv"
+      "matchUpdateTypes": ["major"],
+      "labels": ["dependencies", "major-update"],
+      "automerge": false
     },
     {
-      "commitMessageTopic": "Rust toolchain",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["major"],
+      "minimumReleaseAge": "30 days",
+      "labels": ["dependencies", "major-update"],
+      "automerge": false
+    },
+    {
+      "commitMessageTopic": "Rust toolchain & MSRV",
       "matchManagers": ["custom.regex"],
-      "matchDepNames": ["rust-toolchain"],
+      "matchDepNames": ["MSRV:3", "rust-toolchain"],
+      "extractVersion": "^(?<version>\\d+\\.\\d+)",
       "schedule": ["at any time"],
       "minimumReleaseAge": "85 days",
       "internalChecksFilter": "strict",
@@ -71,18 +80,57 @@
       "groupName": "bootstrap"
     },
     {
-      "matchManagers": ["cargo", "gomod", "npm"],
-      "matchCurrentVersion": ">=0.1.0",
-      "matchUpdateTypes": ["patch"],
+      "matchManagers": ["cargo"],
+      "matchCurrentVersion": "<1.0.0",
+      "matchUpdateTypes": ["patch", "minor"],
       "automerge": false,
-      "groupName": "compatible"
+      "groupName": "compatible-cargo-pre1",
+      "minimumReleaseAge": "7 days",
+      "internalChecksFilter": "strict"
     },
     {
-      "matchManagers": ["cargo", "gomod", "npm"],
+      "matchManagers": ["cargo"],
       "matchCurrentVersion": ">=1.0.0",
-      "matchUpdateTypes": ["minor"],
+      "matchUpdateTypes": ["patch", "minor"],
       "automerge": false,
-      "groupName": "compatible"
+      "groupName": "compatible-cargo",
+      "minimumReleaseAge": "3 days",
+      "internalChecksFilter": "strict"
+    },
+    {
+      "matchManagers": ["gomod"],
+      "matchCurrentVersion": "<1.0.0",
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": false,
+      "groupName": "compatible-go-pre1",
+      "minimumReleaseAge": "7 days",
+      "internalChecksFilter": "strict"
+    },
+    {
+      "matchManagers": ["gomod"],
+      "matchCurrentVersion": ">=1.0.0",
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": false,
+      "groupName": "compatible-go",
+      "minimumReleaseAge": "3 days",
+      "internalChecksFilter": "strict"
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchCurrentVersion": ">=0.1.0",
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": false,
+      "groupName": "compatible-npm",
+      "minimumReleaseAge": "3 days",
+      "internalChecksFilter": "strict"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": false,
+      "groupName": "compatible-actions",
+      "minimumReleaseAge": "7 days",
+      "internalChecksFilter": "strict"
     }
   ]
 }
