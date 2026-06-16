@@ -1,5 +1,5 @@
 overrides:
-  undici: 8.2.0
+  undici: 8.5.0
 
 packages:
   - '.'
