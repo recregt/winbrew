@@ -9,8 +9,6 @@
 //! makes the current process-local root model explicit while still keeping the
 //! storage boundary centralized for the app and CLI layers.
 
-#![cfg(windows)]
-
 pub use winbrew_core as core;
 pub use winbrew_models as models;
 
