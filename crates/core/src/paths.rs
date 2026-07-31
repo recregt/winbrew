@@ -208,12 +208,16 @@ fn cache_filename(name: &str, version: &str, ext: &str) -> String {
 /// Expand `${root}` placeholders inside a path template.
 pub fn resolve_template(root: &Path, template: &str) -> PathBuf {
     let root_text = root.to_string_lossy();
-
-    if template.contains("${root}") {
-        PathBuf::from(template.replace("${root}", &root_text))
+    let normalized = if template.contains("${root}") {
+        template.replace("${root}", &root_text)
     } else {
-        PathBuf::from(template)
-    }
+        template.to_string()
+    };
+
+    let separator = std::path::MAIN_SEPARATOR.to_string();
+    let normalized = normalized.replace('\\', &separator);
+
+    PathBuf::from(normalized)
 }
 
 /// Build the resolved path set for the active root layout.

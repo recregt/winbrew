@@ -180,19 +180,15 @@ fn is_cross_device_error(err: &std::io::Error) -> bool {
     matches!(err.kind(), ErrorKind::CrossesDevices)
 }
 
-#[cfg(windows)]
 fn is_target_conflict_error(err: &io::Error) -> bool {
-    // Windows may report a target that already exists or is otherwise busy as
-    // PermissionDenied, so treat both as a backup-and-retry conflict.
+    // A target that already exists or is otherwise busy may be surfaced as
+    // `AlreadyExists` or `PermissionDenied` on either platform. Treat both as
+    // retryable backup-and-restore conflicts so replacement semantics are
+    // consistent across Linux and Windows.
     matches!(
         err.kind(),
         ErrorKind::AlreadyExists | ErrorKind::PermissionDenied
     )
-}
-
-#[cfg(not(windows))]
-fn is_target_conflict_error(err: &io::Error) -> bool {
-    matches!(err.kind(), ErrorKind::AlreadyExists)
 }
 
 #[cfg(test)]
