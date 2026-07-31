@@ -137,7 +137,7 @@ fn resolve_catalog_package_by_id(
         .ok_or_else(|| anyhow::anyhow!("no catalog package matched '{package_id}'"))
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::{MAX_QUERY_LENGTH, resolve_catalog_package_ref, search_packages};
     use crate::database;

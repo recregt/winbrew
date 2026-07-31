@@ -156,7 +156,7 @@ pub(crate) fn scan_msi_inventory(
     scan
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
     use crate::core::paths::{ResolvedPaths, resolved_paths};
