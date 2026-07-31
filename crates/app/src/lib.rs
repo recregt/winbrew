@@ -20,7 +20,8 @@ pub mod windows {
     pub mod host {
         use crate::models::domains::install::Architecture;
 
-        const NORMAL_PLATFORM_TAGS: &[&str] = &["windows.desktop", "windows.ltsc", "windows.universal"];
+        const NORMAL_PLATFORM_TAGS: &[&str] =
+            &["windows.desktop", "windows.ltsc", "windows.universal"];
         const SERVER_PLATFORM_TAGS: &[&str] = &["windows.server"];
 
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
