@@ -1,5 +1,3 @@
-#![cfg(windows)]
-
 //! Shared test harness for WinBrew workspace crates.
 //!
 //! This crate keeps test-only helpers, fixtures, and subprocess wrappers out of

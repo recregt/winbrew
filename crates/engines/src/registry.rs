@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use std::path::Path;
 
 use crate::models::catalog::package::CatalogInstaller;

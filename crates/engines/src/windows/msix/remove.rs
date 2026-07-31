@@ -12,6 +12,7 @@ use anyhow::{Context, Result, bail};
 use crate::models::install::engine::EngineMetadata;
 use crate::models::install::installed::InstalledPackage as WinbrewPackage;
 
+#[cfg(windows)]
 use crate::windows_dep::packages::msix_remove;
 
 /// Remove an MSIX package using the package full name stored in the receipt.
@@ -19,15 +20,24 @@ use crate::windows_dep::packages::msix_remove;
 /// Returns an error when the installed package does not carry MSIX metadata or
 /// when Windows rejects the uninstall call.
 pub(crate) fn remove(package: &WinbrewPackage) -> Result<()> {
-    let package_full_name = match package.engine_metadata.as_ref() {
-        Some(EngineMetadata::Msix {
-            package_full_name, ..
-        }) => package_full_name,
-        _ => bail!("missing msix receipt metadata for '{}'", package.name),
-    };
+    #[cfg(not(windows))]
+    {
+        let _ = package;
+        bail!("MSIX removal is only supported on Windows")
+    }
 
-    msix_remove(package_full_name)
-        .with_context(|| format!("msix uninstall failed for {package_full_name}"))?;
+    #[cfg(windows)]
+    {
+        let package_full_name = match package.engine_metadata.as_ref() {
+            Some(EngineMetadata::Msix {
+                package_full_name, ..
+            }) => package_full_name,
+            _ => bail!("missing msix receipt metadata for '{}'", package.name),
+        };
 
-    Ok(())
+        msix_remove(package_full_name)
+            .with_context(|| format!("msix uninstall failed for {package_full_name}"))?;
+
+        Ok(())
+    }
 }

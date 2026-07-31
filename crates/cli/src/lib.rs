@@ -1,5 +1,3 @@
-#![cfg(windows)]
-
 //! Command-line facade for WinBrew.
 //!
 //! `winbrew-cli` owns command parsing, command dispatch, and the terminal UI

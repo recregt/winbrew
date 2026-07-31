@@ -13,6 +13,7 @@ use crate::models::install::engine::{
     EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope,
 };
 
+#[cfg(windows)]
 use crate::windows_dep::packages::msix_install;
 
 /// Install an MSIX package and return the receipt data WinBrew needs later.
@@ -25,20 +26,29 @@ pub(crate) fn install(
     install_dir: &Path,
     package_name: &str,
 ) -> Result<EngineInstallReceipt> {
-    let package_full_name =
-        msix_install(download_path, package_name).context("msix install failed")?;
+    #[cfg(not(windows))]
+    {
+        let _ = (download_path, install_dir, package_name);
+        anyhow::bail!("MSIX installation is only supported on Windows")
+    }
 
-    fs::create_dir_all(install_dir)
-        .with_context(|| format!("failed to create {}", install_dir.display()))?;
+    #[cfg(windows)]
+    {
+        let package_full_name =
+            msix_install(download_path, package_name).context("msix install failed")?;
 
-    let engine_metadata = Some(EngineMetadata::msix(
-        package_full_name,
-        InstallScope::Installed,
-    ));
+        fs::create_dir_all(install_dir)
+            .with_context(|| format!("failed to create {}", install_dir.display()))?;
 
-    Ok(EngineInstallReceipt::new(
-        EngineKind::Msix,
-        install_dir.to_string_lossy().into_owned(),
-        engine_metadata,
-    ))
+        let engine_metadata = Some(EngineMetadata::msix(
+            package_full_name,
+            InstallScope::Installed,
+        ));
+
+        Ok(EngineInstallReceipt::new(
+            EngineKind::Msix,
+            install_dir.to_string_lossy().into_owned(),
+            engine_metadata,
+        ))
+    }
 }
