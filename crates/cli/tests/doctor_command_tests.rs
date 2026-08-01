@@ -164,7 +164,11 @@ fn doctor_json_reports_corrupted_records_and_journals() {
     let diagnostics = report["diagnostics"]
         .as_array()
         .expect("diagnostics should be an array");
-    assert_eq!(diagnostics.len(), 4);
+    // 4 pre-existing diagnostics, plus 2 `missing_package_journal` warnings:
+    // Contoso.MissingInstall has no journal at all, and Contoso.StaleJournal's
+    // installed version (2.0.0) has no journal directory of its own (the
+    // committed journal on disk is keyed to the stale 1.0.0 version).
+    assert_eq!(diagnostics.len(), 6);
     assert_eq!(
         diagnostics
             .iter()
@@ -193,10 +197,34 @@ fn doctor_json_reports_corrupted_records_and_journals() {
             .any(|diagnostic| diagnostic["error_code"] == "missing_journal_metadata")
     );
 
+    let missing_package_journal_diagnostics: Vec<&serde_json::Value> = diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic["error_code"] == "missing_package_journal")
+        .collect();
+    assert_eq!(missing_package_journal_diagnostics.len(), 2);
+    assert!(
+        missing_package_journal_diagnostics
+            .iter()
+            .any(|diagnostic| {
+                diagnostic["description"]
+                    .as_str()
+                    .is_some_and(|description| description.contains("Contoso.MissingInstall"))
+            })
+    );
+    assert!(
+        missing_package_journal_diagnostics
+            .iter()
+            .any(|diagnostic| {
+                diagnostic["description"]
+                    .as_str()
+                    .is_some_and(|description| description.contains("Contoso.StaleJournal"))
+            })
+    );
+
     let findings = report["recovery_findings"]
         .as_array()
         .expect("recovery_findings should be an array");
-    assert_eq!(findings.len(), 4);
+    assert_eq!(findings.len(), 6);
 
     let missing_install_finding = recovery_finding_by_code(findings, "missing_install_directory");
     assert_eq!(missing_install_finding["issue_kind"], "disk_drift");
@@ -229,6 +257,17 @@ fn doctor_json_reports_corrupted_records_and_journals() {
         legacy_finding["target_path"],
         legacy_journal_path.to_string_lossy().as_ref()
     );
+
+    let missing_package_journal_findings: Vec<&serde_json::Value> = findings
+        .iter()
+        .filter(|finding| finding["error_code"] == "missing_package_journal")
+        .collect();
+    assert_eq!(missing_package_journal_findings.len(), 2);
+    for finding in &missing_package_journal_findings {
+        assert_eq!(finding["issue_kind"], "recovery_trail_missing");
+        assert!(finding.get("action_group").is_none());
+        assert!(finding.get("target_path").is_none());
+    }
 }
 
 struct SharedBuffer {
