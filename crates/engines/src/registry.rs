@@ -1,5 +1,8 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use std::path::Path;
+
+#[cfg(not(windows))]
+use anyhow::bail;
 
 use crate::models::catalog::package::CatalogInstaller;
 use crate::models::install::engine::EngineInstallReceipt;
