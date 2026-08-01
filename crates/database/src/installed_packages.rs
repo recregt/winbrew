@@ -145,6 +145,35 @@ pub fn commit_install_with_commands(
     engine_receipt: &EngineInstallReceipt,
     package_commands: Option<&str>,
 ) -> Result<()> {
+    commit_install_with_journal(conn, name, engine_receipt, package_commands, |_tx, _pkg| {
+        Ok(())
+    })
+}
+
+/// Commit an install transactionally, calling `before_commit` with the
+/// still-open transaction and the resulting package row immediately before
+/// the SQLite commit finalizes.
+///
+/// This is what the real install path uses `before_commit` for: writing (and
+/// durably fsyncing) the recovery journal from inside that window. Doing so
+/// makes the ordering a hard invariant rather than a convention -- since
+/// `before_commit` runs before `tx.commit()`, a journal-write failure
+/// propagates out and the transaction is never committed (rusqlite rolls
+/// back a `Transaction` that's dropped without an explicit commit). A crash
+/// or error can therefore never leave a package visible in SQLite with no
+/// journal at all: either both the journal and the SQLite row end up
+/// durable, or neither does. The reverse case -- a durably committed journal
+/// with no matching SQLite row, because the crash landed between
+/// `before_commit` returning and `tx.commit()` finishing -- is already the
+/// documented "Incomplete install" recovery case that repair replays from
+/// the journal.
+pub fn commit_install_with_journal(
+    conn: &mut crate::DbConnection,
+    name: &str,
+    engine_receipt: &EngineInstallReceipt,
+    package_commands: Option<&str>,
+    before_commit: impl FnOnce(&Connection, &InstalledPackage) -> Result<()>,
+) -> Result<()> {
     let installed_at = now();
     let tx = conn
         .transaction()
@@ -164,6 +193,12 @@ pub fn commit_install_with_commands(
     if let Some(snapshot) = engine_receipt.msi_inventory_snapshot.as_ref() {
         crate::apply_snapshot(&tx, snapshot)?;
     }
+
+    let committed_package = get_package(&tx, name)?.ok_or_else(|| {
+        anyhow::anyhow!("package '{name}' not found while preparing install commit")
+    })?;
+
+    before_commit(&tx, &committed_package)?;
 
     tx.commit().context("failed to commit install state")?;
 

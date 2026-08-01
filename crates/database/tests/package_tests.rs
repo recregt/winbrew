@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 use winbrew_database as database;
 use winbrew_models::command_resolution::{CommandSource, Confidence, ResolverResult, VersionScope};
-use winbrew_models::domains::install::{EngineKind, EngineMetadata, InstallScope, InstallerType};
+use winbrew_models::domains::install::{
+    EngineInstallReceipt, EngineKind, EngineMetadata, InstallScope, InstallerType,
+};
 use winbrew_models::domains::installed::{InstalledPackage as Package, PackageStatus};
 
 fn init_database(root: &Path) -> Result<()> {
@@ -198,6 +200,89 @@ fn replay_committed_journal_replaces_existing_package() -> Result<()> {
     assert_eq!(stored_package.status, PackageStatus::Ok);
 
     assert_eq!(stored_package.install_dir, install_dir);
+
+    Ok(())
+}
+
+/// `before_commit` runs inside the still-open transaction and sees the row
+/// as it will read once committed (status flipped to Ok, install_dir/engine
+/// metadata already applied) -- this is what lets the real install path
+/// build the recovery journal entry from it without a second query.
+#[test]
+fn commit_install_with_journal_runs_before_commit_with_pending_package_state() -> Result<()> {
+    let test_root = tempdir()?;
+    init_database(test_root.path())?;
+
+    let mut conn = database::get_conn()?;
+    conn.execute("DELETE FROM installed_packages", [])?;
+
+    let package_name = "Contoso.JournalOk";
+    let package = sample_package(package_name, PackageStatus::Installing);
+    database::insert_package(&conn, &package)?;
+
+    let receipt =
+        EngineInstallReceipt::new(EngineKind::Portable, package.install_dir.clone(), None);
+
+    let mut before_commit_ran = false;
+    database::commit_install_with_journal(
+        &mut conn,
+        package_name,
+        &receipt,
+        None,
+        |_tx, committed_package| {
+            before_commit_ran = true;
+            assert_eq!(committed_package.name, package_name);
+            assert_eq!(committed_package.status, PackageStatus::Ok);
+            assert_eq!(committed_package.install_dir, package.install_dir);
+            Ok(())
+        },
+    )?;
+
+    assert!(before_commit_ran);
+
+    let stored = database::get_package(&conn, package_name)?.expect("package should exist");
+    assert_eq!(stored.status, PackageStatus::Ok);
+
+    Ok(())
+}
+
+/// The connected fix this test locks in: a journal-write failure must not
+/// be able to leave a package looking installed in SQLite with no journal
+/// to back it up. Since before_commit runs before tx.commit(), a failure
+/// there aborts the whole transaction -- the status flip back to Ok never
+/// becomes visible, exactly as if the commit itself had failed.
+#[test]
+fn commit_install_with_journal_rolls_back_sqlite_state_when_before_commit_fails() -> Result<()> {
+    let test_root = tempdir()?;
+    init_database(test_root.path())?;
+
+    let mut conn = database::get_conn()?;
+    conn.execute("DELETE FROM installed_packages", [])?;
+
+    let package_name = "Contoso.JournalFail";
+    let package = sample_package(package_name, PackageStatus::Installing);
+    database::insert_package(&conn, &package)?;
+
+    let receipt =
+        EngineInstallReceipt::new(EngineKind::Portable, package.install_dir.clone(), None);
+
+    let result = database::commit_install_with_journal(
+        &mut conn,
+        package_name,
+        &receipt,
+        None,
+        |_tx, _committed_package| anyhow::bail!("simulated journal write failure"),
+    );
+
+    assert!(result.is_err());
+
+    let stored = database::get_package(&conn, package_name)?.expect("package should still exist");
+    assert_eq!(
+        stored.status,
+        PackageStatus::Installing,
+        "the status flip to Ok must have rolled back along with everything else \
+         in the transaction when before_commit failed"
+    );
 
     Ok(())
 }
