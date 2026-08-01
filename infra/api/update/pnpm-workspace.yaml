@@ -13,3 +13,10 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+
+# Supply-chain hardening: wait 7 days before installing newly published
+# versions, refuse transitive deps sourced from anywhere but the configured
+# registry, and never let a dependency update silently loosen these settings.
+minimumReleaseAge: 10080
+blockExoticSubdeps: true
+trustPolicy: no-downgrade

@@ -94,7 +94,7 @@
       "matchUpdateTypes": ["patch", "minor"],
       "automerge": false,
       "groupName": "compatible-cargo",
-      "minimumReleaseAge": "3 days",
+      "minimumReleaseAge": "7 days",
       "internalChecksFilter": "strict"
     },
     {
@@ -112,7 +112,7 @@
       "matchUpdateTypes": ["patch", "minor"],
       "automerge": false,
       "groupName": "compatible-go",
-      "minimumReleaseAge": "3 days",
+      "minimumReleaseAge": "7 days",
       "internalChecksFilter": "strict"
     },
     {
@@ -121,7 +121,7 @@
       "matchUpdateTypes": ["patch", "minor"],
       "automerge": false,
       "groupName": "compatible-npm",
-      "minimumReleaseAge": "3 days",
+      "minimumReleaseAge": "7 days",
       "internalChecksFilter": "strict"
     },
     {
