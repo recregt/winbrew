@@ -21,6 +21,9 @@ pub enum HashError {
 
     #[error("{algorithm} checksums are disabled by default for security")]
     LegacyChecksumAlgorithm { algorithm: HashAlgorithm },
+
+    #[error("no expected checksum was provided for verification")]
+    MissingExpectedHash,
 }
 
 pub type Result<T> = std::result::Result<T, HashError>;
@@ -68,10 +71,20 @@ pub fn hash_algorithm(value: &str) -> Option<HashAlgorithm> {
     HashAlgorithm::detect(value)
 }
 
+/// Verify `actual_hash` against `expected_hash`.
+///
+/// A blank `expected_hash` (empty, whitespace-only, or just an algorithm
+/// prefix) is an error, not an automatic pass -- callers that intend to skip
+/// verification when no hash is available must decide that explicitly before
+/// calling this function, the way `verify_strategy` in the install download
+/// path does. Treating "nothing to compare against" as "verified" here would
+/// let a blank hash field anywhere upstream (a malformed catalog entry, a
+/// missing inventory snapshot value) silently defeat every caller's
+/// integrity check at once.
 pub fn verify_hash(expected_hash: &str, actual_hash: impl AsRef<[u8]>) -> Result<()> {
     let expected_hash = normalize_hash(expected_hash);
     if expected_hash.is_empty() {
-        return Ok(());
+        return Err(HashError::MissingExpectedHash);
     }
 
     let bytes = actual_hash.as_ref();
@@ -187,6 +200,24 @@ mod tests {
     fn verify_hash_rejects_mismatch() {
         let actual = [0x12, 0x34, 0xab, 0xcd];
         assert!(verify_hash("sha256:11111111", actual).is_err());
+    }
+
+    #[test]
+    fn verify_hash_rejects_blank_expected_hash() {
+        let actual = [0x12, 0x34, 0xab, 0xcd];
+
+        assert_eq!(
+            verify_hash("", actual),
+            Err(super::HashError::MissingExpectedHash)
+        );
+        assert_eq!(
+            verify_hash("   ", actual),
+            Err(super::HashError::MissingExpectedHash)
+        );
+        assert_eq!(
+            verify_hash("sha256:", actual),
+            Err(super::HashError::MissingExpectedHash)
+        );
     }
 
     #[test]
