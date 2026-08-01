@@ -8,7 +8,7 @@ use crate::app::repair::{self, FileRestoreResolution, RepairPlan};
 use crate::models::domains::catalog::CatalogPackage;
 use winbrew_ui::Ui;
 
-pub fn run(ctx: &CommandContext, yes: bool) -> Result<()> {
+pub fn run(ctx: &CommandContext, yes: bool, force: bool) -> Result<()> {
     let mut ui = ctx.ui();
     ui.page_title("Repair");
 
@@ -30,10 +30,11 @@ pub fn run(ctx: &CommandContext, yes: bool) -> Result<()> {
 
     let mut applied = 0usize;
 
-    applied += run_journal_replay_group(&mut ui, yes, &plan)?;
-    applied += run_orphan_cleanup_group(&mut ui, yes, &plan)?;
-    applied += run_file_restore_group(&mut ui, ctx, &plan)?;
-    applied += run_reinstall_group(&mut ui, ctx, &plan.reinstall_packages)?;
+    applied += run_journal_replay_group(&mut ui, yes, force, &plan)?;
+    applied += run_conflict_journal_replay_group(&mut ui, force, &plan)?;
+    applied += run_orphan_cleanup_group(&mut ui, yes, force, &plan)?;
+    applied += run_file_restore_group(&mut ui, ctx, force, &plan)?;
+    applied += run_reinstall_group(&mut ui, ctx, force, &plan.reinstall_packages)?;
 
     if applied == 0 {
         ui.notice("No recovery actions were applied.");
@@ -45,6 +46,7 @@ pub fn run(ctx: &CommandContext, yes: bool) -> Result<()> {
 fn run_journal_replay_group<W: Write>(
     ui: &mut Ui<W>,
     yes: bool,
+    force: bool,
     plan: &RepairPlan,
 ) -> Result<usize> {
     if plan.journal_paths.is_empty() {
@@ -74,6 +76,7 @@ fn run_journal_replay_group<W: Write>(
     if !confirm_group(
         ui,
         yes,
+        force,
         true,
         &format!(
             "Replay {} committed journal(s) into SQLite?",
@@ -96,9 +99,64 @@ fn run_journal_replay_group<W: Write>(
     Ok(replayed)
 }
 
+/// Committed journals that disagree with the currently installed package
+/// (`RecoveryIssueKind::Conflict`, per docs/recovery-policy.md's Conflict
+/// Classes table) overwrite SQLite when replayed. Unlike the safe batch in
+/// `run_journal_replay_group`, each one gets its own confirmation, and `-y`
+/// alone never approves it -- only an interactive yes or `--force` can.
+fn run_conflict_journal_replay_group<W: Write>(
+    ui: &mut Ui<W>,
+    force: bool,
+    plan: &RepairPlan,
+) -> Result<usize> {
+    if plan.conflict_journal_paths.is_empty() {
+        return Ok(0);
+    }
+
+    ui.warn(format!(
+        "Found {} committed journal(s) that conflict with the currently installed package state.",
+        plan.conflict_journal_paths.len()
+    ));
+
+    let journal_targets = repair::prepare_journal_replay_targets(&plan.conflict_journal_paths)?;
+    let mut replayed = 0usize;
+
+    for target in &journal_targets {
+        if !confirm_group(
+            ui,
+            false,
+            force,
+            false,
+            &format!(
+                "{} conflicts with the installed package state. Overwrite SQLite with the committed journal?",
+                target.journal_path.display()
+            ),
+            &format!(
+                "Skipped conflicting journal replay for {}.",
+                target.journal_path.display()
+            ),
+        )? {
+            continue;
+        }
+
+        replayed += ui.spinner("Replaying committed journal...", || {
+            repair::replay_prepared_journal_targets(std::slice::from_ref(target))
+        })?;
+    }
+
+    if replayed > 0 {
+        ui.success(format!(
+            "Replayed {replayed} conflicting committed journal(s)."
+        ));
+    }
+
+    Ok(replayed)
+}
+
 fn run_orphan_cleanup_group<W: Write>(
     ui: &mut Ui<W>,
     yes: bool,
+    force: bool,
     plan: &RepairPlan,
 ) -> Result<usize> {
     if plan.orphan_paths.is_empty() {
@@ -113,6 +171,7 @@ fn run_orphan_cleanup_group<W: Write>(
     if !confirm_group(
         ui,
         yes,
+        force,
         true,
         &format!(
             "Remove {} orphan install director{}?",
@@ -151,6 +210,7 @@ fn run_orphan_cleanup_group<W: Write>(
 fn run_file_restore_group<W: Write>(
     ui: &mut Ui<W>,
     ctx: &CommandContext,
+    force: bool,
     plan: &RepairPlan,
 ) -> Result<usize> {
     if plan.file_restore_packages.is_empty() {
@@ -170,6 +230,7 @@ fn run_file_restore_group<W: Write>(
         if !confirm_group(
             ui,
             false,
+            force,
             false,
             &format!(
                 "Restore {} file{} for {}?",
@@ -218,6 +279,7 @@ fn run_file_restore_group<W: Write>(
                 if !confirm_group(
                     ui,
                     false,
+                    force,
                     false,
                     &format!("Reinstall {} instead?", package_target.name),
                     &format!("Skipped reinstall fallback for {}.", package_target.name),
@@ -248,6 +310,7 @@ fn run_file_restore_group<W: Write>(
 fn run_reinstall_group<W: Write>(
     ui: &mut Ui<W>,
     ctx: &CommandContext,
+    force: bool,
     package_names: &[String],
 ) -> Result<usize> {
     if package_names.is_empty() {
@@ -265,6 +328,7 @@ fn run_reinstall_group<W: Write>(
         if !confirm_group(
             ui,
             false,
+            force,
             false,
             &format!("Reinstall {package_name}?"),
             &format!("Skipped reinstall for {package_name}."),
@@ -292,18 +356,33 @@ fn run_reinstall_group<W: Write>(
     Ok(repaired)
 }
 
+/// `allow_auto_yes` marks a group as low risk enough for `-y` to pre-approve
+/// in bulk (per docs/recovery-policy.md's Destructive Operations policy).
+/// `force` always pre-approves, low risk or not -- it's the explicit,
+/// per-invocation opt-in for destructive/high-risk actions that `-y` alone
+/// must never silently take. When neither applies, the confirmation goes
+/// through `Ui::confirm_protected` for `!allow_auto_yes` groups so that a
+/// standing `core.default_yes` config default can't substitute for either
+/// one; low-risk groups still honor it via the regular `Ui::confirm`.
 fn confirm_group<W: Write>(
     ui: &mut Ui<W>,
     yes: bool,
+    force: bool,
     allow_auto_yes: bool,
     prompt: &str,
     skipped_message: &str,
 ) -> Result<bool> {
-    if allow_auto_yes && yes {
+    if force || (allow_auto_yes && yes) {
         return Ok(true);
     }
 
-    if ui.confirm(prompt, false)? {
+    let confirmed = if allow_auto_yes {
+        ui.confirm(prompt, false)?
+    } else {
+        ui.confirm_protected(prompt)?
+    };
+
+    if confirmed {
         return Ok(true);
     }
 

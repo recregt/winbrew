@@ -43,7 +43,7 @@ pub fn run(
         } => doctor::run(ctx, json, warn_as_error),
         Command::Update => update::run(ctx),
         Command::Remove { name, yes, force } => remove::run(ctx, &name, yes, force),
-        Command::Repair { yes } => repair::run(ctx, yes),
+        Command::Repair { yes, force } => repair::run(ctx, yes, force),
         Command::Config { command } => config::run(ctx, config, command),
         Command::Completions { .. } => unreachable!("completion command is handled during startup"),
     }

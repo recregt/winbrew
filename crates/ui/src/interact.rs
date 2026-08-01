@@ -20,6 +20,20 @@ impl<W: Write> Ui<W> {
             .map_err(Into::into)
     }
 
+    /// Like [`Self::confirm`], but never short-circuits on the config-sourced
+    /// `default_yes` flag. Use this for destructive or high-risk
+    /// confirmations that must only be skipped by an explicit, per-invocation
+    /// override (an interactive yes, or a `--force`-style flag checked by the
+    /// caller before this is ever called) -- never by a standing config
+    /// default that silently approves every future invocation.
+    pub fn confirm_protected(&mut self, message: &str) -> Result<bool> {
+        Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt(message)
+            .default(false)
+            .interact()
+            .map_err(Into::into)
+    }
+
     pub fn prompt_text(&mut self, message: &str, default: Option<&str>) -> Result<String> {
         let theme = ColorfulTheme::default();
         let input = Input::<String>::with_theme(&theme).with_prompt(message);

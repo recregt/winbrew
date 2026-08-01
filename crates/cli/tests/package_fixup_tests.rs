@@ -41,8 +41,6 @@ impl RepairFixture {
         let config = common::init_database(root.path()).expect("database should initialize");
         std::fs::create_dir_all(root.path().join("packages")).expect("packages dir should exist");
 
-        let mut config = config;
-        config.core.default_yes = true;
         let resolved_paths = config.resolved_paths();
         let ctx = CommandContext::from_config(&config).expect("context should build");
 
@@ -218,7 +216,7 @@ fn repair_replays_committed_journal_into_database() {
         .expect("write commit");
     writer.flush().expect("flush journal");
 
-    repair::run(&fixture.ctx, true).expect("repair should succeed");
+    repair::run(&fixture.ctx, true, false).expect("repair should succeed");
 
     let conn = fixture.conn();
     let package = database::get_package(conn, package_name)
@@ -303,7 +301,7 @@ fn repair_replays_committed_journal_using_resolver_commands() {
         .expect("write commit");
     writer.flush().expect("flush journal");
 
-    repair::run(&fixture.ctx, true).expect("repair should succeed");
+    repair::run(&fixture.ctx, true, false).expect("repair should succeed");
 
     let shim_path = fixture.root_path().join("shims").join("contoso.cmd");
     assert!(shim_path.exists());
@@ -375,7 +373,7 @@ fn repair_replays_committed_journal_and_removes_stale_shims() {
         .expect("write commit");
     writer.flush().expect("flush journal");
 
-    repair::run(&fixture.ctx, true).expect("repair should succeed");
+    repair::run(&fixture.ctx, true, false).expect("repair should succeed");
 
     let current_shim = fixture.root_path().join("shims").join("contoso.cmd");
     assert!(current_shim.exists());
@@ -471,7 +469,7 @@ fn repair_removes_orphan_install_directory() {
 
     assert!(orphan_dir.exists());
 
-    repair::run(&fixture.ctx, true).expect("repair should succeed");
+    repair::run(&fixture.ctx, true, false).expect("repair should succeed");
 
     assert!(!orphan_dir.exists());
 }
@@ -507,7 +505,9 @@ fn repair_reinstalls_missing_package_from_catalog() -> Result<()> {
 
     database::insert_package(conn, &package).expect("package should insert");
 
-    repair::run(&fixture.ctx, true).expect("repair should succeed");
+    // Reinstall is a high-risk group: `-y` alone never approves it, so this
+    // needs `force: true` to run without an interactive prompt.
+    repair::run(&fixture.ctx, true, true).expect("repair should succeed");
 
     let conn = fixture.conn();
     let package = database::get_package(conn, package_name)
@@ -572,7 +572,9 @@ fn repair_reinstalls_native_exe_from_catalog() -> Result<()> {
 
     database::insert_package(conn, &package).expect("package should insert");
 
-    repair::run(&fixture.ctx, true).expect("repair should succeed");
+    // Reinstall is a high-risk group: `-y` alone never approves it, so this
+    // needs `force: true` to run without an interactive prompt.
+    repair::run(&fixture.ctx, true, true).expect("repair should succeed");
 
     let conn = fixture.conn();
     let package = database::get_package(conn, package_name)
@@ -595,7 +597,7 @@ fn repair_reinstalls_native_exe_from_catalog() -> Result<()> {
 fn repair_is_a_noop_when_no_recovery_targets_exist() {
     let fixture = RepairFixture::new();
 
-    repair::run(&fixture.ctx, true).expect("repair should succeed with no targets");
+    repair::run(&fixture.ctx, true, false).expect("repair should succeed with no targets");
 }
 
 #[test]
@@ -661,7 +663,7 @@ fn repair_replays_bin_bindings_with_alias_and_default_args() {
         .expect("write commit");
     writer.flush().expect("flush journal");
 
-    repair::run(&fixture.ctx, true).expect("repair should succeed");
+    repair::run(&fixture.ctx, true, false).expect("repair should succeed");
 
     let shim_path = fixture.root_path().join("shims").join("git.cmd");
     assert!(shim_path.exists(), "shim should exist");

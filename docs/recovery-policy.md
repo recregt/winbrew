@@ -50,7 +50,7 @@ The current doctor implementation maps diagnostics into recovery findings as fol
 | `missing_msi_inventory_snapshot`, `msi_inventory_unreadable`, `pkgdb_unreadable`, `incomplete_package_journal`, `unreadable_package_journal`, `malformed_package_journal`, `missing_journal_metadata`, `missing_package_journal` | Recovery trail missing | None | The recovery trail is incomplete, but doctor does not assign a direct repair action yet. `missing_package_journal` is the case with nothing to read at all: an installed package with no journal directory under `data/pkgdb` whatsoever, not merely an unreadable or malformed one. |
 | `orphan_install_directory` | Incomplete install | Orphan cleanup | A package directory exists without a matching database record. |
 | `orphan_package_journal` | Incomplete install | Journal replay | A committed journal exists without a live package row. |
-| `stale_package_journal`, `trailing_package_journal` | Conflict | Journal replay | The committed journal disagrees with the installed package and is treated as the recovery source. |
+| `stale_package_journal`, `trailing_package_journal` | Conflict | Journal replay | The committed journal disagrees with the installed package and is treated as the recovery source. Both are Error severity: replaying overwrites SQLite, so repair confirms each one separately (see §3) rather than folding it into the low-risk journal replay batch, even though it shares the same action group. |
 
 Diagnostics without a recovery mapping still appear in the health report, but they are report-only until a repair path is defined.
 
@@ -60,10 +60,11 @@ Repair should be grouped by risk, not by individual line item.
 
 ### Low Risk: Journal Replay
 
-- Use this when a committed journal can reconstruct missing SQLite state.
+- Use this when a committed journal can reconstruct missing SQLite state with no conflicting live row (`RecoveryIssueKind::IncompleteInstall` -- `orphan_package_journal`).
 - Show all replay candidates as one batch.
 - Ask once for the whole batch.
 - Default answer is No.
+- This tier does **not** include Conflict-classified replays (`stale_package_journal`, `trailing_package_journal`) -- see High Risk below, even though both share the `journal_replay` action group.
 
 ### Medium Risk: Orphan Cleanup
 
@@ -72,10 +73,10 @@ Repair should be grouped by risk, not by individual line item.
 - Ask once for the whole batch.
 - Default answer is No.
 
-### High Risk: File Restore / Reinstall
+### High Risk: File Restore / Reinstall / Conflicting Journal Replay
 
-- Use this when disk drift means the content itself is wrong.
-- Ask separately for each package or file set.
+- Use this when disk drift means the content itself is wrong, or when a committed journal disagrees with the installed package and replaying it would overwrite SQLite (`RecoveryIssueKind::Conflict`).
+- Ask separately for each package, file set, or conflicting journal.
 - Do not collapse high-risk actions into a single bulk confirmation.
 - Default answer is No.
 
@@ -83,7 +84,8 @@ Repair should be grouped by risk, not by individual line item.
 
 - Destructive actions are opt-in.
 - If the operation removes data, the default is always No.
-- The `-y` flag may pre-approve grouped low-risk actions, but it should not silently take destructive or high-risk actions.
+- The `-y` flag may pre-approve grouped low-risk actions, but it must never silently take destructive or high-risk actions -- not even indirectly through a standing config default. `core.default_yes` is equivalent to passing `-y` on every invocation and is bound by the exact same limit: it can pre-approve the Low Risk batch, but repair's Medium/High Risk and Destructive confirmations ignore it entirely.
+- The only way to pre-approve a destructive or high-risk action without an interactive prompt is an explicit, per-invocation `--force` (`winbrew repair --force`, `winbrew remove --force`). Because it must be typed on the command line each time, `--force` cannot be left standing in a config file the way `core.default_yes` can.
 
 Example confirmation flow:
 
@@ -92,9 +94,10 @@ Example confirmation flow:
   - registry state is inconsistent
   - journal is incomplete
 - Then prompt by group, for example:
-  - Replay 2 committed journals? [y/N]
-  - Clean up 1 orphaned package record? [y/N]
-  - Reinstall 1 package to fix disk drift? [y/N]
+  - Replay 2 committed journals? [y/N] (`-y` may pre-approve this)
+  - Clean up 1 orphaned package record? [y/N] (`-y` may pre-approve this)
+  - `pkgdb/Contoso.App/journal.jsonl` conflicts with the installed package state. Overwrite SQLite with the committed journal? [y/N] (only `--force` or an interactive yes approves this)
+  - Reinstall 1 package to fix disk drift? [y/N] (only `--force` or an interactive yes approves this)
 
 ## 4. Journal Retention Policy
 

@@ -221,9 +221,23 @@ mod repair_tests {
     #[test]
     fn parses_repair_variants() {
         let cases: Vec<ParseCase> = vec![
-            (vec!["brew", "repair"], || Command::Repair { yes: false }),
+            (vec!["brew", "repair"], || Command::Repair {
+                yes: false,
+                force: false,
+            }),
             (vec!["brew", "repair", "--yes"], || Command::Repair {
                 yes: true,
+                force: false,
+            }),
+            (vec!["brew", "repair", "--force"], || Command::Repair {
+                yes: false,
+                force: true,
+            }),
+            (vec!["brew", "repair", "--yes", "--force"], || {
+                Command::Repair {
+                    yes: true,
+                    force: true,
+                }
             }),
         ];
 
