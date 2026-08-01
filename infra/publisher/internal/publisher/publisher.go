@@ -6,8 +6,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/url"
 	"os"
 	"path"
@@ -141,7 +143,18 @@ func publish(ctx context.Context, client *minio.Client, bucketName, inputPath, m
 
 	var patchArtifacts []patchChainArtifact
 	if remoteMetadata != nil {
-		if candidate, err := buildPatchArtifactCandidate(ctx, client, bucketName, publicBaseURL, objectKey, inputPath, localMetadata, remoteMetadata, fullSnapshotBytes); err == nil && candidate != nil {
+		candidate, err := buildPatchArtifactCandidate(ctx, client, bucketName, publicBaseURL, objectKey, inputPath, localMetadata, remoteMetadata, fullSnapshotBytes)
+		switch {
+		case errors.Is(err, errCatalogRowIDDrift):
+			// The previous and current snapshots don't share stable row
+			// identity (e.g. a cold rebuild happened somewhere upstream).
+			// A delta between them would risk overwriting unrelated rows
+			// on a client, so fall back to publishing only the full
+			// snapshot for this release instead of a patch.
+			slog.Warn("skipping patch artifact: catalog rowid drift detected, falling back to full snapshot", "err", err)
+		case err != nil:
+			slog.Warn("skipping patch artifact", "err", err)
+		case candidate != nil:
 			if err := uploadFileAtomic(ctx, client, bucketName, candidate.ObjectKey, candidate.TempPath, "application/octet-stream"); err != nil {
 				return false, 0, Metadata{}, nil, err
 			}
