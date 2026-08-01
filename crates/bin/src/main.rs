@@ -1,44 +1,42 @@
 #[cfg(windows)]
-use clap::Parser;
-
-#[cfg(windows)]
-use mimalloc::MiMalloc;
-
-#[cfg(windows)]
-use std::error::Error as _;
+use {
+    clap::Parser,
+    mimalloc::MiMalloc,
+    std::error::Error as _,
+    std::process::ExitCode,
+    winbrew_cli::{cli::Cli, commands::error::CommandError, run_app},
+};
 
 #[cfg(windows)]
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
 #[cfg(windows)]
-fn main() -> std::process::ExitCode {
-    let cli = winbrew_cli::cli::Cli::parse();
+fn main() -> ExitCode {
+    let cli = Cli::parse();
     let verbose = cli.verbose;
-    let command = cli.command;
 
-    if let Err(err) = winbrew_cli::run_app(command, verbose) {
-        if let Some(cmd_err) = err.downcast_ref::<winbrew_cli::commands::error::CommandError>() {
-            if let winbrew_cli::commands::error::CommandError::Fatal(message) = cmd_err {
-                eprintln!("\nFATAL: {message}");
-            }
+    let Err(err) = run_app(cli.command, verbose) else {
+        return ExitCode::SUCCESS;
+    };
 
-            if cli.verbose > 0 {
-                print_command_error_sources(cmd_err);
-            }
-
-            return std::process::ExitCode::from(cmd_err);
-        }
-
+    let Some(cmd_err) = err.downcast_ref::<CommandError>() else {
         eprintln!("\nUNEXPECTED: {err:#}");
-        return std::process::ExitCode::from(1);
+        return ExitCode::from(1);
+    };
+
+    if let CommandError::Fatal(message) = cmd_err {
+        eprintln!("\nFATAL: {message}");
+    }
+    if verbose > 0 {
+        print_command_error_sources(cmd_err);
     }
 
-    std::process::ExitCode::SUCCESS
+    ExitCode::from(cmd_err)
 }
 
 #[cfg(windows)]
-fn print_command_error_sources(err: &winbrew_cli::commands::error::CommandError) {
+fn print_command_error_sources(err: &CommandError) {
     let Some(mut source) = err.source() else {
         return;
     };
@@ -46,11 +44,10 @@ fn print_command_error_sources(err: &winbrew_cli::commands::error::CommandError)
     eprintln!("Caused by:");
     loop {
         eprintln!("  - {source}");
-
-        match source.source() {
-            Some(next) => source = next,
-            None => break,
-        }
+        let Some(next) = source.source() else {
+            break;
+        };
+        source = next;
     }
 }
 
