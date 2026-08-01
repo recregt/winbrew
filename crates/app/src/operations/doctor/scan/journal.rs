@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::ErrorKind;
 use std::path::Path;
 
@@ -20,6 +20,7 @@ mod error_codes {
     pub const MISSING_METADATA: &str = "missing_journal_metadata";
     pub const ORPHAN_JOURNAL: &str = "orphan_package_journal";
     pub const STALE_JOURNAL: &str = "stale_package_journal";
+    pub const MISSING_PACKAGE_JOURNAL: &str = "missing_package_journal";
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,11 +178,17 @@ pub(super) fn journal_metadata_matches_package(
         && package.deployment_kind == metadata.deployment_kind
 }
 
+/// Process one `pkgdb` package directory. Returns `true` when a
+/// `journal.jsonl` file was actually found there (whatever its contents),
+/// and `false` when there was nothing to read -- the caller uses this to
+/// tell "a journal exists but has a problem" (already diagnosed here, with
+/// its own specific error code) apart from "no journal evidence exists at
+/// all" (diagnosed by the caller against the installed-package list).
 fn process_journal_entry(
     entry_path: &Path,
     package_lookup: &HashMap<&str, &InstalledPackage>,
     result: &mut PackageJournalScan,
-) {
+) -> bool {
     let journal_path = entry_path.join("journal.jsonl");
 
     match database::JournalReader::read_committed(&journal_path) {
@@ -189,86 +196,117 @@ fn process_journal_entry(
             for diagnosis in diagnose_committed_journal(&journal_path, &entries, package_lookup) {
                 result.push(diagnosis, Some(&journal_path));
             }
+            true
         }
         Err(database::JournalReadError::Read { source, .. })
             if source.kind() == ErrorKind::NotFound =>
         {
             debug!(path = %journal_path.display(), "missing journal file, skipping package directory");
+            false
         }
         Err(error) => {
             let (diagnosis, target_path) = journal_read_error_diagnosis(&journal_path, error);
             result.push(diagnosis, target_path);
+            true
         }
     }
 }
 
 /// Scan package journal files under `data/pkgdb` and report recovery issues.
+///
+/// This also cross-references `packages` (the installed-package list)
+/// against whatever journal evidence was found, so an installed package
+/// whose journal directory was never created at all -- not merely
+/// incomplete or malformed, but entirely absent -- is still reported. Per
+/// docs/recovery-policy.md ("SQLite exists, journal is missing"), that's a
+/// Warning, not silence: the package isn't broken, but its recovery trail
+/// is gone.
 pub(super) fn scan_package_journals(
     paths: &ResolvedPaths,
     packages: &[InstalledPackage],
 ) -> PackageJournalScan {
     let pkgdb_root = &paths.pkgdb;
 
-    if !pkgdb_root.exists() {
-        debug!(path = %pkgdb_root.display(), "pkgdb root does not exist, skipping journal scan");
-        return ScanResult::default();
-    }
-
     let package_lookup: HashMap<&str, &InstalledPackage> = packages
         .iter()
         .map(|package| (package.name.as_str(), package))
         .collect();
 
-    let entries = match std::fs::read_dir(pkgdb_root) {
-        Ok(entries) => entries,
-        Err(err) => {
-            if err.kind() == std::io::ErrorKind::NotFound {
-                debug!(path = %pkgdb_root.display(), "pkgdb root disappeared before journal scan");
-                return ScanResult::default();
-            }
+    let mut result = ScanResult::default();
+    let mut seen_journal_keys: HashSet<String> = HashSet::new();
 
-            let mut result = ScanResult::default();
+    if pkgdb_root.exists() {
+        match std::fs::read_dir(pkgdb_root) {
+            Ok(entries) => {
+                for entry_result in entries {
+                    let entry = match entry_result {
+                        Ok(entry) => entry,
+                        Err(err) => {
+                            debug!(path = %pkgdb_root.display(), error = %err, "skipping unreadable pkgdb entry");
+                            continue;
+                        }
+                    };
+
+                    let entry_path = entry.path();
+
+                    let file_type = match entry.file_type() {
+                        Ok(file_type) => file_type,
+                        Err(err) => {
+                            debug!(path = %entry_path.display(), error = %err, "skipping pkgdb entry with unreadable file type");
+                            continue;
+                        }
+                    };
+
+                    if !file_type.is_dir() {
+                        continue;
+                    }
+
+                    if process_journal_entry(&entry_path, &package_lookup, &mut result) {
+                        seen_journal_keys.insert(entry.file_name().to_string_lossy().into_owned());
+                    }
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                debug!(path = %pkgdb_root.display(), "pkgdb root disappeared before journal scan");
+            }
+            Err(err) => {
+                result.push(
+                    diagnosis(
+                        error_codes::PKGDB_UNREADABLE,
+                        format!(
+                            "pkgdb root: unreadable journal directory ({}) - {err}",
+                            pkgdb_root.to_string_lossy()
+                        ),
+                        DiagnosisSeverity::Error,
+                    ),
+                    None,
+                );
+                // pkgdb itself couldn't be read, so we can't tell which
+                // packages are genuinely missing a journal versus simply
+                // unscanned -- stop here rather than reporting every
+                // installed package as missing its recovery trail.
+                return result;
+            }
+        }
+    } else {
+        debug!(path = %pkgdb_root.display(), "pkgdb root does not exist, skipping journal scan");
+    }
+
+    for package in packages {
+        let expected_key = database::package_journal_key(&package.name, &package.version);
+        if !seen_journal_keys.contains(expected_key.as_str()) {
             result.push(
                 diagnosis(
-                    error_codes::PKGDB_UNREADABLE,
+                    error_codes::MISSING_PACKAGE_JOURNAL,
                     format!(
-                        "pkgdb root: unreadable journal directory ({}) - {err}",
-                        pkgdb_root.to_string_lossy()
+                        "{}: package is installed but has no recovery journal",
+                        package.name
                     ),
-                    DiagnosisSeverity::Error,
+                    DiagnosisSeverity::Warning,
                 ),
                 None,
             );
-            return result;
         }
-    };
-
-    let mut result = ScanResult::default();
-
-    for entry_result in entries {
-        let entry = match entry_result {
-            Ok(entry) => entry,
-            Err(err) => {
-                debug!(path = %pkgdb_root.display(), error = %err, "skipping unreadable pkgdb entry");
-                continue;
-            }
-        };
-
-        let entry_path = entry.path();
-
-        let file_type = match entry.file_type() {
-            Ok(file_type) => file_type,
-            Err(err) => {
-                debug!(path = %entry_path.display(), error = %err, "skipping pkgdb entry with unreadable file type");
-                continue;
-            }
-        };
-
-        if !file_type.is_dir() {
-            continue;
-        }
-
-        process_journal_entry(&entry_path, &package_lookup, &mut result);
     }
 
     sort_diagnoses(&mut result.diagnostics);
@@ -614,23 +652,53 @@ mod tests {
 
         let scan = scan_package_journals(&env.paths, &[package]);
 
-        let diagnosis = assert_single_diagnosis(
-            &scan.diagnostics,
-            "stale_package_journal",
-            DiagnosisSeverity::Warning,
-        );
+        // Two independently true facts here: the on-disk journal (written
+        // for version 1.0.0 by write_committed_journal) doesn't match what's
+        // installed now (2.0.0) -- that's the stale diagnosis -- and 2.0.0,
+        // the currently installed version, has no journal directory of its
+        // own at all, since journal directories are keyed by exact version.
+        assert_eq!(scan.diagnostics.len(), 2);
+
+        let stale = scan
+            .diagnostics
+            .iter()
+            .find(|diagnosis| diagnosis.error_code == "stale_package_journal")
+            .expect("stale diagnosis should be present");
+        assert_eq!(stale.severity, DiagnosisSeverity::Warning);
         assert!(
-            diagnosis
+            stale
                 .description
                 .contains("recovery journal does not match")
         );
 
-        let finding = assert_single_recovery_finding(
-            &scan.recovery_findings,
-            RecoveryIssueKind::Conflict,
-            Some(RecoveryActionGroup::JournalReplay),
+        let missing = scan
+            .diagnostics
+            .iter()
+            .find(|diagnosis| diagnosis.error_code == "missing_package_journal")
+            .expect("missing-journal diagnosis should be present");
+        assert_eq!(missing.severity, DiagnosisSeverity::Warning);
+        assert!(missing.description.contains("Contoso.Stale"));
+
+        assert_eq!(scan.recovery_findings.len(), 2);
+
+        let stale_finding = scan
+            .recovery_findings
+            .iter()
+            .find(|finding| finding.issue_kind == RecoveryIssueKind::Conflict)
+            .expect("stale recovery finding should be present");
+        assert_eq!(
+            stale_finding.action_group,
+            Some(RecoveryActionGroup::JournalReplay)
         );
-        assert_recovery_target_path(finding, &journal_path);
+        assert_recovery_target_path(stale_finding, &journal_path);
+
+        let missing_finding = scan
+            .recovery_findings
+            .iter()
+            .find(|finding| finding.issue_kind == RecoveryIssueKind::RecoveryTrailMissing)
+            .expect("missing-journal recovery finding should be present");
+        assert_eq!(missing_finding.action_group, None);
+        assert!(missing_finding.target_path.is_none());
     }
 
     #[test]
@@ -765,5 +833,67 @@ mod tests {
             Some(RecoveryActionGroup::JournalReplay),
         );
         assert_recovery_target_path(finding, &journal_path);
+    }
+
+    #[test]
+    fn scan_package_journals_detects_installed_package_with_no_journal_directory() {
+        let env = TestEnvironment::new();
+
+        // A journal for some *other*, also-installed package exists,
+        // proving the missing check isn't just "pkgdb has nothing in it at
+        // all" -- it's specific to the package that actually lacks one.
+        write_committed_journal(&env, "Contoso.HasJournal");
+        let mut has_journal_package = sample_package();
+        has_journal_package.name = "Contoso.HasJournal".to_string();
+        has_journal_package.install_dir = r"C:\winbrew\apps\Contoso.HasJournal".to_string();
+
+        let mut missing_package = sample_package();
+        missing_package.name = "Contoso.NoJournal".to_string();
+
+        let scan = scan_package_journals(&env.paths, &[has_journal_package, missing_package]);
+
+        let diagnosis = assert_single_diagnosis(
+            &scan.diagnostics,
+            "missing_package_journal",
+            DiagnosisSeverity::Warning,
+        );
+        assert!(diagnosis.description.contains("Contoso.NoJournal"));
+
+        let finding = assert_single_recovery_finding(
+            &scan.recovery_findings,
+            RecoveryIssueKind::RecoveryTrailMissing,
+            None,
+        );
+        assert!(finding.target_path.is_none());
+    }
+
+    #[test]
+    fn scan_package_journals_detects_missing_journal_when_pkgdb_root_does_not_exist() {
+        let env = TestEnvironment::new();
+        assert!(!env.pkgdb_root().exists());
+
+        let scan = scan_package_journals(&env.paths, &[sample_package()]);
+
+        let diagnosis = assert_single_diagnosis(
+            &scan.diagnostics,
+            "missing_package_journal",
+            DiagnosisSeverity::Warning,
+        );
+        assert!(diagnosis.description.contains("Contoso.App"));
+    }
+
+    #[test]
+    fn scan_package_journals_does_not_flag_installed_package_with_valid_journal() {
+        let env = TestEnvironment::new();
+        write_committed_journal(&env, "Contoso.App");
+
+        let scan = scan_package_journals(&env.paths, &[sample_package()]);
+
+        assert!(
+            scan.diagnostics
+                .iter()
+                .all(|diagnosis| diagnosis.error_code != "missing_package_journal"),
+            "a package with a valid, matching journal should not be reported as missing one"
+        );
     }
 }
