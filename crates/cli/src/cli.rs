@@ -78,9 +78,17 @@ pub enum Command {
 
     /// Replay committed journals into the local database
     Repair {
-        /// Proceed without prompting for confirmation
+        /// Auto-approve grouped, low-risk recovery actions (orphan cleanup,
+        /// journal replay that doesn't conflict with installed package
+        /// state). Never auto-approves destructive or high-risk actions.
         #[arg(long, short = 'y', help_heading = "Safety")]
         yes: bool,
+
+        /// Auto-approve every recovery action, including destructive and
+        /// high-risk ones (conflicting journal replay, file restore,
+        /// reinstall) that `--yes` alone will not approve.
+        #[arg(long, help_heading = "Safety")]
+        force: bool,
     },
 
     /// Get or set winbrew configuration values.

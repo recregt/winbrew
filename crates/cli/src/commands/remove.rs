@@ -90,5 +90,9 @@ fn should_proceed<W: std::io::Write>(
         )
     };
 
-    ui.confirm(&prompt, false)
+    // Removal is destructive, so a standing `core.default_yes` config
+    // default must not be able to silently approve it -- only an explicit
+    // `--yes`/`--force` on this invocation (checked above) or a real
+    // interactive confirmation can.
+    ui.confirm_protected(&prompt)
 }
