@@ -138,7 +138,10 @@ fn doctor_json_reports_corrupted_records_and_journals() {
     let report: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("doctor JSON should parse from stdout");
 
-    assert_eq!(report["error_count"], 2);
+    // Error severity: missing_install_directory, stale_package_journal
+    // (SQLite/journal Conflict, per docs/recovery-policy.md), and
+    // missing_journal_metadata.
+    assert_eq!(report["error_count"], 3);
     assert!(report["scan_duration_micros"].as_u64().is_some());
 
     let scan_timings = report["scan_timings"]
@@ -174,7 +177,7 @@ fn doctor_json_reports_corrupted_records_and_journals() {
             .iter()
             .filter(|diagnostic| diagnostic["severity"] == "error")
             .count(),
-        2
+        3
     );
     assert!(
         diagnostics
@@ -245,6 +248,7 @@ fn doctor_json_reports_corrupted_records_and_journals() {
     let stale_finding = recovery_finding_by_code(findings, "stale_package_journal");
     assert_eq!(stale_finding["issue_kind"], "conflict");
     assert_eq!(stale_finding["action_group"], "journal_replay");
+    assert_eq!(stale_finding["severity"], "error");
     assert_eq!(
         stale_finding["target_path"],
         stale_journal_path.to_string_lossy().as_ref()

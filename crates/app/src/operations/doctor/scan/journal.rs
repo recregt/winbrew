@@ -356,7 +356,7 @@ fn diagnose_committed_journal_metadata(
                 "recovery journal does not match installed package {} ({})",
                 package.name, package.version
             ),
-            DiagnosisSeverity::Warning,
+            DiagnosisSeverity::Error,
         ));
     }
 
@@ -664,7 +664,7 @@ mod tests {
             .iter()
             .find(|diagnosis| diagnosis.error_code == "stale_package_journal")
             .expect("stale diagnosis should be present");
-        assert_eq!(stale.severity, DiagnosisSeverity::Warning);
+        assert_eq!(stale.severity, DiagnosisSeverity::Error);
         assert!(
             stale
                 .description
