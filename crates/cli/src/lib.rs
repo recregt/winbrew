@@ -28,6 +28,7 @@ pub use winbrew_app::{core, database, engines, models};
 pub struct CommandContext {
     app: AppContext,
     ui: UiSettings,
+    confirm_remove: bool,
 }
 
 impl CommandContext {
@@ -44,6 +45,7 @@ impl CommandContext {
                 color_enabled: config.core.color,
                 default_yes: config.core.default_yes,
             },
+            confirm_remove: config.core.confirm_remove,
         })
     }
 
@@ -55,6 +57,14 @@ impl CommandContext {
     /// Return the application context used by the command handlers.
     pub fn app(&self) -> &AppContext {
         &self.app
+    }
+
+    /// Whether `remove` should prompt for confirmation at all
+    /// (`core.confirm_remove`). This is independent of `-y`/`--force` and of
+    /// `core.default_yes`: it is a standing, remove-specific opt-out of the
+    /// prompt itself, not a blanket auto-approval of destructive actions.
+    pub fn confirm_remove(&self) -> bool {
+        self.confirm_remove
     }
 }
 
