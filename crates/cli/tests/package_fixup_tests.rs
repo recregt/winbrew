@@ -387,6 +387,10 @@ fn repair_replays_committed_journal_and_removes_stale_shims() {
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: spawns the compiled winbrew binary"
+)]
 fn repair_reports_journal_command_resolution_summary() -> Result<()> {
     let fixture = RepairFixture::new();
     let package_name = "winget/Contoso.Summary";
@@ -524,6 +528,10 @@ fn repair_reinstalls_missing_package_from_catalog() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: spawns the compiled winbrew binary"
+)]
 fn repair_reinstalls_native_exe_from_catalog() -> Result<()> {
     let fixture = RepairFixture::new();
     let package_name = "Winbrew Repair NativeExe";

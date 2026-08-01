@@ -108,6 +108,10 @@ fn remove_removes_portable_package_when_confirmed() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: spawns the compiled winbrew binary"
+)]
 fn remove_removes_native_exe_package_when_confirmed() -> Result<()> {
     let fixture = RemoveFixture::new();
     let package_name = "Contoso.NativeExe";

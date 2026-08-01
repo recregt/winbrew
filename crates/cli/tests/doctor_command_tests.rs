@@ -97,6 +97,10 @@ fn doctor_run_warn_as_error_returns_reported_error() {
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: spawns the compiled winbrew binary"
+)]
 fn doctor_json_reports_corrupted_records_and_journals() {
     let fixture = DoctorFixture::new();
 
