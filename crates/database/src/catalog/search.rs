@@ -17,6 +17,8 @@ pub(crate) fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackag
         return Ok(Vec::new());
     }
 
+    let fts_query = fts5_match_query(query);
+
     let mut stmt = conn.prepare(
         "SELECT p.id, p.name, p.version, p.source, p.namespace, p.source_id, p.created_at, p.updated_at, p.description, p.homepage, p.license, p.publisher, p.locale, p.moniker, p.platform, p.commands, p.protocols, p.file_extensions, p.capabilities, p.tags, p.bin, p.env_add_path
          FROM catalog_packages p
@@ -25,9 +27,34 @@ pub(crate) fn search(conn: &Connection, query: &str) -> Result<Vec<CatalogPackag
             ORDER BY bm25(catalog_packages_fts, 10.0, 5.0, 6.0, 1.0), p.name ASC",
     )?;
 
-    stmt.query_map(params![query], row_to_package)?
+    stmt.query_map(params![fts_query], row_to_package)?
         .collect::<std::result::Result<Vec<_>, _>>()
         .context("failed to read catalog package")
+}
+
+/// Build a safe FTS5 `MATCH` query from free-text user input.
+///
+/// Binding a raw user string as an FTS5 `MATCH` argument is not the same as
+/// binding it into an ordinary SQL predicate: the bound value is itself
+/// parsed by SQLite's FTS5 query-syntax parser, independent of normal SQL
+/// parameter escaping. Reserved tokens (`AND`, `OR`, `NOT`), grouping and
+/// prefix operators (`(`, `)`, `-`, `*`), and the `column:` filter syntax
+/// are all live syntax in that mini-language, so an unescaped search term
+/// like `foo AND` or an unbalanced `"` either throws an opaque FTS5 syntax
+/// error at the user or silently changes what the query means.
+///
+/// Every whitespace-separated term is wrapped as its own FTS5 string
+/// literal (embedded `"` doubled per FTS5's escaping rule), which forces
+/// each term to be matched as literal text rather than parsed as syntax.
+/// Adjacent string literals with no explicit operator between them still
+/// combine with FTS5's default implicit AND, so this preserves the
+/// existing multi-word search behavior for ordinary queries.
+fn fts5_match_query(query: &str) -> String {
+    query
+        .split_whitespace()
+        .map(|term| format!("\"{}\"", term.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Return a single catalog package by its catalog package id.
@@ -92,7 +119,7 @@ fn row_to_package(row: &rusqlite::Row) -> rusqlite::Result<CatalogPackage> {
 
 #[cfg(test)]
 mod tests {
-    use super::{get_package_by_id, search};
+    use super::{fts5_match_query, get_package_by_id, search};
     use rusqlite::{Connection, params};
 
     const CATALOG_SCHEMA: &str = include_str!("../../../../infra/parser/schema/catalog.sql");
@@ -281,5 +308,65 @@ mod tests {
         assert_eq!(searched.len(), 2);
         assert_eq!(searched[0].name, "Google Chrome");
         assert_eq!(searched[1].name, "NodeJS");
+    }
+
+    #[test]
+    fn fts5_match_query_wraps_each_term_as_a_literal() {
+        assert_eq!(fts5_match_query("chrome"), "\"chrome\"");
+        assert_eq!(fts5_match_query("Visual Studio"), "\"Visual\" \"Studio\"");
+        assert_eq!(fts5_match_query("  a   b  "), "\"a\" \"b\"");
+    }
+
+    #[test]
+    fn fts5_match_query_escapes_embedded_quotes_and_defuses_operators() {
+        assert_eq!(fts5_match_query(r#"foo"bar"#), "\"foo\"\"bar\"");
+        assert_eq!(fts5_match_query("NOT"), "\"NOT\"");
+        assert_eq!(fts5_match_query("foo AND"), "\"foo\" \"AND\"");
+        assert_eq!(fts5_match_query("(foo)"), "\"(foo)\"");
+        assert_eq!(fts5_match_query("name:foo"), "\"name:foo\"");
+    }
+
+    /// Special FTS5 syntax characters (quotes, boolean keywords, grouping,
+    /// column filters) used to reach `MATCH` unescaped, so they were parsed
+    /// as query syntax instead of literal search text -- an unbalanced `"`
+    /// or a bare `NOT`/`AND`/`OR` term threw an FTS5 syntax error straight
+    /// at the user instead of behaving like an ordinary (non-matching)
+    /// search. This locks in that such input now searches safely.
+    #[test]
+    fn search_handles_fts5_special_characters_without_erroring() {
+        let conn = open_test_db();
+
+        insert_catalog_package(
+            &conn,
+            "winget/Contoso.App",
+            "Contoso App",
+            Some("Example package"),
+            None,
+            None,
+        );
+
+        for query in [
+            "\"unbalanced quote",
+            "NOT",
+            "AND OR",
+            "foo AND",
+            "(unterminated",
+            "name:contoso",
+            "foo*",
+            "foo\"bar",
+            "-contoso",
+        ] {
+            search(&conn, query)
+                .unwrap_or_else(|err| panic!("search for {query:?} should not error: {err}"));
+        }
+
+        let matched = search(&conn, "name:contoso").expect("catalog search should succeed");
+        assert!(
+            matched.is_empty(),
+            "column-filter syntax should be treated as literal text, not a column filter"
+        );
+
+        let matched = search(&conn, "Contoso").expect("catalog search should succeed");
+        assert_eq!(matched.len(), 1);
     }
 }
