@@ -52,6 +52,21 @@ jobs:
           restore-keys: |
             winbrew-crawler-${{ runner.os }}-
 
+      # Carries the last successful catalog.db forward so the parser can
+      # upsert into it instead of rebuilding from scratch (see
+      # docs/pipeline.md "Storage Strategy"). The key changes every day, so
+      # this always misses on the first run of the day and restores from the
+      # most recent restore-keys match; the save-on-post-job step then
+      # publishes today's build as tomorrow's base. A cache miss (first run
+      # ever, or eviction) is safe: the parser falls back to building fresh.
+      - name: Restore previous catalog database
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/winbrew-catalog-db
+          key: winbrew-catalog-db-${{ runner.os }}-${{ steps.crawler-cache-key.outputs.date }}
+          restore-keys: |
+            winbrew-catalog-db-${{ runner.os }}-
+
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -77,6 +92,17 @@ jobs:
           catalog_db="$staging/catalog.db"
           metadata_json="$staging/metadata.json"
 
+          catalog_db_cache_dir="$HOME/.cache/winbrew-catalog-db"
+          catalog_db_cache="$catalog_db_cache_dir/catalog.db"
+          mkdir -p "$catalog_db_cache_dir"
+
+          if [ -s "$catalog_db_cache" ]; then
+            echo "Reusing cached catalog database as the upsert base"
+            cp "$catalog_db_cache" "$catalog_db"
+          else
+            echo "No cached catalog database found; parser will build fresh"
+          fi
+
           echo "Running crawler"
           (cd infra/crawler && go run ./cmd/crawler --config config.yaml --winget-out "$winget_jsonl") \
             | tee "$scoop_jsonl" \
@@ -101,6 +127,11 @@ jobs:
             echo "::error::parser did not produce metadata"
             exit 1
           fi
+
+          # Publish this run's catalog as the base the next scheduled run
+          # restores and upserts into, keeping package/installer row
+          # identity stable across days.
+          cp "$catalog_db" "$catalog_db_cache"
 
           {
             echo "CATALOG_DB=$catalog_db"
