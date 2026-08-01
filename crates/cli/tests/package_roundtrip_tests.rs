@@ -246,6 +246,10 @@ fn sha512_hex(bytes: &[u8]) -> String {
 /// - The package database marks the package as installed.
 /// - The extracted binary exists on disk.
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: spawns the compiled winbrew binary"
+)]
 fn install_runs_through_the_binary() -> Result<()> {
     let fixture = BinaryFixture::new();
     let package_name = "Winbrew Test Zip";
@@ -274,6 +278,10 @@ fn install_runs_through_the_binary() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: spawns the compiled winbrew binary"
+)]
 fn install_font_runs_through_the_binary() -> Result<()> {
     let fixture = BinaryFixture::new();
     let package_name = "Winbrew Test Font";
@@ -334,6 +342,10 @@ fn install_font_runs_through_the_binary() -> Result<()> {
 /// - The package directory is deleted.
 /// - The package row is removed from the database.
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: spawns the compiled winbrew binary"
+)]
 fn remove_runs_through_the_binary() -> Result<()> {
     let fixture = BinaryFixture::new();
     let package_name = "Contoso.App";
@@ -356,6 +368,10 @@ fn remove_runs_through_the_binary() -> Result<()> {
 
 /// Integration test for the binary remove flow with a package name that spans multiple words.
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: spawns the compiled winbrew binary"
+)]
 fn remove_multi_token_name_runs_through_the_binary() -> Result<()> {
     let fixture = BinaryFixture::new();
     let package_name = "Contoso Visual Studio";
@@ -388,6 +404,10 @@ fn remove_multi_token_name_runs_through_the_binary() -> Result<()> {
 /// - The package directory is deleted.
 /// - The package row is removed from the database.
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: spawns the compiled winbrew binary"
+)]
 fn remove_native_exe_runs_through_the_binary() -> Result<()> {
     let fixture = BinaryFixture::new();
     let package_name = "Contoso.NativeExe";
@@ -416,6 +436,10 @@ fn remove_native_exe_runs_through_the_binary() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: spawns the compiled winbrew binary"
+)]
 fn remove_font_runs_through_the_binary() -> Result<()> {
     let fixture = BinaryFixture::new();
     let package_name = "Winbrew Test Font";

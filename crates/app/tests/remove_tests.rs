@@ -348,6 +348,10 @@ fn find_dependents_returns_sorted_packages() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: runs the native-exe uninstall command"
+)]
 fn remove_removes_native_exe_package_and_runs_uninstall_command() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
@@ -378,6 +382,10 @@ fn remove_removes_native_exe_package_and_runs_uninstall_command() -> Result<()> 
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: exercises the native-exe removal engine"
+)]
 fn remove_removes_native_exe_package_without_uninstall_metadata() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
@@ -407,6 +415,10 @@ fn remove_removes_native_exe_package_without_uninstall_metadata() -> Result<()> 
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: runs the native-exe uninstall command"
+)]
 fn remove_removes_native_exe_package_when_uninstall_command_fails() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
@@ -435,6 +447,10 @@ fn remove_removes_native_exe_package_when_uninstall_command_fails() -> Result<()
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: exercises the font engine via LOCALAPPDATA"
+)]
 fn remove_removes_font_package_after_install() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();

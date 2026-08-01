@@ -62,6 +62,10 @@ impl ReadOnlyFixture {
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: spawns the compiled winbrew binary"
+)]
 fn read_only_list_reports_when_nothing_is_installed() -> Result<()> {
     let fixture = ReadOnlyFixture::new();
 
@@ -73,6 +77,10 @@ fn read_only_list_reports_when_nothing_is_installed() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: spawns the compiled winbrew binary"
+)]
 fn read_only_commands_cover_cli_views() -> Result<()> {
     let fixture = ReadOnlyFixture::new();
     fixture.insert_package("Contoso App")?;

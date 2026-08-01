@@ -412,6 +412,10 @@ fn install_supports_explicit_winget_ids() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: asserts against the host platform/scope profile"
+)]
 fn install_selects_the_host_matching_platform_and_scope_variant() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
@@ -479,6 +483,10 @@ fn install_selects_the_host_matching_platform_and_scope_variant() -> Result<()> 
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: runs the native-exe engine via ComSpec"
+)]
 fn install_runs_native_exe_end_to_end_in_an_isolated_root() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();
@@ -523,6 +531,10 @@ fn install_runs_native_exe_end_to_end_in_an_isolated_root() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: runs the font engine via LOCALAPPDATA"
+)]
 fn install_runs_font_end_to_end_in_an_isolated_root() -> Result<()> {
     let test_root = test_root();
     let root = test_root.path();

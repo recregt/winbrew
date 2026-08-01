@@ -92,6 +92,10 @@ fn install_plan_mode_is_read_only() -> anyhow::Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    not(windows),
+    ignore = "requires Windows: spawns the compiled winbrew binary"
+)]
 fn install_plan_mode_hides_default_deployment_and_empty_shims() -> anyhow::Result<()> {
     let fixture = InstallFixture::new();
     let catalog_db = fixture
