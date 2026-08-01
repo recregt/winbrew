@@ -3,6 +3,7 @@ package publisher
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -14,6 +15,14 @@ import (
 	"github.com/minio/minio-go/v7"
 	_ "modernc.org/sqlite"
 )
+
+// errCatalogRowIDDrift means a package present in both the previous and
+// current catalog snapshot has a different SQLite rowid in each. Patch SQL
+// keys package/installer rows by rowid, so this indicates the two snapshots
+// don't share stable row identity (e.g. a rebuild-from-scratch happened
+// somewhere in the chain) and a delta between them would silently overwrite
+// unrelated rows when applied to a client's local database.
+var errCatalogRowIDDrift = errors.New("catalog rowid drift detected between snapshots")
 
 type packageRecord struct {
 	RowID       int64
@@ -270,6 +279,22 @@ func buildCatalogPatchSQLFromDB(previousDB, currentDB *sql.DB) (string, error) {
 		return "", err
 	}
 
+	if drifted := driftedPackageIDs(previousPackages, currentPackages); len(drifted) > 0 {
+		sample := drifted
+		if len(sample) > 5 {
+			sample = sample[:5]
+		}
+		return "", fmt.Errorf("%w: %d package(s) changed rowid (e.g. %s)", errCatalogRowIDDrift, len(drifted), strings.Join(sample, ", "))
+	}
+
+	if drifted := driftedInstallerIDs(previousInstallers, currentInstallers); len(drifted) > 0 {
+		sample := drifted
+		if len(sample) > 5 {
+			sample = sample[:5]
+		}
+		return "", fmt.Errorf("%w: %d installer(s) changed id (e.g. %s)", errCatalogRowIDDrift, len(drifted), strings.Join(sample, ", "))
+	}
+
 	changedPackages := make(map[string]struct{})
 	for id, currentPackage := range currentPackages {
 		previousPackage, ok := previousPackages[id]
@@ -361,6 +386,61 @@ func buildCatalogPatchSQLFromDB(previousDB, currentDB *sql.DB) (string, error) {
 	statements = append(statements, "COMMIT;")
 
 	return strings.Join(statements, "\n") + "\n", nil
+}
+
+// driftedPackageIDs returns the ids of packages present in both snapshots
+// under a different SQLite rowid. Content changes are expected and handled
+// by the normal upsert path; a rowid change for the same id means the two
+// snapshots don't share stable row identity.
+func driftedPackageIDs(previous, current map[string]packageRecord) []string {
+	drifted := make([]string, 0)
+	for id, currentPackage := range current {
+		if previousPackage, ok := previous[id]; ok && previousPackage.RowID != currentPackage.RowID {
+			drifted = append(drifted, id)
+		}
+	}
+	sort.Strings(drifted)
+	return drifted
+}
+
+// installerIdentity is the same canonical identity enforced by the
+// idx_catalog_installers_unique index: everything except the row id and the
+// metadata-only columns (platform/commands/protocols/file_extensions/capabilities).
+func installerIdentity(record installerRecord) string {
+	return strings.Join([]string{
+		record.PackageID,
+		record.URL,
+		record.Hash.String,
+		record.HashAlgorithm,
+		record.InstallerType,
+		record.InstallerSwitches.String,
+		record.Scope.String,
+		record.Arch,
+		record.Kind,
+		record.NestedKind.String,
+	}, "\x1f")
+}
+
+// driftedInstallerIDs returns "package_id#id" markers for installers whose
+// canonical identity exists in both snapshots under a different row id.
+func driftedInstallerIDs(previous, current map[string]map[int64]installerRecord) []string {
+	previousByIdentity := make(map[string]int64)
+	for _, records := range previous {
+		for id, record := range records {
+			previousByIdentity[installerIdentity(record)] = id
+		}
+	}
+
+	drifted := make([]string, 0)
+	for _, records := range current {
+		for id, record := range records {
+			if previousID, ok := previousByIdentity[installerIdentity(record)]; ok && previousID != id {
+				drifted = append(drifted, fmt.Sprintf("%s#%d", record.PackageID, id))
+			}
+		}
+	}
+	sort.Strings(drifted)
+	return drifted
 }
 
 func loadCatalogSnapshot(db *sql.DB) (map[string]packageRecord, map[string]sql.NullString, map[string]map[int64]installerRecord, error) {
