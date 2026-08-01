@@ -53,3 +53,13 @@ fn print_command_error_sources(err: &winbrew_cli::commands::error::CommandError)
         }
     }
 }
+
+/// winbrew manages Windows package installs and has no meaningful behavior
+/// on other platforms. This stub exists only so the workspace (and every
+/// other, genuinely cross-platform crate in it) can be built and tested on
+/// non-Windows hosts; it intentionally does not pretend to succeed.
+#[cfg(not(windows))]
+fn main() -> std::process::ExitCode {
+    eprintln!("winbrew is a Windows package manager and does not run on this platform.");
+    std::process::ExitCode::FAILURE
+}
