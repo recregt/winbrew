@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -16,6 +17,80 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/minio/minio-go/v7"
 )
+
+var catalogPatchTestSchema = []string{
+	`CREATE TABLE IF NOT EXISTS catalog_packages (id TEXT PRIMARY KEY, name TEXT NOT NULL, version TEXT NOT NULL, source TEXT NOT NULL, namespace TEXT, source_id TEXT NOT NULL, description TEXT, homepage TEXT, license TEXT, publisher TEXT, locale TEXT, moniker TEXT, tags TEXT, bin TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`,
+	`CREATE TABLE IF NOT EXISTS catalog_installers (id INTEGER PRIMARY KEY AUTOINCREMENT, package_id TEXT NOT NULL, url TEXT NOT NULL, hash TEXT, hash_algorithm TEXT NOT NULL, installer_type TEXT NOT NULL, installer_switches TEXT, scope TEXT, arch TEXT NOT NULL, kind TEXT NOT NULL, nested_kind TEXT);`,
+	`CREATE TABLE IF NOT EXISTS catalog_packages_raw (package_id TEXT PRIMARY KEY, raw TEXT);`,
+	`CREATE TRIGGER IF NOT EXISTS catalog_packages_delete_cleanup AFTER DELETE ON catalog_packages BEGIN DELETE FROM catalog_packages_raw WHERE package_id = old.id; DELETE FROM catalog_installers WHERE package_id = old.id; END;`,
+}
+
+func buildCatalogPatchTestSnapshot(t *testing.T, name string, statements []string) *sql.DB {
+	t.Helper()
+
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", name)
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("open snapshot db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	for _, statement := range catalogPatchTestSchema {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("exec schema statement %q: %v", statement, err)
+		}
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("exec snapshot statement %q: %v", statement, err)
+		}
+	}
+
+	return db
+}
+
+func TestBuildCatalogPatchSQLRefusesWhenPackageRowIDDrifts(t *testing.T) {
+	t.Parallel()
+
+	// Same package id, but the current snapshot assigned it a different
+	// rowid than the previous snapshot did -- the signature of a
+	// rebuild-from-scratch rather than an in-place upsert.
+	previousDB := buildCatalogPatchTestSnapshot(t, "drift_previous_pkg", []string{
+		`INSERT INTO catalog_packages (rowid, id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, tags, bin, created_at, updated_at) VALUES (1, 'pkg/a', 'Alpha', '1.0.0', 'winget', NULL, 'pkg.a', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-04-15 10:00:00', '2026-04-15 10:00:00');`,
+	})
+	currentDB := buildCatalogPatchTestSnapshot(t, "drift_current_pkg", []string{
+		`INSERT INTO catalog_packages (rowid, id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, tags, bin, created_at, updated_at) VALUES (7, 'pkg/a', 'Alpha', '1.1.0', 'winget', NULL, 'pkg.a', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-04-15 10:00:00', '2026-04-16 12:00:00');`,
+	})
+
+	_, err := buildCatalogPatchSQLFromDB(previousDB, currentDB)
+	if !errors.Is(err, errCatalogRowIDDrift) {
+		t.Fatalf("buildCatalogPatchSQLFromDB() error = %v, want errCatalogRowIDDrift", err)
+	}
+}
+
+func TestBuildCatalogPatchSQLRefusesWhenInstallerIDDrifts(t *testing.T) {
+	t.Parallel()
+
+	packageStatement := `INSERT INTO catalog_packages (rowid, id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, tags, bin, created_at, updated_at) VALUES (1, 'pkg/a', 'Alpha', '1.0.0', 'winget', NULL, 'pkg.a', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-04-15 10:00:00', '2026-04-15 10:00:00');`
+
+	// The package row is perfectly stable (same rowid), but the same
+	// installer (identical url/hash/type/arch/kind) landed at a different
+	// row id -- e.g. because installers were deleted and reinserted fresh
+	// instead of upserted in place.
+	previousDB := buildCatalogPatchTestSnapshot(t, "drift_previous_installer", []string{
+		packageStatement,
+		`INSERT INTO catalog_installers (id, package_id, url, hash, hash_algorithm, installer_type, installer_switches, scope, arch, kind, nested_kind) VALUES (1, 'pkg/a', 'https://example.invalid/a.exe', 'sha256:same', 'sha256', 'exe', NULL, NULL, 'x64', 'exe', NULL);`,
+	})
+	currentDB := buildCatalogPatchTestSnapshot(t, "drift_current_installer", []string{
+		packageStatement,
+		`INSERT INTO catalog_installers (id, package_id, url, hash, hash_algorithm, installer_type, installer_switches, scope, arch, kind, nested_kind) VALUES (5, 'pkg/a', 'https://example.invalid/a.exe', 'sha256:same', 'sha256', 'exe', NULL, NULL, 'x64', 'exe', NULL);`,
+	})
+
+	_, err := buildCatalogPatchSQLFromDB(previousDB, currentDB)
+	if !errors.Is(err, errCatalogRowIDDrift) {
+		t.Fatalf("buildCatalogPatchSQLFromDB() error = %v, want errCatalogRowIDDrift", err)
+	}
+}
 
 func TestNormalizeEndpoint(t *testing.T) {
 	t.Parallel()

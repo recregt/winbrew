@@ -282,4 +282,209 @@ mod tests {
 
         Ok(())
     }
+
+    fn winget_envelope(id: &str, version: &str, installer_hash: Option<&str>) -> Value {
+        let installers = match installer_hash {
+            Some(hash) => serde_json::json!([{
+                "url": "https://example.invalid/app.exe",
+                "hash": hash,
+                "arch": "x64",
+                "type": "exe"
+            }]),
+            None => serde_json::json!([]),
+        };
+
+        serde_json::json!({
+            "schema_version": 1,
+            "source": "winget",
+            "kind": "package",
+            "payload": {
+                "id": id,
+                "name": "Test App",
+                "version": version,
+                "description": null,
+                "homepage": null,
+                "license": null,
+                "publisher": "Test Publisher",
+                "locale": "en-US",
+                "moniker": "testapp",
+                "tags": ["utility"],
+                "bin": null,
+                "installers": installers
+            }
+        })
+    }
+
+    fn package_rowid(connection: &Connection, id: &str) -> rusqlite::Result<i64> {
+        connection.query_row(
+            "SELECT rowid FROM catalog_packages WHERE id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+    }
+
+    fn package_version(connection: &Connection, id: &str) -> rusqlite::Result<String> {
+        connection.query_row(
+            "SELECT version FROM catalog_packages WHERE id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+    }
+
+    fn package_exists(connection: &Connection, id: &str) -> rusqlite::Result<bool> {
+        let count: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM catalog_packages WHERE id = ?1",
+            [id],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    fn installer_id(connection: &Connection, package_id: &str, hash: &str) -> rusqlite::Result<i64> {
+        connection.query_row(
+            "SELECT id FROM catalog_installers WHERE package_id = ?1 AND hash = ?2",
+            rusqlite::params![package_id, hash],
+            |row| row.get(0),
+        )
+    }
+
+    /// A parser run over an existing catalog must upsert in place rather than
+    /// rebuild from scratch: unchanged rows keep their `rowid`/`id` (the
+    /// property patch generation depends on), updated rows are overwritten
+    /// without gaining a new identity, packages missing from the run are
+    /// pruned, and new packages get fresh rows.
+    #[test]
+    fn run_upserts_into_existing_catalog_and_preserves_row_identity()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = unique_temp_dir("parser-stability");
+        fs::create_dir_all(&root)?;
+
+        let winget_jsonl_path = root.join("winget.jsonl");
+        let output_db_path = root.join("catalog.db");
+        let metadata_path = root.join("metadata.json");
+
+        // Run 1: package A (with an installer whose hash will later change)
+        // and package B, sourced from scoop.
+        let run1_envelopes = [
+            winget_envelope("winget/Retained.App", "2.0.0", Some("sha256:aaaa")),
+        ];
+        fs::write(
+            &winget_jsonl_path,
+            run1_envelopes
+                .iter()
+                .map(|envelope| serde_json::to_string(envelope).unwrap())
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n",
+        )?;
+
+        let scoop_jsonl_run1 = r#"{"schema_version":1,"source":"scoop","kind":"package","payload":{"id":"scoop/main/removed","name":"Removed Tool","version":"1.0.0","description":null,"homepage":null,"license":null,"publisher":null,"installers":[]}}
+"#;
+
+        run(
+            Cursor::new(scoop_jsonl_run1.as_bytes().to_vec()),
+            RunConfig::new(winget_jsonl_path.clone(), output_db_path.clone())
+                .with_metadata_path(metadata_path.clone()),
+        )?;
+
+        let (retained_rowid, removed_installer_id) = {
+            let connection = Connection::open(&output_db_path)?;
+            assert!(package_exists(&connection, "scoop/main/removed")?);
+            (
+                package_rowid(&connection, "winget/Retained.App")?,
+                installer_id(&connection, "winget/Retained.App", "sha256:aaaa")?,
+            )
+        };
+
+        // Run 2, same output path: A is updated (version bump, installer
+        // hash rotated), B disappears (no longer crawled), C is new.
+        let run2_envelopes = [
+            winget_envelope("winget/Retained.App", "3.0.0", Some("sha256:bbbb")),
+            winget_envelope("winget/New.App", "1.0.0", None),
+        ];
+        fs::write(
+            &winget_jsonl_path,
+            run2_envelopes
+                .iter()
+                .map(|envelope| serde_json::to_string(envelope).unwrap())
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n",
+        )?;
+
+        let metadata2 = run(
+            Cursor::new(Vec::new()),
+            RunConfig::new(winget_jsonl_path.clone(), output_db_path.clone())
+                .with_metadata_path(metadata_path.clone()),
+        )?;
+
+        assert_eq!(metadata2.package_count, 2);
+
+        let connection = Connection::open(&output_db_path)?;
+
+        // Retained package keeps its rowid across runs and reflects the update.
+        assert_eq!(
+            package_rowid(&connection, "winget/Retained.App")?,
+            retained_rowid
+        );
+        assert_eq!(
+            package_version(&connection, "winget/Retained.App")?,
+            "3.0.0"
+        );
+
+        // The stale installer row (old hash) is gone; the new hash got a
+        // fresh id, since its canonical identity genuinely changed.
+        let stale_installer_count: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM catalog_installers WHERE id = ?1",
+            [removed_installer_id],
+            |row| row.get(0),
+        )?;
+        assert_eq!(stale_installer_count, 0);
+        assert!(installer_id(&connection, "winget/Retained.App", "sha256:bbbb").is_ok());
+
+        // Package missing from this run is pruned outright.
+        assert!(!package_exists(&connection, "scoop/main/removed")?);
+
+        // A genuinely new package gets a row.
+        assert!(package_exists(&connection, "winget/New.App")?);
+
+        Ok(())
+    }
+
+    /// Re-writing a package with unchanged installers must not touch the
+    /// installer row's id, since patch generation keys off it.
+    #[test]
+    fn run_preserves_installer_id_when_installer_is_unchanged()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = unique_temp_dir("parser-installer-stability");
+        fs::create_dir_all(&root)?;
+
+        let winget_jsonl_path = root.join("winget.jsonl");
+        let output_db_path = root.join("catalog.db");
+        let metadata_path = root.join("metadata.json");
+
+        for version in ["1.0.0", "1.0.1"] {
+            let envelope = winget_envelope("winget/Stable.App", version, Some("sha256:cccc"));
+            fs::write(&winget_jsonl_path, format!("{}\n", serde_json::to_string(&envelope)?))?;
+
+            run(
+                Cursor::new(Vec::new()),
+                RunConfig::new(winget_jsonl_path.clone(), output_db_path.clone())
+                    .with_metadata_path(metadata_path.clone()),
+            )?;
+        }
+
+        let connection = Connection::open(&output_db_path)?;
+        let installer_count: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM catalog_installers WHERE package_id = 'winget/Stable.App'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(
+            installer_count, 1,
+            "unchanged installer must be updated in place, not duplicated or replaced"
+        );
+
+        Ok(())
+    }
 }

@@ -8,6 +8,8 @@ use rusqlite::{Connection, OpenFlags, params};
 use crate::error::ParserError;
 use crate::parser::ParsedPackage;
 use winbrew_models::catalog::CanonicalInstallerKey;
+use winbrew_models::catalog::metadata::CATALOG_DB_SCHEMA_VERSION;
+use winbrew_models::catalog::package::CatalogInstaller;
 
 const PACKAGE_UPSERT: &str = r#"
 INSERT INTO catalog_packages(id, name, version, source, namespace, source_id, created_at, updated_at, description, homepage, license, publisher, locale, moniker, platform, commands, protocols, file_extensions, capabilities, tags, bin)
@@ -41,12 +43,29 @@ ON CONFLICT(package_id) DO UPDATE SET
     raw=excluded.raw
 "#;
 
-const DELETE_INSTALLERS: &str = "DELETE FROM catalog_installers WHERE package_id = ?1";
-
 const INSTALLER_INSERT: &str = r#"
 INSERT INTO catalog_installers(package_id, url, hash, hash_algorithm, installer_type, installer_switches, platform, commands, protocols, file_extensions, capabilities, scope, arch, kind, nested_kind)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
 "#;
+
+const INSTALLER_SELECT_EXISTING: &str = r#"
+SELECT id, url, hash, hash_algorithm, installer_type, installer_switches, scope, arch, kind, nested_kind
+FROM catalog_installers
+WHERE package_id = ?1
+"#;
+
+const INSTALLER_UPDATE_METADATA: &str = r#"
+UPDATE catalog_installers
+SET platform = ?2, commands = ?3, protocols = ?4, file_extensions = ?5, capabilities = ?6
+WHERE id = ?1
+"#;
+
+const INSTALLER_DELETE_BY_ID: &str = "DELETE FROM catalog_installers WHERE id = ?1";
+
+const SEEN_PACKAGE_INSERT: &str = "INSERT OR IGNORE INTO _parser_seen_packages(id) VALUES (?1)";
+
+const PRUNE_STALE_PACKAGES: &str =
+    "DELETE FROM catalog_packages WHERE id NOT IN (SELECT id FROM _parser_seen_packages)";
 
 const SCHEMA: &str = include_str!("../schema/catalog.sql");
 
@@ -57,6 +76,15 @@ pub struct CatalogWriter {
 }
 
 impl CatalogWriter {
+    /// Open the catalog database for a materialization run.
+    ///
+    /// An existing, schema-compatible catalog at `path` is reused and written
+    /// incrementally: packages and installers are upserted in place, and only
+    /// rows that no longer appear in this run are pruned at `finish`. This
+    /// keeps SQLite `rowid`/`id` values stable across runs for unchanged rows,
+    /// which is what makes package-level delta patches safe to generate. A
+    /// missing, unreadable, or schema-incompatible catalog falls back to a
+    /// fresh rebuild, matching the previous always-destructive behavior.
     pub fn open(path: &Path) -> Result<Self, ParserError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -64,16 +92,21 @@ impl CatalogWriter {
 
         let catalog_db_path = path.to_path_buf();
 
-        let mut cleanup_paths = Vec::with_capacity(3);
-        cleanup_paths.push(path.to_path_buf());
-        cleanup_paths.push(PathBuf::from(format!("{}-wal", path.display())));
-        cleanup_paths.push(PathBuf::from(format!("{}-shm", path.display())));
-
-        for cleanup_path in cleanup_paths {
-            let _ = fs::remove_file(cleanup_path);
+        // Stray WAL/SHM files can only be left behind by an interrupted run,
+        // since this connection always runs in journal_mode=DELETE; clear
+        // them defensively before deciding whether the main file is reusable.
+        for stray in [
+            PathBuf::from(format!("{}-wal", path.display())),
+            PathBuf::from(format!("{}-shm", path.display())),
+        ] {
+            let _ = fs::remove_file(stray);
         }
 
-        if path.exists() {
+        if path.exists() && !catalog_is_reusable(path) {
+            eprintln!(
+                "[parser] existing catalog at {} is missing, unreadable, or has an incompatible schema version; rebuilding from scratch",
+                path.display()
+            );
             fs::remove_file(path)?;
         }
 
@@ -89,6 +122,9 @@ impl CatalogWriter {
             .map_err(|source| ParserError::from((catalog_db_path.clone(), source)))?;
         connection
             .execute_batch(SCHEMA)
+            .map_err(|source| ParserError::from((catalog_db_path.clone(), source)))?;
+        connection
+            .execute_batch("CREATE TEMP TABLE _parser_seen_packages(id TEXT PRIMARY KEY);")
             .map_err(|source| ParserError::from((catalog_db_path.clone(), source)))?;
 
         Ok(Self {
@@ -107,13 +143,9 @@ impl CatalogWriter {
             .connection
             .prepare(RAW_UPSERT)
             .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
-        let mut delete_installers_stmt = self
+        let mut seen_stmt = self
             .connection
-            .prepare(DELETE_INSTALLERS)
-            .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
-        let mut installer_stmt = self
-            .connection
-            .prepare(INSTALLER_INSERT)
+            .prepare(SEEN_PACKAGE_INSERT)
             .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
 
         package_stmt
@@ -146,44 +178,26 @@ impl CatalogWriter {
                 parsed.raw_json.as_str()
             ])
             .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
-        delete_installers_stmt
+
+        seen_stmt
             .execute(params![parsed.package.id.as_str()])
             .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
 
         let installers = merge_installers(&parsed.installers)?;
-
-        for installer in installers {
-            let hash = if installer.hash.trim().is_empty() {
-                None
-            } else {
-                Some(installer.hash.as_str())
-            };
-
-            installer_stmt
-                .execute(params![
-                    parsed.package.id.as_str(),
-                    installer.url.as_str(),
-                    hash,
-                    installer.hash_algorithm.as_str(),
-                    installer.installer_type.as_str(),
-                    installer.installer_switches.as_deref(),
-                    installer.platform.as_deref(),
-                    installer.commands.as_deref(),
-                    installer.protocols.as_deref(),
-                    installer.file_extensions.as_deref(),
-                    installer.capabilities.as_deref(),
-                    installer.scope.as_deref(),
-                    installer.arch.to_string(),
-                    installer.kind.to_string(),
-                    installer.nested_kind.map(|kind| kind.as_str()),
-                ])
-                .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
-        }
+        sync_installers(
+            &self.connection,
+            &self.catalog_db_path,
+            parsed.package.id.as_str(),
+            &installers,
+        )?;
 
         Ok(())
     }
 
     pub fn finish(mut self) -> Result<(), ParserError> {
+        self.connection
+            .execute_batch(PRUNE_STALE_PACKAGES)
+            .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
         self.connection
             .execute_batch("COMMIT;")
             .map_err(|source| ParserError::from((self.catalog_db_path.clone(), source)))?;
@@ -198,6 +212,156 @@ impl Drop for CatalogWriter {
             let _ = self.connection.execute_batch("ROLLBACK;");
         }
     }
+}
+
+/// Return `true` when the catalog at `path` can be opened read-only and its
+/// recorded schema version matches what this parser writes. Any failure
+/// (missing table, unreadable file, mismatched version) means the caller
+/// should discard the file and rebuild from scratch instead of upserting
+/// into a shape it doesn't understand.
+fn catalog_is_reusable(path: &Path) -> bool {
+    let Ok(connection) = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    else {
+        return false;
+    };
+
+    let version: Result<String, _> = connection.query_row(
+        "SELECT value FROM schema_meta WHERE name = 'schema_version'",
+        [],
+        |row| row.get(0),
+    );
+
+    matches!(version, Ok(value) if value == CATALOG_DB_SCHEMA_VERSION.to_string())
+}
+
+/// Upsert `installers` for `package_id` in place, preserving each existing
+/// installer's `id` when its canonical identity (url/hash/type/arch/kind/...)
+/// is unchanged, and removing rows that are no longer present in this run.
+///
+/// This intentionally avoids the previous "delete all installers for the
+/// package, then insert fresh rows" strategy: that reassigned a new
+/// autoincrement `id` to every installer on every run, which is exactly the
+/// kind of row-identity churn that makes downstream delta patches unsafe.
+fn sync_installers(
+    connection: &Connection,
+    catalog_db_path: &Path,
+    package_id: &str,
+    installers: &[CatalogInstaller],
+) -> Result<(), ParserError> {
+    let mut existing: HashMap<CanonicalInstallerKey, i64> = HashMap::new();
+    {
+        let mut select_stmt = connection
+            .prepare(INSTALLER_SELECT_EXISTING)
+            .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?;
+        let mut rows = select_stmt
+            .query(params![package_id])
+            .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?;
+
+        while let Some(row) = rows
+            .next()
+            .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?
+        {
+            let id: i64 = row
+                .get(0)
+                .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?;
+            let key = CanonicalInstallerKey {
+                package_id: package_id.to_string(),
+                url: row
+                    .get(1)
+                    .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?,
+                hash: row
+                    .get::<_, Option<String>>(2)
+                    .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?
+                    .unwrap_or_default(),
+                hash_algorithm: row
+                    .get(3)
+                    .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?,
+                installer_type: row
+                    .get(4)
+                    .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?,
+                installer_switches: row
+                    .get(5)
+                    .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?,
+                scope: row
+                    .get(6)
+                    .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?,
+                arch: row
+                    .get(7)
+                    .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?,
+                kind: row
+                    .get(8)
+                    .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?,
+                nested_kind: row
+                    .get(9)
+                    .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?,
+            };
+            existing.insert(key, id);
+        }
+    }
+
+    let mut insert_stmt = connection
+        .prepare(INSTALLER_INSERT)
+        .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?;
+    let mut update_stmt = connection
+        .prepare(INSTALLER_UPDATE_METADATA)
+        .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?;
+
+    for installer in installers {
+        let key = installer.canonical_key();
+
+        if let Some(existing_id) = existing.remove(&key) {
+            update_stmt
+                .execute(params![
+                    existing_id,
+                    installer.platform.as_deref(),
+                    installer.commands.as_deref(),
+                    installer.protocols.as_deref(),
+                    installer.file_extensions.as_deref(),
+                    installer.capabilities.as_deref(),
+                ])
+                .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?;
+            continue;
+        }
+
+        let hash = if installer.hash.trim().is_empty() {
+            None
+        } else {
+            Some(installer.hash.as_str())
+        };
+
+        insert_stmt
+            .execute(params![
+                package_id,
+                installer.url.as_str(),
+                hash,
+                installer.hash_algorithm.as_str(),
+                installer.installer_type.as_str(),
+                installer.installer_switches.as_deref(),
+                installer.platform.as_deref(),
+                installer.commands.as_deref(),
+                installer.protocols.as_deref(),
+                installer.file_extensions.as_deref(),
+                installer.capabilities.as_deref(),
+                installer.scope.as_deref(),
+                installer.arch.to_string(),
+                installer.kind.to_string(),
+                installer.nested_kind.map(|kind| kind.as_str()),
+            ])
+            .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?;
+    }
+
+    if !existing.is_empty() {
+        let mut delete_stmt = connection
+            .prepare(INSTALLER_DELETE_BY_ID)
+            .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?;
+        for stale_id in existing.values() {
+            delete_stmt
+                .execute(params![stale_id])
+                .map_err(|source| ParserError::from((catalog_db_path.to_path_buf(), source)))?;
+        }
+    }
+
+    Ok(())
 }
 
 fn merge_installers(
