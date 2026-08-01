@@ -258,11 +258,26 @@ pub fn run<O: InstallObserver>(
         return Err(cancel::CancellationError.into());
     }
 
-    if let Err(err) = database::commit_install_with_commands(
+    // The recovery journal is written (and durably fsynced) from inside this
+    // transaction, before it commits -- see commit_install_with_journal. That
+    // makes it impossible for a crash to leave a package visible in SQLite
+    // with no journal at all: a journal-write failure here aborts the whole
+    // transaction just like any other commit-time failure below.
+    if let Err(err) = database::commit_install_with_journal(
         &mut conn,
         &target.package.name,
         &engine_receipt,
         target.resolved_commands_json.as_deref(),
+        |_tx, committed_package| {
+            write_install_journal(
+                &ctx.paths,
+                committed_package,
+                &target.command_resolution,
+                target.resolved_commands.as_deref(),
+                target.package.bin.as_deref(),
+                target.package.env_add_path.as_deref(),
+            )
+        },
     ) {
         let _ = state::mark_failed(&conn, &target.package.name);
         if let Some(conflict) = err.downcast_ref::<database::CommandRegistryConflictError>() {
@@ -271,22 +286,6 @@ pub fn run<O: InstallObserver>(
             });
         }
         return Err(err.into());
-    }
-
-    if let Err(err) = write_install_journal(
-        &ctx.paths,
-        &conn,
-        &target.package.name,
-        &target.command_resolution,
-        target.resolved_commands.as_deref(),
-        target.package.bin.as_deref(),
-        target.package.env_add_path.as_deref(),
-    ) {
-        warn!(
-            package = %target.package.name,
-            error = %err,
-            "failed to write install journal"
-        );
     }
 
     if let Err(err) = shims::publish_package_shims(
@@ -430,13 +429,11 @@ mod tests {
         let root = test_root.path();
         let config = init_database(root)?;
         reset_install_state(root)?;
-        let conn = database::get_conn()?;
 
         let install_dir = root.join("packages").join("Contoso.Journal");
         fs::create_dir_all(&install_dir)?;
 
         let package = sample_package("Contoso.Journal", InstallerType::Portable, &install_dir);
-        database::insert_package(&conn, &package)?;
 
         let paths = config.resolved_paths();
         let command_resolution = ResolverResult::Resolved {
@@ -450,8 +447,7 @@ mod tests {
 
         write_install_journal(
             &paths,
-            &conn,
-            &package.name,
+            &package,
             &command_resolution,
             Some(commands.as_slice()),
             Some(r#""bin/tool.exe""#),
@@ -478,17 +474,12 @@ impl Drop for TempRootGuard {
 
 fn write_install_journal(
     paths: &crate::core::paths::ResolvedPaths,
-    conn: &crate::database::DbConnection,
-    package_name: &str,
+    committed_package: &crate::models::domains::installed::InstalledPackage,
     command_resolution: &ResolverResult,
     commands: Option<&[String]>,
     bin: Option<&str>,
     env_add_path: Option<&str>,
 ) -> anyhow::Result<()> {
-    let committed_package = database::get_package(conn, package_name)?.ok_or_else(|| {
-        anyhow::anyhow!("package '{package_name}' was not found after a successful install commit")
-    })?;
-
     let journal_key = database::package_journal_key(
         committed_package.name.as_str(),
         committed_package.version.as_str(),
@@ -516,7 +507,7 @@ fn write_install_journal(
             }
             Err(err) => {
                 warn!(
-                    package = %package_name,
+                    package = %committed_package.name,
                     error = %err,
                     "failed to normalize install bin metadata into journal"
                 );
@@ -534,7 +525,7 @@ fn write_install_journal(
             Ok(env_add_path) => Some(env_add_path),
             Err(err) => {
                 warn!(
-                    package = %package_name,
+                    package = %committed_package.name,
                     error = %err,
                     "failed to normalize install env_add_path metadata into journal"
                 );

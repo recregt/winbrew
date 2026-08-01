@@ -676,3 +676,44 @@ fn install_rolls_back_on_download_failure() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn install_marks_package_failed_when_journal_write_fails() -> Result<()> {
+    let test_root = test_root();
+    let root = test_root.path();
+
+    let zip_bytes = create_dummy_zip_bytes()?;
+    let sha512_hash = sha512_hex(&zip_bytes);
+    let fixture = InstallTestFixture::from_zip(root, zip_bytes, &sha512_hash)?;
+
+    // Sabotage the journal directory: pre-create a *file* where the journal
+    // writer needs a *directory*, so fs::create_dir_all fails deterministically
+    // and cross-platform, without relying on filesystem permissions.
+    let journal_key = package_journal_key(&fixture.package_name, "1.0.0");
+    let journal_dir = fixture.ctx.paths.package_journal_dir(&journal_key);
+    fs::create_dir_all(
+        journal_dir
+            .parent()
+            .expect("journal directory should have a parent"),
+    )?;
+    fs::write(&journal_dir, b"not a directory")?;
+
+    let err = fixture
+        .run_install(false)
+        .expect_err("a journal-write failure should fail the whole install");
+    assert!(!err.to_string().is_empty());
+
+    // The Zip engine already placed files on disk by this point (WinBrew
+    // owns that step directly), but the connected fix under test is that
+    // SQLite must never show the package as successfully installed when its
+    // journal never became durable -- exactly what
+    // commit_install_with_journal's transactional ordering guarantees: the
+    // journal write runs before tx.commit(), so a failure here rolls back
+    // the status flip to Ok along with everything else.
+    let conn = database::get_conn()?;
+    let stored = database::get_package(&conn, &fixture.package_name)?
+        .expect("package should remain tracked after rollback");
+    assert_eq!(stored.status, PackageStatus::Failed);
+
+    Ok(())
+}
