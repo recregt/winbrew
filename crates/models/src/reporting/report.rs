@@ -79,7 +79,8 @@ impl RecoveryFinding {
             | "incomplete_package_journal"
             | "unreadable_package_journal"
             | "malformed_package_journal"
-            | "missing_journal_metadata" => (RecoveryIssueKind::RecoveryTrailMissing, None),
+            | "missing_journal_metadata"
+            | "missing_package_journal" => (RecoveryIssueKind::RecoveryTrailMissing, None),
             "orphan_install_directory" => (
                 RecoveryIssueKind::IncompleteInstall,
                 Some(RecoveryActionGroup::OrphanCleanup),
