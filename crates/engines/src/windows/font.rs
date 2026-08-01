@@ -48,15 +48,27 @@ pub(crate) fn remove(package: &InstalledPackage) -> Result<()> {
 
     #[cfg(windows)]
     {
+        // The removal helper may fail for reasons that don't block cleanup
+        // (e.g. the font was already unregistered), so its failure is
+        // logged rather than fatal -- mirroring the native-exe engine's
+        // "uninstall command may fail, fall back to directory cleanup"
+        // pattern. The directory cleanup below is what actually determines
+        // whether removal succeeded, so unlike the helper call, its result
+        // must be propagated rather than discarded.
         if let Err(err) = remove_user_font(Path::new(&package.install_dir)) {
             warn!(
                 package = package.name.as_str(),
                 error = %err,
-                "font removal helper reported an error; continuing with filesystem cleanup"
+                "font removal helper reported an error; falling back to directory cleanup"
             );
         }
 
-        let _ = cleanup_path(Path::new(&package.install_dir));
+        cleanup_path(Path::new(&package.install_dir)).with_context(|| {
+            format!(
+                "failed to remove font install directory for {}",
+                package.name
+            )
+        })?;
 
         Ok(())
     }
