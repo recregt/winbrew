@@ -53,6 +53,9 @@ pub enum InstallError {
     #[error("{algorithm} checksums are disabled by default for security")]
     LegacyChecksumAlgorithm { algorithm: HashAlgorithm },
 
+    #[error("installer is missing an expected checksum and cannot be verified")]
+    MissingChecksum,
+
     #[error("catalog package has no installers")]
     NoInstallers,
 
@@ -90,9 +93,9 @@ impl InstallError {
             Self::AlreadyInstalled { .. }
             | Self::AlreadyInstalling { .. }
             | Self::CurrentlyUpdating { .. } => InstallFailureClass::Preflight,
-            Self::ChecksumMismatch { .. } | Self::LegacyChecksumAlgorithm { .. } => {
-                InstallFailureClass::Verification
-            }
+            Self::ChecksumMismatch { .. }
+            | Self::LegacyChecksumAlgorithm { .. }
+            | Self::MissingChecksum => InstallFailureClass::Verification,
             Self::NoInstallers
             | Self::NoCompatibleInstaller { .. }
             | Self::NoScopeCompatibleInstaller { .. }
@@ -128,6 +131,7 @@ impl From<HashError> for InstallError {
             HashError::LegacyChecksumAlgorithm { algorithm } => {
                 Self::LegacyChecksumAlgorithm { algorithm }
             }
+            HashError::MissingExpectedHash => Self::MissingChecksum,
         }
     }
 }

@@ -152,6 +152,16 @@ fn handle_install_error<W: io::Write>(ui: &mut Ui<W>, err: InstallError) -> Resu
                 "Re-run with --ignore-checksum-security only if you trust the package source.",
             ));
         }
+        InstallError::MissingChecksum => {
+            let message =
+                "Installer is missing an expected checksum and cannot be verified.".to_string();
+            ui.error(&message);
+            ui.notice("Hint: refresh the catalog, or re-run with --ignore-checksum-security only if you trust the package source.");
+            return Err(reported_with_hint(
+                message,
+                "Refresh the catalog, or re-run with --ignore-checksum-security only if you trust the package source.",
+            ));
+        }
         InstallError::NoInstallers => {
             let message = "This package has no installers in the catalog.".to_string();
             ui.error(&message);
