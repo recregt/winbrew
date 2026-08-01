@@ -220,8 +220,7 @@ impl Drop for CatalogWriter {
 /// should discard the file and rebuild from scratch instead of upserting
 /// into a shape it doesn't understand.
 fn catalog_is_reusable(path: &Path) -> bool {
-    let Ok(connection) = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-    else {
+    let Ok(connection) = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) else {
         return false;
     };
 

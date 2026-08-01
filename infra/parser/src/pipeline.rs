@@ -340,7 +340,11 @@ mod tests {
         Ok(count > 0)
     }
 
-    fn installer_id(connection: &Connection, package_id: &str, hash: &str) -> rusqlite::Result<i64> {
+    fn installer_id(
+        connection: &Connection,
+        package_id: &str,
+        hash: &str,
+    ) -> rusqlite::Result<i64> {
         connection.query_row(
             "SELECT id FROM catalog_installers WHERE package_id = ?1 AND hash = ?2",
             rusqlite::params![package_id, hash],
@@ -365,9 +369,11 @@ mod tests {
 
         // Run 1: package A (with an installer whose hash will later change)
         // and package B, sourced from scoop.
-        let run1_envelopes = [
-            winget_envelope("winget/Retained.App", "2.0.0", Some("sha256:aaaa")),
-        ];
+        let run1_envelopes = [winget_envelope(
+            "winget/Retained.App",
+            "2.0.0",
+            Some("sha256:aaaa"),
+        )];
         fs::write(
             &winget_jsonl_path,
             run1_envelopes
@@ -465,7 +471,10 @@ mod tests {
 
         for version in ["1.0.0", "1.0.1"] {
             let envelope = winget_envelope("winget/Stable.App", version, Some("sha256:cccc"));
-            fs::write(&winget_jsonl_path, format!("{}\n", serde_json::to_string(&envelope)?))?;
+            fs::write(
+                &winget_jsonl_path,
+                format!("{}\n", serde_json::to_string(&envelope)?),
+            )?;
 
             run(
                 Cursor::new(Vec::new()),
