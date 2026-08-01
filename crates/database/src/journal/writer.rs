@@ -73,10 +73,23 @@ impl JournalWriter {
         Ok(())
     }
 
+    /// Flush buffered writes to the OS and fsync the file to physical disk.
+    ///
+    /// `BufWriter::flush` alone only hands the bytes to the OS page cache; a
+    /// crash or power loss immediately after a caller sees `Ok(())` here can
+    /// still lose data that was never fsynced, leaving what looks like a
+    /// committed journal on disk that actually never made it there. Callers
+    /// (and doctor/repair) treat a journal ending in a `Commit` entry as
+    /// authoritative for rebuilding package state, so this durability step
+    /// isn't optional -- it's what makes that authority claim true.
     pub fn flush(&mut self) -> Result<()> {
         self.writer
             .flush()
-            .context("failed to flush journal writer")
+            .context("failed to flush journal writer")?;
+        self.writer
+            .get_ref()
+            .sync_all()
+            .context("failed to fsync journal writer")
     }
 
     pub fn path(&self) -> &Path {
