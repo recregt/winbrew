@@ -27,7 +27,7 @@ pub fn run(ctx: &CommandContext, name: &[String], yes: bool, force: bool) -> Res
         ));
     }
 
-    if !should_proceed(&mut ui, &plan, yes, force)? {
+    if !should_proceed(&mut ui, &plan, yes, force, ctx.confirm_remove())? {
         ui.notice("Removal aborted.");
         return Ok(());
     }
@@ -76,8 +76,14 @@ fn should_proceed<W: std::io::Write>(
     plan: &remove::RemovalPlan,
     yes: bool,
     force: bool,
+    confirm_remove: bool,
 ) -> Result<bool> {
-    if force || yes {
+    // `core.confirm_remove = false` is a standing, remove-specific opt-out
+    // of this prompt -- distinct from `core.default_yes`, which must never
+    // silently approve a destructive action (see confirm_protected below).
+    // This key exists specifically to control this one prompt, so honoring
+    // it here is exactly its intended scope, not a violation of that policy.
+    if force || yes || !confirm_remove {
         return Ok(true);
     }
 
@@ -95,4 +101,57 @@ fn should_proceed<W: std::io::Write>(
     // `--yes`/`--force` on this invocation (checked above) or a real
     // interactive confirmation can.
     ui.confirm_protected(&prompt)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_proceed;
+    use crate::app::remove::RemovalPlan;
+    use crate::commands::test_support::buffered_ui;
+    use crate::models::domains::install::{EngineKind, InstallerType};
+    use crate::models::domains::installed::{InstalledPackage, PackageStatus};
+    use winbrew_ui::UiSettings;
+
+    fn sample_plan(dependents: Vec<String>) -> RemovalPlan {
+        RemovalPlan {
+            package: InstalledPackage {
+                name: "Contoso.App".to_string(),
+                version: "1.0.0".to_string(),
+                kind: InstallerType::Portable,
+                deployment_kind: InstallerType::Portable.deployment_kind(),
+                engine_kind: EngineKind::Portable,
+                engine_metadata: None,
+                install_dir: r"C:\winbrew\packages\Contoso.App".to_string(),
+                dependencies: Vec::new(),
+                status: PackageStatus::Ok,
+                installed_at: "2026-04-12T00:00:00Z".to_string(),
+            },
+            dependents,
+        }
+    }
+
+    /// `core.confirm_remove = false` must skip the prompt entirely, the same
+    /// as an explicit `--yes`/`--force` -- this is the fix for the key
+    /// previously being registered in config but never read anywhere.
+    #[test]
+    fn should_proceed_skips_prompt_when_confirm_remove_is_disabled() {
+        let (mut ui, _out, _err) = buffered_ui(UiSettings::default());
+        let plan = sample_plan(Vec::new());
+
+        let proceed = should_proceed(&mut ui, &plan, false, false, false)
+            .expect("should not need an interactive prompt");
+
+        assert!(proceed);
+    }
+
+    #[test]
+    fn should_proceed_skips_prompt_on_explicit_yes_or_force() {
+        let plan = sample_plan(Vec::new());
+
+        let (mut ui, _out, _err) = buffered_ui(UiSettings::default());
+        assert!(should_proceed(&mut ui, &plan, true, false, true).expect("yes bypasses prompt"));
+
+        let (mut ui, _out, _err) = buffered_ui(UiSettings::default());
+        assert!(should_proceed(&mut ui, &plan, false, true, true).expect("force bypasses prompt"));
+    }
 }
