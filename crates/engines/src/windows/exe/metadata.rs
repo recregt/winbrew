@@ -92,11 +92,19 @@ pub(super) fn capture_native_exe_metadata_with(
     }
 
     if saw_ambiguous_match {
+        // A tie at the same priority level means install_location couldn't
+        // disambiguate (no exact match on either side) and nothing else
+        // distinguishes the candidates. Guessing risks capturing an
+        // uninstall command from a different, unrelated application that
+        // happens to share this display name -- refuse instead, the same
+        // way a missing registry entry already results in no metadata and a
+        // safe fallback to directory-based removal.
         warn!(
             package = package_name,
             install_dir = %install_dir.display(),
-            "multiple native executable uninstall registry entries matched; using the best available metadata"
+            "multiple native executable uninstall registry entries matched ambiguously; refusing to guess"
         );
+        return None;
     }
 
     best_match.map(|(_, metadata)| metadata)
