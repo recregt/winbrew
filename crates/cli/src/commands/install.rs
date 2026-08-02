@@ -10,7 +10,7 @@ use crate::app::install;
 use crate::app::install::InstallError;
 use crate::app::install::InstallObserver;
 use crate::app::install::plan;
-use crate::commands::error::{cancelled, reported_with_hint};
+use crate::commands::error::{cancelled, reported, reported_with_hint};
 use crate::models::domains::catalog::CatalogPackage;
 use crate::models::domains::package::PackageRef;
 use winbrew_ui::{ProgressHandle, SpinnerGuard, Ui};
@@ -26,10 +26,19 @@ pub fn run(
 
     let query_text = query.join(" ").trim().to_owned();
     if query_text.is_empty() {
-        return Err(anyhow::Error::msg("package query cannot be empty"));
+        let message = "package query cannot be empty".to_string();
+        ui.error(&message);
+        return Err(reported(message));
     }
 
-    let package_ref = PackageRef::parse(&query_text).map_err(anyhow::Error::msg)?;
+    let package_ref = match PackageRef::parse(&query_text) {
+        Ok(package_ref) => package_ref,
+        Err(err) => {
+            let message = format!("invalid package query '{query_text}': {err}");
+            ui.error(&message);
+            return Err(reported(message));
+        }
+    };
 
     ui.info(format!("Resolving {query_text}..."));
 
