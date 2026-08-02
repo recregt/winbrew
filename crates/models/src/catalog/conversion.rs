@@ -12,11 +12,19 @@ use crate::package::Package;
 use crate::package::PackageId;
 use crate::shared::ModelError;
 
-impl From<&Package> for CatalogPackage {
-    fn from(package: &Package) -> Self {
-        let package_id = PackageId::parse(package.id.as_ref()).expect("package id should parse");
+impl TryFrom<&Package> for CatalogPackage {
+    type Error = ModelError;
 
-        Self {
+    /// `Package.id` is only checked for non-emptiness by `Package::validate`,
+    /// not for canonical `source/id` form, so a `Package` that has passed
+    /// validation is not guaranteed to have a `PackageId`-parseable `id`.
+    /// This is fallible rather than an infallible `From` conversion (which
+    /// would have to panic or silently invent a source) so callers decide
+    /// how to handle a malformed id instead of the process crashing.
+    fn try_from(package: &Package) -> Result<Self, Self::Error> {
+        let package_id = PackageId::parse(package.id.as_ref())?;
+
+        Ok(Self {
             id: package.id.clone().into(),
             name: package.name.clone(),
             version: package.version.clone(),
@@ -39,7 +47,7 @@ impl From<&Package> for CatalogPackage {
             tags: None,
             bin: None,
             env_add_path: None,
-        }
+        })
     }
 }
 
@@ -113,6 +121,49 @@ mod tests {
     use crate::catalog::raw::{RawCatalogInstaller, RawCatalogPackage};
     use crate::install::{Architecture, InstallerType};
     use crate::package::PackageSource;
+    use crate::package::model::{Package, PackageKind};
+    use crate::shared::Version;
+    use core::convert::TryFrom;
+
+    fn sample_package(id: &str) -> Package {
+        Package {
+            id: id.to_string(),
+            name: "Contoso App".to_string(),
+            version: Version::parse("1.2.3").expect("version should parse"),
+            source: PackageSource::Winget,
+            kind: PackageKind::Catalog,
+            description: None,
+            homepage: None,
+            license: None,
+            publisher: None,
+            installers: Vec::new(),
+            dependencies: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn package_with_canonical_id_converts_to_catalog_package() {
+        let package = sample_package("winget/Contoso.App");
+
+        let converted = CatalogPackage::try_from(&package).expect("canonical id should convert");
+
+        assert_eq!(converted.source, PackageSource::Winget);
+        assert_eq!(converted.source_id, "Contoso.App");
+    }
+
+    /// `Package::validate` only checks that `id` is non-empty, not that it
+    /// parses as a canonical `source/id`. This locks in that a
+    /// non-canonical id is reported as an error instead of panicking, which
+    /// is what the previous infallible `From` impl did via `.expect(...)`.
+    #[test]
+    fn package_with_non_canonical_id_is_reported_as_an_error() {
+        let package = sample_package("not-a-canonical-id");
+
+        let err =
+            CatalogPackage::try_from(&package).expect_err("non-canonical id should not convert");
+
+        assert!(err.to_string().contains("not-a-canonical-id"));
+    }
 
     #[test]
     fn raw_catalog_package_converts_and_derives_source() {
