@@ -72,6 +72,29 @@ pub enum FsError {
         source: io::Error,
     },
 
+    #[error("failed to move existing file aside before finalizing: {final_path} -> {backup_path}")]
+    MoveAsideBeforeFinalize {
+        final_path: PathBuf,
+        backup_path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    /// Raised when the temp-file rename fails after the previous target was
+    /// already moved aside, and restoring it also fails. This leaves
+    /// `final_path` genuinely missing (not just conflicted), so it is
+    /// reported distinctly from `FinalizeFile`.
+    #[error(
+        "failed to finalize file: {temp_path} -> {final_path} (original error: {source}; rollback also failed: {rollback_error})"
+    )]
+    FinalizeRollbackFailed {
+        temp_path: PathBuf,
+        final_path: PathBuf,
+        #[source]
+        source: io::Error,
+        rollback_error: io::Error,
+    },
+
     #[error("failed to open zip archive {zip_path}")]
     OpenZipArchive {
         zip_path: PathBuf,
@@ -327,6 +350,32 @@ impl FsError {
             temp_path: temp_path.to_path_buf(),
             final_path: final_path.to_path_buf(),
             source,
+        }
+    }
+
+    pub(crate) fn move_aside_before_finalize(
+        final_path: &Path,
+        backup_path: &Path,
+        source: io::Error,
+    ) -> Self {
+        Self::MoveAsideBeforeFinalize {
+            final_path: final_path.to_path_buf(),
+            backup_path: backup_path.to_path_buf(),
+            source,
+        }
+    }
+
+    pub(crate) fn finalize_rollback_failed(
+        temp_path: &Path,
+        final_path: &Path,
+        source: io::Error,
+        rollback_error: io::Error,
+    ) -> Self {
+        Self::FinalizeRollbackFailed {
+            temp_path: temp_path.to_path_buf(),
+            final_path: final_path.to_path_buf(),
+            source,
+            rollback_error,
         }
     }
 
