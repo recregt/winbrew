@@ -25,8 +25,10 @@ var (
 const (
 	defaultLogLevel     = "info"
 	defaultFetchTimeout = 5 * time.Minute
-	defaultRetryMax     = 3
-	defaultRetryBackoff = 2 * time.Second
+	// Matches the "Crawler Backoff" policy in docs/pipeline.md: start at 1s,
+	// double each retry, stop after 5 attempts.
+	defaultRetryMax     = 5
+	defaultRetryBackoff = 1 * time.Second
 )
 
 type Config struct {

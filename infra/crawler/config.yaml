@@ -7,6 +7,10 @@ logLevel: info
 timeout:
   fetch: 5m
 
+# See "Crawler Backoff" in docs/pipeline.md: start at 1s, double each retry,
+# stop after 5 attempts. That gives ~15s of retry budget before giving up on
+# a single manifest, enough to ride out sustained Winget throttling during
+# the deep manifest walk.
 retry:
-  max: 3
-  backoff: 2s
+  max: 5
+  backoff: 1s
