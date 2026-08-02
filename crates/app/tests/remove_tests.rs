@@ -177,6 +177,10 @@ fn remove_deletes_committed_journal_for_removed_package() -> Result<()> {
     })?;
     writer.flush()?;
     let journal_path = writer.path().to_path_buf();
+    // The journal lock is mandatory on Windows and stays held until `writer`
+    // drops, so it must be released before remove tries to clean up this
+    // same journal file.
+    drop(writer);
 
     assert!(journal_path.exists());
 
