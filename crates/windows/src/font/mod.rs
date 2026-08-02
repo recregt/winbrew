@@ -164,7 +164,7 @@ fn remove_font_resource(font_path: &Path) -> Result<()> {
         unsafe { RemoveFontResourceExW(wide_path.as_ptr(), FONT_RESOURCE_FLAGS, std::ptr::null()) };
 
     if removed == 0 {
-        return Ok(());
+        bail!("RemoveFontResourceExW failed for {}", font_path.display());
     }
 
     Ok(())
