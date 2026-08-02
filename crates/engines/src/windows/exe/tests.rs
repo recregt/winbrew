@@ -393,3 +393,41 @@ fn capture_native_exe_metadata_returns_none_when_registry_entry_missing() {
 
     let _ = std::fs::remove_dir_all(&install_dir);
 }
+
+/// Two unrelated registry entries can legitimately share a DisplayName (a
+/// generic product name reused across vendors, for example). When neither
+/// one's install_location matches -- the only signal that can disambiguate
+/// them -- capturing "whichever came first" risks recording an uninstall
+/// command for a completely different application. Refusing and falling
+/// back to directory-based removal (the same as a missing entry) is safer
+/// than guessing.
+#[test]
+fn capture_native_exe_metadata_refuses_ambiguous_tie() {
+    let package_name = "Contoso.NativeExe.Ambiguous";
+    let install_dir = native_exe_test_dir("ambiguous-tie");
+    std::fs::create_dir_all(&install_dir).expect("install directory should exist");
+
+    let metadata = capture_native_exe_metadata_with(package_name, &install_dir, |_filter| {
+        Ok(vec![
+            uninstall_entry(
+                package_name,
+                None,
+                None,
+                Some("C:\\Unrelated\\App\\uninstall.exe"),
+            ),
+            uninstall_entry(
+                package_name,
+                None,
+                None,
+                Some("C:\\Other\\Unrelated\\App\\uninstall.exe"),
+            ),
+        ])
+    });
+
+    assert!(
+        metadata.is_none(),
+        "an ambiguous tie between unrelated entries must not be resolved by guessing"
+    );
+
+    let _ = std::fs::remove_dir_all(&install_dir);
+}
