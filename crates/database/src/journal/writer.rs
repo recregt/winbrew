@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use std::fs::{File, OpenOptions};
+use std::fs::{File, OpenOptions, TryLockError};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
@@ -57,6 +57,30 @@ impl JournalWriter {
             .open(&journal_path)
             .with_context(|| format!("failed to open {}", journal_path.display()))?;
 
+        // Two processes racing to install the same package (or a repair
+        // replay racing an in-progress install) could otherwise both hold
+        // an open handle to this file and interleave appended lines. That
+        // corrupts more than the racing writer's own entries: JournalReader
+        // rejects any entry appended after a Commit line as malformed,
+        // meaning a second writer's interleaved bytes can retroactively
+        // invalidate a first writer's already-committed, otherwise-valid
+        // journal for recovery purposes. An OS-level advisory lock, held for
+        // the writer's lifetime, serializes access instead: a second opener
+        // fails fast rather than silently interleaving.
+        match file.try_lock() {
+            Ok(()) => {}
+            Err(TryLockError::WouldBlock) => {
+                anyhow::bail!(
+                    "journal at {} is already being written by another process",
+                    journal_path.display()
+                );
+            }
+            Err(TryLockError::Error(err)) => {
+                return Err(err)
+                    .with_context(|| format!("failed to lock {}", journal_path.display()));
+            }
+        }
+
         Ok(Self {
             path: journal_path,
             writer: BufWriter::new(file),
@@ -100,5 +124,60 @@ impl JournalWriter {
 impl Drop for JournalWriter {
     fn drop(&mut self) {
         let _ = self.writer.flush();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::JournalWriter;
+    use std::path::Path;
+    use tempfile::tempdir;
+
+    fn prepare_journal_dir(root: &Path, package_id: &str, version: &str) {
+        let package_key = crate::journal::package_journal_key(package_id, version);
+        let journal_path = crate::core::package_journal_file_at(root, &package_key);
+        std::fs::create_dir_all(
+            journal_path
+                .parent()
+                .expect("journal path should have a parent"),
+        )
+        .expect("journal directory should be created");
+    }
+
+    /// Locks in the fix for the race where two processes (or a repair
+    /// replay racing an in-progress install) both hold an open handle to
+    /// the same journal file and interleave appended lines, which
+    /// JournalReader's post-Commit trailing-entry check would then treat as
+    /// corruption. Advisory locks are per open-file-description, so two
+    /// independent opens from the same test process reproduce the same
+    /// conflict a second real process would hit.
+    #[test]
+    fn open_for_package_rejects_a_second_concurrent_writer() {
+        let temp_root = tempdir().expect("temp root");
+        prepare_journal_dir(temp_root.path(), "Contoso.App", "1.0.0");
+
+        let _first = JournalWriter::open_for_package(temp_root.path(), "Contoso.App", "1.0.0")
+            .expect("first writer should open the journal");
+
+        let second = JournalWriter::open_for_package(temp_root.path(), "Contoso.App", "1.0.0");
+
+        assert!(
+            second.is_err(),
+            "a second writer must not be able to open the same journal while the first is active"
+        );
+    }
+
+    #[test]
+    fn open_for_package_allows_reopening_after_the_first_writer_is_dropped() {
+        let temp_root = tempdir().expect("temp root");
+        prepare_journal_dir(temp_root.path(), "Contoso.App", "1.0.0");
+
+        {
+            let _first = JournalWriter::open_for_package(temp_root.path(), "Contoso.App", "1.0.0")
+                .expect("first writer should open the journal");
+        }
+
+        JournalWriter::open_for_package(temp_root.path(), "Contoso.App", "1.0.0")
+            .expect("a new writer should be able to open the journal once the lock is released");
     }
 }
