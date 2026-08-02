@@ -37,28 +37,45 @@ fn render_info_report<W: Write>(ui: &mut Ui<W>, report: &InfoReport) {
 
     ui.write_line("");
     ui.write_line("WinBrew Paths");
-    ui.display_key_values(&runtime_section(&report.runtime, "Paths").entries);
+    render_runtime_section(ui, &report.runtime, "Paths");
     ui.write_line("");
 
     ui.write_line("WinBrew Settings");
-    ui.display_key_values(&runtime_section(&report.runtime, "Core").entries);
+    render_runtime_section(ui, &report.runtime, "Core");
 }
 
-fn runtime_section<'a>(report: &'a RuntimeReport, title: &str) -> &'a ReportSection {
+/// Renders a named runtime report section, or a warning if it's missing.
+///
+/// A missing section here would mean the report-building code in
+/// `winbrew-app` stopped emitting a section this command expects -- an
+/// internal inconsistency between crates, not something a user did. That
+/// shouldn't take down the whole `info` command (which the user may be
+/// running specifically to diagnose a problem); it should be visible but
+/// non-fatal.
+fn render_runtime_section<W: Write>(ui: &mut Ui<W>, report: &RuntimeReport, title: &str) {
+    match runtime_section(report, title) {
+        Some(section) => ui.display_key_values(&section.entries),
+        None => ui.warn(format!(
+            "'{title}' section is missing from the runtime report (internal inconsistency)."
+        )),
+    }
+}
+
+fn runtime_section<'a>(report: &'a RuntimeReport, title: &str) -> Option<&'a ReportSection> {
     report
         .sections
         .iter()
         .find(|section| section.title == title)
-        .expect("runtime report should contain the expected section")
 }
 
 #[cfg(test)]
 mod tests {
-    use super::run_with_ui;
+    use super::{render_runtime_section, run_with_ui};
     use crate::app::AppContext;
     use crate::commands::test_support::{buffer_text, buffered_ui};
     use crate::database::Config;
     use tempfile::tempdir;
+    use winbrew_app::models::domains::reporting::{ReportSection, RuntimeReport};
     use winbrew_ui::UiSettings;
 
     #[test]
@@ -83,5 +100,25 @@ mod tests {
         assert!(out.contains("Key"));
         assert!(out.contains("Value"));
         assert!(err.is_empty());
+    }
+
+    /// A missing "Paths"/"Core" section here would mean winbrew-app's
+    /// report-building code stopped emitting a section this command
+    /// expects -- an internal inconsistency between crates. This used to
+    /// panic via `.expect(...)`, taking down the whole `info` command
+    /// (which a user may be running specifically to diagnose a problem)
+    /// instead of surfacing the inconsistency and continuing.
+    #[test]
+    fn render_runtime_section_warns_instead_of_panicking_when_section_is_missing() {
+        let (mut ui, _out, err) = buffered_ui(UiSettings::default());
+        let report = RuntimeReport::new(vec![ReportSection {
+            title: "Paths".to_string(),
+            entries: vec![("root".to_string(), "C:\\winbrew".to_string())],
+        }]);
+
+        render_runtime_section(&mut ui, &report, "Core");
+
+        let err = buffer_text(&err);
+        assert!(err.contains("'Core' section is missing"));
     }
 }
