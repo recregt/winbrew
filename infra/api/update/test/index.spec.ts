@@ -199,6 +199,34 @@ describe('update worker', () => {
 		});
 	});
 
+	/// Regression test for a bug where `mode: 'full'` always echoed
+	/// `target_hash` back as both `current` and `target`, discarding the
+	/// client's actual current version. Every other test's `full`-mode
+	/// fixture happens to set `currentHash === targetHash`, so the bug was
+	/// invisible to them regardless of which field the code read -- this
+	/// fixture deliberately uses different values, matching the documented
+	/// example payload (docs/pipeline.md) and the real-world case of a
+	/// full-snapshot fallback row inserted for a specific old version whose
+	/// patch chain exceeded the length/size limit.
+	it('returns the client-specific current hash for a full-snapshot fallback plan', async () => {
+		await seedPlan({
+			currentHash: 'sha256:old',
+			mode: 'full',
+			targetHash: 'sha256:new',
+			snapshotUrl: 'https://cdn.winbrew.dev/catalog/latest.db.zst',
+		});
+
+		const response = await SELF.fetch('https://api.winbrew.dev/v1/update?current=sha256:old');
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({
+			mode: 'full',
+			current: 'sha256:old',
+			target: 'sha256:new',
+			snapshot: 'https://cdn.winbrew.dev/catalog/latest.db.zst',
+			patches: [],
+		});
+	});
+
 	it('rejects blank current values', async () => {
 		const response = await SELF.fetch('https://api.winbrew.dev/v1/update?current=');
 		expect(response.status).toBe(400);
