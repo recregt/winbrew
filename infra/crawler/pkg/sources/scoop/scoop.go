@@ -176,6 +176,9 @@ type packageSnapshot struct {
 	Bin         json.RawMessage     `json:"bin,omitempty"`
 	EnvAddPath  json.RawMessage     `json:"env_add_path,omitempty"`
 	Installers  []installerSnapshot `json:"installers,omitempty"`
+	// Raw carries the literal upstream manifest JSON, verbatim as fetched,
+	// for the parser to store in catalog_packages_raw.
+	Raw json.RawMessage `json:"raw,omitempty"`
 }
 
 type installerSnapshot struct {
@@ -210,6 +213,7 @@ func packageSnapshotFromPackage(pkg normalize.Package) packageSnapshot {
 		Bin:         append(json.RawMessage(nil), pkg.Bin...),
 		EnvAddPath:  append(json.RawMessage(nil), pkg.EnvAddPath...),
 		Installers:  installers,
+		Raw:         append(json.RawMessage(nil), pkg.Raw...),
 	}
 }
 

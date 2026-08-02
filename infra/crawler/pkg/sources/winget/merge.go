@@ -1,6 +1,7 @@
 package winget
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -22,6 +23,36 @@ type wingetPackageSnapshot struct {
 	Capabilities   []string                  `json:"capabilities,omitempty"`
 	Tags           []string                  `json:"tags,omitempty"`
 	Installers     []wingetInstallerSnapshot `json:"installers,omitempty"`
+	// Raw carries the literal upstream manifest YAML (root, and locale +
+	// installer when the package uses the multi-file manifest layout),
+	// verbatim as fetched, for the parser to store in catalog_packages_raw.
+	Raw json.RawMessage `json:"raw,omitempty"`
+}
+
+// wingetRawManifests preserves the literal upstream manifest text so
+// catalog_packages_raw holds the actual fetched YAML, not a re-serialization
+// of the normalized fields parsed out of it. A winget package is described
+// by one manifest file (singleton layout) or three (version/locale/installer
+// layout); only the ones actually fetched are included.
+type wingetRawManifests struct {
+	Root      string `json:"root,omitempty"`
+	Locale    string `json:"locale,omitempty"`
+	Installer string `json:"installer,omitempty"`
+}
+
+func rawManifestsJSON(root, locale, installer []byte) (json.RawMessage, error) {
+	raw := wingetRawManifests{
+		Root:      string(root),
+		Locale:    string(locale),
+		Installer: string(installer),
+	}
+
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode raw winget manifests: %w", err)
+	}
+
+	return data, nil
 }
 
 type wingetInstallerSnapshot struct {
@@ -77,8 +108,13 @@ func ensureWingetPackageCoordinate(expected, actual string) error {
 	return nil
 }
 
-func buildWingetPackageSnapshot(row wingetIndexRow, rootManifest wingetManifest, localeManifest, installerManifest *wingetManifest) (wingetPackageSnapshot, error) {
+func buildWingetPackageSnapshot(row wingetIndexRow, rootManifest wingetManifest, localeManifest, installerManifest *wingetManifest, rootBytes, localeBytes, installerBytes []byte) (wingetPackageSnapshot, error) {
 	if err := ensureWingetPackageCoordinate(row.id, rootManifest.PackageIdentifier); err != nil {
+		return wingetPackageSnapshot{}, err
+	}
+
+	rawManifests, err := rawManifestsJSON(rootBytes, localeBytes, installerBytes)
+	if err != nil {
 		return wingetPackageSnapshot{}, err
 	}
 
@@ -107,6 +143,7 @@ func buildWingetPackageSnapshot(row wingetIndexRow, rootManifest wingetManifest,
 			Capabilities:   firstNonEmptyStrings(rootManifest.Capabilities),
 			Tags:           firstNonEmptyStrings(rootManifest.Tags),
 			Installers:     installers,
+			Raw:            rawManifests,
 		}, nil
 	case "version":
 		if localeManifest == nil {
@@ -145,6 +182,7 @@ func buildWingetPackageSnapshot(row wingetIndexRow, rootManifest wingetManifest,
 			Capabilities:   firstNonEmptyStrings(localeManifest.Capabilities, rootManifest.Capabilities, installerManifest.Capabilities),
 			Tags:           firstNonEmptyStrings(localeManifest.Tags, rootManifest.Tags),
 			Installers:     installers,
+			Raw:            rawManifests,
 		}, nil
 	default:
 		return wingetPackageSnapshot{}, fmt.Errorf("unsupported winget manifest type %q for %s", rootManifest.ManifestType, row.id)

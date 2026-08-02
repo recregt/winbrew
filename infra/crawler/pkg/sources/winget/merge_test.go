@@ -1,6 +1,7 @@
 package winget
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -87,9 +88,20 @@ func TestWingetManifestResolutionSingleton(t *testing.T) {
 		name:      "Windows Terminal",
 		version:   "1.9.1942.0",
 		publisher: "Microsoft Corporation",
-	}, manifest, nil, nil)
+	}, manifest, nil, nil, []byte(manifestYAML), nil, nil)
 	if err != nil {
 		t.Fatalf("buildWingetPackageSnapshot() error = %v", err)
+	}
+
+	var rawManifests wingetRawManifests
+	if err := json.Unmarshal(pkg.Raw, &rawManifests); err != nil {
+		t.Fatalf("failed to decode pkg.Raw: %v", err)
+	}
+	if got, want := rawManifests.Root, manifestYAML; got != want {
+		t.Fatalf("raw root manifest = %q, want %q", got, want)
+	}
+	if rawManifests.Locale != "" {
+		t.Fatalf("raw locale manifest = %q, want empty for a singleton manifest", rawManifests.Locale)
 	}
 
 	if got, want := pkg.ID, "winget/Microsoft.WindowsTerminal"; got != want {
@@ -187,7 +199,7 @@ func TestWingetManifestResolutionSingleton(t *testing.T) {
 func TestWingetManifestResolutionMultiFile(t *testing.T) {
 	t.Parallel()
 
-	root, err := parseWingetManifest([]byte(`
+	rootYAML := `
 PackageIdentifier: Contoso.App
 PackageVersion: 2.3.4
 DefaultLocale: en-US
@@ -196,12 +208,13 @@ Tags:
   - utility
 ManifestType: version
 ManifestVersion: 1.12.0
-`))
+`
+	root, err := parseWingetManifest([]byte(rootYAML))
 	if err != nil {
 		t.Fatalf("parseWingetManifest(root) error = %v", err)
 	}
 
-	locale, err := parseWingetManifest([]byte(`
+	localeYAML := `
 PackageIdentifier: Contoso.App
 PackageVersion: 2.3.4
 PackageLocale: en-US
@@ -216,7 +229,8 @@ Homepage: https://contoso.example
 License: MIT
 ManifestType: defaultLocale
 ManifestVersion: 1.12.0
-`))
+`
+	locale, err := parseWingetManifest([]byte(localeYAML))
 	if err != nil {
 		t.Fatalf("parseWingetManifest(locale) error = %v", err)
 	}
@@ -315,9 +329,23 @@ ManifestVersion: 1.12.0
 		name:      "Contoso App",
 		version:   "2.3.4",
 		publisher: "Contoso Ltd.",
-	}, root, &locale, &installer)
+	}, root, &locale, &installer, []byte(rootYAML), []byte(localeYAML), []byte(installerYAML))
 	if err != nil {
 		t.Fatalf("buildWingetPackageSnapshot() error = %v", err)
+	}
+
+	var rawManifests wingetRawManifests
+	if err := json.Unmarshal(pkg.Raw, &rawManifests); err != nil {
+		t.Fatalf("failed to decode pkg.Raw: %v", err)
+	}
+	if got, want := rawManifests.Root, rootYAML; got != want {
+		t.Fatalf("raw root manifest = %q, want %q", got, want)
+	}
+	if got, want := rawManifests.Locale, localeYAML; got != want {
+		t.Fatalf("raw locale manifest = %q, want %q", got, want)
+	}
+	if got, want := rawManifests.Installer, installerYAML; got != want {
+		t.Fatalf("raw installer manifest = %q, want %q", got, want)
 	}
 
 	if got, want := pkg.Description, "Contoso app"; got != want {

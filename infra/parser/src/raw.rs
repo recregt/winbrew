@@ -47,6 +47,13 @@ pub struct RawFetchedPackage {
     pub env_add_path: Option<serde_json::Value>,
     #[serde(default)]
     pub installers: Vec<RawFetchedInstaller>,
+    /// The literal upstream manifest, verbatim as fetched by the crawler
+    /// (JSON for scoop, a small object of the fetched YAML documents for
+    /// winget). Stored as-is in `catalog_packages_raw` instead of a
+    /// re-serialization of the normalized fields above, which is what a
+    /// missing/absent value here would otherwise fall back to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,6 +160,7 @@ mod tests {
                     file_extensions: None,
                     capabilities: None,
                 }],
+                raw: None,
             },
         };
 
@@ -184,6 +192,7 @@ mod tests {
                 bin: None,
                 env_add_path: None,
                 installers: Vec::new(),
+                raw: None,
             },
         };
 
