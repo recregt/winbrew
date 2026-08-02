@@ -93,6 +93,38 @@ func TestReadManifestUsesArchitectureBlocks(t *testing.T) {
 	}
 }
 
+// readManifest already captured the literal manifest bytes into pkg.Raw via
+// a TeeReader; packageSnapshotFromPackage used to build the JSONL envelope
+// without copying that field over, so catalog_packages_raw ended up storing
+// a re-serialization of the normalized fields instead of the actual
+// upstream manifest. This locks in that the raw bytes survive the
+// snapshot conversion, byte-for-byte.
+func TestPackageSnapshotFromPackagePreservesRawManifestBytes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestDir := filepath.Join(dir, "bucket")
+	if err := os.MkdirAll(manifestDir, 0o750); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	manifestJSON := `{"version":"1.2.3","description":"example package","url":"https://example.invalid/tool.zip","hash":"deadbeef"}`
+	if err := os.WriteFile(filepath.Join(manifestDir, "example.json"), []byte(manifestJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	pkg, err := readManifest(context.Background(), "main", manifestDir, "example.json")
+	if err != nil {
+		t.Fatalf("readManifest() error = %v", err)
+	}
+
+	snapshot := packageSnapshotFromPackage(pkg)
+
+	if got, want := string(snapshot.Raw), manifestJSON; got != want {
+		t.Fatalf("snapshot.Raw = %q, want %q (the literal upstream manifest)", got, want)
+	}
+}
+
 func TestResolveLicenseUsesIdentifierOrURL(t *testing.T) {
 	t.Parallel()
 

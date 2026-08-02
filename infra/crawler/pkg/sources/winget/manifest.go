@@ -264,13 +264,15 @@ func (s *Source) buildPackageSnapshot(ctx context.Context, row wingetIndexRow, m
 
 	var localeManifest *wingetManifest
 	var installerManifest *wingetManifest
+	var localeBytes, installerBytes []byte
 	switch strings.ToLower(strings.TrimSpace(rootManifest.ManifestType)) {
 	case "version":
 		if strings.TrimSpace(rootManifest.DefaultLocale) == "" {
 			return wingetPackageSnapshot{}, fmt.Errorf("winget package %s is missing default locale", row.id)
 		}
 
-		localeBytes, err := s.fetchManifestBytes(ctx, row.id, row.version, rootLocaleFileName(row.id, rootManifest.DefaultLocale), maxAttempts, backoff)
+		var err error
+		localeBytes, err = s.fetchManifestBytes(ctx, row.id, row.version, rootLocaleFileName(row.id, rootManifest.DefaultLocale), maxAttempts, backoff)
 		if err != nil {
 			return wingetPackageSnapshot{}, fmt.Errorf("failed to fetch winget locale manifest for %s: %w", row.id, err)
 		}
@@ -280,7 +282,7 @@ func (s *Source) buildPackageSnapshot(ctx context.Context, row wingetIndexRow, m
 		}
 		localeManifest = &parsedLocale
 
-		installerBytes, err := s.fetchManifestBytes(ctx, row.id, row.version, rootInstallerFileName(row.id), maxAttempts, backoff)
+		installerBytes, err = s.fetchManifestBytes(ctx, row.id, row.version, rootInstallerFileName(row.id), maxAttempts, backoff)
 		if err != nil {
 			return wingetPackageSnapshot{}, fmt.Errorf("failed to fetch winget installer manifest for %s: %w", row.id, err)
 		}
@@ -291,7 +293,7 @@ func (s *Source) buildPackageSnapshot(ctx context.Context, row wingetIndexRow, m
 		installerManifest = &parsedInstaller
 	}
 
-	return buildWingetPackageSnapshot(row, rootManifest, localeManifest, installerManifest)
+	return buildWingetPackageSnapshot(row, rootManifest, localeManifest, installerManifest, rootBytes, localeBytes, installerBytes)
 }
 
 func (s *Source) fetchManifestBytes(ctx context.Context, packageIdentifier, packageVersion, fileName string, maxAttempts int, backoff time.Duration) ([]byte, error) {

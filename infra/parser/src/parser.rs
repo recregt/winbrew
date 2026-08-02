@@ -19,8 +19,17 @@ pub(crate) struct ParsedPackage {
     pub raw_json: String,
 }
 
-pub(crate) fn parse_package(raw: RawFetchedPackage) -> Result<ParsedPackage, ParserError> {
-    let raw_json = serde_json::to_string(&raw)?;
+pub(crate) fn parse_package(mut raw: RawFetchedPackage) -> Result<ParsedPackage, ParserError> {
+    // Prefer the crawler-supplied literal upstream manifest over
+    // re-serializing the normalized fields below: catalog_packages_raw is
+    // meant to preserve the actual fetched manifest for traceability, not a
+    // reconstruction of what this parser understood from it. Falling back
+    // to re-serialization only covers JSONL input that predates the
+    // crawler populating this field.
+    let raw_json = match raw.raw.take() {
+        Some(value) => serde_json::to_string(&value)?,
+        None => serde_json::to_string(&raw)?,
+    };
     let package_id = PackageId::parse(raw.id.as_str())?;
     let platform = to_json_text(raw.platform)?;
     let commands = to_json_text(raw.commands)?;
@@ -185,6 +194,7 @@ mod tests {
                 file_extensions: Some(vec![".exe".to_string()]),
                 capabilities: Some(vec!["internetClient".to_string()]),
             }],
+            raw: None,
         })
         .expect("package should parse");
 
@@ -228,6 +238,64 @@ mod tests {
         assert!(parsed.raw_json.contains("NestedInstallerType"));
     }
 
+    /// catalog_packages_raw is meant to hold the literal upstream manifest
+    /// for traceability. Before this fix, raw_json was always a
+    /// re-serialization of the normalized fields the parser understood --
+    /// this locks in that when the crawler supplies the actual fetched
+    /// manifest via the `raw` field, that literal content wins instead.
+    #[test]
+    fn prefers_crawler_supplied_raw_manifest_over_reserialized_fields() {
+        let literal_manifest = serde_json::json!({
+            "version": "1.2.3",
+            "url": "https://example.invalid/tool.zip",
+            "hash": "deadbeef",
+            "some_upstream_field_the_parser_does_not_model": true,
+        });
+
+        let parsed = parse_package(RawFetchedPackage {
+            id: "scoop/main/example".to_string(),
+            name: "example".to_string(),
+            version: "1.2.3".to_string(),
+            description: None,
+            homepage: None,
+            license: None,
+            publisher: None,
+            locale: None,
+            moniker: None,
+            platform: None,
+            commands: None,
+            protocols: None,
+            file_extensions: None,
+            capabilities: None,
+            tags: None,
+            bin: None,
+            env_add_path: None,
+            installers: vec![RawFetchedInstaller {
+                url: "https://example.invalid/tool.zip".to_string(),
+                hash: "deadbeef".to_string(),
+                arch: "x64".to_string(),
+                kind: "portable".to_string(),
+                nested_kind: None,
+                installer_switches: None,
+                scope: None,
+                platform: None,
+                commands: None,
+                protocols: None,
+                file_extensions: None,
+                capabilities: None,
+            }],
+            raw: Some(literal_manifest.clone()),
+        })
+        .expect("package should parse");
+
+        let stored: serde_json::Value =
+            serde_json::from_str(&parsed.raw_json).expect("raw_json should be valid JSON");
+        assert_eq!(
+            stored, literal_manifest,
+            "raw_json should be exactly the crawler-supplied manifest, not a re-serialization"
+        );
+    }
+
     #[test]
     fn parses_fetched_package_with_loose_version() {
         let parsed = parse_package(RawFetchedPackage {
@@ -262,6 +330,7 @@ mod tests {
                 file_extensions: Some(vec![".exe".to_string()]),
                 capabilities: Some(vec!["internetClient".to_string()]),
             }],
+            raw: None,
         })
         .expect("package should parse");
 
