@@ -3,7 +3,7 @@
 
 use anyhow::Result;
 
-use crate::commands::error::reported_with_hint;
+use crate::commands::error::{reported, reported_with_hint};
 use crate::{CommandContext, app::remove};
 use winbrew_ui::Ui;
 
@@ -13,7 +13,9 @@ pub fn run(ctx: &CommandContext, name: &[String], yes: bool, force: bool) -> Res
 
     let name_text = name.join(" ").trim().to_owned();
     if name_text.is_empty() {
-        return Err(anyhow::anyhow!("package name cannot be empty"));
+        let message = "package name cannot be empty".to_string();
+        ui.error(&message);
+        return Err(reported(message));
     }
 
     ui.info(format!("Assessing impact for {name_text}..."));
