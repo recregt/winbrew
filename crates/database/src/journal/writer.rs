@@ -51,8 +51,15 @@ impl JournalWriter {
             }
         }
 
+        // `.read(true)` is required for `try_lock()` to succeed on Windows:
+        // a handle opened with only `.append(true)` gets FILE_APPEND_DATA
+        // access, which LockFileEx rejects with ERROR_ACCESS_DENIED even
+        // when the file is otherwise uncontested. Adding read access
+        // doesn't change the write semantics -- appends still land at EOF
+        // -- it only grants the access rights locking needs.
         let file = OpenOptions::new()
             .create(true)
+            .read(true)
             .append(true)
             .open(&journal_path)
             .with_context(|| format!("failed to open {}", journal_path.display()))?;
