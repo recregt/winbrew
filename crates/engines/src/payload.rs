@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use flate2::read::GzDecoder;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
@@ -68,7 +69,27 @@ pub(crate) fn probe_downloaded_artifact_kind(path: &Path) -> Result<Option<Detec
 
     match classify_probe_bytes(&buffer) {
         Some(DetectedArtifactKind::Archive(ArchiveKind::Zip)) => try_probe_as_msix(file),
+        Some(DetectedArtifactKind::Archive(ArchiveKind::Gzip)) => {
+            Ok(Some(probe_gzip_compressed_tar(file)))
+        }
         detected => Ok(detected),
+    }
+}
+
+/// A gzip-compressed tar archive (`.tar.gz`, `.tgz`) and a lone
+/// gzip-compressed file share an identical raw gzip signature -- the
+/// compression wraps both the same way, so nothing in the outer bytes
+/// distinguishes them. The only way to tell them apart from content alone is
+/// to decompress far enough to check for tar's own "ustar" magic in the
+/// decompressed stream, the same check `is_tar_signature` does for
+/// uncompressed `.tar` payloads.
+fn probe_gzip_compressed_tar(file: File) -> DetectedArtifactKind {
+    let mut decoder = GzDecoder::new(file);
+    let mut buffer = vec![0u8; signatures::TAR_OFFSET + signatures::TAR_MAGIC.len()];
+
+    match decoder.read_exact(&mut buffer) {
+        Ok(()) if is_tar_signature(&buffer) => DetectedArtifactKind::Archive(ArchiveKind::Tar),
+        _ => DetectedArtifactKind::Archive(ArchiveKind::Gzip),
     }
 }
 
@@ -214,8 +235,11 @@ mod tests {
         classify_probe_bytes, probe_downloaded_artifact_kind, read_probe_bytes,
     };
     use crate::core::ArchiveKind;
+    use flate2::Compression;
+    use flate2::write::GzEncoder;
     use std::fs;
     use std::io::{self, Read, Write};
+    use tar::{Builder, Header};
     use tempfile::NamedTempFile;
     use zip::ZipWriter;
     use zip::write::SimpleFileOptions;
@@ -383,6 +407,55 @@ mod tests {
         assert_eq!(
             classify_probe_bytes(&bytes),
             Some(DetectedArtifactKind::Archive(ArchiveKind::Tar))
+        );
+    }
+
+    fn write_tar_gz(path: &std::path::Path, file_name: &str, contents: &[u8]) {
+        let file = fs::File::create(path).expect("create tar.gz file");
+        let encoder = GzEncoder::new(file, Compression::default());
+        let mut builder = Builder::new(encoder);
+        let mut header = Header::new_gnu();
+        header.set_size(contents.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+
+        builder
+            .append_data(&mut header, file_name, contents)
+            .expect("append tar entry");
+        let encoder = builder.into_inner().expect("finish tar builder");
+        encoder.finish().expect("finish tar.gz file");
+    }
+
+    fn write_plain_gzip(path: &std::path::Path, contents: &[u8]) {
+        let file = fs::File::create(path).expect("create gzip file");
+        let mut encoder = GzEncoder::new(file, Compression::default());
+        encoder.write_all(contents).expect("write gzip contents");
+        encoder.finish().expect("finish gzip file");
+    }
+
+    /// A gzip-compressed tar archive and a lone gzip-compressed file are
+    /// byte-for-byte identical at the outer (gzip) layer -- both start with
+    /// the same magic bytes. Without decompressing far enough to check for
+    /// tar's own "ustar" magic, content probing alone could never tell a
+    /// `.tar.gz` apart from a single compressed file, which is exactly the
+    /// ambiguity that made naively trusting content probing over the URL's
+    /// `.tar.gz`/`.tgz` extension unsafe.
+    #[test]
+    fn probe_downloaded_artifact_kind_distinguishes_gzip_compressed_tar_from_plain_gzip() {
+        let tar_gz_file = NamedTempFile::new().expect("temp file");
+        write_tar_gz(tar_gz_file.path(), "bin/tool.exe", b"tar-binary");
+
+        assert_eq!(
+            probe_downloaded_artifact_kind(tar_gz_file.path()).expect("probe tar.gz"),
+            Some(DetectedArtifactKind::Archive(ArchiveKind::Tar))
+        );
+
+        let plain_gz_file = NamedTempFile::new().expect("temp file");
+        write_plain_gzip(plain_gz_file.path(), b"just a compressed binary, not a tar");
+
+        assert_eq!(
+            probe_downloaded_artifact_kind(plain_gz_file.path()).expect("probe plain gzip"),
+            Some(DetectedArtifactKind::Archive(ArchiveKind::Gzip))
         );
     }
 }

@@ -1,11 +1,14 @@
 use std::fs;
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
 
 use bzip2::read::BzDecoder;
 use flate2::read::GzDecoder;
 
 use crate::fs::{FsError, Result};
+
+const GZIP_MAGIC: [u8; 2] = [0x1F, 0x8B];
+const BZIP2_MAGIC: [u8; 3] = [b'B', b'Z', b'h'];
 
 use super::super::context::ExtractionContext;
 use super::super::limits::ExtractionLimits;
@@ -23,7 +26,7 @@ pub(crate) fn extract_tar_archive_with_platform<P: PlatformAdapter>(
     let archive_size = fs::metadata(archive_path)
         .map_err(|err| FsError::open_archive(archive_path, err))?
         .len();
-    let reader = archive_reader_for_path(archive_path, archive_file);
+    let reader = archive_reader_for_path(archive_path, archive_file)?;
     let mut archive = tar::Archive::new(reader);
     let mut extraction = ExtractionContext::<P>::new(limits);
     let mut buffer = vec![0u8; TAR_COPY_BUFFER_SIZE];
@@ -47,7 +50,34 @@ pub(crate) fn extract_tar_archive_with_platform<P: PlatformAdapter>(
     Ok(())
 }
 
-fn archive_reader_for_path(archive_path: &Path, file: fs::File) -> Box<dyn Read> {
+/// Picks the decompression wrapper (if any) for a tar archive's byte stream.
+///
+/// Prefers the archive's own magic bytes over its filename: the caller may
+/// know the true content (e.g. from a content probe upstream) even when the
+/// path came from a URL with no extension, or a misleading one. Falling back
+/// to a full unrecognized-content-as-plain-tar assumption only when the
+/// magic-byte check is inconclusive (a truncated/empty file) keeps the prior
+/// filename-based behavior as a safety net for that edge case.
+fn archive_reader_for_path(archive_path: &Path, mut file: fs::File) -> Result<Box<dyn Read>> {
+    let mut header = [0u8; 3];
+    let bytes_read = read_up_to(&mut file, &mut header)
+        .map_err(|err| FsError::open_archive(archive_path, err))?;
+    file.seek(SeekFrom::Start(0))
+        .map_err(|err| FsError::open_archive(archive_path, err))?;
+
+    if header[..bytes_read].starts_with(&GZIP_MAGIC) {
+        return Ok(Box::new(GzDecoder::new(file)));
+    }
+    if header[..bytes_read] == BZIP2_MAGIC {
+        return Ok(Box::new(BzDecoder::new(file)));
+    }
+    if bytes_read == header.len() {
+        // Recognized-but-uncompressed content, or unrecognized content that
+        // isn't gzip/bzip2 -- either way, the extension can't tell us
+        // anything the bytes themselves haven't already ruled out.
+        return Ok(Box::new(file));
+    }
+
     let file_name = archive_path
         .file_name()
         .and_then(|name| name.to_str())
@@ -55,12 +85,25 @@ fn archive_reader_for_path(archive_path: &Path, file: fs::File) -> Box<dyn Read>
         .to_ascii_lowercase();
 
     if file_name.ends_with(".tar.gz") || file_name.ends_with(".tgz") {
-        Box::new(GzDecoder::new(file))
+        Ok(Box::new(GzDecoder::new(file)))
     } else if file_name.ends_with(".tbz2") || file_name.ends_with(".tar.bz2") {
-        Box::new(BzDecoder::new(file))
+        Ok(Box::new(BzDecoder::new(file)))
     } else {
-        Box::new(file)
+        Ok(Box::new(file))
     }
+}
+
+fn read_up_to<R: Read>(reader: &mut R, buffer: &mut [u8]) -> std::io::Result<usize> {
+    let mut total_read = 0;
+
+    while total_read < buffer.len() {
+        match reader.read(&mut buffer[total_read..])? {
+            0 => break,
+            bytes_read => total_read += bytes_read,
+        }
+    }
+
+    Ok(total_read)
 }
 
 fn extract_entry<P: PlatformAdapter, R: Read>(
@@ -242,6 +285,41 @@ mod tests {
 
         assert_eq!(
             fs::read(destination_dir.join("bin/tool.exe")).expect("read"),
+            b"tar bz2 payload"
+        );
+    }
+
+    /// Decompression used to be selected purely from the archive path's
+    /// extension, so a downloaded file with no `.tar.gz`/`.tgz`/`.tbz2`
+    /// suffix (a CDN link with no extension, or a caller-chosen temp
+    /// filename) was always treated as an uncompressed tar stream and
+    /// failed to parse. Content-based detection fixes both compressed
+    /// variants regardless of what the file happens to be named.
+    #[test]
+    fn extract_tar_archive_detects_compression_without_a_recognizable_extension() {
+        let temp_dir = tempdir().expect("temp dir");
+
+        let gz_destination = temp_dir.path().join("dest-gz");
+        let gz_archive_path = temp_dir.path().join("download");
+        fs::create_dir_all(&gz_destination).expect("destination dir");
+        create_tar_gz_archive(&gz_archive_path, "bin/tool.exe", b"tar gz payload");
+
+        extract_archive(ArchiveKind::Tar, &gz_archive_path, &gz_destination)
+            .expect("extensionless tar.gz extraction");
+        assert_eq!(
+            fs::read(gz_destination.join("bin/tool.exe")).expect("read"),
+            b"tar gz payload"
+        );
+
+        let bz2_destination = temp_dir.path().join("dest-bz2");
+        let bz2_archive_path = temp_dir.path().join("download2");
+        fs::create_dir_all(&bz2_destination).expect("destination dir");
+        create_tar_bz2_archive(&bz2_archive_path, "bin/tool.exe", b"tar bz2 payload");
+
+        extract_archive(ArchiveKind::Tar, &bz2_archive_path, &bz2_destination)
+            .expect("extensionless tar.bz2 extraction");
+        assert_eq!(
+            fs::read(bz2_destination.join("bin/tool.exe")).expect("read"),
             b"tar bz2 payload"
         );
     }

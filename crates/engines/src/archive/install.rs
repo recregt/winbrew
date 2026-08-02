@@ -2,12 +2,13 @@ use anyhow::Result;
 use std::fs;
 use std::path::Path;
 
+use crate::core::ArchiveKind;
 use crate::core::fs::{cleanup_path, extract_archive, replace_directory};
 
 use crate::models::install::engine::EngineInstallReceipt;
 use crate::models::install::engine::EngineKind;
 
-use crate::payload::archive_kind_for_url;
+use crate::payload::{DetectedArtifactKind, archive_kind_for_url, probe_downloaded_artifact_kind};
 
 /// Extract an archive installer into the target install directory.
 ///
@@ -19,7 +20,7 @@ pub(crate) fn install(
     installer_url: &str,
 ) -> Result<EngineInstallReceipt> {
     let stage_dir = install_dir.parent().unwrap_or(install_dir).join("staging");
-    let archive_kind = archive_kind_for_url(installer_url).unwrap_or(crate::core::ArchiveKind::Zip);
+    let archive_kind = resolve_archive_kind(download_path, installer_url);
 
     cleanup_path(&stage_dir)?;
     fs::create_dir_all(&stage_dir)?;
@@ -32,6 +33,23 @@ pub(crate) fn install(
         install_dir.to_string_lossy().into_owned(),
         None,
     ))
+}
+
+/// Determine which archive format the downloaded payload actually is.
+///
+/// Prefers the content-probed kind (the same signature check that routed
+/// this installer to the archive engine in the first place) over guessing
+/// from the URL's file extension. A URL with no recognizable extension --
+/// common for CDN redirect links or self-extracting downloads -- would
+/// otherwise always fall back to `Zip` here even when routing upstream
+/// correctly identified the payload as, say, a 7z or tar archive from its
+/// actual bytes: extraction would then fail trying to parse non-ZIP bytes
+/// as a ZIP file despite having been routed to the right engine.
+fn resolve_archive_kind(download_path: &Path, installer_url: &str) -> ArchiveKind {
+    match probe_downloaded_artifact_kind(download_path) {
+        Ok(Some(DetectedArtifactKind::Archive(kind))) => kind,
+        _ => archive_kind_for_url(installer_url).unwrap_or(ArchiveKind::Zip),
+    }
 }
 
 #[cfg(test)]
@@ -172,6 +190,40 @@ mod tests {
             "https://example.invalid/download.tar.gz",
         )
         .expect("tar.gz install");
+
+        let installed_file = install_dir.join("bin").join("tool.exe");
+        let mut contents = String::default();
+        fs::File::open(&installed_file)
+            .expect("installed file")
+            .read_to_string(&mut contents)
+            .expect("read installed file");
+
+        assert_eq!(contents, "tar-binary");
+    }
+
+    /// Locks in the fix for archive kind detection: a CDN-style URL with no
+    /// recognizable extension used to always fall back to `Zip` here, even
+    /// though routing upstream (registry::probe_installer_from_download)
+    /// already correctly identified the payload as an archive from its
+    /// actual bytes. Extraction would then fail trying to parse tar.gz bytes
+    /// as a ZIP file. The downloaded file's own filename intentionally has
+    /// no `.tar.gz`/`.tgz` suffix for this test, and the installer URL has
+    /// no extension at all -- content probing is the only thing that can get
+    /// this right.
+    #[test]
+    fn install_extracts_gzip_compressed_tar_with_no_recognizable_extension() {
+        let temp_root = tempdir().expect("temp root");
+        let download_path = temp_root.path().join("download");
+        let install_dir = temp_root.path().join("packages").join("Contoso.NoExt");
+
+        create_tar_gz_archive(&download_path, "bin/tool.exe", b"tar-binary");
+
+        install(
+            &download_path,
+            &install_dir,
+            "https://example.invalid/download?id=12345",
+        )
+        .expect("extensionless tar.gz install");
 
         let installed_file = install_dir.join("bin").join("tool.exe");
         let mut contents = String::default();
