@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 regex = "1.12"
 strum_macros = "0.28"
 url = "2"
@@ -26,5 +27,4 @@ winbrew-windows = { path = "../windows", features = ["testing"] }
 [dev-dependencies]
 tempfile = "3"
 tar = "0.4"
-flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 winbrew-testing = { path = "../testing" }
