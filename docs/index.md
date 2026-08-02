@@ -35,6 +35,7 @@ Use it when you want to answer one of these questions:
 - [winbrew-cli](../crates/cli/src/lib.rs) for command parsing, dispatch, and terminal wiring.
 - [winbrew-ui](../crates/ui/src/lib.rs) for terminal presentation state.
 - [winbrew-windows](../crates/windows/src/lib.rs) for Windows-only platform helpers.
+- [winbrew-testing](../crates/testing/src/lib.rs) for the shared test harness (fixtures and subprocess wrappers used from `[dev-dependencies]`).
 
 ## Pipeline Docs
 

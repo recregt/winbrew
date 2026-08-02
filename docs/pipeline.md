@@ -229,7 +229,7 @@ Expected behavior:
 - [infra/parser/src/sqlite.rs](../infra/parser/src/sqlite.rs)
 - [infra/parser/src/pipeline.rs](../infra/parser/src/pipeline.rs)
 - [infra/parser/schema/catalog.sql](../infra/parser/schema/catalog.sql)
-- [crates/database/src/catalog.rs](../crates/database/src/catalog.rs)
+- [crates/database/src/catalog/mod.rs](../crates/database/src/catalog/mod.rs)
 - [infra/publisher/internal/publisher/metadata.go](../infra/publisher/internal/publisher/metadata.go)
 - [infra/publisher/internal/publisher/publisher.go](../infra/publisher/internal/publisher/publisher.go)
 - [crates/app/src/operations/update/mod.rs](../crates/app/src/operations/update/mod.rs)
