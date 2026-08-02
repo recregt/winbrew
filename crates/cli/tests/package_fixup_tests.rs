@@ -215,6 +215,12 @@ fn repair_replays_committed_journal_into_database() {
         })
         .expect("write commit");
     writer.flush().expect("flush journal");
+    // The journal lock is mandatory on Windows (unlike Linux's advisory
+    // flock) and is held until `writer` is dropped, which -- as a local
+    // in this function -- would otherwise last until the function returns.
+    // Drop it explicitly here so repair's own read of this same journal
+    // file isn't blocked by a lock this test itself is still holding.
+    drop(writer);
 
     repair::run(&fixture.ctx, true, false).expect("repair should succeed");
 
@@ -300,6 +306,12 @@ fn repair_replays_committed_journal_using_resolver_commands() {
         })
         .expect("write commit");
     writer.flush().expect("flush journal");
+    // The journal lock is mandatory on Windows (unlike Linux's advisory
+    // flock) and is held until `writer` is dropped, which -- as a local
+    // in this function -- would otherwise last until the function returns.
+    // Drop it explicitly here so repair's own read of this same journal
+    // file isn't blocked by a lock this test itself is still holding.
+    drop(writer);
 
     repair::run(&fixture.ctx, true, false).expect("repair should succeed");
 
@@ -372,6 +384,12 @@ fn repair_replays_committed_journal_and_removes_stale_shims() {
         })
         .expect("write commit");
     writer.flush().expect("flush journal");
+    // The journal lock is mandatory on Windows (unlike Linux's advisory
+    // flock) and is held until `writer` is dropped, which -- as a local
+    // in this function -- would otherwise last until the function returns.
+    // Drop it explicitly here so repair's own read of this same journal
+    // file isn't blocked by a lock this test itself is still holding.
+    drop(writer);
 
     repair::run(&fixture.ctx, true, false).expect("repair should succeed");
 
@@ -450,6 +468,11 @@ fn repair_reports_journal_command_resolution_summary() -> Result<()> {
         })
         .expect("write commit");
     writer.flush().expect("flush journal");
+    // See the comment on the other repair tests in this file: the journal
+    // lock is mandatory on Windows and stays held until `writer` drops, so
+    // it must be released explicitly before the spawned `winbrew repair`
+    // subprocess tries to read this same journal file.
+    drop(writer);
 
     let output = common::run_winbrew(fixture.root_path(), &["repair", "-y"]);
     common::assert_success(&output, "winbrew repair")?;
@@ -662,6 +685,12 @@ fn repair_replays_bin_bindings_with_alias_and_default_args() {
         })
         .expect("write commit");
     writer.flush().expect("flush journal");
+    // The journal lock is mandatory on Windows (unlike Linux's advisory
+    // flock) and is held until `writer` is dropped, which -- as a local
+    // in this function -- would otherwise last until the function returns.
+    // Drop it explicitly here so repair's own read of this same journal
+    // file isn't blocked by a lock this test itself is still holding.
+    drop(writer);
 
     repair::run(&fixture.ctx, true, false).expect("repair should succeed");
 

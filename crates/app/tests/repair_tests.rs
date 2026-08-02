@@ -47,6 +47,10 @@ fn prepare_journal_replay_targets_rejects_missing_command_resolution_metadata() 
     writer.flush().expect("flush journal");
 
     let journal_path = writer.path().to_path_buf();
+    // The journal lock is mandatory on Windows and stays held until `writer`
+    // drops, so it must be released before prepare_journal_replay_targets
+    // tries to read this same file.
+    drop(writer);
     let err = prepare_journal_replay_targets(&[journal_path])
         .expect_err("legacy journal should be rejected");
 
