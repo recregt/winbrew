@@ -231,7 +231,20 @@ impl From<InstallerType> for DeploymentKind {
     fn from(value: InstallerType) -> Self {
         match value {
             InstallerType::Portable | InstallerType::Zip => Self::Portable,
-            _ => Self::Installed,
+            // Exhaustive on purpose: a future archive/portable-style variant
+            // added here should fail to compile until someone decides
+            // whether it belongs above with Portable/Zip, rather than
+            // silently falling through to Installed via a wildcard arm.
+            InstallerType::Msi
+            | InstallerType::Msix
+            | InstallerType::Appx
+            | InstallerType::Exe
+            | InstallerType::Inno
+            | InstallerType::Nullsoft
+            | InstallerType::Wix
+            | InstallerType::Burn
+            | InstallerType::Pwa
+            | InstallerType::Font => Self::Installed,
         }
     }
 }
