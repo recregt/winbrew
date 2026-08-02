@@ -81,7 +81,16 @@ async function selectPlanForCurrent(db: D1Database, currentHash: string): Promis
 	}
 
 	try {
-		return mapRowToResponse(row);
+		const plan = mapRowToResponse(row);
+		// `WHERE current_hash = ?` guarantees row.current_hash === currentHash,
+		// so this is a no-op for 'current'/'patch' modes -- but it matters for
+		// 'full': mapRowToResponse reports current === target for a 'full' row
+		// by default (correct for selectLatestFullPlan's synthetic "latest
+		// snapshot" row, whose current_hash is just a row key, not a real
+		// client version). Here the row was matched by the client's actual
+		// current hash, so that's what should be echoed back, not the target
+		// they're upgrading to.
+		return { ...plan, current: currentHash };
 	} catch (error) {
 		console.warn('update plan row is invalid; falling back to latest full snapshot', error);
 		return selectLatestFullPlan(db);
@@ -122,9 +131,15 @@ function mapRowToResponse(row: UpdatePlanRow): UpdatePlanResponse {
 				throw new Error(`full plan ${row.current_hash} is missing a snapshot URL`);
 			}
 
+			// Defaults to current === target: correct for
+			// selectLatestFullPlan's row, whose current_hash is a synthetic
+			// row key (see e.g. seedPlan's `full:sha256:latest` fixture), not
+			// a real client version. selectPlanForCurrent overrides `current`
+			// to the actual client-supplied hash after calling this, since
+			// there the row was matched specifically by that hash.
 			return {
 				mode: 'full',
-				current: row.current_hash,
+				current: row.target_hash,
 				target: row.target_hash,
 				snapshot: row.snapshot_url,
 				patches: [],
