@@ -21,6 +21,7 @@ jobs:
   semgrep:
     name: SAST › Semgrep
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,12 +53,13 @@ jobs:
   cargo-audit:
     name: Audit › Rust
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - uses: ./.github/actions/setup-rust
         with:
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
@@ -70,6 +72,7 @@ jobs:
   gitleaks:
     name: Secrets
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -96,22 +99,26 @@ jobs:
         with:
           sarif_file: gitleaks.sarif
 
+      - name: Fail on Gitleaks findings
+        if: steps.gitleaks.outcome == 'failure'
+        run: exit 1
+
   govulncheck:
     name: Vuln › Go (${{ matrix.module }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        module: [crawler, publisher]
+        module: [crawler, publisher, sqliteutil]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: ./.github/actions/setup-go
         with:
-          go-version-file: infra/${{ matrix.module }}/go.mod
+          module: ${{ matrix.module }}
           cache: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          cache-dependency-path: infra/${{ matrix.module }}/go.sum
 
       - uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
         with:
@@ -129,6 +136,9 @@ jobs:
   actionlint:
     name: Lint › Workflows
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
