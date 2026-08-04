@@ -1,8 +1,8 @@
 use anyhow::Result;
-use std::fs;
 use std::path::Path;
 use tracing::warn;
 
+use crate::windows_dep::fs::paths_refer_to_same_location;
 use crate::windows_dep::installed::{UninstallEntry, uninstall_entries_matching};
 
 pub(super) enum NativeExeInstallMetadata {
@@ -41,7 +41,7 @@ pub(super) fn capture_native_exe_metadata_with(
 
         let install_location_exact = match entry.install_location.as_deref() {
             Some(value) if !value.trim().is_empty() => {
-                if !same_install_location(Path::new(value), install_dir) {
+                if !paths_refer_to_same_location(Path::new(value), install_dir) {
                     continue;
                 }
 
@@ -116,18 +116,4 @@ fn native_exe_metadata_priority(install_location_exact: bool, metadata_priority:
     } else {
         metadata_priority
     }
-}
-
-pub(super) fn same_install_location(left: &Path, right: &Path) -> bool {
-    match (fs::canonicalize(left), fs::canonicalize(right)) {
-        (Ok(left), Ok(right)) => left == right,
-        _ => normalize_path_text(left) == normalize_path_text(right),
-    }
-}
-
-fn normalize_path_text(path: &Path) -> String {
-    path.to_string_lossy()
-        .replace('/', "\\")
-        .trim_end_matches('\\')
-        .to_ascii_lowercase()
 }
