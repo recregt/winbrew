@@ -167,6 +167,20 @@ fn validate_install_dir_rejects_empty_path() {
 }
 
 #[test]
+fn validate_install_dir_rejects_parent_dir_components() {
+    let err = validate_install_dir(Path::new(r"C:\winbrew\packages\..\..\Windows"))
+        .expect_err("traversal-shaped install directory should fail");
+
+    assert!(err.to_string().contains("'..' components"));
+}
+
+#[test]
+fn validate_install_dir_accepts_an_ordinary_path() {
+    validate_install_dir(Path::new(r"C:\winbrew\packages\Contoso.App"))
+        .expect("ordinary install directory should be accepted");
+}
+
+#[test]
 fn validate_package_name_rejects_empty_and_control_characters() {
     let empty_err = validate_package_name("   ").expect_err("empty package name should fail");
     assert!(
