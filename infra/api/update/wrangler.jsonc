@@ -23,6 +23,10 @@
 		{
 			"binding": "DB",
 			"database_name": "winbrew-update",
+			// Identifies the exact production D1 database. Not a credential on
+			// its own (no access without the separately-held API token), but
+			// treat it as sensitive: it pins down which resource a leaked token
+			// would reach.
 			"database_id": "f0ad3437-720d-4df1-8d31-97214707689d"
 		}
 	],
