@@ -20,6 +20,7 @@ Use it when you want to answer one of these questions:
 
 - [Managed Paths Policy](managed-paths-policy.md) for the owned directory tree.
 - [Recovery Policy](recovery-policy.md) for journal, SQLite, and disk authority.
+- [Security Invariants](security-invariants.md) for the verify-before-trust and path-safety rules that apply at every network/filesystem boundary.
 
 ## Engine Strategy
 
