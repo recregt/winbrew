@@ -22,6 +22,39 @@ func TestTruncateGitOutput(t *testing.T) {
 	}
 }
 
+func TestValidateRepoInputs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		url     string
+		dir     string
+		wantErr bool
+	}{
+		{name: "https", url: "https://github.com/ScoopInstaller/Main", dir: "/tmp/main", wantErr: false},
+		{name: "http", url: "http://github.com/ScoopInstaller/Main", dir: "/tmp/main", wantErr: false},
+		{name: "ssh shorthand", url: "git@github.com:ScoopInstaller/Main.git", dir: "/tmp/main", wantErr: false},
+		{name: "empty url", url: "", dir: "/tmp/main", wantErr: true},
+		{name: "empty dir", url: "https://github.com/ScoopInstaller/Main", dir: "", wantErr: true},
+		{name: "ext transport", url: "ext::sh -c touch% /tmp/pwned", dir: "/tmp/main", wantErr: true},
+		{name: "scheme confusion", url: "httpevil://github.com/ScoopInstaller/Main", dir: "/tmp/main", wantErr: true},
+		{name: "schemeless http-prefixed", url: "http:evil", dir: "/tmp/main", wantErr: true},
+		{name: "no host", url: "https:///ScoopInstaller/Main", dir: "/tmp/main", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateRepoInputs(tt.url, tt.dir)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validateRepoInputs(%q, %q) error = %v, wantErr %v", tt.url, tt.dir, err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestIsRetryableGitOutput(t *testing.T) {
 	t.Parallel()
 
