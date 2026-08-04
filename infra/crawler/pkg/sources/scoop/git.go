@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -149,6 +150,15 @@ func (e *gitCommandError) NonRetryable() bool {
 	return !e.retryable
 }
 
+// validateRepoInputs accepts only https/http URLs with a host, or an
+// "git@host:path"-style SSH shorthand. A bare prefix check (the previous
+// implementation) also matches scheme-confused strings like "httpevil://"
+// or a schemeless "http:evil", and does not require a host at all; parsing
+// the URL and checking the scheme explicitly closes both gaps. This is not
+// currently reachable with an attacker-chosen URL (no caller populates the
+// New(..., extra ...Bucket) parameter from configuration yet), but if bucket
+// URLs ever become configurable, add a host allowlist here too rather than
+// accepting any https(s) host.
 func validateRepoInputs(url, dir string) error {
 	if strings.TrimSpace(url) == "" {
 		return fmt.Errorf("empty repository URL")
@@ -156,7 +166,13 @@ func validateRepoInputs(url, dir string) error {
 	if strings.TrimSpace(dir) == "" {
 		return fmt.Errorf("empty repository directory")
 	}
-	if !strings.HasPrefix(url, "http") && !strings.HasPrefix(url, "git@") {
+
+	if strings.HasPrefix(url, "git@") {
+		return nil
+	}
+
+	parsed, err := neturl.Parse(url)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 		return fmt.Errorf("invalid git URL: %s", url)
 	}
 
