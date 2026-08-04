@@ -39,7 +39,9 @@ pub mod packages {
 
 /// Filesystem inspection and extraction helpers.
 pub mod fs {
-    pub use crate::filesystem::{PathInfo, create_extraction_target_file, inspect_path};
+    pub use crate::filesystem::{
+        PathInfo, create_extraction_target_file, inspect_path, paths_refer_to_same_location,
+    };
 }
 
 /// Deprecated compatibility alias for installed application helpers.

@@ -9,6 +9,7 @@ use crate::models::install::engine::{
 };
 use crate::models::install::installed::InstalledPackage;
 use crate::models::msi_inventory::records::MsiInventorySnapshot;
+use crate::windows_dep::fs::paths_refer_to_same_location;
 use crate::windows_dep::installed::read_uninstall_registry_value;
 use crate::windows_dep::packages::msi_scan_inventory;
 
@@ -148,7 +149,7 @@ fn resolve_install_dir(
         Some(install_location) => {
             let actual_install_dir = PathBuf::from(&install_location);
 
-            if !same_install_dir(&actual_install_dir, requested_install_dir) {
+            if !paths_refer_to_same_location(&actual_install_dir, requested_install_dir) {
                 warn!(
                     package = package_name,
                     product_code = %snapshot.receipt.product_code,
@@ -191,18 +192,4 @@ fn resolve_install_dir(
             requested_install_dir.to_path_buf()
         }
     }
-}
-
-fn same_install_dir(left: &Path, right: &Path) -> bool {
-    match (fs::canonicalize(left), fs::canonicalize(right)) {
-        (Ok(left), Ok(right)) => left == right,
-        _ => normalize_install_dir_text(left) == normalize_install_dir_text(right),
-    }
-}
-
-fn normalize_install_dir_text(path: &Path) -> String {
-    path.to_string_lossy()
-        .replace('/', "\\")
-        .trim_end_matches('\\')
-        .to_ascii_lowercase()
 }
