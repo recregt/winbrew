@@ -181,90 +181,123 @@ pub fn run<O: InstallObserver>(
 
     let client = download::build_client()?;
 
-    let (engine_receipt, legacy_checksum_algorithms) =
-        match (|| -> anyhow::Result<(EngineInstallReceipt, Vec<HashAlgorithm>)> {
-            let legacy_checksum_algorithms = download::download_installer(
-                &client,
-                &target.installer,
-                &target.download_path,
-                ignore_checksum_security,
-                |total_bytes| observer.borrow_mut().on_start(total_bytes),
-                |downloaded_bytes| observer.borrow_mut().on_progress(downloaded_bytes),
-            )?;
+    let (engine_receipt, legacy_checksum_algorithms) = match download_and_execute_engine(
+        &client,
+        &target,
+        &conn,
+        ignore_checksum_security,
+        &observer,
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            let install_error: InstallError = err.into();
 
-            let resolved_kind =
-                engines::probe_installer_from_download(&target.installer, &target.download_path)?;
-            let mut resolved_installer = target.installer.clone();
-            resolved_installer.kind = resolved_kind;
-
-            let engine = engines::resolve_engine_for_installer(&resolved_installer)?;
-            let deployment_kind = engines::resolve_deployment_kind(&resolved_installer);
-
-            if resolved_kind != target.installer.kind
-                || engine != target.manifest_engine
-                || deployment_kind != target.manifest_deployment_kind
-            {
-                state::update_installing_identity(
-                    &conn,
-                    &target.package.name,
-                    resolved_kind,
-                    deployment_kind,
-                    engine,
-                )?;
-            }
-
-            observer
-                .borrow_mut()
-                .on_install_start(&format!("Installing {}...", target.package.name));
-            let _install_phase_guard = InstallPhaseGuard::new(&observer);
-
-            let engine_receipt = flow::execute_engine_install(
-                engine,
-                &resolved_installer,
-                &target.download_path,
-                &target.install_dir,
-                &target.package.name,
-            )?;
-
-            Ok((engine_receipt, legacy_checksum_algorithms))
-        })() {
-            Ok(result) => result,
-            Err(err) => {
-                let install_error: InstallError = err.into();
-
-                match install_error.failure_class() {
-                    InstallFailureClass::Cancelled => {
-                        flow::rollback_cancelled_install(
-                            &conn,
-                            &target.package.name,
-                            &target.install_dir,
-                        );
-                    }
-                    _ => {
-                        flow::rollback_failed_install(
-                            &conn,
-                            &target.package.name,
-                            &target.install_dir,
-                        );
-                    }
+            match install_error.failure_class() {
+                InstallFailureClass::Cancelled => {
+                    flow::rollback_cancelled_install(
+                        &conn,
+                        &target.package.name,
+                        &target.install_dir,
+                    );
                 }
-
-                return Err(install_error);
+                _ => {
+                    flow::rollback_failed_install(&conn, &target.package.name, &target.install_dir);
+                }
             }
-        };
+
+            return Err(install_error);
+        }
+    };
 
     if cancel::is_cancelled() {
         flow::rollback_cancelled_install(&conn, &target.package.name, &target.install_dir);
         return Err(cancel::CancellationError.into());
     }
 
-    // The recovery journal is written (and durably fsynced) from inside this
-    // transaction, before it commits -- see commit_install_with_journal. That
-    // makes it impossible for a crash to leave a package visible in SQLite
-    // with no journal at all: a journal-write failure here aborts the whole
-    // transaction just like any other commit-time failure below.
-    if let Err(err) = database::commit_install_with_journal(
+    commit_install(
+        ctx,
         &mut conn,
+        &target,
+        engine_receipt,
+        legacy_checksum_algorithms,
+    )
+}
+
+/// Download the installer, probe/resolve the engine to use, and run it.
+///
+/// Extracted from [`run`] so the download-and-execute phase reads as one
+/// named step. On failure, the caller is responsible for rolling back the
+/// database/filesystem state this phase may have partially advanced.
+fn download_and_execute_engine<'a, O: InstallObserver>(
+    client: &crate::core::network::Client,
+    target: &ResolvedInstallTarget,
+    conn: &database::DbConnection,
+    ignore_checksum_security: bool,
+    observer: &'a RefCell<&'a mut O>,
+) -> anyhow::Result<(EngineInstallReceipt, Vec<HashAlgorithm>)> {
+    let legacy_checksum_algorithms = download::download_installer(
+        client,
+        &target.installer,
+        &target.download_path,
+        ignore_checksum_security,
+        |total_bytes| observer.borrow_mut().on_start(total_bytes),
+        |downloaded_bytes| observer.borrow_mut().on_progress(downloaded_bytes),
+    )?;
+
+    let resolved_kind =
+        engines::probe_installer_from_download(&target.installer, &target.download_path)?;
+    let mut resolved_installer = target.installer.clone();
+    resolved_installer.kind = resolved_kind;
+
+    let engine = engines::resolve_engine_for_installer(&resolved_installer)?;
+    let deployment_kind = engines::resolve_deployment_kind(&resolved_installer);
+
+    if resolved_kind != target.installer.kind
+        || engine != target.manifest_engine
+        || deployment_kind != target.manifest_deployment_kind
+    {
+        state::update_installing_identity(
+            conn,
+            &target.package.name,
+            resolved_kind,
+            deployment_kind,
+            engine,
+        )?;
+    }
+
+    observer
+        .borrow_mut()
+        .on_install_start(&format!("Installing {}...", target.package.name));
+    let _install_phase_guard = InstallPhaseGuard::new(observer);
+
+    let engine_receipt = flow::execute_engine_install(
+        engine,
+        &resolved_installer,
+        &target.download_path,
+        &target.install_dir,
+        &target.package.name,
+    )?;
+
+    Ok((engine_receipt, legacy_checksum_algorithms))
+}
+
+/// Commit the completed install: write the recovery journal and database
+/// row, publish command shims, and build the final [`InstallOutcome`].
+///
+/// Extracted from [`run`] so the commit phase reads as one named step. A
+/// journal-write failure here aborts the whole commit transaction just like
+/// any other commit-time failure, so a crash can never leave a package
+/// visible in SQLite with no journal at all -- see
+/// `database::commit_install_with_journal`.
+fn commit_install(
+    ctx: &crate::AppContext,
+    conn: &mut database::DbConnection,
+    target: &ResolvedInstallTarget,
+    engine_receipt: EngineInstallReceipt,
+    legacy_checksum_algorithms: Vec<HashAlgorithm>,
+) -> Result<InstallOutcome> {
+    if let Err(err) = database::commit_install_with_journal(
+        conn,
         &target.package.name,
         &engine_receipt,
         target.resolved_commands_json.as_deref(),
@@ -279,7 +312,7 @@ pub fn run<O: InstallObserver>(
             )
         },
     ) {
-        if let Err(mark_failed_err) = state::mark_failed(&conn, &target.package.name) {
+        if let Err(mark_failed_err) = state::mark_failed(conn, &target.package.name) {
             warn!(
                 package = target.package.name.as_str(),
                 error = %mark_failed_err,
@@ -307,8 +340,8 @@ pub fn run<O: InstallObserver>(
     }
 
     let install_result = InstallResult {
-        name: target.package.name,
-        version: target.package_version,
+        name: target.package.name.clone(),
+        version: target.package_version.clone(),
         install_dir: engine_receipt.install_dir.clone(),
     };
 
