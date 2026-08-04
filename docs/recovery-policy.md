@@ -84,8 +84,9 @@ Repair should be grouped by risk, not by individual line item.
 
 - Destructive actions are opt-in.
 - If the operation removes data, the default is always No.
-- The `-y` flag may pre-approve grouped low-risk actions, but it must never silently take destructive or high-risk actions -- not even indirectly through a standing config default. `core.default_yes` is equivalent to passing `-y` on every invocation and is bound by the exact same limit: it can pre-approve the Low Risk batch, but repair's Medium/High Risk and Destructive confirmations ignore it entirely.
-- The only way to pre-approve a destructive or high-risk action without an interactive prompt is an explicit, per-invocation `--force` (`winbrew repair --force`, `winbrew remove --force`). Because it must be typed on the command line each time, `--force` cannot be left standing in a config file the way `core.default_yes` can.
+- For `winbrew repair`, the `-y` flag may pre-approve the grouped Low Risk journal-replay batch, but it must never silently take destructive or high-risk actions -- not even indirectly through a standing config default. `core.default_yes` is equivalent to passing `-y` on every invocation and is bound by the exact same limit: it can pre-approve the Low Risk batch, but repair's Medium/High Risk and Destructive confirmations ignore it entirely.
+- The only way to pre-approve a repair destructive or high-risk action without an interactive prompt is an explicit, per-invocation `--force` (`winbrew repair --force`). Because it must be typed on the command line each time, `--force` cannot be left standing in a config file the way `core.default_yes` can.
+- `winbrew remove` is a single destructive action, not a batch, so it does not have repair's Low/Medium/High tiers. Its own `-y`/`--yes` flag is accepted as an explicit, per-invocation destructive override -- the same status `--force` has here, and for the same reason: it must be typed on the command line each time and cannot be left standing in a config file. `core.default_yes` is *not* equivalent to `remove -y`: the remove confirmation prompt (`confirm_protected`) never consults `core.default_yes`, so only `remove --yes`, `remove --force`, or an interactive confirmation can approve it.
 
 Example confirmation flow:
 
