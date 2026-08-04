@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -14,6 +13,8 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	_ "modernc.org/sqlite"
+
+	"infra/sqliteutil"
 )
 
 // errCatalogRowIDDrift means a package present in both the previous and
@@ -679,7 +680,7 @@ func installerUpdateStatement(record installerRecord) string {
 }
 
 func openSQLiteReadOnly(path string) (*sql.DB, error) {
-	dsn, err := sqliteDSN(path)
+	dsn, err := sqliteutil.DSN(path)
 	if err != nil {
 		return nil, err
 	}
@@ -690,21 +691,4 @@ func openSQLiteReadOnly(path string) (*sql.DB, error) {
 	}
 
 	return db, nil
-}
-
-func sqliteDSN(dbPath string) (string, error) {
-	absPath, err := filepath.Abs(dbPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve sqlite database path: %w", err)
-	}
-	uriPath := filepath.ToSlash(absPath)
-	if len(uriPath) >= 2 && uriPath[1] == ':' {
-		uriPath = "/" + uriPath
-	}
-
-	return (&url.URL{
-		Scheme:   "file",
-		Path:     uriPath,
-		RawQuery: "mode=ro",
-	}).String(), nil
 }
