@@ -140,6 +140,33 @@ fn collect_shortcuts(snapshot: &MsiInventorySnapshot) -> Vec<String> {
     shortcuts
 }
 
+/// Directories that must never become a package's tracked install root, even
+/// when an MSI's registry-published `InstallLocation` points at one: a drive
+/// root, the Windows directory itself, or anything containing/contained by
+/// it. Accepting one of these would let a later `remove` recurse into it.
+fn is_unsafe_install_relocation_target(path: &Path) -> bool {
+    let windows_dir = std::env::var_os("SystemRoot")
+        .or_else(|| std::env::var_os("windir"))
+        .map(PathBuf::from);
+
+    is_unsafe_relative_to_windows_dir(path, windows_dir.as_deref())
+}
+
+fn is_unsafe_relative_to_windows_dir(path: &Path, windows_dir: Option<&Path>) -> bool {
+    if path.parent().is_none() {
+        return true;
+    }
+
+    match windows_dir {
+        Some(windows_dir) => {
+            paths_refer_to_same_location(path, windows_dir)
+                || path.starts_with(windows_dir)
+                || windows_dir.starts_with(path)
+        }
+        None => false,
+    }
+}
+
 fn resolve_install_dir(
     snapshot: &MsiInventorySnapshot,
     requested_install_dir: &Path,
@@ -148,6 +175,19 @@ fn resolve_install_dir(
     match read_uninstall_registry_value(&snapshot.receipt.product_code, INSTALL_LOCATION_VALUE) {
         Some(install_location) => {
             let actual_install_dir = PathBuf::from(&install_location);
+
+            if is_unsafe_install_relocation_target(&actual_install_dir) {
+                warn!(
+                    package = package_name,
+                    product_code = %snapshot.receipt.product_code,
+                    requested_install_dir = %requested_install_dir.display(),
+                    registry_install_location = %install_location,
+                    "MSI InstallLocation points at a sensitive system directory; \
+                     ignoring it and using the requested install directory instead"
+                );
+
+                return requested_install_dir.to_path_buf();
+            }
 
             if !paths_refer_to_same_location(&actual_install_dir, requested_install_dir) {
                 warn!(
@@ -191,5 +231,58 @@ fn resolve_install_dir(
 
             requested_install_dir.to_path_buf()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_drive_root() {
+        assert!(is_unsafe_relative_to_windows_dir(
+            Path::new(r"C:\"),
+            Some(Path::new(r"C:\Windows"))
+        ));
+    }
+
+    #[test]
+    fn rejects_the_windows_directory_itself() {
+        assert!(is_unsafe_relative_to_windows_dir(
+            Path::new(r"C:\Windows"),
+            Some(Path::new(r"C:\Windows"))
+        ));
+    }
+
+    #[test]
+    fn rejects_a_directory_inside_windows() {
+        assert!(is_unsafe_relative_to_windows_dir(
+            Path::new(r"C:\Windows\System32"),
+            Some(Path::new(r"C:\Windows"))
+        ));
+    }
+
+    #[test]
+    fn rejects_an_ancestor_that_contains_windows() {
+        assert!(is_unsafe_relative_to_windows_dir(
+            Path::new(r"C:\"),
+            Some(Path::new(r"C:\Windows\System32"))
+        ));
+    }
+
+    #[test]
+    fn accepts_an_ordinary_install_dir() {
+        assert!(!is_unsafe_relative_to_windows_dir(
+            Path::new(r"C:\winbrew\apps\Contoso.App"),
+            Some(Path::new(r"C:\Windows"))
+        ));
+    }
+
+    #[test]
+    fn accepts_anything_when_windows_dir_is_unknown() {
+        assert!(!is_unsafe_relative_to_windows_dir(
+            Path::new(r"C:\winbrew\apps\Contoso.App"),
+            None
+        ));
     }
 }
