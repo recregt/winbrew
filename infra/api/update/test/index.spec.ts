@@ -69,6 +69,16 @@ describe('update worker', () => {
 		expect(await response.json()).toEqual({ error: 'not found' });
 	});
 
+	it('returns 405 with an Allow header for non-GET methods', async () => {
+		const response = await SELF.fetch('https://api.winbrew.dev/v1/update', {
+			method: 'POST',
+		});
+
+		expect(response.status).toBe(405);
+		expect(response.headers.get('Allow')).toBe('GET');
+		expect(await response.json()).toEqual({ error: 'method not allowed' });
+	});
+
 	it('returns the current state without downloading when the client is current', async () => {
 		await seedPlan({
 			currentHash: 'sha256:current',
