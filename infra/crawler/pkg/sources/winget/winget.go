@@ -69,7 +69,7 @@ func (s *Source) DownloadSourceDB(ctx context.Context, dst string) error {
 
 	msixPath := filepath.Join(s.cacheDir, "winget-source.msix")
 
-	if err := s.download(ctx, sourceURL, msixPath); err != nil {
+	if err := s.download(ctx, sourceURL, msixPath, maxDownloadSize); err != nil {
 		return fmt.Errorf("failed to download winget source: %w", err)
 	}
 
@@ -82,7 +82,7 @@ func (s *Source) DownloadSourceDB(ctx context.Context, dst string) error {
 	return nil
 }
 
-func (s *Source) download(ctx context.Context, url, dst string) error {
+func (s *Source) download(ctx context.Context, url, dst string, maxSize int64) error {
 	slog.Debug("starting winget download", "url", url, "dst", dst)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -136,12 +136,12 @@ func (s *Source) download(ctx context.Context, url, dst string) error {
 		body = &progressReader{url: url, total: resp.ContentLength, reader: resp.Body}
 	}
 
-	n, err := io.CopyBuffer(tempFile, io.LimitReader(body, maxDownloadSize+1), buf)
+	n, err := io.CopyBuffer(tempFile, io.LimitReader(body, maxSize+1), buf)
 	if err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
-	if n > maxDownloadSize {
-		return fmt.Errorf("download exceeds %d bytes", maxDownloadSize)
+	if n > maxSize {
+		return fmt.Errorf("download exceeds %d bytes", maxSize)
 	}
 
 	if err := tempFile.Close(); err != nil {
