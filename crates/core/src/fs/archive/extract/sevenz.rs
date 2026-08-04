@@ -220,7 +220,7 @@ thread_local! {
 /// `WINBREW_PATHS_ROOT`, the persisted `[paths].root` config value, and the
 /// `%LOCALAPPDATA%` default, in that order) before archive extraction runs
 /// several layers below it. This guard hands that already-resolved root
-/// down to [`extract_sevenz`]'s runtime lookup directly, rather than the
+/// down to the crate's runtime lookup directly, rather than the
 /// caller re-exporting it through the process-wide `WINBREW_PATHS_ROOT`
 /// environment variable -- which would only work by coincidence (it does
 /// not account for a root resolved from the config file) and would race
