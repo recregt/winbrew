@@ -131,7 +131,6 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 		}
 	}()
 
-	enc := json.NewEncoder(writer)
 	indexStart := time.Now()
 	rows, err := readWingetIndexRows(ctx, dbPath)
 	if err != nil {
@@ -143,13 +142,32 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 		return nil
 	}
 
+	results, err := s.fetchPackageSnapshotsConcurrently(ctx, rows, maxAttempts, backoff)
+	if err != nil {
+		return err
+	}
+
+	enc := json.NewEncoder(writer)
+	written, skipped, err := encodeWingetResults(enc, results)
+	if err != nil {
+		return err
+	}
+
+	slog.Info("winget package resolution complete", "db_path", dbPath, "packages", len(rows), "written", written, "skipped", skipped, "elapsed", time.Since(start))
+
+	return nil
+}
+
+// fetchPackageSnapshotsConcurrently fans out manifest fetches across a
+// bounded worker pool and returns one result per row, in row order.
+func (s *Source) fetchPackageSnapshotsConcurrently(ctx context.Context, rows []wingetIndexRow, maxAttempts int, backoff time.Duration) ([]wingetWriteResult, error) {
 	results := make([]wingetWriteResult, len(rows))
 	jobs := make(chan int)
 	workerCount := 8
 	if len(rows) < workerCount {
 		workerCount = len(rows)
 	}
-	slog.Info("winget manifest fanout started", "db_path", dbPath, "packages", len(rows), "workers", workerCount)
+	slog.Info("winget manifest fanout started", "packages", len(rows), "workers", workerCount)
 
 	var wg sync.WaitGroup
 	wg.Add(workerCount)
@@ -180,7 +198,7 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 		case <-ctx.Done():
 			close(jobs)
 			wg.Wait()
-			return ctx.Err()
+			return nil, ctx.Err()
 		case jobs <- idx:
 		}
 	}
@@ -188,11 +206,16 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 	wg.Wait()
 
 	if err := ctx.Err(); err != nil {
-		return err
+		return nil, err
 	}
 
-	written := 0
-	skipped := 0
+	return results, nil
+}
+
+// encodeWingetResults writes successful results as JSONL and summarizes
+// skipped ones by failure reason. It has no network or worker-pool
+// dependency, so it can be unit tested directly against synthetic results.
+func encodeWingetResults(enc *json.Encoder, results []wingetWriteResult) (written, skipped int, err error) {
 	skipSummaries := make(map[string]*wingetPackageSkipSummary)
 
 	for _, result := range results {
@@ -221,7 +244,7 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 			Kind:          wingetEnvelopeKind,
 			Payload:       result.pkg,
 		}); err != nil {
-			return fmt.Errorf("failed to encode winget package %s: %w", result.pkg.ID, err)
+			return written, skipped, fmt.Errorf("failed to encode winget package %s: %w", result.pkg.ID, err)
 		}
 	}
 
@@ -237,9 +260,7 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 		}
 	}
 
-	slog.Info("winget package resolution complete", "db_path", dbPath, "packages", len(rows), "written", written, "skipped", skipped, "elapsed", time.Since(start))
-
-	return nil
+	return written, skipped, nil
 }
 
 func (s *Source) buildPackageSnapshot(ctx context.Context, row wingetIndexRow, maxAttempts int, backoff time.Duration) (wingetPackageSnapshot, error) {
