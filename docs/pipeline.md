@@ -223,6 +223,7 @@ Expected behavior:
 - [infra/crawler/README.md](../infra/crawler/README.md)
 - [infra/parser/README.md](../infra/parser/README.md)
 - [infra/publisher/README.md](../infra/publisher/README.md)
+- [infra/api/update/README.md](../infra/api/update/README.md) and [infra/api/update/src/update-worker.ts](../infra/api/update/src/update-worker.ts) for "the worker" referenced throughout this page.
 - [infra/crawler/pkg/sources/winget/winget.go](../infra/crawler/pkg/sources/winget/winget.go)
 - [infra/crawler/pkg/sources/scoop/scoop.go](../infra/crawler/pkg/sources/scoop/scoop.go)
 - [infra/parser/src/winget.rs](../infra/parser/src/winget.rs)
