@@ -239,16 +239,43 @@ where
     let mut normalized = BTreeMap::new();
 
     for command in commands {
-        let trimmed = command.as_ref().trim();
-        if trimmed.is_empty() {
+        let Some(sanitized) = sanitize_command_name(command.as_ref()) else {
             continue;
-        }
+        };
         normalized
-            .entry(trimmed.to_ascii_lowercase())
-            .or_insert_with(|| trimmed.to_string());
+            .entry(sanitized.to_ascii_lowercase())
+            .or_insert(sanitized);
     }
 
     normalized.into_values().collect()
+}
+
+/// Reduce a catalog- or bin-derived command string to a bare command name.
+///
+/// Every accepted command name eventually becomes a shim file name
+/// (`shims/<command>.cmd`, see `winbrew_app::operations::shims`), so this
+/// must not let a path-separator- or traversal-shaped catalog value escape
+/// the shim directory. Only the final path segment is kept, and segments
+/// that are empty, `.`/`..`, or contain a drive/stream marker are dropped
+/// entirely rather than passed through.
+fn sanitize_command_name(command: &str) -> Option<String> {
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let file_name = trimmed.rsplit(['/', '\\']).next().unwrap_or(trimmed).trim();
+
+    let is_unsafe = file_name.is_empty()
+        || file_name == "."
+        || file_name == ".."
+        || file_name.contains([':', '\0']);
+
+    if is_unsafe {
+        None
+    } else {
+        Some(file_name.to_string())
+    }
 }
 
 fn command_name_from_bin_entry(command: &str) -> Option<String> {
@@ -313,7 +340,7 @@ impl From<&CanonicalInstallerKey> for CanonicalFingerprintInstallerIdentity {
 mod tests {
     use super::{
         CommandSource, Confidence, ResolverResult, UnresolvedReason, VersionScope,
-        catalog_fingerprint, commands_from_bin, resolve_command_exposure,
+        catalog_fingerprint, commands_from_bin, parse_command_list, resolve_command_exposure,
     };
     use crate::catalog::package::{CanonicalInstallerKey, CatalogInstaller, CatalogPackage};
     use crate::package::PackageId;
@@ -481,6 +508,27 @@ mod tests {
         assert_eq!(
             commands_from_bin(r#"["jq.exe", "jq2.exe"]"#).expect("bin"),
             vec!["jq".to_string(), "jq2".to_string(),]
+        );
+    }
+
+    #[test]
+    fn strips_traversal_and_separators_from_catalog_commands() {
+        let commands = parse_command_list(Some(
+            r#"["safe", "..\\..\\AppData\\Roaming\\Startup\\evil", "C:\\Windows\\evil2", "..", "."]"#,
+        ))
+        .expect("commands should parse");
+
+        // Traversal/current-dir-only segments are dropped entirely; the rest
+        // are reduced to a bare basename with no separator, and a bare drive
+        // marker (`C:`) alone is rejected outright rather than passed through.
+        assert_eq!(
+            commands,
+            vec!["evil".to_string(), "evil2".to_string(), "safe".to_string()]
+        );
+        assert!(
+            parse_command_list(Some(r#"["C:"]"#))
+                .expect("commands should parse")
+                .is_empty()
         );
     }
 

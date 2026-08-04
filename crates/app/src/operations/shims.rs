@@ -95,8 +95,30 @@ pub fn remove_shim_files(shims_root: &Path, commands: &[String]) -> Result<usize
 }
 
 /// Return the on-disk path for a command shim under the managed `shims/` root.
+///
+/// `command_name` should already be sanitized by
+/// `winbrew_models::command_resolution` before it reaches here, but this is
+/// the single choke point every shim write and removal goes through, so it
+/// defensively re-derives a safe basename (e.g. for command names persisted
+/// to the database by an older build) instead of trusting the caller. A
+/// traversal- or separator-shaped name must never be allowed to resolve
+/// outside `shims_root`.
 pub fn command_shim_path(shims_root: &Path, command_name: &str) -> PathBuf {
-    shims_root.join(format!("{command_name}.cmd"))
+    let file_name = command_name
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(command_name)
+        .trim();
+
+    let safe_name =
+        if file_name.is_empty() || file_name == "." || file_name == ".." || file_name.contains(':')
+        {
+            "_invalid_command"
+        } else {
+            file_name
+        };
+
+    shims_root.join(format!("{safe_name}.cmd"))
 }
 
 fn write_command_shim(
@@ -484,5 +506,25 @@ mod tests {
         assert!(!git_lfs_shim.contains("--version"));
 
         Ok(())
+    }
+
+    #[test]
+    fn command_shim_path_stays_within_shims_root_for_malicious_names() {
+        let shims_root = Path::new("C:\\winbrew\\shims");
+
+        for malicious in [
+            "..\\..\\..\\Startup\\evil",
+            "../../etc/evil",
+            "..",
+            ".",
+            "C:\\Windows\\evil",
+        ] {
+            let resolved = command_shim_path(shims_root, malicious);
+            assert_eq!(
+                resolved.parent(),
+                Some(shims_root),
+                "command_shim_path({malicious:?}) escaped shims_root: {resolved:?}"
+            );
+        }
     }
 }
