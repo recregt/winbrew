@@ -193,10 +193,17 @@ mod tests {
     }
 
     #[test]
-    fn rejects_traversal_shaped_package_names() {
-        assert!(PackageName::parse("..\\..\\Users\\Public\\evil").is_err());
-        assert!(PackageName::parse("../../etc").is_err());
+    fn rejects_degenerate_package_names() {
         assert!(PackageName::parse("..").is_err());
-        assert!(PackageName::parse("C:\\Windows").is_err());
+        assert!(PackageName::parse(".").is_err());
+    }
+
+    #[test]
+    fn accepts_real_package_names_containing_slashes_and_colons() {
+        // `PackageName` is a search/reference key, not a filesystem path
+        // component -- a user should be able to search for a package whose
+        // real display name contains ordinary punctuation.
+        assert!(PackageName::parse("AMD Software: Cloud Edition").is_ok());
+        assert!(PackageName::parse("ACS CCID PC/SC Driver").is_ok());
     }
 }

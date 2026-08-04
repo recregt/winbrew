@@ -20,21 +20,25 @@ pub fn ensure_non_empty(field: &'static str, value: &str) -> Result<(), ModelErr
     }
 }
 
-/// Reject values that cannot be safely used as a single filesystem path
-/// component (a directory or file name joined onto a managed root).
+/// Reject values that can never be legitimate identity/display text: NUL
+/// bytes, or a value that is *exactly* `.` or `..` after trimming.
 ///
-/// This rejects path separators, drive/stream markers, NUL, and the `.`/`..`
-/// traversal segments. It does not reject arbitrary leading dots (e.g.
-/// `.NET Desktop Runtime` is a real package name), only a component that is
-/// *exactly* `.` or `..`, since those are the only segments that change which
-/// directory a join resolves to.
+/// This is intentionally narrow. Fields like a catalog package's display
+/// `name` routinely contain characters such as `/` or `:` as ordinary text
+/// (for example `"AMD Software: Cloud Edition"` or
+/// `"Visual Studio / Code for Command Palette"` are real Winget package
+/// names), so this helper does not reject those -- it only catches values
+/// that could never be legitimate text at all. Callers that turn a value
+/// into a single filesystem path component (a directory or file name joined
+/// onto a managed root) are responsible for sanitizing separators and
+/// drive/stream markers themselves (see
+/// `winbrew_core::paths::ResolvedPaths::package_install_dir`), since that is
+/// a presentation/storage concern the shared model layer should not decide
+/// for every caller.
 pub fn ensure_safe_path_component(field: &'static str, value: &str) -> Result<(), ModelError> {
     let trimmed = value.trim();
 
-    let is_unsafe = trimmed.is_empty()
-        || trimmed == "."
-        || trimmed == ".."
-        || trimmed.contains(['/', '\\', ':', '\0']);
+    let is_unsafe = trimmed.is_empty() || trimmed == "." || trimmed == ".." || value.contains('\0');
 
     if is_unsafe {
         Err(ModelError::invalid_contract(
