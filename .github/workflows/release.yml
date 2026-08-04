@@ -12,13 +12,22 @@ jobs:
   build-and-release:
     name: Build and Release
     runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     env:
       WINBREW_EXE: .\target\x86_64-pc-windows-msvc\release\winbrew.exe
       CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
       RELEASE_TAG: ${{ github.ref_name }}
+      # Job-scoped, not step-scoped: GitHub Actions only exposes the
+      # `secrets` context to a step's own `env`/`with`/`run`, not to its
+      # `if:` condition (only `env`, `github`, `vars`, etc. are available
+      # there) -- so the "skip signing when unconfigured" gate below needs
+      # these as job-level env to check via `env.*`.
       WINBREW_SIGNING_PFX_BASE64: ${{ secrets.WINBREW_SIGNING_PFX_BASE64 }}
       WINBREW_SIGNING_PFX_PASSWORD: ${{ secrets.WINBREW_SIGNING_PFX_PASSWORD }}
-      WINBREW_SIGNING_TIMESTAMP_URL: ${{ vars.WINBREW_SIGNING_TIMESTAMP_URL || 'http://timestamp.digicert.com' }}
 
     steps:
       - name: Checkout
@@ -43,6 +52,8 @@ jobs:
       - name: Sign Release Binary
         if: env.WINBREW_SIGNING_PFX_BASE64 != '' && env.WINBREW_SIGNING_PFX_PASSWORD != ''
         shell: pwsh
+        env:
+          WINBREW_SIGNING_TIMESTAMP_URL: ${{ vars.WINBREW_SIGNING_TIMESTAMP_URL || 'http://timestamp.digicert.com' }}
         run: |
           $ErrorActionPreference = 'Stop'
 
@@ -96,6 +107,13 @@ jobs:
           $archiveName = "winbrew-$env:RELEASE_TAG-windows-x86_64.zip"
           $hash = Get-FileHash $archiveName -Algorithm SHA256
           $hash.Hash | Out-File -FilePath ("{0}.sha256" -f $archiveName)
+
+      - name: Generate build provenance attestation
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: |
+            winbrew-${{ env.RELEASE_TAG }}-windows-x86_64.zip
+            winbrew-${{ env.RELEASE_TAG }}-windows-x86_64.zip.sha256
 
       - name: Generate changelog
         id: changelog
