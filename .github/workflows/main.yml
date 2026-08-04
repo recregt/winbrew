@@ -37,7 +37,7 @@ jobs:
           jq --exit-status 'all(.result == "success")' <<< '${{ toJson(needs) }}'
 
   go:
-    name: Go › ${{ matrix.module == 'crawler' && 'Crawler' || 'Publisher' }}
+    name: Go › ${{ matrix.module }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -45,6 +45,7 @@ jobs:
         module:
           - crawler
           - publisher
+          - sqliteutil
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,7 +55,9 @@ jobs:
         with:
           go-version-file: infra/${{ matrix.module }}/go.mod
           cache: ${{ github.event_name == 'push' }}
-          cache-dependency-path: infra/${{ matrix.module }}/go.sum
+          cache-dependency-path: |
+            infra/${{ matrix.module }}/go.sum
+            infra/go.work.sum
 
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0

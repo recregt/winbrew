@@ -72,6 +72,11 @@ tasks:
     cmds:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check/go.ps1 -Module publisher
 
+  ci:go:sqliteutil:
+    desc: Run Go CI checks for the shared sqliteutil module
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check/go.ps1 -Module sqliteutil
+
   ci:parser:
     desc: Run Rust CI checks for the catalog parser
     cmds:
@@ -92,6 +97,7 @@ tasks:
     cmds:
       - task: ci:go:crawler
       - task: ci:go:publisher
+      - task: ci:go:sqliteutil
       - task: ci:parser
       - task: ci:docs
       - task: ci:rust
