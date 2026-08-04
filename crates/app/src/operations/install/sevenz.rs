@@ -1,12 +1,10 @@
 use anyhow::{Context, Result};
 use std::env;
-use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::core::env::WINBREW_PATHS_ROOT;
-use crate::core::fs::{cleanup_path, replace_directory};
+use crate::core::fs::{RuntimeRootOverride, cleanup_path, replace_directory};
 use crate::core::hash::{hash_file, verify_hash};
 use crate::core::network::{build_client, download_url_to_temp_file, is_7z_path};
 use crate::core::paths::system_sevenz_binary_path;
@@ -48,8 +46,8 @@ pub(crate) fn sevenz_version_manifest_path(runtime_root: &Path) -> PathBuf {
     sevenz_runtime_dir_from_runtime_root(runtime_root).join(SEVENZ_VERSION_FILENAME)
 }
 
-pub(crate) fn runtime_root_env_guard(root: &Path) -> RuntimeRootEnvGuard {
-    RuntimeRootEnvGuard::set(WINBREW_PATHS_ROOT, root)
+pub(crate) fn runtime_root_env_guard(root: &Path) -> RuntimeRootOverride {
+    RuntimeRootOverride::set(root)
 }
 
 pub(crate) fn ensure_runtime(
@@ -253,36 +251,6 @@ impl Drop for BootstrapArtifacts {
             let _ = cleanup_path(&self.staging_dir);
             let _ = fs::remove_file(&self.sevenzr_path);
             let _ = fs::remove_file(&self.installer_path);
-        }
-    }
-}
-
-pub(crate) struct RuntimeRootEnvGuard {
-    key: &'static str,
-    previous: Option<OsString>,
-}
-
-impl RuntimeRootEnvGuard {
-    fn set(key: &'static str, value: &Path) -> Self {
-        let previous = env::var_os(key);
-        unsafe {
-            env::set_var(key, value);
-        }
-
-        Self { key, previous }
-    }
-}
-
-impl Drop for RuntimeRootEnvGuard {
-    fn drop(&mut self) {
-        if let Some(previous) = self.previous.take() {
-            unsafe {
-                env::set_var(self.key, previous);
-            }
-        } else {
-            unsafe {
-                env::remove_var(self.key);
-            }
         }
     }
 }

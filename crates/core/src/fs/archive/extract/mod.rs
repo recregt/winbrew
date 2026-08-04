@@ -7,6 +7,8 @@ mod sevenz;
 mod tar;
 mod zip;
 
+pub use sevenz::RuntimeRootOverride;
+
 use super::ArchiveKind;
 use crate::fs::{FsError, Result};
 use std::path::Path;
