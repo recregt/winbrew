@@ -311,7 +311,7 @@ func (s *Source) fetchManifestBytes(ctx context.Context, packageIdentifier, pack
 	}
 
 	return retry.DoResult(ctx, maxAttempts, backoff, func() ([]byte, error) {
-		if err := s.download(ctx, url, cachePath); err != nil {
+		if err := s.download(ctx, url, cachePath, wingetManifestMaxSize); err != nil {
 			return nil, err
 		}
 
@@ -518,9 +518,15 @@ func wingetManifestPathParts(packageIdentifier, packageVersion, fileName string)
 
 	segments := strings.Split(packageIdentifier, ".")
 	for _, segment := range segments {
-		if strings.TrimSpace(segment) == "" {
-			return nil, fmt.Errorf("package identifier contains an empty segment: %s", packageIdentifier)
+		if err := validateManifestPathSegment(segment); err != nil {
+			return nil, fmt.Errorf("package identifier segment %q: %w", segment, err)
 		}
+	}
+	if err := validateManifestPathSegment(packageVersion); err != nil {
+		return nil, fmt.Errorf("package version %q: %w", packageVersion, err)
+	}
+	if err := validateManifestPathSegment(fileName); err != nil {
+		return nil, fmt.Errorf("manifest file name %q: %w", fileName, err)
 	}
 
 	partition := strings.ToLower(string([]rune(segments[0])[0]))
@@ -529,6 +535,26 @@ func wingetManifestPathParts(packageIdentifier, packageVersion, fileName string)
 	parts = append(parts, segments...)
 	parts = append(parts, packageVersion, fileName)
 	return parts, nil
+}
+
+// validateManifestPathSegment rejects a value that cannot safely become a
+// single path component of the manifest cache path or request URL.
+// packageIdentifier, packageVersion, and file names derived from manifest
+// content (e.g. DefaultLocale, used to build a locale manifest file name)
+// all ultimately come from the community-editable winget-pkgs repository, so
+// none of them can be trusted to already be a bare path segment.
+func validateManifestPathSegment(segment string) error {
+	trimmed := strings.TrimSpace(segment)
+	if trimmed == "" {
+		return fmt.Errorf("segment cannot be empty")
+	}
+	if trimmed == "." || trimmed == ".." {
+		return fmt.Errorf("segment cannot be %q", trimmed)
+	}
+	if strings.ContainsAny(trimmed, "/\\") {
+		return fmt.Errorf("segment cannot contain a path separator")
+	}
+	return nil
 }
 
 func wingetManifestURL(packageIdentifier, packageVersion, fileName string) (string, error) {

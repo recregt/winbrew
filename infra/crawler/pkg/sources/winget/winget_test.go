@@ -39,6 +39,54 @@ func TestWingetManifestPathHelpers(t *testing.T) {
 	}
 }
 
+func TestWingetManifestPathHelpersRejectPathTraversal(t *testing.T) {
+	t.Parallel()
+
+	cacheDir := t.TempDir()
+
+	cases := []struct {
+		name              string
+		packageIdentifier string
+		packageVersion    string
+		fileName          string
+	}{
+		{
+			name:              "traversal in package identifier segment",
+			packageIdentifier: "Microsoft..\\..\\..\\evil",
+			packageVersion:    "1.0.0",
+			fileName:          "Microsoft.evil.yaml",
+		},
+		{
+			name:              "traversal in package version",
+			packageIdentifier: "Microsoft.WindowsTerminal",
+			packageVersion:    "../../../../evil",
+			fileName:          "Microsoft.WindowsTerminal.yaml",
+		},
+		{
+			name:              "traversal in manifest file name",
+			packageIdentifier: "Microsoft.WindowsTerminal",
+			packageVersion:    "1.9.1942.0",
+			// DefaultLocale-derived file names come from community-editable
+			// manifest content, not just the identifier/version from index.db.
+			fileName: "..\\..\\..\\Startup\\evil.yaml",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := wingetManifestPathParts(tc.packageIdentifier, tc.packageVersion, tc.fileName); err == nil {
+				t.Fatalf("wingetManifestPathParts(%q, %q, %q) error = nil, want traversal rejection",
+					tc.packageIdentifier, tc.packageVersion, tc.fileName)
+			}
+
+			if _, err := wingetManifestCachePath(cacheDir, tc.packageIdentifier, tc.packageVersion, tc.fileName); err == nil {
+				t.Fatalf("wingetManifestCachePath(%q, %q, %q) error = nil, want traversal rejection",
+					tc.packageIdentifier, tc.packageVersion, tc.fileName)
+			}
+		})
+	}
+}
+
 func TestClassifyWingetPackageSkip(t *testing.T) {
 	t.Parallel()
 
@@ -89,7 +137,7 @@ func TestDownloadUsesETagCache(t *testing.T) {
 	}
 
 	dst := filepath.Join(dir, "winget-source.msix")
-	if err := src.download(context.Background(), server.URL, dst); err != nil {
+	if err := src.download(context.Background(), server.URL, dst, maxDownloadSize); err != nil {
 		t.Fatalf("download(first) error = %v", err)
 	}
 
@@ -109,7 +157,7 @@ func TestDownloadUsesETagCache(t *testing.T) {
 		t.Fatalf("etag file = %q, want %q", got, want)
 	}
 
-	if err := src.download(context.Background(), server.URL, dst); err != nil {
+	if err := src.download(context.Background(), server.URL, dst, maxDownloadSize); err != nil {
 		t.Fatalf("download(second) error = %v", err)
 	}
 
@@ -136,6 +184,38 @@ func TestDownloadUsesETagCache(t *testing.T) {
 	}
 	if got, want := gotHeaders[1], etagValue; got != want {
 		t.Fatalf("second request If-None-Match = %q, want %q", got, want)
+	}
+}
+
+func TestDownloadEnforcesMaxSizeInFlight(t *testing.T) {
+	t.Parallel()
+
+	const maxSize = 8
+	oversized := strings.Repeat("x", maxSize*4)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, oversized)
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	src, err := New(server.Client(), dir)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	dst := filepath.Join(dir, "capped.bin")
+	err = src.download(context.Background(), server.URL, dst, maxSize)
+	if err == nil {
+		t.Fatal("download() error = nil, want size-limit error")
+	}
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("download() error = %v, want size-limit error", err)
+	}
+
+	if _, statErr := os.Stat(dst); !os.IsNotExist(statErr) {
+		t.Fatalf("destination file should not exist after a rejected oversized download, stat err = %v", statErr)
 	}
 }
 
