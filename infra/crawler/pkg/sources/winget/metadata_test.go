@@ -3,10 +3,6 @@ package winget
 import (
 	"context"
 	"database/sql"
-	"net/url"
-	"path/filepath"
-	"runtime"
-	"strings"
 	"testing"
 )
 
@@ -102,35 +98,5 @@ func TestReadWingetIndexRowsPrefersLatestVersion(t *testing.T) {
 	}
 	if got, want := rows[0].manifestRowID, int64(2); got != want {
 		t.Fatalf("row manifest rowid = %d, want %d", got, want)
-	}
-}
-
-func TestSQLiteDSNPrefixesWindowsDrivePath(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "winget_source.db")
-	if runtime.GOOS == "windows" {
-		dbPath = `C:\Users\recregt\AppData\Local\winbrew\winget\winget_source.db`
-	}
-
-	dsn, err := sqliteDSN(dbPath)
-	if err != nil {
-		t.Fatalf("sqliteDSN() error = %v", err)
-	}
-
-	absPath, err := filepath.Abs(dbPath)
-	if err != nil {
-		t.Fatalf("filepath.Abs() error = %v", err)
-	}
-	wantPath := filepath.ToSlash(absPath)
-	if runtime.GOOS == "windows" && len(wantPath) >= 2 && wantPath[1] == ':' {
-		wantPath = "/" + wantPath
-	}
-
-	if got, want := dsn, (&url.URL{Scheme: "file", Path: wantPath, RawQuery: "mode=ro"}).String(); got != want {
-		t.Fatalf("sqliteDSN() = %q, want %q", got, want)
-	}
-	if runtime.GOOS == "windows" && !strings.HasPrefix(dsn, "file:///C:/") {
-		t.Fatalf("sqliteDSN() = %q, want Windows drive path to keep the leading slash", dsn)
 	}
 }

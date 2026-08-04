@@ -1,4 +1,7 @@
 go 1.26.5
 
 use ./crawler
+
 use ./publisher
+
+use ./sqliteutil

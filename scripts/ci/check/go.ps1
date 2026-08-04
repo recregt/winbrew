@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('crawler', 'publisher')]
+    [ValidateSet('crawler', 'publisher', 'sqliteutil')]
     [string]$Module
 )
 
