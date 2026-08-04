@@ -43,6 +43,7 @@ Use it when you want to answer one of these questions:
 - [infra/crawler](../infra/crawler/README.md) for source crawling.
 - [infra/parser](../infra/parser/README.md) for catalog bundle parsing.
 - [infra/publisher](../infra/publisher/README.md) for bundle publishing.
+- [infra/api/update](../infra/api/update/README.md) for the `api.winbrew.dev/v1/update` selection worker referenced throughout this page and [pipeline.md](pipeline.md).
 
 ## Validation
 

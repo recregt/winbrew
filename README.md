@@ -74,7 +74,7 @@ Package identity follows the pattern `<source>/<id>` — for example `winget/Git
 | --- | --- | --- |
 | MSI | Supported | Windows Installer packages routed through the MSI engine. |
 | MSIX / AppX | Supported | Delegates install and remove to the Windows package APIs. |
-| EXE family | Supported | Covers Exe, Inno, Nullsoft, WiX, and Burn. |
+| EXE family | Supported | Covers Exe, Inno, Nullsoft, and Burn. WiX installers route through the MSI engine. |
 | Portable | Supported | Copies raw payloads into the managed install root. |
 | ZIP | Supported | Archive-shaped payloads are unpacked before the final engine is selected. |
 | Font | Supported | Installs fonts through the Windows font path. |
@@ -86,14 +86,14 @@ Package identity follows the pattern `<source>/<id>` — for example `winget/Git
 
 The repository is split by responsibility.
 
-- `infra/` contains the Go crawler and publisher. They ingest Winget and Scoop, normalize catalog data, and publish the daily snapshot.
+- `infra/` contains the Go crawler and publisher, the Rust catalog parser (`infra/parser`), and the TypeScript Cloudflare Worker that serves the update-selection API (`infra/api/update`). Together they ingest Winget and Scoop, normalize catalog data, and publish the daily snapshot.
 - `crates/` contains the Rust runtime: models, database, core helpers, engines, app orchestration, CLI, UI, and Windows-only helpers.
 - `docs/` captures the contracts that should stay stable: engine ownership, recovery policy, managed paths, and workspace structure.
 
 A few details matter:
 
 - The catalog is the canonical offline artifact for search and update.
-- The refresh flow is API-driven through `https://api.winbrew.dev/v1/update`; the worker decides whether a client should stay current, apply patches, or download a full snapshot.
+- The refresh flow is API-driven through `https://api.winbrew.dev/v1/update`; the worker (`infra/api/update`) decides whether a client should stay current, apply patches, or download a full snapshot.
 - Repair depends on committed journals as the recovery trail, not on live disk state.
 - The engine layer keeps package-type routing data-driven so the app layer does not need a chain of hidden conditionals.
 
