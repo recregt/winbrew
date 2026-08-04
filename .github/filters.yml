@@ -1,0 +1,34 @@
+# Shared path-change filters for dorny/paths-filter, used by main.yml and
+# security.yml to skip language-specific jobs when nothing in that language
+# changed. Grouped at the whole-Cargo-workspace / whole-go.work level, not
+# per-crate or per-module: infra/parser depends on crates/models (and any
+# workspace member can in principle be affected by a Cargo.lock change from
+# another member), so a finer split would need to track the dependency
+# graph by hand and silently go stale as it evolves.
+
+rust:
+  - 'crates/**'
+  - 'infra/parser/**'
+  - 'Cargo.toml'
+  - 'Cargo.lock'
+  - 'rust-toolchain.toml'
+  - 'scripts/ci/check/rust.ps1'
+  - 'scripts/ci/check/rust-parser.ps1'
+  - 'scripts/ci/smoke.ps1'
+  - '.github/actions/setup-rust/**'
+
+go:
+  - 'infra/crawler/**'
+  - 'infra/publisher/**'
+  - 'infra/sqliteutil/**'
+  - 'infra/go.work'
+  - 'infra/go.work.sum'
+  - 'infra/golangci.yml'
+  - 'scripts/ci/check/go.ps1'
+  - '.github/actions/setup-go/**'
+
+# A change to CI config itself should re-validate everything it configures,
+# regardless of which language-specific filter would otherwise match.
+workflows:
+  - '.github/workflows/**'
+  - '.github/actions/**'
