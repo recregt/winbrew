@@ -45,6 +45,10 @@ jobs:
           install: false
           cache: true
           cache-dependency-path: infra/api/update/pnpm-lock.yaml
+          # Both paths are relative to GITHUB_WORKSPACE (the repo root), not
+          # to the job's `defaults.run.working-directory` -- that default
+          # only applies to `run:` steps, not to this action's own inputs.
+          package-json-file: infra/api/update/package.json
 
       - name: Install dependencies
         # --trust-lockfile: the committed lockfile is the reviewed, trusted
