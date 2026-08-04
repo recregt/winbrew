@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -208,7 +209,50 @@ fn verify_extracted_tree<P: PlatformAdapter>(
     Ok(())
 }
 
+thread_local! {
+    static RUNTIME_ROOT_OVERRIDE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+}
+
+/// Temporarily overrides the local 7z runtime root lookup for the current
+/// thread, restoring the previous value when the guard drops.
+///
+/// The install flow resolves the active managed root once (honoring
+/// `WINBREW_PATHS_ROOT`, the persisted `[paths].root` config value, and the
+/// `%LOCALAPPDATA%` default, in that order) before archive extraction runs
+/// several layers below it. This guard hands that already-resolved root
+/// down to [`extract_sevenz`]'s runtime lookup directly, rather than the
+/// caller re-exporting it through the process-wide `WINBREW_PATHS_ROOT`
+/// environment variable -- which would only work by coincidence (it does
+/// not account for a root resolved from the config file) and would race
+/// across threads if installs are ever run concurrently in the same
+/// process, since `std::env::set_var`/`remove_var` mutate global state with
+/// no synchronization.
+pub struct RuntimeRootOverride {
+    previous: Option<PathBuf>,
+}
+
+impl RuntimeRootOverride {
+    pub fn set(root: &Path) -> Self {
+        let previous =
+            RUNTIME_ROOT_OVERRIDE.with(|cell| cell.borrow_mut().replace(root.to_path_buf()));
+        Self { previous }
+    }
+}
+
+impl Drop for RuntimeRootOverride {
+    fn drop(&mut self) {
+        RUNTIME_ROOT_OVERRIDE.with(|cell| *cell.borrow_mut() = self.previous.take());
+    }
+}
+
 fn resolve_local_runtime_root() -> io::Result<PathBuf> {
+    if let Some(root) = RUNTIME_ROOT_OVERRIDE.with(|cell| cell.borrow().clone()) {
+        return Ok(root);
+    }
+
+    // Fallback for callers that reach this function without going through
+    // the install flow's RuntimeRootOverride guard (e.g. a future direct
+    // caller, or WINBREW_PATHS_ROOT set for genuinely external reasons).
     if let Some(runtime_root) = std::env::var_os(WINBREW_PATHS_ROOT) {
         return Ok(PathBuf::from(runtime_root));
     }
@@ -459,5 +503,43 @@ mod tests {
         let error = result.expect_err("overly deep output should be rejected");
         assert!(error.to_string().contains("too deep"));
         assert!(!destination_dir.exists());
+    }
+
+    #[test]
+    fn runtime_root_override_is_scoped_to_the_current_thread() {
+        // Each thread starts with no override, so it must fall back past the
+        // override lookup; setting one on this thread should not be visible
+        // from a different thread, and it must be restored on drop.
+        assert!(
+            RUNTIME_ROOT_OVERRIDE
+                .with(|cell| cell.borrow().clone())
+                .is_none()
+        );
+
+        let this_thread_root = PathBuf::from("C:/winbrew-this-thread");
+        let guard = RuntimeRootOverride::set(&this_thread_root);
+
+        assert_eq!(
+            RUNTIME_ROOT_OVERRIDE.with(|cell| cell.borrow().clone()),
+            Some(this_thread_root)
+        );
+
+        std::thread::spawn(|| {
+            assert!(
+                RUNTIME_ROOT_OVERRIDE
+                    .with(|cell| cell.borrow().clone())
+                    .is_none(),
+                "a different thread must not see this thread's override"
+            );
+        })
+        .join()
+        .expect("spawned thread should not panic");
+
+        drop(guard);
+        assert!(
+            RUNTIME_ROOT_OVERRIDE
+                .with(|cell| cell.borrow().clone())
+                .is_none()
+        );
     }
 }

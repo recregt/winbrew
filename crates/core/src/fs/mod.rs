@@ -45,7 +45,7 @@ pub use crate::paths::{
     sevenz_bin_path_from_runtime_root, sevenz_dll_path_from_runtime_root,
     sevenz_runtime_dir_from_runtime_root, system_sevenz_binary_path,
 };
-pub use archive::{ArchiveKind, extract_archive, extract_zip_archive};
+pub use archive::{ArchiveKind, RuntimeRootOverride, extract_archive, extract_zip_archive};
 pub use cleanup::cleanup_path;
 pub use error::{FsError, Result};
 pub use move_or_copy::{backup_path_for, replace_directory};
