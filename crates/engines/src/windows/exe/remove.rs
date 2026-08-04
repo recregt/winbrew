@@ -7,7 +7,7 @@ use crate::core::fs::cleanup_path;
 use crate::models::install::installed::InstalledPackage;
 
 use super::NATIVE_EXE_SUCCESS_EXIT_CODES;
-use super::switches::split_switches;
+use super::switches::split_uninstall_command;
 use super::validation::{validate_install_dir, validate_package_name};
 
 /// Remove a native executable package.
@@ -48,7 +48,7 @@ pub(crate) fn remove(package: &InstalledPackage) -> Result<()> {
 }
 
 fn run_uninstall_command(command: &str, package_name: &str) -> Result<()> {
-    let mut command_parts = split_switches(command)?;
+    let mut command_parts = split_uninstall_command(command)?;
 
     if command_parts.is_empty() {
         bail!("native executable uninstall command is empty for '{package_name}'");
