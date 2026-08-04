@@ -36,6 +36,20 @@ pub(super) fn validate_install_dir(path: &Path) -> Result<()> {
         bail!("install directory cannot be empty");
     }
 
+    // `package_install_dir` already sanitizes the package name before this
+    // path is built, so a `..` component here should be unreachable. This
+    // check is a second, independent guard against a bug upstream slipping
+    // one through, since this directory later feeds `remove_dir_all`.
+    if path
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        bail!(
+            "install directory must not contain '..' components: {}",
+            path.display()
+        );
+    }
+
     Ok(())
 }
 
