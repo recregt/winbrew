@@ -153,7 +153,9 @@ func (s *Source) download(ctx context.Context, url, dst string, maxSize int64) e
 	}
 
 	if etag := resp.Header.Get("ETag"); etag != "" {
-		_ = os.WriteFile(dst+".etag", []byte(etag), 0o644)
+		if err := os.WriteFile(dst+".etag", []byte(etag), 0o644); err != nil {
+			slog.Warn("failed to write etag cache file; next run will re-download in full", "dst", dst, "error", err)
+		}
 	}
 
 	slog.Debug("winget download stored", "url", url, "dst", dst, "bytes", n)
