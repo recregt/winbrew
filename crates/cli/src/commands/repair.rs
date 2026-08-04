@@ -192,7 +192,7 @@ fn run_orphan_cleanup_group<W: Write>(
         return Ok(0);
     }
 
-    let removed = ui.spinner(
+    let summary = ui.spinner(
         format!(
             "Removing {} orphan install director{}...",
             plan.orphan_paths.len(),
@@ -203,12 +203,33 @@ fn run_orphan_cleanup_group<W: Write>(
             }
         ),
         || repair::cleanup_orphan_install_dirs(&plan.orphan_paths),
-    )?;
+    );
+    let removed = summary.removed.len();
 
-    ui.success(format!(
-        "Removed {removed} orphan install director{}.",
-        if removed == 1 { "y" } else { "ies" }
-    ));
+    if removed > 0 {
+        ui.success(format!(
+            "Removed {removed} orphan install director{}.",
+            if removed == 1 { "y" } else { "ies" }
+        ));
+    }
+
+    for (path, err) in &summary.failed {
+        ui.warn(format!("Failed to remove {}: {err:#}", path.display()));
+    }
+
+    if !summary.failed.is_empty() {
+        return Err(anyhow::anyhow!(
+            "failed to remove {} of {} orphan install director{}",
+            summary.failed.len(),
+            plan.orphan_paths.len(),
+            if plan.orphan_paths.len() == 1 {
+                "y"
+            } else {
+                "ies"
+            }
+        ));
+    }
+
     Ok(removed)
 }
 
