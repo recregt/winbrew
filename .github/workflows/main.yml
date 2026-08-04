@@ -30,6 +30,7 @@ jobs:
     permissions:
       contents: none
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Conclusion
         run: |
@@ -39,6 +40,7 @@ jobs:
   go:
     name: Go › ${{ matrix.module }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -51,13 +53,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: ./.github/actions/setup-go
         with:
-          go-version-file: infra/${{ matrix.module }}/go.mod
+          module: ${{ matrix.module }}
           cache: ${{ github.event_name == 'push' }}
-          cache-dependency-path: |
-            infra/${{ matrix.module }}/go.sum
-            infra/go.work.sum
 
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
@@ -72,13 +71,14 @@ jobs:
   rust-parser:
     name: Rust › Catalog Parser
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
         with:
           save-if: ${{ github.event_name == 'push' }}
 
@@ -90,20 +90,14 @@ jobs:
     name: doc
     runs-on: windows-latest
     environment: production
-
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        uses: ./.github/actions/setup-rust
         with:
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
@@ -118,15 +112,16 @@ jobs:
           printf '%s\n' '/ /winbrew/ 301' '/index.html /winbrew/ 301' > target/doc/_redirects
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
         with:
-          apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy target/doc --project-name=winbrew --branch=main --commit-dirty=true
 
   spellcheck:
     name: Spell Check with Typos
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -138,16 +133,14 @@ jobs:
   rust:
     name: Rust
     runs-on: windows-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        uses: ./.github/actions/setup-rust
         with:
           save-if: ${{ github.event_name == 'push' }}
 

@@ -23,17 +23,6 @@ jobs:
     environment: production
     timeout-minutes: 180
 
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CATALOG_PUBLIC_BASE_URL: ${{ vars.CATALOG_PUBLIC_BASE_URL || 'https://cdn.winbrew.dev' }}
-      CATALOG_OBJECT_KEY: catalog/latest.db.zst
-      R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
-      R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME || 'winbrew-assets' }}
-      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || secrets.AWS_ACCESS_KEY_ID }}
-      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || secrets.AWS_SECRET_ACCESS_KEY }}
-      WINBREW_UPDATE_DB_NAME: ${{ vars.WINBREW_UPDATE_DB_NAME || 'winbrew-update' }}
-      WINBREW_UPDATE_DB_ID: ${{ secrets.WINBREW_UPDATE_DB_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,17 +57,12 @@ jobs:
             winbrew-catalog-db-${{ runner.os }}-
 
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: ./.github/actions/setup-go
         with:
-          go-version-file: infra/crawler/go.mod
-          cache: true
-          cache-dependency-path: infra/**/go.sum
+          module: crawler
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        uses: ./.github/actions/setup-rust
         with:
           save-if: true
 
@@ -140,6 +124,15 @@ jobs:
 
       - name: Publish catalog bundle to R2 and prepare update plans
         working-directory: infra/publisher
+        env:
+          CATALOG_PUBLIC_BASE_URL: ${{ vars.CATALOG_PUBLIC_BASE_URL || 'https://cdn.winbrew.dev' }}
+          CATALOG_OBJECT_KEY: catalog/latest.db.zst
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME || 'winbrew-assets' }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || secrets.AWS_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || secrets.AWS_SECRET_ACCESS_KEY }}
+          WINBREW_UPDATE_DB_NAME: ${{ vars.WINBREW_UPDATE_DB_NAME || 'winbrew-update' }}
+          WINBREW_UPDATE_DB_ID: ${{ secrets.WINBREW_UPDATE_DB_ID }}
         run: |
           set -euo pipefail
 
@@ -170,19 +163,19 @@ jobs:
 
       - name: Materialize release lineage to D1
         if: ${{ hashFiles('infra/publisher/.generated/release_materialization.sql') != '' }}
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
         with:
           apiToken: ${{ secrets.D1_ACCESS_TOKEN }}
-          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4"
           command: d1 execute DB --remote --config infra/publisher/.generated/wrangler.production.jsonc --file infra/publisher/.generated/release_materialization.sql --yes
 
       - name: Publish update plans to D1
         if: ${{ hashFiles('infra/publisher/.generated/update_plans.sql') != '' }}
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
         with:
           apiToken: ${{ secrets.D1_ACCESS_TOKEN }}
-          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4"
           command: d1 execute DB --remote --config infra/publisher/.generated/wrangler.production.jsonc --file infra/publisher/.generated/update_plans.sql --yes
 
