@@ -46,12 +46,13 @@ pub mod time;
 pub use cancel::{CancellationError, check, init_handler, is_cancelled};
 pub use env::{LOCALAPPDATA, WINBREW_PATHS_ROOT};
 pub use fs::{
-    ArchiveKind, FsError, Result as FsResult, atomic_write, atomic_write_toml_temp,
-    backup_path_for, cleanup_path, extract_archive, extract_zip_archive, finalize_temp_file,
-    replace_directory,
+    ArchiveKind, FsError, Result as FsResult, RuntimeRootOverride, atomic_write,
+    atomic_write_toml_temp, backup_path_for, cleanup_path, extract_archive, extract_zip_archive,
+    finalize_temp_file, replace_directory,
 };
 pub use hash::{
     HashError, Hasher, Result as HashResult, hash_algorithm, normalize_hash, verify_hash,
+    verify_hash_with_policy,
 };
 pub use network::{
     BoxError as NetworkBoxError, Client, DownloadError, Result as NetworkResult, build_client,
