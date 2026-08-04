@@ -180,7 +180,10 @@ pub enum JournalEntry {
 #[cfg(test)]
 mod tests {
     use super::package_journal_key;
-    use super::{FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader, JournalWriter};
+    use super::{
+        FileHash, HashAlgo, JournalEntry, JournalReadError, JournalReader, JournalReplayError,
+        JournalWriter,
+    };
     use crate::core::{ResolvedPaths, resolved_paths};
     use crate::models::install::installer::InstallerType;
     use std::fs;
@@ -229,7 +232,11 @@ mod tests {
             version: "1.0.0".to_string(),
             engine: "msi".to_string(),
             deployment_kind: crate::models::shared::DeploymentKind::Installed,
-            install_dir: r"C:\winbrew\apps\Contoso.App".to_string(),
+            // A forward-slash path so it decomposes into components
+            // consistently on both Windows and Unix -- the containment
+            // check in read_committed_package relies on Path component
+            // parsing, which only treats `\` as a separator on Windows.
+            install_dir: "C:/winbrew/apps/Contoso.App".to_string(),
             dependencies: vec!["winget/Contoso.Shared".to_string()],
             commands: None,
             bin: None,
@@ -370,13 +377,37 @@ mod tests {
             .expect("write trailing entry");
         writer.flush().expect("flush journal");
 
-        let replay = JournalReader::read_committed_package(writer.path())
-            .expect("parse replay journal with trailing entries");
+        let replay =
+            JournalReader::read_committed_package(writer.path(), Path::new("C:/winbrew/apps"))
+                .expect("parse replay journal with trailing entries");
 
         assert_eq!(replay.journal_path, writer.path());
         assert_eq!(replay.entries, vec![metadata_entry(), commit_entry()]);
         assert_eq!(replay.package.name, "winget/Contoso.App");
         assert_eq!(replay.package.version, "1.0.0");
+    }
+
+    #[test]
+    fn read_committed_package_rejects_install_dir_outside_packages_root() {
+        let root = temp_root();
+        let mut writer = JournalWriter::open_for_package(&root, "winget/Contoso.App", "1.0.0")
+            .expect("open journal");
+
+        writer.append(&metadata_entry()).expect("write metadata");
+        writer.append(&commit_entry()).expect("write commit");
+        writer.flush().expect("flush journal");
+
+        // metadata_entry()'s install_dir is under C:/winbrew/apps; a
+        // replayer must reject it against a different expected root rather
+        // than trust it blindly.
+        let err =
+            JournalReader::read_committed_package(writer.path(), Path::new("C:/winbrew/packages"))
+                .expect_err("install_dir outside the expected root should be rejected");
+
+        assert!(matches!(
+            err,
+            JournalReplayError::InstallDirOutsideManagedRoot { .. }
+        ));
     }
 
     #[test]
@@ -565,14 +596,15 @@ mod tests {
         writer.flush().expect("flush journal");
 
         let replay =
-            JournalReader::read_committed_package(writer.path()).expect("parse replay journal");
+            JournalReader::read_committed_package(writer.path(), Path::new("C:/winbrew/apps"))
+                .expect("parse replay journal");
 
         assert_eq!(replay.journal_path, writer.path());
         assert_eq!(replay.entries.len(), 2);
         assert_eq!(replay.package.name, "winget/Contoso.App");
         assert_eq!(replay.package.version, "1.0.0");
         assert_eq!(replay.package.kind, InstallerType::Msi);
-        assert_eq!(replay.package.install_dir, r"C:\winbrew\apps\Contoso.App");
+        assert_eq!(replay.package.install_dir, "C:/winbrew/apps/Contoso.App");
         assert_eq!(
             replay.package.dependencies,
             vec!["winget/Contoso.Shared".to_string()]

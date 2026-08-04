@@ -456,7 +456,8 @@ mod tests {
 
         let journal_key = package_journal_key(&package.name, &package.version);
         let journal_path = paths.package_journal_file(&journal_key);
-        let committed = database::JournalReader::read_committed_package(&journal_path)?;
+        let committed =
+            database::JournalReader::read_committed_package(&journal_path, &paths.packages)?;
 
         assert_eq!(committed.commands, Some(vec!["contoso".to_string()]));
         assert_eq!(committed.bin, Some(vec!["bin\\tool.exe".to_string()]));

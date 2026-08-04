@@ -30,8 +30,9 @@ pub fn run(ctx: &CommandContext, yes: bool, force: bool) -> Result<()> {
 
     let mut applied = 0usize;
 
-    applied += run_journal_replay_group(&mut ui, yes, force, &plan)?;
-    applied += run_conflict_journal_replay_group(&mut ui, force, &plan)?;
+    let packages_root = &ctx.app().paths.packages;
+    applied += run_journal_replay_group(&mut ui, yes, force, &plan, packages_root)?;
+    applied += run_conflict_journal_replay_group(&mut ui, force, &plan, packages_root)?;
     applied += run_orphan_cleanup_group(&mut ui, yes, force, &plan)?;
     applied += run_file_restore_group(&mut ui, ctx, force, &plan)?;
     applied += run_reinstall_group(&mut ui, ctx, force, &plan.reinstall_packages)?;
@@ -48,6 +49,7 @@ fn run_journal_replay_group<W: Write>(
     yes: bool,
     force: bool,
     plan: &RepairPlan,
+    packages_root: &std::path::Path,
 ) -> Result<usize> {
     if plan.journal_paths.is_empty() {
         return Ok(0);
@@ -58,7 +60,8 @@ fn run_journal_replay_group<W: Write>(
         plan.journal_paths.len()
     ));
 
-    let journal_targets = repair::prepare_journal_replay_targets(&plan.journal_paths)?;
+    let journal_targets =
+        repair::prepare_journal_replay_targets(&plan.journal_paths, packages_root)?;
     let journal_summary = repair::summarize_journal_replay_targets(&journal_targets);
     if journal_summary.total > 0 {
         let message = format!(
@@ -108,6 +111,7 @@ fn run_conflict_journal_replay_group<W: Write>(
     ui: &mut Ui<W>,
     force: bool,
     plan: &RepairPlan,
+    packages_root: &std::path::Path,
 ) -> Result<usize> {
     if plan.conflict_journal_paths.is_empty() {
         return Ok(0);
@@ -118,7 +122,8 @@ fn run_conflict_journal_replay_group<W: Write>(
         plan.conflict_journal_paths.len()
     ));
 
-    let journal_targets = repair::prepare_journal_replay_targets(&plan.conflict_journal_paths)?;
+    let journal_targets =
+        repair::prepare_journal_replay_targets(&plan.conflict_journal_paths, packages_root)?;
     let mut replayed = 0usize;
 
     for target in &journal_targets {
