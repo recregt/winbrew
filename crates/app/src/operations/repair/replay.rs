@@ -35,13 +35,14 @@ pub struct JournalReplaySummary {
     pub unknown: usize,
 }
 
-pub fn replay_committed_journals(journal_paths: &[PathBuf]) -> Result<usize> {
-    let targets = prepare_journal_replay_targets(journal_paths)?;
+pub fn replay_committed_journals(journal_paths: &[PathBuf], packages_root: &Path) -> Result<usize> {
+    let targets = prepare_journal_replay_targets(journal_paths, packages_root)?;
     replay_prepared_journal_targets(&targets)
 }
 
 pub fn prepare_journal_replay_targets(
     journal_paths: &[PathBuf],
+    packages_root: &Path,
 ) -> Result<Vec<JournalReplayTarget>> {
     let catalog_conn = match database::get_catalog_conn() {
         Ok(conn) => Some(conn),
@@ -56,13 +57,14 @@ pub fn prepare_journal_replay_targets(
     let mut targets = Vec::with_capacity(journal_paths.len());
 
     for journal_path in journal_paths {
-        let committed = database::JournalReader::read_committed_package(journal_path)
-            .with_context(|| {
-                format!(
-                    "failed to parse committed journal at {}",
-                    journal_path.display()
-                )
-            })?;
+        let committed =
+            database::JournalReader::read_committed_package(journal_path, packages_root)
+                .with_context(|| {
+                    format!(
+                        "failed to parse committed journal at {}",
+                        journal_path.display()
+                    )
+                })?;
 
         if committed.command_resolution.is_none() {
             bail!(

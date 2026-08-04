@@ -248,6 +248,7 @@ fn read_committed_install_journal(
 
     Ok(database::JournalReader::read_committed_package(
         &journal_path,
+        &fixture.ctx.paths.packages,
     )?)
 }
 
