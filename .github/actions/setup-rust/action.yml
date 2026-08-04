@@ -1,0 +1,19 @@
+name: Setup Rust
+description: Install the pinned stable Rust toolchain and restore/save the cargo build cache.
+
+inputs:
+  save-if:
+    description: Passed through to Swatinem/rust-cache's save-if input.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+    - name: Cache cargo artifacts
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      with:
+        save-if: ${{ inputs.save-if }}
