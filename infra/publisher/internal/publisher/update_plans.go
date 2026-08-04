@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -160,17 +161,17 @@ type updatePlanSQLRow struct {
 }
 
 func (row updatePlanSQLRow) insertStatement() string {
-	return fmt.Sprintf(
-		"INSERT INTO update_plans (current_hash, mode, target_hash, snapshot_url, patch_urls_json, chain_length, total_patch_bytes, is_latest_full, is_stale) VALUES (%s, %s, %s, %s, %s, %d, %d, %d, %d);",
+	return sqlSprintf(
+		"INSERT INTO update_plans (current_hash, mode, target_hash, snapshot_url, patch_urls_json, chain_length, total_patch_bytes, is_latest_full, is_stale) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);",
 		sqlText(row.currentHash),
 		sqlText(row.mode),
 		sqlText(row.targetHash),
 		sqlNullableText(row.snapshotURL),
 		sqlText(row.patchURLsJSON),
-		row.chainLength,
-		row.totalPatchBytes,
-		row.isLatestFull,
-		row.isStale,
+		sqlInt(int64(row.chainLength)),
+		sqlInt(row.totalPatchBytes),
+		sqlInt(int64(row.isLatestFull)),
+		sqlInt(int64(row.isStale)),
 	)
 }
 
@@ -203,16 +204,51 @@ func publicObjectURL(baseURL, objectKey string) (string, error) {
 	return parsed.String(), nil
 }
 
-func sqlText(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+// sqlLiteral is a value that has already been rendered as safe SQL text
+// (quoted-and-escaped, or a bare numeric/NULL literal). It is only ever
+// constructed by sqlText, sqlNullableText, or sqlInt in this file, so it
+// exists to make sqlSprintf's argument list type-checked: a raw string or
+// int passed where a sqlLiteral is expected fails to compile instead of
+// shipping an unescaped value into a SQL statement that gets executed
+// directly against production D1 via `wrangler d1 execute`.
+type sqlLiteral string
+
+func (v sqlLiteral) renderSQL() string { return string(v) }
+
+// sqlArg is implemented only by sqlLiteral, so sqlSprintf's format
+// arguments must already be escaped/rendered safe SQL text.
+type sqlArg interface {
+	renderSQL() string
 }
 
-func sqlNullableText(value string) string {
+// sqlSprintf is fmt.Sprintf restricted to sqlArg values. Use it (instead of
+// fmt.Sprintf directly) anywhere a SQL statement is being assembled by
+// string interpolation, so every argument is forced through sqlText,
+// sqlNullableText, or sqlInt first.
+func sqlSprintf(format string, args ...sqlArg) string {
+	rendered := make([]any, len(args))
+	for i, arg := range args {
+		rendered[i] = arg.renderSQL()
+	}
+
+	return fmt.Sprintf(format, rendered...)
+}
+
+func sqlText(value string) sqlLiteral {
+	return sqlLiteral("'" + strings.ReplaceAll(value, "'", "''") + "'")
+}
+
+func sqlNullableText(value string) sqlLiteral {
 	if strings.TrimSpace(value) == "" {
 		return "NULL"
 	}
 
 	return sqlText(value)
+}
+
+// sqlInt renders an integer as a bare (unquoted) SQL numeric literal.
+func sqlInt(value int64) sqlLiteral {
+	return sqlLiteral(strconv.FormatInt(value, 10))
 }
 
 func latestFullRowKey(currentHash string) string {

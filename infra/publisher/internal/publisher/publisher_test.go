@@ -446,6 +446,32 @@ func TestLoadMetadataRejectsUnsupportedSchemaVersion(t *testing.T) {
 	}
 }
 
+func TestSQLTextEscapesQuotesAndFormatsAsLiteral(t *testing.T) {
+	if got, want := string(sqlText("O'Brien")), "'O''Brien'"; got != want {
+		t.Fatalf("sqlText() = %q, want %q", got, want)
+	}
+	if got, want := string(sqlNullableText("")), "NULL"; got != want {
+		t.Fatalf("sqlNullableText(\"\") = %q, want %q", got, want)
+	}
+	if got, want := string(sqlNullableText("  ")), "NULL"; got != want {
+		t.Fatalf("sqlNullableText(whitespace) = %q, want %q", got, want)
+	}
+	if got, want := string(sqlNullableText("value")), "'value'"; got != want {
+		t.Fatalf("sqlNullableText(value) = %q, want %q", got, want)
+	}
+	if got, want := string(sqlInt(42)), "42"; got != want {
+		t.Fatalf("sqlInt(42) = %q, want %q", got, want)
+	}
+}
+
+func TestSQLSprintfRendersEscapedLiterals(t *testing.T) {
+	got := sqlSprintf("WHERE name = %s AND id = %s", sqlText("O'Brien"), sqlInt(7))
+	want := "WHERE name = 'O''Brien' AND id = 7"
+	if got != want {
+		t.Fatalf("sqlSprintf() = %q, want %q", got, want)
+	}
+}
+
 func TestBuildUpdatePlansSQLIncludesCurrentAndFullRows(t *testing.T) {
 	metadata := Metadata{
 		SchemaVersion:   1,
