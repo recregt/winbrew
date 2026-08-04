@@ -1,7 +1,6 @@
 package winget
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -22,6 +21,7 @@ import (
 
 	"infra/crawler/internal/models"
 	"infra/crawler/internal/retry"
+	"infra/crawler/pkg/jsonl"
 )
 
 const (
@@ -124,7 +124,7 @@ func (s *Source) WriteJSONL(ctx context.Context, dbPath string, w io.Writer, max
 
 	slog.Info("winget package resolution started", "db_path", dbPath, "purpose", "query the Winget index, fetch raw manifests from winget-pkgs, and write merged JSONL")
 
-	writer, flush := bufferJSONLWriter(w)
+	writer, flush := jsonl.BufferedWriter(w)
 	defer func() {
 		if flushErr := flush(); err == nil && flushErr != nil {
 			err = fmt.Errorf("failed to flush JSONL writer: %w", flushErr)
@@ -593,15 +593,6 @@ func rootLocaleFileName(packageIdentifier, locale string) string {
 
 func rootInstallerFileName(packageIdentifier string) string {
 	return fmt.Sprintf("%s.installer.yaml", packageIdentifier)
-}
-
-func bufferJSONLWriter(w io.Writer) (io.Writer, func() error) {
-	if bw, ok := w.(*bufio.Writer); ok {
-		return bw, bw.Flush
-	}
-
-	bw := bufio.NewWriterSize(w, 64*1024)
-	return bw, bw.Flush
 }
 
 func classifyWingetPackageSkip(err error) string {
