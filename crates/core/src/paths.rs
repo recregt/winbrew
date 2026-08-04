@@ -195,17 +195,28 @@ pub fn package_journal_file_at(root: &Path, package_key: &str) -> PathBuf {
     pkgdb_dir_at(root).join(package_key).join("journal.jsonl")
 }
 
-/// Collapse a value to a single safe path component, rejecting separators
-/// and traversal segments rather than letting them change which directory a
-/// `Path::join` resolves to.
-fn safe_path_component(value: &str) -> &str {
-    let file_name = value.rsplit(['/', '\\']).next().unwrap_or(value).trim();
+/// Flatten a value into a single safe path component.
+///
+/// Path separators (`/`, `\`) and the colon (a Windows drive prefix or NTFS
+/// alternate-data-stream marker) are replaced with `_` so the value can never
+/// be interpreted as more than one path component or escape the directory it
+/// is joined onto -- unlike rejecting or truncating the value, this preserves
+/// the rest of the original text (and therefore uniqueness) instead of
+/// collapsing every unsafe name to the same placeholder.
+fn safe_path_component(value: &str) -> String {
+    let trimmed = value.trim();
 
-    match file_name {
-        "" | "." | ".." => "_invalid_name",
-        name if name.contains(':') => "_invalid_name",
-        name => name,
+    if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
+        return "_invalid_name".to_string();
     }
+
+    trimmed
+        .chars()
+        .map(|ch| match ch {
+            '/' | '\\' | ':' | '\0' => '_',
+            other => other,
+        })
+        .collect()
 }
 
 fn cache_filename(name: &str, version: &str, ext: &str) -> String {
@@ -247,14 +258,16 @@ pub fn resolved_paths(
 impl ResolvedPaths {
     /// Return the install directory for a package name.
     ///
-    /// `package_name` should already be validated by
-    /// `winbrew_models::catalog::CatalogPackage::validate` before it reaches
-    /// here (every row read from `catalog_packages` goes through it), but
-    /// this is the single choke point every install/remove path joins
-    /// through, so it defensively collapses the name to a single safe path
-    /// component instead of trusting the caller. A traversal- or
-    /// separator-shaped name must never be allowed to resolve outside
-    /// `self.packages`.
+    /// `package_name` is a catalog package's free-text display name (real
+    /// examples legitimately contain `/` or `:`, e.g.
+    /// `"AMD Software: Cloud Edition"`), so it is not safe to join onto the
+    /// managed root as-is: on Windows both `/` and `\` act as path
+    /// separators and `:` denotes a drive prefix or NTFS alternate-data-
+    /// stream marker. This is the single choke point every install/remove
+    /// path joins through, so it flattens the name into one safe path
+    /// component by substituting those characters rather than trusting the
+    /// caller -- a traversal- or separator-shaped name must never be allowed
+    /// to resolve outside `self.packages`.
     pub fn package_install_dir(&self, package_name: &str) -> PathBuf {
         self.packages.join(safe_path_component(package_name))
     }
@@ -404,5 +417,36 @@ mod tests {
                 "package_install_dir({malicious:?}) escaped the packages root: {resolved:?}"
             );
         }
+    }
+
+    #[test]
+    fn package_install_dir_preserves_real_display_names_containing_slashes_and_colons() {
+        let root = tempdir().expect("temp dir");
+        let paths = resolved_paths(
+            root.path(),
+            "${root}\\packages",
+            "${root}\\data",
+            "${root}\\data\\logs",
+            "${root}\\data\\cache",
+        );
+
+        // These are real Winget display names. They must stay inside
+        // `packages` (single component) *and* stay distinguishable from
+        // each other -- collapsing every unsafe name to one placeholder
+        // would make different packages collide into the same directory.
+        let first = paths.package_install_dir("ACS CCID PC/SC Driver");
+        let second = paths.package_install_dir("AMD Software: Cloud Edition");
+
+        for resolved in [&first, &second] {
+            assert_eq!(resolved.parent(), Some(paths.packages.as_path()));
+        }
+        assert_ne!(first, second);
+        assert!(
+            first
+                .file_name()
+                .expect("file name")
+                .to_string_lossy()
+                .contains("ACS CCID")
+        );
     }
 }
