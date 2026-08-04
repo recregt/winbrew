@@ -497,14 +497,8 @@ mod tests {
     }
 
     #[test]
-    fn rejects_traversal_shaped_name() {
-        for unsafe_name in [
-            "..\\..\\Users\\Public\\evil",
-            "../../etc",
-            "..",
-            ".",
-            "C:\\Windows",
-        ] {
+    fn rejects_degenerate_name() {
+        for unsafe_name in ["..", "."] {
             let package = catalog_package(
                 "winget/Contoso.App".into(),
                 unsafe_name,
@@ -513,12 +507,39 @@ mod tests {
 
             let err = package
                 .validate()
-                .expect_err("traversal-shaped name should fail validation");
+                .expect_err("a name that is exactly '.' or '..' should fail validation");
 
             assert!(
                 err.to_string().contains("catalog_package.name"),
                 "unexpected error for {unsafe_name:?}: {err}"
             );
+        }
+    }
+
+    #[test]
+    fn accepts_real_names_containing_slashes_and_colons() {
+        // These are real Winget display names. `name` is presentation text,
+        // not a filesystem path component, so the model layer must not
+        // reject ordinary punctuation here -- path-safety sanitization
+        // happens where a name is turned into a path component (see
+        // `winbrew_core::paths::ResolvedPaths::package_install_dir`).
+        for real_name in [
+            "Visual Studio / Code for Command Palette",
+            "ACS CCID PC/SC Driver",
+            "AMD Software: Cloud Edition",
+            "..\\..\\Users\\Public\\evil",
+            "C:\\Windows",
+        ] {
+            let mut package = catalog_package(
+                "winget/Contoso.App".into(),
+                real_name,
+                Version::parse("1.2.3").expect("version should parse"),
+            );
+            package.locale = Some("en-US".to_string());
+
+            package
+                .validate()
+                .unwrap_or_else(|err| panic!("expected {real_name:?} to validate: {err}"));
         }
     }
 
