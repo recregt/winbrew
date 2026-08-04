@@ -52,6 +52,15 @@ pub enum JournalReplayError {
         #[source]
         source: ModelError,
     },
+
+    #[error(
+        "journal at {path} records install_dir {install_dir:?} outside the managed packages root {expected_root:?}"
+    )]
+    InstallDirOutsideManagedRoot {
+        path: PathBuf,
+        install_dir: String,
+        expected_root: PathBuf,
+    },
 }
 
 impl JournalReader {
@@ -63,8 +72,19 @@ impl JournalReader {
         enumerate_committed_journals(&paths.pkgdb)
     }
 
+    /// Reads and parses a committed package journal.
+    ///
+    /// `expected_packages_root` is the live `ResolvedPaths.packages` value
+    /// for the active managed root. A committed journal is authoritative for
+    /// rebuilding package state (see `docs/recovery-policy.md`), so its
+    /// `install_dir` must be verified to actually live under the managed
+    /// packages root before it is trusted -- a corrupted or hand-edited
+    /// journal recording a traversal-shaped `install_dir` would otherwise be
+    /// replayed into a live package record, and a later `remove` would
+    /// `remove_dir_all` whatever that path resolves to.
     pub fn read_committed_package(
         path: &Path,
+        expected_packages_root: &Path,
     ) -> Result<CommittedJournalPackage, JournalReplayError> {
         let entries = match JournalReader::read_committed(path) {
             Ok(entries) => entries,
@@ -72,7 +92,7 @@ impl JournalReader {
             Err(err) => return Err(err.into()),
         };
 
-        parse_committed_package_journal(path, entries)
+        parse_committed_package_journal(path, entries, expected_packages_root)
     }
 }
 
@@ -105,6 +125,7 @@ fn enumerate_committed_journals(pkgdb_dir: &Path) -> Result<Vec<PathBuf>, Journa
 fn parse_committed_package_journal(
     path: &Path,
     entries: Vec<JournalEntry>,
+    expected_packages_root: &Path,
 ) -> Result<CommittedJournalPackage, JournalReplayError> {
     let (
         package_id,
@@ -180,6 +201,17 @@ fn parse_committed_package_journal(
         return Err(JournalReplayError::MissingField {
             path: path.to_path_buf(),
             field: "install_dir",
+        });
+    }
+
+    if Path::new(install_dir)
+        .strip_prefix(expected_packages_root)
+        .is_err()
+    {
+        return Err(JournalReplayError::InstallDirOutsideManagedRoot {
+            path: path.to_path_buf(),
+            install_dir: install_dir.to_string(),
+            expected_root: expected_packages_root.to_path_buf(),
         });
     }
 
