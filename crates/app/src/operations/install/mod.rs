@@ -279,7 +279,13 @@ pub fn run<O: InstallObserver>(
             )
         },
     ) {
-        let _ = state::mark_failed(&conn, &target.package.name);
+        if let Err(mark_failed_err) = state::mark_failed(&conn, &target.package.name) {
+            warn!(
+                package = target.package.name.as_str(),
+                error = %mark_failed_err,
+                "failed to record install failure in the database; package may be left in Installing state until the next command runs"
+            );
+        }
         if let Some(conflict) = err.downcast_ref::<database::CommandRegistryConflictError>() {
             return Err(InstallError::CommandClaimedWhileInProgress {
                 command: conflict.command_name.clone(),
