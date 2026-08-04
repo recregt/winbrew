@@ -8,5 +8,5 @@ mod limits;
 mod platform;
 mod types;
 
-pub use extract::{extract_archive, extract_zip_archive};
+pub use extract::{RuntimeRootOverride, extract_archive, extract_zip_archive};
 pub use kind::ArchiveKind;
