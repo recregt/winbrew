@@ -1,7 +1,6 @@
 package scoop
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -18,6 +17,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"infra/crawler/internal/retry"
+	"infra/crawler/pkg/jsonl"
 	"infra/crawler/pkg/normalize"
 )
 
@@ -85,7 +85,7 @@ func (s *Source) Name() string {
 
 func (s *Source) WriteJSONL(ctx context.Context, w io.Writer, maxAttempts int, backoff time.Duration) (err error) {
 	start := time.Now()
-	writer, flush := bufferJSONLWriter(w)
+	writer, flush := jsonl.BufferedWriter(w)
 	defer func() {
 		if flushErr := flush(); err == nil && flushErr != nil {
 			err = fmt.Errorf("failed to flush JSONL writer: %w", flushErr)
@@ -424,15 +424,6 @@ func rawJSONValue(value any) json.RawMessage {
 	}
 
 	return append(json.RawMessage(nil), data...)
-}
-
-func bufferJSONLWriter(w io.Writer) (io.Writer, func() error) {
-	if bw, ok := w.(*bufio.Writer); ok {
-		return bw, bw.Flush
-	}
-
-	bw := bufio.NewWriterSize(w, 64*1024)
-	return bw, bw.Flush
 }
 
 func resolveLicense(v any) string {
