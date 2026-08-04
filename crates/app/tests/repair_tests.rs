@@ -51,7 +51,7 @@ fn prepare_journal_replay_targets_rejects_missing_command_resolution_metadata() 
     // drops, so it must be released before prepare_journal_replay_targets
     // tries to read this same file.
     drop(writer);
-    let err = prepare_journal_replay_targets(&[journal_path])
+    let err = prepare_journal_replay_targets(&[journal_path], &root.path().join("packages"))
         .expect_err("legacy journal should be rejected");
 
     assert!(
