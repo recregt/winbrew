@@ -118,6 +118,55 @@ fn switch_signature(arg: &str) -> String {
     }
 }
 
+/// Splits a registry-sourced uninstall command line into `(program, args)`.
+///
+/// Unlike installer switches (which come from a trusted, well-formed catalog
+/// manifest), an `UninstallString`/`QuietUninstallString` registry value is
+/// written by the installer itself and is often an *unquoted* path
+/// containing spaces (e.g. `C:\Program Files\App\uninst.exe -y`). Naively
+/// splitting on whitespace breaks that into `C:\Program` and
+/// `Files\App\uninst.exe -y`, which then fails to launch. If the command
+/// line isn't quoted, probe progressively longer whitespace-bounded
+/// prefixes and treat the longest one that names an existing file as the
+/// program, matching how Windows itself resolves this ambiguity.
+pub(super) fn split_uninstall_command(raw: &str) -> Result<Vec<String>> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    if trimmed.starts_with(['"', '\'']) {
+        return split_switches(trimmed);
+    }
+
+    if let Some((program, rest)) = longest_existing_file_prefix(trimmed) {
+        let mut parts = vec![program];
+        parts.extend(split_switches(rest)?);
+        return Ok(parts);
+    }
+
+    // No prefix of the command line names an existing file (for example the
+    // uninstaller was already removed by hand, or this is a space-free
+    // path). Fall back to naive whitespace splitting rather than refusing
+    // to run at all.
+    split_switches(trimmed)
+}
+
+fn longest_existing_file_prefix(command: &str) -> Option<(String, &str)> {
+    if Path::new(command).is_file() {
+        return Some((command.to_string(), ""));
+    }
+
+    let mut best_end = None;
+    for (index, ch) in command.char_indices() {
+        if ch.is_whitespace() && Path::new(&command[..index]).is_file() {
+            best_end = Some(index);
+        }
+    }
+
+    best_end.map(|index| (command[..index].to_string(), command[index..].trim_start()))
+}
+
 fn push_flag_if_missing(args: &mut Vec<String>, flag: &str) {
     if !args.iter().any(|arg| arg.eq_ignore_ascii_case(flag)) {
         args.push(flag.to_string());
