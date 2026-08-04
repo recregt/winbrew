@@ -164,6 +164,57 @@ func TestWingetStagingCountsWrittenAndSkippedPackages(t *testing.T) {
 	}
 }
 
+func TestEncodeWingetResultsCountsWrittenAndSkipped(t *testing.T) {
+	results := []wingetWriteResult{
+		{id: "Contoso.App", pkg: wingetPackageSnapshot{ID: "winget/Contoso.App"}},
+		{id: "Missing.App", err: fmt.Errorf("failed to fetch winget root manifest: %w", errWingetTestNotFound)},
+		{id: "Broken.App", err: fmt.Errorf("failed to parse winget root manifest: boom")},
+	}
+
+	var output bytes.Buffer
+	enc := json.NewEncoder(&output)
+	written, skipped, err := encodeWingetResults(enc, results)
+	if err != nil {
+		t.Fatalf("encodeWingetResults() error = %v", err)
+	}
+	if got, want := written, 1; got != want {
+		t.Fatalf("written = %d, want %d", got, want)
+	}
+	if got, want := skipped, 2; got != want {
+		t.Fatalf("skipped = %d, want %d", got, want)
+	}
+
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if got, want := len(lines), 1; got != want {
+		t.Fatalf("encoded line count = %d, want %d", got, want)
+	}
+
+	var envelope wingetEnvelope
+	if err := json.Unmarshal([]byte(lines[0]), &envelope); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if got, want := envelope.Payload.ID, "winget/Contoso.App"; got != want {
+		t.Fatalf("encoded package id = %q, want %q", got, want)
+	}
+}
+
+func TestEncodeWingetResultsWithNoResultsWritesNothing(t *testing.T) {
+	var output bytes.Buffer
+	enc := json.NewEncoder(&output)
+	written, skipped, err := encodeWingetResults(enc, nil)
+	if err != nil {
+		t.Fatalf("encodeWingetResults() error = %v", err)
+	}
+	if written != 0 || skipped != 0 {
+		t.Fatalf("written = %d, skipped = %d, want 0, 0", written, skipped)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("output = %q, want empty", output.String())
+	}
+}
+
+var errWingetTestNotFound = fmt.Errorf("404 Not Found")
+
 func openWingetIndexFixture(t *testing.T) *sql.DB {
 	t.Helper()
 

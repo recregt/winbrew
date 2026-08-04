@@ -270,7 +270,6 @@ func buildCatalogPatchSQL(previousPath, currentPath string) (string, error) {
 }
 
 func buildCatalogPatchSQLFromDB(previousDB, currentDB *sql.DB) (string, error) {
-
 	previousPackages, previousRaws, previousInstallers, err := loadCatalogSnapshot(previousDB)
 	if err != nil {
 		return "", err
@@ -280,6 +279,24 @@ func buildCatalogPatchSQLFromDB(previousDB, currentDB *sql.DB) (string, error) {
 		return "", err
 	}
 
+	return buildCatalogPatchSQLFromSnapshots(
+		previousPackages, previousRaws, previousInstallers,
+		currentPackages, currentRaws, currentInstallers,
+	)
+}
+
+// buildCatalogPatchSQLFromSnapshots diffs two already-loaded catalog
+// snapshots and assembles the patch SQL. It has no database dependency, so
+// drift detection and diffing can be unit tested directly against
+// synthetic snapshots instead of only end-to-end through a real sqlite file.
+func buildCatalogPatchSQLFromSnapshots(
+	previousPackages map[string]packageRecord,
+	previousRaws map[string]sql.NullString,
+	previousInstallers map[string]map[int64]installerRecord,
+	currentPackages map[string]packageRecord,
+	currentRaws map[string]sql.NullString,
+	currentInstallers map[string]map[int64]installerRecord,
+) (string, error) {
 	if drifted := driftedPackageIDs(previousPackages, currentPackages); len(drifted) > 0 {
 		sample := drifted
 		if len(sample) > 5 {
