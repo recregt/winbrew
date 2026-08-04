@@ -195,6 +195,19 @@ pub fn package_journal_file_at(root: &Path, package_key: &str) -> PathBuf {
     pkgdb_dir_at(root).join(package_key).join("journal.jsonl")
 }
 
+/// Collapse a value to a single safe path component, rejecting separators
+/// and traversal segments rather than letting them change which directory a
+/// `Path::join` resolves to.
+fn safe_path_component(value: &str) -> &str {
+    let file_name = value.rsplit(['/', '\\']).next().unwrap_or(value).trim();
+
+    match file_name {
+        "" | "." | ".." => "_invalid_name",
+        name if name.contains(':') => "_invalid_name",
+        name => name,
+    }
+}
+
 fn cache_filename(name: &str, version: &str, ext: &str) -> String {
     let mut filename = String::with_capacity(name.len() + version.len() + ext.len() + 2);
     filename.push_str(name);
@@ -233,8 +246,17 @@ pub fn resolved_paths(
 
 impl ResolvedPaths {
     /// Return the install directory for a package name.
+    ///
+    /// `package_name` should already be validated by
+    /// `winbrew_models::catalog::CatalogPackage::validate` before it reaches
+    /// here (every row read from `catalog_packages` goes through it), but
+    /// this is the single choke point every install/remove path joins
+    /// through, so it defensively collapses the name to a single safe path
+    /// component instead of trusting the caller. A traversal- or
+    /// separator-shaped name must never be allowed to resolve outside
+    /// `self.packages`.
     pub fn package_install_dir(&self, package_name: &str) -> PathBuf {
-        self.packages.join(package_name)
+        self.packages.join(safe_path_component(package_name))
     }
 
     /// Return the journal directory for a package key.
@@ -355,5 +377,32 @@ mod tests {
             paths.package_shim_dir(package_key),
             paths.shims.join(package_key)
         );
+    }
+
+    #[test]
+    fn package_install_dir_rejects_traversal_shaped_names() {
+        let root = tempdir().expect("temp dir");
+        let paths = resolved_paths(
+            root.path(),
+            "${root}\\packages",
+            "${root}\\data",
+            "${root}\\data\\logs",
+            "${root}\\data\\cache",
+        );
+
+        for malicious in [
+            "..\\..\\..\\..\\Users\\Public\\Desktop",
+            "../../etc",
+            "..",
+            ".",
+            "C:\\Users\\Public\\evil",
+        ] {
+            let resolved = paths.package_install_dir(malicious);
+            assert_eq!(
+                resolved.parent(),
+                Some(paths.packages.as_path()),
+                "package_install_dir({malicious:?}) escaped the packages root: {resolved:?}"
+            );
+        }
     }
 }

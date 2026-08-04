@@ -4,7 +4,7 @@ use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use super::ModelError;
-use super::validation::{Validate, ensure_non_empty};
+use super::validation::{Validate, ensure_non_empty, ensure_safe_path_component};
 use crate::package::PackageId;
 
 macro_rules! define_string_newtype {
@@ -119,9 +119,13 @@ define_string_newtype! {
             return Err(ModelError::empty("package_ref.name"));
         }
 
+        ensure_safe_path_component("package_ref.name", trimmed)?;
         Ok(trimmed.to_string())
     };
-    validate = |value: &str| ensure_non_empty("package_ref.name", value);
+    validate = |value: &str| {
+        ensure_non_empty("package_ref.name", value)?;
+        ensure_safe_path_component("package_ref.name", value)
+    };
 }
 
 define_string_newtype! {
@@ -186,5 +190,13 @@ mod tests {
         assert!(CatalogId::parse("invalid").is_err());
         assert!(PackageName::parse("   ").is_err());
         assert!(BucketName::parse("main/tools").is_err());
+    }
+
+    #[test]
+    fn rejects_traversal_shaped_package_names() {
+        assert!(PackageName::parse("..\\..\\Users\\Public\\evil").is_err());
+        assert!(PackageName::parse("../../etc").is_err());
+        assert!(PackageName::parse("..").is_err());
+        assert!(PackageName::parse("C:\\Windows").is_err());
     }
 }
