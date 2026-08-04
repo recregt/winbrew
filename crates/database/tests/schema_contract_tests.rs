@@ -194,7 +194,6 @@ fn catalog_contract_matches_canonical_schema() -> Result<()> {
         ("table", "catalog_packages_raw"),
         ("table", "catalog_packages_fts"),
         ("trigger", "catalog_packages_au"),
-        ("trigger", "catalog_packages_update_timestamp"),
         ("index", "idx_catalog_installers_unique"),
     ] {
         assert!(
@@ -202,6 +201,20 @@ fn catalog_contract_matches_canonical_schema() -> Result<()> {
             "expected {object_type} {name} to exist"
         );
     }
+
+    // Regression guard: catalog_packages must not carry a second AFTER
+    // UPDATE trigger. A prior "catalog_packages_update_timestamp" trigger
+    // issued a nested UPDATE on catalog_packages from within its own
+    // trigger body, which corrupted the FTS5 external-content index
+    // ("database disk image is malformed") whenever a caller updated a row
+    // without also setting `updated_at` in the same statement. Every writer
+    // must set `updated_at` explicitly instead.
+    assert!(
+        !object_exists(&conn, "trigger", "catalog_packages_update_timestamp")?,
+        "catalog_packages_update_timestamp must not be reintroduced -- see \
+         infra/parser/schema/catalog.sql for why a nested UPDATE trigger on \
+         catalog_packages corrupts the FTS5 index"
+    );
 
     let installer_columns = table_columns(&conn, "catalog_installers")?;
     assert!(installer_columns.contains("kind"));
