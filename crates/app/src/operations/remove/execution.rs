@@ -95,7 +95,15 @@ fn execute_removal_with_conn(
                 );
             }
 
-            database::delete_package(conn, &plan.package.name)?;
+            if let Err(err) = database::delete_package(conn, &plan.package.name) {
+                tracing::error!(
+                    package = plan.package.name.as_str(),
+                    error = %err,
+                    "engine uninstall succeeded but the database row could not be removed; \
+                     package is now orphaned in SQLite -- run `winbrew doctor` to reconcile"
+                );
+                return Err(err.into());
+            }
             if !commands.is_empty()
                 && let Err(err) = shims::remove_shim_files(shims_root, &commands)
             {

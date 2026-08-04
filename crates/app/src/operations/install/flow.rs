@@ -45,7 +45,7 @@ pub(crate) fn rollback_failed_install(
     name: &str,
     install_dir: &Path,
 ) {
-    let _ = state::mark_failed(conn, name);
+    warn_on_mark_failed_error(conn, name);
     cleanup_install_artifacts(install_dir);
 }
 
@@ -59,8 +59,22 @@ pub(crate) fn rollback_cancelled_install(
     name: &str,
     install_dir: &Path,
 ) {
-    let _ = state::mark_failed(conn, name);
+    warn_on_mark_failed_error(conn, name);
     cleanup_install_artifacts(install_dir);
+}
+
+/// Records a failed `mark_failed` write as a warning instead of discarding
+/// it. If this write fails, the package is left in `PackageStatus::Installing`
+/// -- a state that `cleanup_stale_installations` reclaims on the next CLI
+/// invocation, but only after logging here makes the interim state visible.
+fn warn_on_mark_failed_error(conn: &crate::database::DbConnection, name: &str) {
+    if let Err(err) = state::mark_failed(conn, name) {
+        warn!(
+            package = name,
+            error = %err,
+            "failed to record install failure in the database; package may be left in Installing state until the next command runs"
+        );
+    }
 }
 
 /// Execute the selected engine against a downloaded payload.
