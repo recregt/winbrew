@@ -13,7 +13,7 @@ impl PlatformAdapter for PortablePlatform {
         let metadata = fs::symlink_metadata(path)?;
         Ok(PathInfo {
             is_directory: metadata.is_dir(),
-            is_reparse_point: false,
+            is_reparse_point: metadata.file_type().is_symlink(),
             #[cfg(unix)]
             hard_link_count: metadata.nlink() as u32,
         })
