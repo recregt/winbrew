@@ -106,6 +106,30 @@ pub fn verify_hash(expected_hash: &str, actual_hash: impl AsRef<[u8]>) -> Result
     Ok(())
 }
 
+/// Verifies `actual_hash` against `expected_hash`, rejecting legacy (MD5/SHA-1)
+/// algorithms unless the caller explicitly opts in via `allow_legacy`.
+///
+/// `verify_hash` alone is a pure byte comparison with no opinion about
+/// algorithm strength -- it does not enforce the "legacy checksums are
+/// rejected by default" guarantee the project advertises. That enforcement
+/// used to live only in the install download path (`verify_strategy` in
+/// `winbrew-app`), which meant any other caller of `verify_hash` got no
+/// legacy-algorithm protection at all. Route verification through this
+/// function instead so the guarantee holds everywhere a hash is checked, not
+/// just wherever a caller happened to replicate the policy.
+pub fn verify_hash_with_policy(
+    algorithm: HashAlgorithm,
+    expected_hash: &str,
+    actual_hash: impl AsRef<[u8]>,
+    allow_legacy: bool,
+) -> Result<()> {
+    if algorithm.is_legacy() && !allow_legacy {
+        return Err(HashError::LegacyChecksumAlgorithm { algorithm });
+    }
+
+    verify_hash(expected_hash, actual_hash)
+}
+
 pub fn hash_file(path: &Path, algorithm: HashAlgorithm) -> io::Result<Vec<u8>> {
     let mut file = File::open(path)?;
     let mut writer = HashWriter::new(Hasher::new(algorithm));
@@ -152,7 +176,10 @@ impl Write for HashWriter {
 
 #[cfg(test)]
 mod tests {
-    use super::{HashAlgorithm, Hasher, hash_algorithm, hash_file, normalize_hash, verify_hash};
+    use super::{
+        HashAlgorithm, HashError, Hasher, hash_algorithm, hash_file, normalize_hash, verify_hash,
+        verify_hash_with_policy,
+    };
     use sha2::{Digest, Sha256, Sha512};
     use std::fs;
     use tempfile::tempdir;
@@ -217,6 +244,47 @@ mod tests {
         assert_eq!(
             verify_hash("sha256:", actual),
             Err(super::HashError::MissingExpectedHash)
+        );
+    }
+
+    #[test]
+    fn verify_hash_with_policy_rejects_legacy_algorithms_by_default() {
+        let actual = [0x12, 0x34, 0xab, 0xcd];
+
+        for algorithm in [HashAlgorithm::Md5, HashAlgorithm::Sha1] {
+            assert_eq!(
+                verify_hash_with_policy(algorithm, "sha256:1234abcd", actual, false),
+                Err(HashError::LegacyChecksumAlgorithm { algorithm })
+            );
+        }
+    }
+
+    #[test]
+    fn verify_hash_with_policy_allows_legacy_algorithms_when_opted_in() {
+        let actual = [0x12, 0x34, 0xab, 0xcd];
+
+        assert!(
+            verify_hash_with_policy(HashAlgorithm::Md5, "sha256:1234abcd", actual, true).is_ok()
+        );
+        assert!(
+            verify_hash_with_policy(HashAlgorithm::Sha1, "sha256:1234abcd", actual, true).is_ok()
+        );
+    }
+
+    #[test]
+    fn verify_hash_with_policy_never_restricts_modern_algorithms() {
+        let actual = [0x12, 0x34, 0xab, 0xcd];
+
+        assert!(
+            verify_hash_with_policy(HashAlgorithm::Sha256, "sha256:1234abcd", actual, false)
+                .is_ok()
+        );
+        assert_eq!(
+            verify_hash_with_policy(HashAlgorithm::Sha256, "sha256:11111111", actual, false),
+            Err(HashError::ChecksumMismatch {
+                expected: "11111111".to_string(),
+                actual: "1234abcd".to_string(),
+            })
         );
     }
 

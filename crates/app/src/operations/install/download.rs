@@ -126,29 +126,35 @@ fn verify_strategy(
         return Ok((Verification::None, Vec::new()));
     }
 
-    match hash_algorithm {
-        // MD5 is cryptographically broken beyond use; skip verification entirely
-        // rather than computing a hash we cannot trust.
-        HashAlgorithm::Md5 if ignore_checksum_security => {
-            Ok((Verification::None, vec![HashAlgorithm::Md5]))
+    // `HashAlgorithm::is_legacy` is the single source of truth for which
+    // algorithms are rejected by default (see
+    // `core::hash::verify_hash_with_policy`, which backs the same guarantee
+    // for callers outside the install download path).
+    if hash_algorithm.is_legacy() {
+        if !ignore_checksum_security {
+            return Err(crate::core::HashError::LegacyChecksumAlgorithm {
+                algorithm: hash_algorithm,
+            }
+            .into());
         }
-        HashAlgorithm::Md5 => Err(crate::core::HashError::LegacyChecksumAlgorithm {
-            algorithm: HashAlgorithm::Md5,
-        }
-        .into()),
-        HashAlgorithm::Sha1 if ignore_checksum_security => Ok((
-            Verification::Active(Box::new(Hasher::new(HashAlgorithm::Sha1))),
-            vec![HashAlgorithm::Sha1],
-        )),
-        HashAlgorithm::Sha1 => Err(crate::core::HashError::LegacyChecksumAlgorithm {
-            algorithm: HashAlgorithm::Sha1,
-        }
-        .into()),
-        algorithm => Ok((
-            Verification::Active(Box::new(Hasher::new(algorithm))),
-            Vec::new(),
-        )),
+
+        // MD5 is cryptographically broken beyond use; skip verification
+        // entirely rather than computing a hash we cannot trust. SHA-1 is
+        // weaker but still catches accidental corruption, so it stays
+        // active when tolerated.
+        let verification = if hash_algorithm == HashAlgorithm::Md5 {
+            Verification::None
+        } else {
+            Verification::Active(Box::new(Hasher::new(hash_algorithm)))
+        };
+
+        return Ok((verification, vec![hash_algorithm]));
     }
+
+    Ok((
+        Verification::Active(Box::new(Hasher::new(hash_algorithm))),
+        Vec::new(),
+    ))
 }
 
 #[cfg(test)]
