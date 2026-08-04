@@ -2,6 +2,7 @@
 	"name": "update",
 	"version": "0.0.0",
 	"private": true,
+	"packageManager": "pnpm@11.18.0",
 	"scripts": {
 		"dev:bootstrap": "node ./scripts/dev-bootstrap.mjs",
 		"predev": "pnpm run dev:bootstrap",
