@@ -1,7 +1,9 @@
 use super::metadata::{
     NativeExeInstallMetadata, capture_native_exe_metadata, capture_native_exe_metadata_with,
 };
-use super::switches::{build_install_args, has_arg_prefix, split_switches};
+use super::switches::{
+    build_install_args, has_arg_prefix, split_switches, split_uninstall_command,
+};
 use super::validation::{validate_download_path, validate_install_dir, validate_package_name};
 
 use std::path::{Path, PathBuf};
@@ -97,6 +99,44 @@ fn split_switches_rejects_duplicate_value_switches() {
     assert!(
         err.to_string()
             .contains("duplicate installer switch detected")
+    );
+}
+
+#[test]
+fn split_uninstall_command_handles_unquoted_path_with_spaces() {
+    let dir = native_exe_test_dir("uninstall-unquoted");
+    let uninstaller = dir.join("uninst.exe");
+    std::fs::write(&uninstaller, b"placeholder").expect("write fake uninstaller");
+
+    let command = format!("{} -y /quiet", uninstaller.display());
+    let parts = split_uninstall_command(&command).expect("uninstall command should parse");
+
+    assert_eq!(parts[0], uninstaller.display().to_string());
+    assert_eq!(parts[1..], vec!["-y".to_string(), "/quiet".to_string()]);
+}
+
+#[test]
+fn split_uninstall_command_handles_quoted_path() {
+    let parts = split_uninstall_command(r#""C:\Program Files\App\uninst.exe" -y"#)
+        .expect("uninstall command should parse");
+
+    assert_eq!(
+        parts,
+        vec![
+            "C:\\Program Files\\App\\uninst.exe".to_string(),
+            "-y".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn split_uninstall_command_falls_back_to_naive_split_without_existing_file() {
+    let parts = split_uninstall_command("C:\\Nonexistent\\uninst.exe -y")
+        .expect("uninstall command should parse");
+
+    assert_eq!(
+        parts,
+        vec!["C:\\Nonexistent\\uninst.exe".to_string(), "-y".to_string()]
     );
 }
 
