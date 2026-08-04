@@ -1,4 +1,20 @@
 {
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "docker:pinDigests",
+    "helpers:pinGitHubActionDigests",
+    "abandonments:recommended",
+    "security:minimumReleaseAgeNpm",
+    ":maintainLockFilesWeekly",
+    // Deliberately not extending "config:best-practices" wholesale: it also
+    // pulls in ":pinDevDependencies", which -- via the "dev-dependencies"
+    // depType -- pins Cargo's [dev-dependencies] across every crate, not
+    // just npm devDependencies. That doesn't fit this workspace's Rust
+    // conventions. Everything else best-practices adds is included above,
+    // spelled out individually so the one exclusion stays visible.
+  ],
+  "timezone": "Etc/UTC",
   "schedule": ["before 5am on the first day of the month"],
   "semanticCommits": "enabled",
   "configMigration": true,
@@ -6,13 +22,13 @@
   "labels": ["dependencies"],
   "prConcurrentLimit": 10,
   "prHourlyLimit": 0,
+  "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
     "schedule": ["at any time"],
     "labels": ["dependencies", "security"]
   },
   "enabledManagers": ["cargo", "gomod", "npm", "github-actions", "custom.regex"],
   "ignorePaths": ["**/tests/**"],
-  "ignoreDeps": ["curl-sys"],
   "customManagers": [
     {
       "customType": "regex",
@@ -48,8 +64,22 @@
   ],
   "packageRules": [
     {
+      "matchManagers": ["gomod"],
+      "postUpdateOptions": ["gomodTidy"]
+    },
+    {
+      "matchManagers": ["npm"],
+      "postUpdateOptions": ["pnpmDedupe"]
+    },
+    {
       "matchUpdateTypes": ["major"],
       "labels": ["dependencies", "major-update"],
+      "automerge": false
+    },
+    {
+      "matchManagers": ["cargo", "gomod", "npm"],
+      "matchUpdateTypes": ["major"],
+      "minimumReleaseAge": "14 days",
       "automerge": false
     },
     {
@@ -65,6 +95,9 @@
       "matchDepNames": ["MSRV:3", "rust-toolchain"],
       "extractVersion": "^(?<version>\\d+\\.\\d+)",
       "schedule": ["at any time"],
+      // Longer cooldown than the compatible-* groups below: a toolchain/MSRV
+      // bump affects every crate in the workspace at once, so it gets extra
+      // time to prove itself before Renovate proposes it.
       "minimumReleaseAge": "85 days",
       "internalChecksFilter": "strict",
       "groupName": "msrv"
