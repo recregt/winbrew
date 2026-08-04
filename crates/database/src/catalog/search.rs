@@ -198,7 +198,13 @@ mod tests {
     }
 
     #[test]
-    fn package_updates_refresh_updated_at_automatically() {
+    fn package_updates_require_explicit_updated_at() {
+        // `catalog_packages` has no trigger that auto-refreshes
+        // `updated_at` (a prior one was removed -- see
+        // infra/parser/schema/catalog.sql for why), so every writer is
+        // responsible for setting it in the same statement. This matches
+        // infra/parser's real PACKAGE_UPSERT statement, which always sets
+        // `updated_at = CURRENT_TIMESTAMP` explicitly.
         let conn = open_test_db();
 
         insert_catalog_package(
@@ -213,10 +219,14 @@ mod tests {
         conn.execute(
             r#"
             UPDATE catalog_packages
-            SET description = ?1
-            WHERE id = ?2
+            SET description = ?1, updated_at = ?2
+            WHERE id = ?3
             "#,
-            params!["Updated package", "winget/Contoso.App"],
+            params![
+                "Updated package",
+                "2026-04-15 00:00:00",
+                "winget/Contoso.App"
+            ],
         )
         .expect("update catalog package");
 
@@ -225,12 +235,43 @@ mod tests {
             .expect("package should exist");
 
         assert_eq!(package.description.as_deref(), Some("Updated package"));
-        let updated_at = package
-            .updated_at
-            .as_deref()
-            .expect("package should have updated_at");
-        assert!(updated_at > "2026-04-14 12:34:56");
+        assert_eq!(package.updated_at.as_deref(), Some("2026-04-15 00:00:00"));
         assert_eq!(package.created_at.as_deref(), Some("2026-04-14 12:00:00"));
+    }
+
+    #[test]
+    fn package_update_without_touching_updated_at_does_not_corrupt_fts_index() {
+        // Regression test. A previous "catalog_packages_update_timestamp"
+        // trigger issued a nested UPDATE on catalog_packages, from within
+        // its own AFTER UPDATE trigger body, whenever a caller updated a
+        // row without touching `updated_at`. That nested write corrupted
+        // the FTS5 external-content index ("database disk image is
+        // malformed") on the very next read -- reproducible with plain
+        // sqlite3, independent of rusqlite, across SQLite versions from
+        // 3.45 through 3.53. The trigger was removed rather than reworked,
+        // since any second AFTER UPDATE trigger doing a nested write to the
+        // same content table reproduces the same corruption.
+        let conn = open_test_db();
+
+        insert_catalog_package(
+            &conn,
+            "winget/Contoso.App",
+            "Contoso App",
+            Some("Example package"),
+            None,
+            None,
+        );
+
+        conn.execute(
+            "UPDATE catalog_packages SET name = ?1 WHERE id = ?2",
+            params!["Contoso App 2", "winget/Contoso.App"],
+        )
+        .expect("update should not corrupt the fts5 index");
+
+        let searched =
+            search(&conn, "Contoso").expect("catalog search should succeed after update");
+        assert_eq!(searched.len(), 1);
+        assert_eq!(searched[0].name, "Contoso App 2");
     }
 
     #[test]
