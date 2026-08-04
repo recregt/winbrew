@@ -6,7 +6,9 @@ use crate::catalog::installer_type::CatalogInstallerType;
 use crate::install::{Architecture, InstallerType};
 use crate::package::{PackageId, PackageSource};
 use crate::shared::CatalogId;
-use crate::shared::validation::{Validate, ensure_hash, ensure_http_url, ensure_non_empty};
+use crate::shared::validation::{
+    Validate, ensure_hash, ensure_http_url, ensure_non_empty, ensure_safe_path_component,
+};
 use crate::shared::{HashAlgorithm, ModelError, Version};
 
 /// A validated catalog package entry.
@@ -149,6 +151,10 @@ impl CatalogPackage {
     pub fn validate(&self) -> Result<(), ModelError> {
         self.id.validate()?;
         ensure_non_empty("catalog_package.name", &self.name)?;
+        // `name` is joined directly onto the managed packages root to build
+        // the package install directory (see `ResolvedPaths::package_install_dir`
+        // in winbrew-core), so it must not be able to escape that root.
+        ensure_safe_path_component("catalog_package.name", &self.name)?;
         ensure_non_empty("catalog_package.source_id", &self.source_id)?;
         if let Some(namespace) = self.namespace.as_deref() {
             ensure_non_empty("catalog_package.namespace", namespace)?;
@@ -488,6 +494,32 @@ mod tests {
         let err = package.validate().expect_err("source mismatch should fail");
 
         assert!(err.to_string().contains("source mismatch"));
+    }
+
+    #[test]
+    fn rejects_traversal_shaped_name() {
+        for unsafe_name in [
+            "..\\..\\Users\\Public\\evil",
+            "../../etc",
+            "..",
+            ".",
+            "C:\\Windows",
+        ] {
+            let package = catalog_package(
+                "winget/Contoso.App".into(),
+                unsafe_name,
+                Version::parse("1.2.3").expect("version should parse"),
+            );
+
+            let err = package
+                .validate()
+                .expect_err("traversal-shaped name should fail validation");
+
+            assert!(
+                err.to_string().contains("catalog_package.name"),
+                "unexpected error for {unsafe_name:?}: {err}"
+            );
+        }
     }
 
     #[test]
