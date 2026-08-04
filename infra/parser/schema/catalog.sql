@@ -111,12 +111,18 @@ CREATE TRIGGER IF NOT EXISTS catalog_packages_au AFTER UPDATE ON catalog_package
     VALUES (new.rowid, new.name, COALESCE(new.description, ''), COALESCE(new.moniker, ''), COALESCE(new.tags, ''));
 END;
 
-CREATE TRIGGER IF NOT EXISTS catalog_packages_update_timestamp
-AFTER UPDATE ON catalog_packages
-FOR EACH ROW
-WHEN NEW.updated_at = OLD.updated_at
-BEGIN
-    UPDATE catalog_packages
-    SET updated_at = datetime('now')
-    WHERE rowid = NEW.rowid;
-END;
+-- There is intentionally no trigger that auto-refreshes `updated_at`.
+-- A previous "catalog_packages_update_timestamp" AFTER UPDATE trigger
+-- issued a nested UPDATE on catalog_packages (from within its own trigger
+-- body) whenever a caller updated a row without touching `updated_at`.
+-- That nested write, layered on top of catalog_packages_au's FTS5
+-- external-content sync for the same statement, corrupted the FTS5 index
+-- ("database disk image is malformed") on the next read -- reproducible
+-- with plain sqlite3, independent of rusqlite or this project's code, and
+-- confirmed across SQLite versions from 3.45 through 3.53. External-content
+-- FTS5 tables are documented as unsafe to write to from more than one place
+-- while a sync trigger for the same statement is active; a second AFTER
+-- UPDATE trigger on the same table is exactly that.
+-- Every writer must set `updated_at` explicitly in the same statement that
+-- changes a row (both infra/parser's PACKAGE_UPSERT and infra/publisher's
+-- INSERT OR REPLACE patch statements already do this).
