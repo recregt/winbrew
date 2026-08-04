@@ -94,7 +94,7 @@ func buildReleaseMaterializationSQL(publicBaseURL, objectKey string, metadata Me
 	}
 	statements = append(statements, d1SchemaBootstrapStatements()...)
 	statements = append(statements,
-		fmt.Sprintf(
+		sqlSprintf(
 			"INSERT INTO release_lineage (hash, parent_hash, is_snapshot, snapshot_url, metadata_url) VALUES (%s, %s, 1, %s, %s) ON CONFLICT(hash) DO UPDATE SET parent_hash = excluded.parent_hash, is_snapshot = excluded.is_snapshot, snapshot_url = excluded.snapshot_url, metadata_url = excluded.metadata_url;",
 			sqlText(currentHash),
 			sqlNullableText(previousHash),
@@ -109,12 +109,12 @@ func buildReleaseMaterializationSQL(publicBaseURL, objectKey string, metadata Me
 		}
 
 		statements = append(statements,
-			fmt.Sprintf(
-				"INSERT INTO patch_artifacts (from_hash, to_hash, file_path, size_bytes, checksum) VALUES (%s, %s, %s, %d, %s) ON CONFLICT(from_hash, to_hash) DO UPDATE SET file_path = excluded.file_path, size_bytes = excluded.size_bytes, checksum = excluded.checksum;",
+			sqlSprintf(
+				"INSERT INTO patch_artifacts (from_hash, to_hash, file_path, size_bytes, checksum) VALUES (%s, %s, %s, %s, %s) ON CONFLICT(from_hash, to_hash) DO UPDATE SET file_path = excluded.file_path, size_bytes = excluded.size_bytes, checksum = excluded.checksum;",
 				sqlText(artifact.FromHash),
 				sqlText(artifact.ToHash),
 				sqlText(artifact.FilePath),
-				artifact.SizeBytes,
+				sqlInt(artifact.SizeBytes),
 				sqlText(artifact.Checksum),
 			),
 		)
@@ -343,7 +343,7 @@ func buildCatalogPatchSQLFromDB(previousDB, currentDB *sql.DB) (string, error) {
 				statements = append(statements, rawUpsertStatement(packageID, currentRaw))
 			}
 		} else if _, previousOK := previousRaws[packageID]; previousOK {
-			statements = append(statements, fmt.Sprintf("DELETE FROM catalog_packages_raw WHERE package_id = %s;", sqlText(packageID)))
+			statements = append(statements, sqlSprintf("DELETE FROM catalog_packages_raw WHERE package_id = %s;", sqlText(packageID)))
 		}
 
 		currentPackageInstallers := currentInstallers[packageID]
@@ -375,12 +375,12 @@ func buildCatalogPatchSQLFromDB(previousDB, currentDB *sql.DB) (string, error) {
 		}
 		sort.Slice(removedInstallerIDs, func(i, j int) bool { return removedInstallerIDs[i] < removedInstallerIDs[j] })
 		for _, installerID := range removedInstallerIDs {
-			statements = append(statements, fmt.Sprintf("DELETE FROM catalog_installers WHERE id = %d;", installerID))
+			statements = append(statements, sqlSprintf("DELETE FROM catalog_installers WHERE id = %s;", sqlInt(installerID)))
 		}
 	}
 
 	for _, packageID := range removedPackages {
-		statements = append(statements, fmt.Sprintf("DELETE FROM catalog_packages WHERE id = %s;", sqlText(packageID)))
+		statements = append(statements, sqlSprintf("DELETE FROM catalog_packages WHERE id = %s;", sqlText(packageID)))
 	}
 
 	statements = append(statements, "COMMIT;")
@@ -614,9 +614,9 @@ func nullStringEqual(left, right sql.NullString) bool {
 }
 
 func packageUpsertStatement(record packageRecord) string {
-	return fmt.Sprintf(
-		"INSERT OR REPLACE INTO catalog_packages (rowid, id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, tags, bin, created_at, updated_at) VALUES (%d, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
-		record.RowID,
+	return sqlSprintf(
+		"INSERT OR REPLACE INTO catalog_packages (rowid, id, name, version, source, namespace, source_id, description, homepage, license, publisher, locale, moniker, tags, bin, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+		sqlInt(record.RowID),
 		sqlText(record.ID),
 		sqlText(record.Name),
 		sqlText(record.Version),
@@ -637,7 +637,7 @@ func packageUpsertStatement(record packageRecord) string {
 }
 
 func rawUpsertStatement(packageID string, raw sql.NullString) string {
-	return fmt.Sprintf(
+	return sqlSprintf(
 		"INSERT OR REPLACE INTO catalog_packages_raw (package_id, raw) VALUES (%s, %s);",
 		sqlText(packageID),
 		sqlNullableText(raw.String),
@@ -645,9 +645,9 @@ func rawUpsertStatement(packageID string, raw sql.NullString) string {
 }
 
 func installerUpsertStatement(record installerRecord) string {
-	return fmt.Sprintf(
-		"INSERT OR REPLACE INTO catalog_installers (id, package_id, url, hash, hash_algorithm, installer_type, installer_switches, scope, arch, kind, nested_kind) VALUES (%d, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
-		record.ID,
+	return sqlSprintf(
+		"INSERT OR REPLACE INTO catalog_installers (id, package_id, url, hash, hash_algorithm, installer_type, installer_switches, scope, arch, kind, nested_kind) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+		sqlInt(record.ID),
 		sqlText(record.PackageID),
 		sqlText(record.URL),
 		sqlNullableText(record.Hash.String),
@@ -662,8 +662,8 @@ func installerUpsertStatement(record installerRecord) string {
 }
 
 func installerUpdateStatement(record installerRecord) string {
-	return fmt.Sprintf(
-		"UPDATE catalog_installers SET package_id = %s, url = %s, hash = %s, hash_algorithm = %s, installer_type = %s, installer_switches = %s, scope = %s, arch = %s, kind = %s, nested_kind = %s WHERE id = %d;",
+	return sqlSprintf(
+		"UPDATE catalog_installers SET package_id = %s, url = %s, hash = %s, hash_algorithm = %s, installer_type = %s, installer_switches = %s, scope = %s, arch = %s, kind = %s, nested_kind = %s WHERE id = %s;",
 		sqlText(record.PackageID),
 		sqlText(record.URL),
 		sqlNullableText(record.Hash.String),
@@ -674,7 +674,7 @@ func installerUpdateStatement(record installerRecord) string {
 		sqlText(record.Arch),
 		sqlText(record.Kind),
 		sqlNullableText(record.NestedKind.String),
-		record.ID,
+		sqlInt(record.ID),
 	)
 }
 
