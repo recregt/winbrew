@@ -20,6 +20,32 @@ pub fn ensure_non_empty(field: &'static str, value: &str) -> Result<(), ModelErr
     }
 }
 
+/// Reject values that cannot be safely used as a single filesystem path
+/// component (a directory or file name joined onto a managed root).
+///
+/// This rejects path separators, drive/stream markers, NUL, and the `.`/`..`
+/// traversal segments. It does not reject arbitrary leading dots (e.g.
+/// `.NET Desktop Runtime` is a real package name), only a component that is
+/// *exactly* `.` or `..`, since those are the only segments that change which
+/// directory a join resolves to.
+pub fn ensure_safe_path_component(field: &'static str, value: &str) -> Result<(), ModelError> {
+    let trimmed = value.trim();
+
+    let is_unsafe = trimmed.is_empty()
+        || trimmed == "."
+        || trimmed == ".."
+        || trimmed.contains(['/', '\\', ':', '\0']);
+
+    if is_unsafe {
+        Err(ModelError::invalid_contract(
+            field,
+            format!("{value:?} is not safe to use as a path component"),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 /// Accept only `http` and `https` URLs.
 pub fn ensure_http_url(field: &'static str, value: &str) -> Result<(), ModelError> {
     let parsed = url::Url::parse(value)
