@@ -66,6 +66,41 @@ func TestBuildCatalogPatchSQLRefusesWhenPackageRowIDDrifts(t *testing.T) {
 	}
 }
 
+func TestBuildCatalogPatchSQLFromSnapshotsDiffsWithoutADatabase(t *testing.T) {
+	t.Parallel()
+
+	// buildCatalogPatchSQLFromSnapshots takes already-loaded maps, so drift
+	// detection and diffing can be exercised directly against synthetic
+	// fixtures instead of only end-to-end through a real sqlite file.
+	unchanged := packageRecord{RowID: 1, ID: "pkg/unchanged", Name: "Unchanged", Version: "1.0.0", Source: "winget", SourceID: "unchanged", CreatedAt: "2026-04-15 10:00:00", UpdatedAt: "2026-04-15 10:00:00"}
+	changed := packageRecord{RowID: 2, ID: "pkg/changed", Name: "Changed", Version: "1.0.0", Source: "winget", SourceID: "changed", CreatedAt: "2026-04-15 10:00:00", UpdatedAt: "2026-04-15 10:00:00"}
+	changedUpdated := changed
+	changedUpdated.Version = "2.0.0"
+	changedUpdated.UpdatedAt = "2026-04-16 12:00:00"
+	removed := packageRecord{RowID: 3, ID: "pkg/removed", Name: "Removed", Version: "1.0.0", Source: "winget", SourceID: "removed", CreatedAt: "2026-04-15 10:00:00", UpdatedAt: "2026-04-15 10:00:00"}
+
+	previousPackages := map[string]packageRecord{unchanged.ID: unchanged, changed.ID: changed, removed.ID: removed}
+	currentPackages := map[string]packageRecord{unchanged.ID: unchanged, changed.ID: changedUpdated}
+
+	patchSQL, err := buildCatalogPatchSQLFromSnapshots(
+		previousPackages, map[string]sql.NullString{}, map[string]map[int64]installerRecord{},
+		currentPackages, map[string]sql.NullString{}, map[string]map[int64]installerRecord{},
+	)
+	if err != nil {
+		t.Fatalf("buildCatalogPatchSQLFromSnapshots() error = %v", err)
+	}
+
+	if strings.Contains(patchSQL, "'pkg/unchanged'") {
+		t.Fatalf("patch SQL touched the unchanged package:\n%s", patchSQL)
+	}
+	if !strings.Contains(patchSQL, "'pkg/changed'") || !strings.Contains(patchSQL, "2.0.0") {
+		t.Fatalf("patch SQL did not upsert the changed package:\n%s", patchSQL)
+	}
+	if !strings.Contains(patchSQL, "DELETE FROM catalog_packages WHERE id = 'pkg/removed';") {
+		t.Fatalf("patch SQL did not delete the removed package:\n%s", patchSQL)
+	}
+}
+
 func TestBuildCatalogPatchSQLRefusesWhenInstallerIDDrifts(t *testing.T) {
 	t.Parallel()
 
