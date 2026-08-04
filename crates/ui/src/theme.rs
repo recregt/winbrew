@@ -70,3 +70,16 @@ pub fn styled_line(value: bool, icon: &str, msg: &str, style: Style) -> String {
         format!("{icon} {msg}")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn spinner_and_progress_templates_are_valid_in_both_color_modes() {
+        make_spinner_style(true);
+        make_spinner_style(false);
+        make_progress_style(true);
+        make_progress_style(false);
+    }
+}
