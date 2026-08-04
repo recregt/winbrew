@@ -7,7 +7,7 @@ mod replay;
 mod resolution;
 mod restore;
 
-pub use cleanup::cleanup_orphan_install_dirs;
+pub use cleanup::{OrphanCleanupSummary, cleanup_orphan_install_dirs};
 pub use plan::{FileRestorePackage, RepairPlan, build_repair_plan};
 pub use replay::{
     JournalCommandResolutionStatus, JournalReplaySummary, JournalReplayTarget,
