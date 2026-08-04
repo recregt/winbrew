@@ -5,13 +5,13 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"net/url"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"infra/sqliteutil"
 )
 
 const wingetIndexQuery = `
@@ -50,7 +50,7 @@ type wingetVersionParts struct {
 
 func readWingetIndexRows(ctx context.Context, dbPath string) ([]wingetIndexRow, error) {
 	start := time.Now()
-	dsn, err := sqliteDSN(dbPath)
+	dsn, err := sqliteutil.DSN(dbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -338,21 +338,4 @@ func splitNumericPrefix(value string) (string, string) {
 	}
 
 	return value[:idx], value[idx:]
-}
-
-func sqliteDSN(dbPath string) (string, error) {
-	absPath, err := filepath.Abs(dbPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve winget database path: %w", err)
-	}
-	uriPath := filepath.ToSlash(absPath)
-	if len(uriPath) >= 2 && uriPath[1] == ':' {
-		uriPath = "/" + uriPath
-	}
-
-	return (&url.URL{
-		Scheme:   "file",
-		Path:     uriPath,
-		RawQuery: "mode=ro",
-	}).String(), nil
 }
