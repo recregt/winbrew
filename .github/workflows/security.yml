@@ -216,6 +216,37 @@ jobs:
     steps:
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
 
+  scorecard:
+    name: OpenSSF Scorecard
+    # A repo-configuration posture score, not a code scanner -- doesn't need
+    # to run on every push/PR, just periodically like the rest of this
+    # workflow's scheduled checks.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: scorecard-results.sarif
+          results_format: sarif
+          # false: keeps results in this repo's own Security tab only, same
+          # as every other scanner here. true publishes to the public
+          # securityscorecards.dev ledger and enables a README badge --
+          # a separate, explicit decision to make later, not bundled in here.
+          publish_results: false
+
+      - uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          sarif_file: scorecard-results.sarif
+
   actionlint:
     name: Lint › Workflows
     needs: changes
