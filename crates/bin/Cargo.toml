@@ -22,3 +22,8 @@ mimalloc = "0.1"
 
 [build-dependencies]
 winresource = "0.1"
+
+# cargo-machete doesn't scan build.rs, so it can't see winresource is used
+# there to embed the Windows icon/version resource.
+[package.metadata.cargo-machete]
+ignored = ["winresource"]

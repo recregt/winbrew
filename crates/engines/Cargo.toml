@@ -11,9 +11,6 @@ publish.workspace = true
 [dependencies]
 anyhow.workspace = true
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
-regex = "1.12"
-strum_macros = "0.28"
-url = "2"
 zip = "8"
 tracing.workspace = true
 winbrew-core = { path = "../core" }

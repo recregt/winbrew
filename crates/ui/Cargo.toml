@@ -16,7 +16,6 @@ dialoguer = { version = "0.12", default-features = false }
 indicatif = { version = "0.18", default-features = false, features = ["unicode-width"] }
 terminal_size = "0.4"
 tracing.workspace = true
-unicode-width = "0.2"
 winbrew-models = { path = "../models" }
 
 [dev-dependencies]
