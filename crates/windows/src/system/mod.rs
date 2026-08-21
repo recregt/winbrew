@@ -242,6 +242,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "creates a real temp directory and calls SearchPathW; Miri's Windows target doesn't shim either"
+    )]
     fn search_path_file_uses_explicit_search_path_list() {
         let temp_dir = tempdir().expect("temp dir");
         let file_path = temp_dir.path().join("7z.exe");

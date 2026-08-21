@@ -161,6 +161,10 @@ mod tests {
     use std::path::Path;
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "creates a real temp directory; Miri's Windows target doesn't shim CreateDirectoryW"
+    )]
     fn matches_existing_directories_via_canonicalization() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let trailing_slash = temp_dir.path().join("");

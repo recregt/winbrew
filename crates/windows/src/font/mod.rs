@@ -297,6 +297,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "touches the real HKCU registry via winreg; Miri's Windows target doesn't shim RegCreateKeyExW"
+    )]
     fn register_and_unregister_user_font_round_trip_registry_value() {
         let font_path = temp_font_path("registry-round-trip.ttf");
         fs::write(&font_path, b"dummy font payload").expect("write temp font file");
@@ -323,6 +327,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "touches the real HKCU registry via winreg; Miri's Windows target doesn't shim RegCreateKeyExW"
+    )]
     fn remove_user_font_cleans_registry_entry_and_file() {
         let font_path = temp_font_path("remove-round-trip.ttf");
         fs::write(&font_path, b"dummy font payload").expect("write temp font file");
@@ -346,6 +354,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "touches the real HKCU registry via winreg; Miri's Windows target doesn't shim RegOpenKeyExW"
+    )]
     fn remove_user_font_is_idempotent_when_registry_entry_is_missing() {
         let font_path = temp_font_path("missing-registry.ttf");
         fs::write(&font_path, b"dummy font payload").expect("write temp font file");
@@ -356,6 +368,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "touches the real HKCU registry via winreg; Miri's Windows target doesn't shim RegOpenKeyExW"
+    )]
     fn remove_user_font_is_idempotent_when_font_file_is_missing() {
         let font_path = temp_font_path("missing-file.ttf");
         fs::write(&font_path, b"dummy font payload").expect("write temp font file");

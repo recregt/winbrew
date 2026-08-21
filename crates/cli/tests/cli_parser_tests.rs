@@ -42,6 +42,12 @@ fn assert_parse_error(args: &[&str], expected_kind: ErrorKind, expected_fragment
     }
 }
 
+// `set_var`/`remove_var` are unsafe because concurrent env mutation across
+// threads is unsound (the whole `environ` array can race, not just one key).
+// `env_lock()` serializes every test in this file that touches process env
+// vars so the harness's default parallel test execution can't trigger that.
+use winbrew_testing::env_lock;
+
 struct EnvOverrideGuard {
     key: &'static str,
     previous: Option<OsString>,
@@ -468,11 +474,62 @@ mod help_validation {
     }
 }
 
+mod env_override_guard_tests {
+    use super::*;
+
+    #[test]
+    fn set_applies_value_and_drop_restores_previous() {
+        let _lock = env_lock();
+        let key = "WINBREW_CLI_TEST_ENV_ROUNDTRIP_RESTORE";
+        unsafe {
+            env::set_var(key, "before");
+        }
+
+        {
+            let guard = EnvOverrideGuard::set(key, std::ffi::OsStr::new("after"));
+            assert_eq!(env::var(key).as_deref(), Ok("after"));
+            drop(guard);
+        }
+
+        assert_eq!(env::var(key).as_deref(), Ok("before"));
+
+        unsafe {
+            env::remove_var(key);
+        }
+    }
+
+    #[test]
+    fn set_applies_value_and_drop_removes_when_previously_unset() {
+        let _lock = env_lock();
+        let key = "WINBREW_CLI_TEST_ENV_ROUNDTRIP_UNSET";
+        unsafe {
+            env::remove_var(key);
+        }
+
+        {
+            let guard = EnvOverrideGuard::set(key, std::ffi::OsStr::new("after"));
+            assert_eq!(env::var(key).as_deref(), Ok("after"));
+            drop(guard);
+        }
+
+        assert!(env::var(key).is_err());
+    }
+}
+
 mod integration {
     use super::*;
 
     #[test]
+    // Reaches winbrew-database's bundled rusqlite, which calls into real C
+    // FFI (`sqlite3_threadsafe` and friends) that Miri cannot interpret.
+    // The env-var unsafe block this test also exercises is covered directly,
+    // and without an OS dependency, by `env_override_guard_tests` above.
+    #[cfg_attr(
+        miri,
+        ignore = "transitively calls into bundled libsqlite3 via FFI, which Miri cannot interpret"
+    )]
     fn run_app_version_smoke_test() {
+        let _lock = env_lock();
         let temp_root = tempfile::tempdir().expect("temp root");
         let _env_guard = EnvOverrideGuard::set("WINBREW_PATHS_ROOT", temp_root.path().as_os_str());
 

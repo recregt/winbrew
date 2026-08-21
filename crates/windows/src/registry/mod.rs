@@ -262,6 +262,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "touches the real HKCU registry via winreg; Miri's Windows target doesn't shim RegCreateKeyExW"
+    )]
     fn collects_uninstall_entries_and_projects_them_to_apps() {
         let package_name = "WinBrew Registry Helper";
         let install_dir = temp_install_dir("registry-helper");
