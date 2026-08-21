@@ -75,6 +75,14 @@ task test:nextest
 * `task ci:rust`: Runs formatting, Clippy, documentation generation, and the CLI test suite.
 * `task test:nextest`: Runs only the Rust tests without the extra CI wrapping.
 
+Optionally, run Miri to check every `unsafe` block in the workspace for undefined
+behavior (this needs the nightly toolchain and is not part of `task ci:rust`):
+
+```powershell
+task tools:install-miri
+task test:miri
+```
+
 ### 5. Build the CLI Binary
 
 To build the executable for debugging and development:

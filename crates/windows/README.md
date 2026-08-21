@@ -412,3 +412,15 @@ here, and higher layers can stay portable.
   does not depend on Windows projection types.
 - When a helper needs to expose more behavior, document the caller-facing
   contract at the root and keep the low-level implementation details private.
+- Every `unsafe` block in this crate wraps a real Win32/MSI/registry FFI call.
+  `task test:miri` runs this crate's test suite under Miri (cross-interpreted
+  for `x86_64-pc-windows-msvc`, no Windows host required) to catch UB in the
+  surrounding safe code -- struct/union layout assumptions, pointer handling,
+  and the like. Miri is an interpreter and cannot execute calls into external
+  DLLs, so any test that reaches a real Win32 call (MSI, registry, font
+  resources, `SearchPathW`, or even a plain `CreateDirectoryW` via `tempfile`)
+  is marked `#[cfg_attr(miri, ignore = "...")]` at its definition, with the
+  reason recorded inline. When adding a new `unsafe` block here, prefer
+  covering it with a test that constructs its inputs by hand (see
+  `architecture_from_native_system_info`'s tests) rather than one that must
+  call the real API, so Miri can actually exercise it.

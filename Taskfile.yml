@@ -13,6 +13,13 @@ tasks:
     cmds:
       - cargo install --locked cargo-nextest --version 0.9.132 --force
 
+  tools:install-miri:
+    desc: Install the nightly Miri component for local development
+    cmds:
+      - rustup toolchain install nightly --component miri
+      - cargo +nightly miri setup
+      - cargo +nightly miri setup --target x86_64-pc-windows-msvc
+
   tools:install-golangci-lint:
     desc: Install golangci-lint for local development
     cmds:
@@ -32,6 +39,21 @@ tasks:
     desc: Run lefthook pre-commit checks
     cmds:
       - lefthook run pre-commit --all-files
+
+  test:miri:
+    desc: Run Miri against every unsafe block in the workspace (run tools:install-miri first)
+    cmds:
+      # winbrew-testing and winbrew-cli hold the only `unsafe` blocks outside
+      # winbrew-windows (std::env::set_var/remove_var). winbrew-windows
+      # (#![cfg(windows)]) is cross-interpreted for the Windows target since
+      # its unsafe code is all Win32 FFI; tests that reach real Win32 calls
+      # are marked #[cfg_attr(miri, ignore)] at their definitions, since Miri
+      # cannot execute calls into arbitrary external DLLs on any host.
+      - cargo +nightly miri test -p winbrew-testing --lib
+      - cargo +nightly miri test -p winbrew-cli --test cli_parser_tests
+      - cmd: cargo +nightly miri test -p winbrew-windows --target x86_64-pc-windows-msvc
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation
 
   check:
     desc: Run cargo fmt
