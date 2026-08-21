@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Compute crawler cache key
         id: crawler-cache-key
@@ -183,11 +185,13 @@ jobs:
         if: ${{ hashFiles('infra/publisher/.generated/update_plans.sql') != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          NIGHTLY_DATE: ${{ steps.crawler-cache-key.outputs.date }}
+          NIGHTLY_TAG_DATE: ${{ steps.crawler-cache-key.outputs.tag_date }}
         run: |
           set -euo pipefail
 
-          nightly_date="${{ steps.crawler-cache-key.outputs.date }}"
-          nightly_tag="catalog-${{ steps.crawler-cache-key.outputs.tag_date }}-nightly"
+          nightly_date="$NIGHTLY_DATE"
+          nightly_tag="catalog-$NIGHTLY_TAG_DATE-nightly"
           archive_dir="infra/publisher/.generated/nightly"
 
           bash scripts/ci/package-nightly-release.sh "$CATALOG_DB" "$CATALOG_METADATA" infra/publisher/.generated "$archive_dir"
