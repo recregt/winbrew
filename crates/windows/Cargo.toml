@@ -11,8 +11,6 @@ publish.workspace = true
 [dependencies]
 anyhow.workspace = true
 regex = "1.12"
-strum = "0.28"
-strum_macros = "0.28"
 winbrew-models = { path = "../models" }
 
 [features]
