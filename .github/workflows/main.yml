@@ -220,6 +220,18 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
 
+    # cargo-miri wraps rustc and refuses the `@argfile` cargo falls back to
+    # once a rustc command line passes Windows' 32,767-character process
+    # limit ("cargo uses an argfile to invoke rustc, which is not supported
+    # by cargo-miri"). The winbrew-cli test target crossed it at 34,251
+    # characters -- not from unusual flags, but because the default target
+    # directory (`D:\a\winbrew\winbrew\target\miri`) is repeated in ~275
+    # `-L`/`--extern` paths. Building into a short path off the drive root
+    # takes the same invocation to 26,523 characters. The terseness is the
+    # entire point: every character here costs ~275 on the command line.
+    env:
+      CARGO_TARGET_DIR: C:\m
+
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -237,6 +249,10 @@ jobs:
         with:
           save-if: ${{ github.event_name == 'push' }}
           prefix-key: miri
+          # rust-cache resolves target directories relative to the workspace
+          # root, so it cannot reach the out-of-tree CARGO_TARGET_DIR above.
+          # Registry and toolchain caching still apply.
+          cache-targets: false
 
       # `+nightly` is required on every invocation below: the workspace pins
       # a stable toolchain via rust-toolchain.toml, which rustup's directory
