@@ -205,6 +205,17 @@ jobs:
         with:
           category: /language:${{ matrix.language }}
 
+  dependency-review:
+    name: Dependency Review
+    # Diffs the PR's dependency manifest changes against base -- inherently
+    # a no-op with nothing to diff on push/schedule/dispatch, so it only
+    # runs where it's meaningful rather than needing path-filter gating.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+
   actionlint:
     name: Lint › Workflows
     needs: changes
