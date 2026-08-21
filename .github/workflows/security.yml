@@ -175,6 +175,36 @@ jobs:
         with:
           sarif_file: infra/${{ matrix.module }}/govulncheck.sarif
 
+  codeql:
+    name: SAST › CodeQL (${{ matrix.language }})
+    needs: changes
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true' || needs.changes.outputs.go == 'true' || needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Go doesn't support build-mode: none (unlike Rust and JS/TS below),
+        # so it needs an actual toolchain and build step.
+        language: [rust, go, javascript-typescript]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - if: matrix.language == 'go'
+        uses: ./.github/actions/setup-go
+        with:
+          module: crawler
+          cache: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - uses: github/codeql-action/init@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'go' && 'autobuild' || 'none' }}
+
+      - uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          category: /language:${{ matrix.language }}
+
   actionlint:
     name: Lint › Workflows
     needs: changes
