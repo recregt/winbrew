@@ -31,6 +31,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Detect changed paths
         id: filter
@@ -52,12 +54,14 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Conclusion
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
         run: |
-          jq -C <<< '${{ toJson(needs) }}'
+          jq -C <<< "$NEEDS_JSON"
           # A job gated by the changes filter reports "skipped" when its
           # language didn't change -- that's a pass, not a failure. Only
           # "failure"/"cancelled" should fail the build here.
-          jq --exit-status 'all(.result == "success" or .result == "skipped")' <<< '${{ toJson(needs) }}'
+          jq --exit-status 'all(.result == "success" or .result == "skipped")' <<< "$NEEDS_JSON"
 
   go:
     name: Go › ${{ matrix.module }}
@@ -75,6 +79,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Go
         uses: ./.github/actions/setup-go
@@ -102,6 +108,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
@@ -123,6 +131,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
@@ -154,6 +164,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Spell Check Repo
         uses: crate-ci/typos@bee27e3a4fd1ea2111cf90ab89cd076c870fce14 # v1.48.0
@@ -168,6 +180,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
