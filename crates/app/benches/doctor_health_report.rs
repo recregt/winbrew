@@ -16,6 +16,10 @@ mod doctor_health_report {
     use winbrew_models::domains::shared::{DeploymentKind, HashAlgorithm};
     use winbrew_testing::{InstalledPackageBuilder, init_database, test_root};
 
+    /// Timestamp stamped into every fixture commit record. Fixed rather than
+    /// generated so repeated runs write byte-identical journals.
+    const INSTALLED_AT: &str = "2026-04-12T00:00:00Z";
+
     struct DoctorBenchFixture {
         _root: TempDir,
         ctx: AppContext,
@@ -40,6 +44,8 @@ mod doctor_health_report {
             self.ctx.paths.packages.join(package_name)
         }
 
+        /// Seed a healthy portable package: payload on disk, database row, and
+        /// a committed journal that agrees with both.
         fn seed_portable_package(&self, package_name: &str, version: &str) {
             let install_dir = self.package_dir(package_name);
             fs::create_dir_all(&install_dir).expect("install dir should exist");
@@ -63,6 +69,8 @@ mod doctor_health_report {
             );
         }
 
+        /// Seed a healthy MSI package, including the inventory snapshot the
+        /// scan reads to verify recorded files still hash to their receipt.
         fn seed_msi_package(&self, package_name: &str, version: &str) {
             let install_dir = self.package_dir(package_name);
             let file_path = install_dir.join("bin").join("tool.exe");
@@ -75,7 +83,7 @@ mod doctor_health_report {
                 .kind(InstallerType::Msi)
                 .build(&install_dir);
 
-            let conn = database::get_conn().expect("database connection should open");
+            let mut conn = database::get_conn().expect("database connection should open");
             database::insert_package(&conn, &package).expect("package should insert");
 
             let snapshot = MsiInventorySnapshot {
@@ -98,7 +106,6 @@ mod doctor_health_report {
                 components: Vec::new(),
             };
 
-            let mut conn = database::get_conn().expect("database connection should open");
             database::replace_snapshot(&mut conn, &snapshot).expect("msi snapshot should replace");
 
             self.write_committed_journal(
@@ -110,6 +117,8 @@ mod doctor_health_report {
             );
         }
 
+        /// Seed a package row whose install directory is deliberately never
+        /// created, so the scan reports a missing install.
         fn seed_missing_install_package(&self, package_name: &str, version: &str) {
             let install_dir = self.package_dir(package_name);
             let package = InstalledPackageBuilder::new(package_name)
@@ -121,10 +130,29 @@ mod doctor_health_report {
             database::insert_package(&conn, &package).expect("package should insert");
         }
 
+        /// Create a package directory with no matching database row, so the
+        /// scan reports an orphan directory.
         fn seed_orphan_directory(&self, package_name: &str) {
             fs::create_dir_all(self.package_dir(package_name)).expect("orphan dir should exist");
         }
 
+        /// Write `entries` to the package journal, creating its directory first.
+        fn write_journal(&self, package_name: &str, version: &str, entries: &[JournalEntry]) {
+            let journal_key = database::package_journal_key(package_name, version);
+            fs::create_dir_all(self.ctx.paths.package_journal_dir(&journal_key))
+                .expect("journal dir should exist");
+
+            let mut writer =
+                JournalWriter::open_for_package_in(&self.ctx.paths, package_name, version)
+                    .expect("open journal");
+            for entry in entries {
+                writer.append(entry).expect("write journal entry");
+            }
+            writer.flush().expect("flush journal");
+        }
+
+        /// Write the metadata-plus-commit journal a completed install leaves
+        /// behind.
         fn write_committed_journal(
             &self,
             package_name: &str,
@@ -133,67 +161,41 @@ mod doctor_health_report {
             deployment_kind: DeploymentKind,
             install_dir: &Path,
         ) {
-            fs::create_dir_all(
-                self.ctx
-                    .paths
-                    .root
-                    .join("data")
-                    .join("pkgdb")
-                    .join(database::package_journal_key(package_name, version)),
-            )
-            .expect("journal dir should exist");
-            let mut writer = JournalWriter::open_for_package(
-                self.ctx.paths.root.as_path(),
+            self.write_journal(
                 package_name,
                 version,
-            )
-            .expect("open committed journal");
-            writer
-                .append(&JournalEntry::Metadata {
-                    package_id: package_name.to_string(),
-                    version: version.to_string(),
-                    engine: engine.to_string(),
-                    deployment_kind,
-                    install_dir: install_dir.to_string_lossy().into_owned(),
-                    dependencies: Vec::new(),
-                    commands: None,
-                    bin: None,
-                    bin_bindings: None,
-                    env_add_path: Vec::new(),
-                    command_resolution: None,
-                    engine_metadata: None,
-                })
-                .expect("write journal metadata");
-            writer
-                .append(&JournalEntry::Commit {
-                    installed_at: "2026-04-12T00:00:00Z".to_string(),
-                })
-                .expect("write journal commit");
-            writer.flush().expect("flush journal");
+                &[
+                    JournalEntry::Metadata {
+                        package_id: package_name.to_string(),
+                        version: version.to_string(),
+                        engine: engine.to_string(),
+                        deployment_kind,
+                        install_dir: install_dir.to_string_lossy().into_owned(),
+                        dependencies: Vec::new(),
+                        commands: None,
+                        bin: None,
+                        bin_bindings: None,
+                        env_add_path: Vec::new(),
+                        command_resolution: None,
+                        engine_metadata: None,
+                    },
+                    JournalEntry::Commit {
+                        installed_at: INSTALLED_AT.to_string(),
+                    },
+                ],
+            );
         }
 
+        /// Write a legacy journal that commits without a metadata record, the
+        /// shape the scan has to recover from.
         fn write_commit_only_journal(&self, package_name: &str, version: &str) {
-            fs::create_dir_all(
-                self.ctx
-                    .paths
-                    .root
-                    .join("data")
-                    .join("pkgdb")
-                    .join(database::package_journal_key(package_name, version)),
-            )
-            .expect("journal dir should exist");
-            let mut writer = JournalWriter::open_for_package(
-                self.ctx.paths.root.as_path(),
+            self.write_journal(
                 package_name,
                 version,
-            )
-            .expect("open commit-only journal");
-            writer
-                .append(&JournalEntry::Commit {
-                    installed_at: "2026-04-12T00:00:00Z".to_string(),
-                })
-                .expect("write journal commit");
-            writer.flush().expect("flush journal");
+                &[JournalEntry::Commit {
+                    installed_at: INSTALLED_AT.to_string(),
+                }],
+            );
         }
 
         fn healthy_empty() -> Self {
@@ -216,12 +218,18 @@ mod doctor_health_report {
             fixture
         }
 
+        /// The healthy fixture plus one instance of every anomaly the scan
+        /// reports: a missing install, an orphan directory, a journal recorded
+        /// against a version the database no longer holds, and a legacy
+        /// commit-only journal.
         fn dirty_mixed() -> Self {
             let fixture = Self::healthy_mixed();
 
             fixture.seed_missing_install_package("Contoso.MissingInstall", "1.0.0");
             fixture.seed_orphan_directory("Contoso.Orphan");
 
+            // Installed as 2.0.0 but journalled as 1.0.0: the version skew is
+            // the anomaly under test, not a typo.
             let stale_install_dir = fixture.package_dir("Contoso.StaleJournal");
             fs::create_dir_all(&stale_install_dir).expect("stale install dir should exist");
             let stale_package = InstalledPackageBuilder::new("Contoso.StaleJournal")
