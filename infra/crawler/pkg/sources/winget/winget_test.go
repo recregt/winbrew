@@ -141,7 +141,7 @@ func TestDownloadUsesETagCache(t *testing.T) {
 		t.Fatalf("download(first) error = %v", err)
 	}
 
-	data, err := os.ReadFile(dst)
+	data, err := os.ReadFile(dst) //nolint:gosec // dst is a test-local temp dir path, not attacker input
 	if err != nil {
 		t.Fatalf("ReadFile(dst) error = %v", err)
 	}
@@ -282,7 +282,7 @@ func TestExtractDBRejectsPathTraversalEntry(t *testing.T) {
 	}
 
 	msixPath := filepath.Join(t.TempDir(), "winget.msix")
-	if err := os.WriteFile(msixPath, payload.Bytes(), 0o644); err != nil {
+	if err := os.WriteFile(msixPath, payload.Bytes(), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -320,7 +320,7 @@ func TestExtractDBRejectsDuplicateEntries(t *testing.T) {
 	}
 
 	msixPath := filepath.Join(t.TempDir(), "winget.msix")
-	if err := os.WriteFile(msixPath, payload.Bytes(), 0o644); err != nil {
+	if err := os.WriteFile(msixPath, payload.Bytes(), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -360,7 +360,7 @@ func TestExtractDBRejectsCorruptEntryAndCleansTemp(t *testing.T) {
 
 	dir := t.TempDir()
 	msixPath := filepath.Join(dir, "winget.msix")
-	if err := os.WriteFile(msixPath, corrupted, 0o644); err != nil {
+	if err := os.WriteFile(msixPath, corrupted, 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 

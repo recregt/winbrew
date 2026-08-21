@@ -196,7 +196,7 @@ func runPipeline(ctx context.Context, cfg *config.Config, srcs crawlerSources, c
 				return fmt.Errorf("failed to create winget output dir: %w", err)
 			}
 
-			outFile, err := os.Create(wingetOutPath)
+			outFile, err := os.Create(wingetOutPath) //nolint:gosec // wingetOutPath is the operator-supplied --winget-out flag, not attacker input
 			if err != nil {
 				return fmt.Errorf("failed to create winget output file: %w", err)
 			}

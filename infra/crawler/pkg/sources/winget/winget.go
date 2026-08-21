@@ -90,7 +90,7 @@ func (s *Source) download(ctx context.Context, url, dst string, maxSize int64) e
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	if etag, err := os.ReadFile(dst + ".etag"); err == nil {
+	if etag, err := os.ReadFile(dst + ".etag"); err == nil { //nolint:gosec // dst is caller-controlled cache path, not attacker input
 		if trimmed := strings.TrimSpace(string(etag)); trimmed != "" {
 			req.Header.Set("If-None-Match", trimmed)
 		}
@@ -153,7 +153,7 @@ func (s *Source) download(ctx context.Context, url, dst string, maxSize int64) e
 	}
 
 	if etag := resp.Header.Get("ETag"); etag != "" {
-		if err := os.WriteFile(dst+".etag", []byte(etag), 0o644); err != nil {
+		if err := os.WriteFile(dst+".etag", []byte(etag), 0o600); err != nil {
 			slog.Warn("failed to write etag cache file; next run will re-download in full", "dst", dst, "error", err)
 		}
 	}

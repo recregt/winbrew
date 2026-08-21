@@ -379,7 +379,7 @@ func readManifest(ctx context.Context, bucketName, dir, filename string) (normal
 		return normalize.Package{}, fmt.Errorf("manifest too large: %d bytes", info.Size())
 	}
 
-	file, err := os.Open(path)
+	file, err := os.Open(path) //nolint:gosec // path is a manifest file within the managed cache dir, already size-checked above
 	if err != nil {
 		return normalize.Package{}, fmt.Errorf("failed to open %s: %w", filename, err)
 	}

@@ -30,7 +30,7 @@ func loadPatchChain(path string) ([]patchChainArtifact, error) {
 		return nil, nil
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is a program/CLI-supplied local path, not attacker input
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil

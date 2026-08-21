@@ -185,7 +185,7 @@ func writeWingetFixture(path string, packages []wingetEnvelope) error {
 		return fmt.Errorf("create fixture dir: %w", err)
 	}
 
-	file, err := os.Create(path)
+	file, err := os.Create(path) //nolint:gosec // path is a caller-supplied fixture path in dev tooling, not attacker input
 	if err != nil {
 		return err
 	}

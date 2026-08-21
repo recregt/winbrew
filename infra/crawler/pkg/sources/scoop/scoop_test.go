@@ -63,7 +63,7 @@ func TestReadManifestUsesArchitectureBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(manifestDir, "example.json"), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(manifestDir, "example.json"), data, 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -109,7 +109,7 @@ func TestPackageSnapshotFromPackagePreservesRawManifestBytes(t *testing.T) {
 	}
 
 	manifestJSON := `{"version":"1.2.3","description":"example package","url":"https://example.invalid/tool.zip","hash":"deadbeef"}`
-	if err := os.WriteFile(filepath.Join(manifestDir, "example.json"), []byte(manifestJSON), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(manifestDir, "example.json"), []byte(manifestJSON), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 

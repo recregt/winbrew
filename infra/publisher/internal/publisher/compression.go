@@ -11,7 +11,7 @@ import (
 )
 
 func compressSnapshotToTemp(inputPath string) (string, int64, error) {
-	inputFile, err := os.Open(inputPath)
+	inputFile, err := os.Open(inputPath) //nolint:gosec // inputPath is the operator-supplied --input CLI flag, not attacker input
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to open catalog snapshot for compression: %w", err)
 	}
@@ -26,7 +26,7 @@ func compressTextToTemp(text string, tempNamePattern string) (string, int64, err
 }
 
 func decompressSnapshotToTemp(compressedPath string) (string, error) {
-	compressedFile, err := os.Open(compressedPath)
+	compressedFile, err := os.Open(compressedPath) //nolint:gosec // compressedPath is program-controlled (a locally downloaded/generated snapshot path), not attacker input
 	if err != nil {
 		return "", fmt.Errorf("failed to open compressed snapshot: %w", err)
 	}
