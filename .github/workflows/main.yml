@@ -217,7 +217,7 @@ jobs:
     name: Rust › Miri
     needs: changes
     if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true'
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     timeout-minutes: 20
 
     steps:
@@ -238,26 +238,25 @@ jobs:
           save-if: ${{ github.event_name == 'push' }}
           prefix-key: miri
 
-      - name: Install Miri sysroots
-        run: |
-          cargo miri setup
-          cargo miri setup --target x86_64-pc-windows-msvc
+      # `+nightly` is required on every invocation below: the workspace pins
+      # a stable toolchain via rust-toolchain.toml, which rustup's directory
+      # override would otherwise apply ahead of whatever the previous step
+      # just installed, even though nightly is what actually has Miri.
+      - name: Install Miri sysroot
+        run: cargo +nightly miri setup
 
       # winbrew-testing and winbrew-cli hold the only `unsafe` blocks outside
       # winbrew-windows (std::env::set_var/remove_var, unsafe since env
-      # mutation across threads is unsound). Both run on the native Linux
-      # target -- neither depends on Windows-only code.
+      # mutation across threads is unsound).
       - name: Miri › winbrew-testing
-        run: cargo miri test -p winbrew-testing --lib
+        run: cargo +nightly miri test -p winbrew-testing --lib
 
       - name: Miri › winbrew-cli (cli_parser_tests)
-        run: cargo miri test -p winbrew-cli --test cli_parser_tests
+        run: cargo +nightly miri test -p winbrew-cli --test cli_parser_tests
 
-      # winbrew-windows (#![cfg(windows)]) is cross-interpreted for the
-      # Windows target -- Miri doesn't need a real Windows host or an MSVC
-      # linker to do this, since it interprets MIR rather than compiling to
-      # native code. Isolation is disabled because several safe tests exist
-      # alongside the unsafe ones and legitimately touch the filesystem.
+      # winbrew-windows (#![cfg(windows)]) is all Win32/MSI/registry FFI.
+      # Isolation is disabled because several safe tests exist alongside the
+      # unsafe ones and legitimately touch the filesystem.
       #
       # Tests that reach real Win32 FFI (MSI/registry/font-resource APIs,
       # SearchPathW, or even plain CreateDirectoryW via tempfile) are marked
@@ -267,4 +266,4 @@ jobs:
       - name: Miri › winbrew-windows
         env:
           MIRIFLAGS: -Zmiri-disable-isolation
-        run: cargo miri test -p winbrew-windows --target x86_64-pc-windows-msvc
+        run: cargo +nightly miri test -p winbrew-windows
