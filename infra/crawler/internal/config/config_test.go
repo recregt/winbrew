@@ -151,7 +151,7 @@ func TestLoadContextHonorsCancellation(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte("sources:\n  - winget\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("sources:\n  - winget\n"), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
@@ -172,7 +172,7 @@ func TestLoadReadsConfigFile(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte("sources:\n  - winget\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("sources:\n  - winget\n"), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 

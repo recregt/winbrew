@@ -336,7 +336,7 @@ func (s *Source) fetchManifestBytes(ctx context.Context, packageIdentifier, pack
 			return nil, err
 		}
 
-		data, err := os.ReadFile(cachePath)
+		data, err := os.ReadFile(cachePath) //nolint:gosec // cachePath is built via wingetManifestCachePath, which rejects traversal/separator segments
 		if err != nil {
 			return nil, fmt.Errorf("failed to read cached winget manifest %s: %w", cachePath, err)
 		}

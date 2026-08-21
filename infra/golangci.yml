@@ -10,6 +10,14 @@ linters:
     - govet
     - ineffassign
     - staticcheck
+    - gosec
+  exclusions:
+    rules:
+      # Test-file I/O uses local temp/fixture paths, not attacker input --
+      # gosec's file-inclusion/permission rules aren't meaningful there.
+      - path: _test\.go
+        linters:
+          - gosec
 
 formatters:
   enable:

@@ -73,8 +73,15 @@ func extractFile(f *zip.File, dst string) (err error) {
 		}
 	}()
 
-	if _, err = io.Copy(out, rc); err != nil {
+	// UncompressedSize64 above is a self-reported zip header field, not
+	// enforced during decompression -- bound the actual copy too, so a
+	// mismatched header can't turn into an unbounded decompression bomb.
+	written, err := io.Copy(out, io.LimitReader(rc, maxIndexDBSize+1))
+	if err != nil {
 		return fmt.Errorf("failed to extract file: %w", err)
+	}
+	if written > maxIndexDBSize {
+		return fmt.Errorf("zip entry too large: exceeded %d bytes during extraction", maxIndexDBSize)
 	}
 
 	if err = out.Close(); err != nil {

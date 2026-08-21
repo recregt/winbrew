@@ -20,7 +20,7 @@ type Metadata struct {
 }
 
 func LoadMetadata(path string) (Metadata, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) //nolint:gosec // path is the operator-supplied --metadata CLI flag, not attacker input
 	if err != nil {
 		return Metadata{}, fmt.Errorf("failed to read metadata file: %w", err)
 	}

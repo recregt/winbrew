@@ -53,7 +53,7 @@ func LoadContext(ctx context.Context, path string) (*Config, error) {
 		return nil, err
 	}
 
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // path is the operator-supplied --config flag, not attacker input
 	if err != nil {
 		return nil, fmt.Errorf("failed to open config file: %w", err)
 	}

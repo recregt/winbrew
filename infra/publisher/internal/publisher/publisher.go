@@ -159,7 +159,7 @@ func publish(ctx context.Context, client *minio.Client, bucketName, inputPath, m
 				return false, 0, Metadata{}, nil, err
 			}
 			defer func() {
-				_ = os.Remove(candidate.TempPath)
+				_ = os.Remove(candidate.TempPath) //nolint:gosec // TempPath always originates from os.CreateTemp in compressReaderToTemp, never external input
 			}()
 			patchArtifacts = []patchChainArtifact{candidate.Artifact}
 		}
@@ -269,7 +269,7 @@ func defaultMetadataPath(inputPath string) string {
 }
 
 func hashFile(path string) (string, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) //nolint:gosec // callers always pass a local CLI-flag or program-generated temp path, not attacker input
 	if err != nil {
 		return "", fmt.Errorf("failed to open file for hashing: %w", err)
 	}

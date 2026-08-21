@@ -86,7 +86,7 @@ func collectRealScoopPackages(ctx context.Context, cacheDir string) ([]normalize
 }
 
 func writeScoopFixture(path string, packages []normalize.Package) error {
-	file, err := os.Create(path)
+	file, err := os.Create(path) //nolint:gosec // path is a caller-supplied fixture path in test tooling, not attacker input
 	if err != nil {
 		return err
 	}

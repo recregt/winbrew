@@ -97,7 +97,7 @@ func fetchRepo(ctx context.Context, dir string) error {
 }
 
 func runGit(ctx context.Context, errorPrefix string, args ...string) error {
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, "git", args...) //nolint:gosec // args come from internal callers, not shell-interpreted; repo URLs are scheme/host-validated in validateRepoInputs
 	var stderr bytes.Buffer
 	cmd.Stdout = io.Discard
 	cmd.Stderr = &stderr
@@ -183,7 +183,7 @@ func acquireRepoLock(ctx context.Context, dir string) (*repoLock, error) {
 	lockPath := dir + ".lock"
 	const staleAfter = 30 * time.Minute
 	for {
-		file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) //nolint:gosec // lockPath is the managed cache dir plus a fixed suffix, not attacker input
 		if err == nil {
 			return &repoLock{path: lockPath, file: file}, nil
 		}
