@@ -31,6 +31,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # Replaces pnpm/action-setup + actions/setup-node: pnpm/action-setup's
       # own README now points to pnpm/setup as the successor for pnpm v11+
