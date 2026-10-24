@@ -1,5 +1,5 @@
 overrides:
-  undici: 8.10.2
+  undici: 8.12.2
   vite: "8.1.6"
   esbuild: ">=0.28.1"
   ws: ">=8.21.0"
@@ -23,7 +23,7 @@ trustPolicy: no-downgrade
 minimumReleaseAgeExclude:
   # Renovate security update: sharp@0.35.4 || 0.35.5
   - sharp@0.35.4 || 0.35.5
-  # Renovate security update: undici@8.10.2
-  - undici@8.10.2
+  # Renovate security update: undici@8.10.2 || 8.12.2
+  - undici@8.10.2 || 8.12.2
   # Renovate security update: vite@8.1.6
   - vite@8.1.6
