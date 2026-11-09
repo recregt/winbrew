@@ -7,7 +7,7 @@ require (
 	modernc.org/sqlite v1.55.0
 )
 
-require github.com/klauspost/compress v1.19.1
+require github.com/klauspost/compress v1.20.2
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
