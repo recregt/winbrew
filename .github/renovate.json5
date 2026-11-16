@@ -1,169 +1,254 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended",
-    "docker:pinDigests",
-    "helpers:pinGitHubActionDigests",
-    "abandonments:recommended",
-    "security:minimumReleaseAgeNpm",
-    ":maintainLockFilesWeekly",
-    // Deliberately not extending "config:best-practices" wholesale: it also
-    // pulls in ":pinDevDependencies", which -- via the "dev-dependencies"
-    // depType -- pins Cargo's [dev-dependencies] across every crate, not
-    // just npm devDependencies. That doesn't fit this workspace's Rust
-    // conventions. Everything else best-practices adds is included above,
-    // spelled out individually so the one exclusion stays visible.
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    'config:recommended',
+    'docker:pinDigests',
+    'helpers:pinGitHubActionDigests',
+    'abandonments:recommended',
+    'security:minimumReleaseAgeNpm',
+    ':maintainLockFilesWeekly',
   ],
-  "timezone": "Etc/UTC",
-  "schedule": ["before 5am on the first day of the month"],
-  "semanticCommits": "enabled",
-  "configMigration": true,
-  "dependencyDashboard": true,
-  "labels": ["dependencies"],
-  "prConcurrentLimit": 10,
-  "prHourlyLimit": 0,
-  "osvVulnerabilityAlerts": true,
-  "vulnerabilityAlerts": {
-    "schedule": ["at any time"],
-    "labels": ["dependencies", "security"]
+  timezone: 'Etc/UTC',
+  schedule: [
+    'before 5am on the first day of the month',
+  ],
+  semanticCommits: 'enabled',
+  configMigration: true,
+  dependencyDashboard: {
+    enabled: true,
   },
-  "enabledManagers": ["cargo", "gomod", "npm", "github-actions", "custom.regex"],
-  "ignorePaths": ["**/tests/**"],
-  "customManagers": [
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/(^|/)Cargo\\.toml$/"],
-      "matchStrings": [
-        "\\bMSRV:3\\b.*?(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)",
-        "(?<currentValue>\\d+\\.\\d+(\\.\\d+)?).*?\\bMSRV:3\\b"
-      ],
-      "depNameTemplate": "MSRV:3",
-      "packageNameTemplate": "rust-lang/rust",
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/(^|/)rust-toolchain\\.toml$/"],
-      "matchStrings": [
-        "channel\\s*=\\s*\"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)\""
-      ],
-      "depNameTemplate": "rust-toolchain",
-      "packageNameTemplate": "rust-lang/rust",
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": ["/(^|/)crates/app/src/operations/install/sevenz\\.rs$/"],
-      "matchStrings": [
-        "const\\s+SEVENZ_BOOTSTRAP_VERSION:\\s*&str\\s*=\\s*\"(?<currentValue>\\d+\\.\\d+)\";"
-      ],
-      "depNameTemplate": "7zip",
-      "packageNameTemplate": "ip7z/7zip",
-      "datasourceTemplate": "github-releases"
-    }
+  labels: [
+    'dependencies',
   ],
-  "packageRules": [
+  prConcurrentLimit: 10,
+  prHourlyLimit: 0,
+  osvVulnerabilityAlerts: true,
+  vulnerabilityAlerts: {
+    schedule: [
+      'at any time',
+    ],
+    labels: [
+      'dependencies',
+      'security',
+    ],
+  },
+  enabledManagers: [
+    'cargo',
+    'gomod',
+    'npm',
+    'github-actions',
+    'custom.regex',
+  ],
+  ignorePaths: [
+    '**/tests/**',
+  ],
+  customManagers: [
     {
-      "matchManagers": ["gomod"],
-      "postUpdateOptions": ["gomodTidy"]
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)Cargo\\.toml$/',
+      ],
+      matchStrings: [
+        '\\bMSRV:3\\b.*?(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)',
+        '(?<currentValue>\\d+\\.\\d+(\\.\\d+)?).*?\\bMSRV:3\\b',
+      ],
+      depNameTemplate: 'MSRV:3',
+      packageNameTemplate: 'rust-lang/rust',
+      datasourceTemplate: 'github-releases',
     },
     {
-      "matchManagers": ["npm"],
-      "postUpdateOptions": ["pnpmDedupe"]
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)rust-toolchain\\.toml$/',
+      ],
+      matchStrings: [
+        'channel\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
+      ],
+      depNameTemplate: 'rust-toolchain',
+      packageNameTemplate: 'rust-lang/rust',
+      datasourceTemplate: 'github-releases',
     },
     {
-      "matchUpdateTypes": ["major"],
-      "labels": ["dependencies", "major-update"],
-      "automerge": false
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)crates/app/src/operations/install/sevenz\\.rs$/',
+      ],
+      matchStrings: [
+        'const\\s+SEVENZ_BOOTSTRAP_VERSION:\\s*&str\\s*=\\s*"(?<currentValue>\\d+\\.\\d+)";',
+      ],
+      depNameTemplate: '7zip',
+      packageNameTemplate: 'ip7z/7zip',
+      datasourceTemplate: 'github-releases',
+    },
+  ],
+  packageRules: [
+    {
+      matchManagers: [
+        'gomod',
+      ],
+      postUpdateOptions: [
+        'gomodTidy',
+      ],
     },
     {
-      "matchManagers": ["cargo", "gomod", "npm"],
-      "matchUpdateTypes": ["major"],
-      "minimumReleaseAge": "14 days",
-      "automerge": false
+      matchManagers: [
+        'npm',
+      ],
+      postUpdateOptions: [
+        'pnpmDedupe',
+      ],
     },
     {
-      "matchManagers": ["github-actions"],
-      "matchUpdateTypes": ["major"],
-      "minimumReleaseAge": "30 days",
-      "labels": ["dependencies", "major-update"],
-      "automerge": false
+      matchUpdateTypes: [
+        'major',
+      ],
+      labels: [
+        'dependencies',
+        'major-update',
+      ],
+      automerge: false,
     },
     {
-      "commitMessageTopic": "Rust toolchain & MSRV",
-      "matchManagers": ["custom.regex"],
-      "matchDepNames": ["MSRV:3", "rust-toolchain"],
-      "extractVersion": "^(?<version>\\d+\\.\\d+)",
-      "schedule": ["at any time"],
-      // Longer cooldown than the compatible-* groups below: a toolchain/MSRV
-      // bump affects every crate in the workspace at once, so it gets extra
-      // time to prove itself before Renovate proposes it.
-      "minimumReleaseAge": "85 days",
-      "internalChecksFilter": "strict",
-      "groupName": "msrv"
+      matchManagers: [
+        'cargo',
+        'gomod',
+        'npm',
+      ],
+      matchUpdateTypes: [
+        'major',
+      ],
+      minimumReleaseAge: '14 days',
+      automerge: false,
     },
     {
-      "commitMessageTopic": "7-Zip bootstrap",
-      "matchManagers": ["custom.regex"],
-      "matchDepNames": ["7zip"],
-      "extractVersion": "^(?<version>\\d+\\.\\d+)",
-      "schedule": ["at any time"],
-      "minimumReleaseAge": "7 days",
-      "automerge": false,
-      "groupName": "bootstrap"
+      matchManagers: [
+        'github-actions',
+      ],
+      matchUpdateTypes: [
+        'major',
+      ],
+      minimumReleaseAge: '30 days',
+      labels: [
+        'dependencies',
+        'major-update',
+      ],
+      automerge: false,
     },
     {
-      "matchManagers": ["cargo"],
-      "matchCurrentVersion": "<1.0.0",
-      "matchUpdateTypes": ["patch", "minor"],
-      "automerge": false,
-      "groupName": "compatible-cargo-pre1",
-      "minimumReleaseAge": "7 days",
-      "internalChecksFilter": "strict"
+      commitMessageTopic: 'Rust toolchain & MSRV',
+      matchManagers: [
+        'custom.regex',
+      ],
+      matchDepNames: [
+        'MSRV:3',
+        'rust-toolchain',
+      ],
+      extractVersion: '^(?<version>\\d+\\.\\d+)',
+      schedule: [
+        'at any time',
+      ],
+      minimumReleaseAge: '85 days',
+      internalChecksFilter: 'strict',
+      groupName: 'msrv',
     },
     {
-      "matchManagers": ["cargo"],
-      "matchCurrentVersion": ">=1.0.0",
-      "matchUpdateTypes": ["patch", "minor"],
-      "automerge": false,
-      "groupName": "compatible-cargo",
-      "minimumReleaseAge": "7 days",
-      "internalChecksFilter": "strict"
+      commitMessageTopic: '7-Zip bootstrap',
+      matchManagers: [
+        'custom.regex',
+      ],
+      matchDepNames: [
+        '7zip',
+      ],
+      extractVersion: '^(?<version>\\d+\\.\\d+)',
+      schedule: [
+        'at any time',
+      ],
+      minimumReleaseAge: '7 days',
+      automerge: false,
+      groupName: 'bootstrap',
     },
     {
-      "matchManagers": ["gomod"],
-      "matchCurrentVersion": "<1.0.0",
-      "matchUpdateTypes": ["patch", "minor"],
-      "automerge": false,
-      "groupName": "compatible-go-pre1",
-      "minimumReleaseAge": "7 days",
-      "internalChecksFilter": "strict"
+      matchManagers: [
+        'cargo',
+      ],
+      matchCurrentVersion: '<1.0.0',
+      matchUpdateTypes: [
+        'patch',
+        'minor',
+      ],
+      automerge: false,
+      groupName: 'compatible-cargo-pre1',
+      minimumReleaseAge: '7 days',
+      internalChecksFilter: 'strict',
     },
     {
-      "matchManagers": ["gomod"],
-      "matchCurrentVersion": ">=1.0.0",
-      "matchUpdateTypes": ["patch", "minor"],
-      "automerge": false,
-      "groupName": "compatible-go",
-      "minimumReleaseAge": "7 days",
-      "internalChecksFilter": "strict"
+      matchManagers: [
+        'cargo',
+      ],
+      matchCurrentVersion: '>=1.0.0',
+      matchUpdateTypes: [
+        'patch',
+        'minor',
+      ],
+      automerge: false,
+      groupName: 'compatible-cargo',
+      minimumReleaseAge: '7 days',
+      internalChecksFilter: 'strict',
     },
     {
-      "matchManagers": ["npm"],
-      "matchCurrentVersion": ">=0.1.0",
-      "matchUpdateTypes": ["patch", "minor"],
-      "automerge": false,
-      "groupName": "compatible-npm",
-      "minimumReleaseAge": "7 days",
-      "internalChecksFilter": "strict"
+      matchManagers: [
+        'gomod',
+      ],
+      matchCurrentVersion: '<1.0.0',
+      matchUpdateTypes: [
+        'patch',
+        'minor',
+      ],
+      automerge: false,
+      groupName: 'compatible-go-pre1',
+      minimumReleaseAge: '7 days',
+      internalChecksFilter: 'strict',
     },
     {
-      "matchManagers": ["github-actions"],
-      "matchUpdateTypes": ["patch", "minor"],
-      "automerge": false,
-      "groupName": "compatible-actions",
-      "minimumReleaseAge": "7 days",
-      "internalChecksFilter": "strict"
-    }
-  ]
+      matchManagers: [
+        'gomod',
+      ],
+      matchCurrentVersion: '>=1.0.0',
+      matchUpdateTypes: [
+        'patch',
+        'minor',
+      ],
+      automerge: false,
+      groupName: 'compatible-go',
+      minimumReleaseAge: '7 days',
+      internalChecksFilter: 'strict',
+    },
+    {
+      matchManagers: [
+        'npm',
+      ],
+      matchCurrentVersion: '>=0.1.0',
+      matchUpdateTypes: [
+        'patch',
+        'minor',
+      ],
+      automerge: false,
+      groupName: 'compatible-npm',
+      minimumReleaseAge: '7 days',
+      internalChecksFilter: 'strict',
+    },
+    {
+      matchManagers: [
+        'github-actions',
+      ],
+      matchUpdateTypes: [
+        'patch',
+        'minor',
+      ],
+      automerge: false,
+      groupName: 'compatible-actions',
+      minimumReleaseAge: '7 days',
+      internalChecksFilter: 'strict',
+    },
+  ],
 }
